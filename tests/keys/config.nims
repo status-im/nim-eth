@@ -1,1 +1,3 @@
-switch("threads", "on")
+--threads:on
+--path:"$projectDir/../.."
+
