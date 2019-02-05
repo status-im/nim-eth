@@ -15,7 +15,8 @@ proc test(filename: string) =
   echo "Running: ", filename
   exec "nim c -r " & filename
 
-import strutils, os
+import strutils
+import oswalkdir, ospaths # In newer nim these are merged to os
 
 task test, "run tests":
   for i in walkDirRec("tests"):
