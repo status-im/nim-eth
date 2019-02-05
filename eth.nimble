@@ -10,7 +10,9 @@ requires "nim >= 0.19.0",
          "stint",
          "byteutils",
          "secp256k1",
-         "rocksdb"
+         "rocksdb",
+         "package_visible_types",
+         "asyncdispatch2"
 
 proc test(filename: string) =
   echo "Running: ", filename
