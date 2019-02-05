@@ -7,7 +7,7 @@
 #
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  ../src/eth_keys,
+import  eth/keys,
         ./config
 
 import unittest
