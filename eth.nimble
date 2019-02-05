@@ -12,7 +12,8 @@ requires "nim >= 0.19.0",
          "secp256k1",
          "rocksdb",
          "package_visible_types",
-         "asyncdispatch2"
+         "asyncdispatch2",
+         "chronicles"
 
 proc test(filename: string) =
   echo "Running: ", filename
