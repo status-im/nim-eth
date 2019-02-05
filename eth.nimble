@@ -9,7 +9,8 @@ requires "nim >= 0.19.0",
          "ranges",
          "stint",
          "byteutils",
-         "secp256k1"
+         "secp256k1",
+         "rocksdb"
 
 proc test(filename: string) =
   echo "Running: ", filename
