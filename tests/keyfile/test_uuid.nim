@@ -7,7 +7,7 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 
-import eth_keyfile/uuid, strutils, unittest
+import eth/keyfile/uuid, strutils, unittest
 
 suite "Cross-platform UUID test suite":
   test "Platform UUID check":

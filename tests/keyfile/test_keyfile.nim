@@ -7,7 +7,7 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 
-import eth_keys, eth_keyfile/[uuid, keyfile], json, strutils, os, unittest
+import eth/keys, eth/keyfile/[uuid, keyfile], json, strutils, os, unittest
 
 # Test vectors copied from
 # https://github.com/ethereum/tests/blob/develop/KeyStoreTests/basic_tests.json
