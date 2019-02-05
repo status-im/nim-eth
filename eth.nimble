@@ -4,12 +4,21 @@ description   = "Ethereum Common library"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim > 0.18.0",
+requires "nim > 0.19.0",
          "nimcrypto",
          "ranges",
          "stint",
-         "byteutils"
+         "byteutils",
+         "secp256k1"
+
+proc test(filename: string) =
+  echo "Running: ", filename
+  exec "nim c -r " & filename
+
+import strutils, os
 
 task test, "run tests":
-  cd "tests"
-  exec "nim c -r test_common"
+  for i in walkDirRec("tests"):
+    let fn = splitPath(i).tail
+    if fn.startsWith("test_") and fn.endsWith(".nim"):
+      test(i)
