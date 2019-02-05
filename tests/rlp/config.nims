@@ -1,0 +1,3 @@
+--threads:on
+--path:"$projectDir/../.."
+

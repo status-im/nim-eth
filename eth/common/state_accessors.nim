@@ -1,5 +1,5 @@
 import
-  eth_trie/[defs, db, hexary], rlp,
+  eth/trie/[defs, db, hexary], rlp,
   eth_types
 
 proc getAccount*(db: TrieDatabaseRef,

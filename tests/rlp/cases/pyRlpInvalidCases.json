@@ -1,0 +1,67 @@
+{
+	"T1": {
+		"in": "INVALID", 
+		"out": ""
+	},
+
+	"T2": {
+		"in": "INVALID", 
+		"out": "00ab"
+	},
+
+	"T3": {
+		"in": "INVALID", 
+		"out": "0000ff"
+	},
+
+	"T4": {
+		"in": "VALID", 
+		"out": "83646F67636174"
+	},
+
+	"T5": {
+		"in": "INVALID", 
+		"out": "83646F"
+	},
+
+	"T6": {
+		"in": "INVALID", 
+		"out": "c7c0c1c0c3c0c1c0ff"
+	},
+
+	"T7": {
+		"in": "INVALID",
+		"out": "c7c0c1c0c3c0c1"
+	},
+
+	"T8": {
+		"in": "INVALID",
+		"out": "8102"
+	},
+
+	"T9": {
+		"in": "INVALID",
+		"out": "b800"
+	},
+
+	"T10": {
+		"in": "INVALID",
+		"out": "b800"
+	},
+
+	"T11": {
+		"in": "INVALID",
+		"out": "b90000"
+	},
+
+	"T12": {
+		"in": "INVALID",
+		"out": "ba0002ffff"
+	},
+
+	"T13": {
+		"in": "INVALID",
+		"out": "8154"
+	}
+}
+

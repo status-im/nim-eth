@@ -1,4 +1,4 @@
-import unittest, eth/common, rlp
+import unittest, eth/common, eth/rlp
 
 proc `==`(a, b: HashOrStatus): bool =
   result = a.isHash == b.isHash
