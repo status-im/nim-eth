@@ -12,7 +12,7 @@ requires "nim >= 0.19.0",
          "secp256k1",
          "rocksdb",
          "package_visible_types",
-         "https://github.com/status-im/chronos",
+         "https://github.com/status-im/nim-chronos",
          "chronicles"
 
 proc test(filename: string) =
