@@ -10,7 +10,7 @@
 
 import
   times,
-  asyncdispatch2, eth/[keys, rlp], stint, nimcrypto, chronicles,
+  chronos, eth/[keys, rlp], stint, nimcrypto, chronicles,
   kademlia, enode
 
 export

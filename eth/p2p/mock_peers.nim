@@ -1,6 +1,6 @@
 import
   macros, deques, algorithm,
-  asyncdispatch2, eth/[keys, rlp], eth/common/eth_types,
+  chronos, eth/[keys, rlp], eth/common/eth_types,
   private/p2p_types, rlpx, ../p2p
 
 type

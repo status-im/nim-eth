@@ -1,6 +1,6 @@
 import
   macros, tables, algorithm, deques, hashes, options, typetraits,
-  chronicles, nimcrypto, asyncdispatch2, eth/[rlp, common, keys],
+  chronicles, nimcrypto, chronos, eth/[rlp, common, keys],
   private/p2p_types, kademlia, auth, rlpxcrypt, enode, p2p_tracing
 
 when useSnappy:

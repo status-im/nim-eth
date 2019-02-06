@@ -1,6 +1,6 @@
 import
   tables, sets,
-  chronicles, asyncdispatch2, eth/rlp, eth/common/eth_types,
+  chronicles, chronos, eth/rlp, eth/common/eth_types,
   ../../rlpx, ../../private/p2p_types, private/les_types
 
 const

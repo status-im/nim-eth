@@ -1,6 +1,6 @@
 import
   sets, options, random, hashes,
-  asyncdispatch2, chronicles, eth/common/eth_types,
+  chronos, chronicles, eth/common/eth_types,
   private/p2p_types, rlpx, peer_pool, rlpx_protocols/eth_protocol,
   ../p2p
 

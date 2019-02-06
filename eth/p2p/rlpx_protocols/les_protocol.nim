@@ -10,7 +10,7 @@
 
 import
   times, tables, options, sets, hashes, strutils, macros,
-  chronicles, asyncdispatch2, nimcrypto/[keccak, hash],
+  chronicles, chronos, nimcrypto/[keccak, hash],
   eth/[rlp, keys], eth/common/eth_types,
   ../rlpx, ../kademlia, ../private/p2p_types, ../blockchain_utils,
   les/private/les_types, les/flow_control

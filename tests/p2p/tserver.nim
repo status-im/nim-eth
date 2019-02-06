@@ -9,7 +9,7 @@
 
 import
   sequtils, strformat, options, unittest,
-  chronicles, asyncdispatch2, eth/[rlp, keys, p2p],
+  chronicles, chronos, eth/[rlp, keys, p2p],
   eth/p2p/mock_peers
 
 const
