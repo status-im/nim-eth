@@ -1,4 +1,4 @@
-# eth_keys
+# keys
 
 This library is a Nim re-implementation of [eth-keys](https://github.com/ethereum/eth-keys): the common API for working with Ethereum's public and private keys, signatures, and addresses.
 

@@ -1,4 +1,4 @@
-# eth_p2p
+# p2p
 
 ## Introduction
 

@@ -1,4 +1,4 @@
-# eth_bloom: an Ethereum Bloom Filter
+# bloom: an Ethereum Bloom Filter
 
 # Introduction
 
@@ -13,14 +13,9 @@ Ethereum bloom filters are implemented with the Keccak-256 cryptographic hash fu
 To see the bloom filter used in the context of Ethereum, please refer to the [Ethereum Yellow Paper](https://ethereum.github.io/yellowpaper/paper.pdf).
 
 
-# Installation
-```
-$ nimble install eth_bloom
-```
-
 # Usage
 ```nim
-import eth_bloom, stint
+import eth/bloom, stint
 var f: BloomFilter
 f.incl("test1")
 assert("test1" in f)

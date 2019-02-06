@@ -1,4 +1,4 @@
-# nim-trie
+# trie
 Nim Implementation of the Ethereum Trie structure
 ---
 
@@ -97,7 +97,7 @@ and then you want to continue/resume the trie operations.
 
 ```Nim
 import
-  eth_trie/[db, binary, utils]
+  eth/trie/[db, binary, utils]
 
 var db = newMemoryDB()
 var trie = initBinaryTrie(db)
@@ -153,7 +153,7 @@ Therefore a list is enough to reconstruct the entire trie/branch.
 
 ```Nim
 import
-  eth_trie/[db, binary, utils]
+  eth/trie/[db, binary, utils]
 
 var db = newMemoryDB()
 var trie = initBinaryTrie(db)
@@ -291,7 +291,7 @@ and then you want to continue/resume the trie operations.
 
 ```Nim
 import
-  eth_trie/[db, sparse_binary, utils]
+  eth/trie/[db, sparse_binary, utils]
 
 var
   db = newMemoryDB()
