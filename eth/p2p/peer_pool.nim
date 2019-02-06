@@ -3,7 +3,7 @@
 
 import
   os, tables, times, random, sequtils,
-  asyncdispatch2, chronicles, eth/[rlp, keys],
+  chronos, chronicles, eth/[rlp, keys],
   private/p2p_types, discovery, kademlia, rlpx
 
 const

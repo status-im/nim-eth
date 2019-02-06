@@ -1,4 +1,4 @@
-import times, asyncdispatch2
+import times, chronos
 
 type
   FullNodeSyncer* = ref object

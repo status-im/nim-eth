@@ -8,7 +8,7 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  options, unittest, asyncdispatch2, eth/[rlp, keys, p2p],
+  options, unittest, chronos, eth/[rlp, keys, p2p],
   eth/p2p/mock_peers, eth/p2p/rlpx_protocols/[whisper_protocol]
 
 proc localAddress(port: int): Address =

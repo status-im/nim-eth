@@ -12,7 +12,7 @@
 ## https://github.com/ethereum/wiki/wiki/Ethereum-Wire-Protocol
 
 import
-  asyncdispatch2, stint, chronicles, eth/rlp, eth/common/eth_types,
+  chronos, stint, chronicles, eth/rlp, eth/common/eth_types,
   ../rlpx, ../private/p2p_types, ../blockchain_utils, ../../p2p
 
 type

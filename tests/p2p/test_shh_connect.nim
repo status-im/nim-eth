@@ -8,7 +8,7 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  sequtils, options, unittest, tables, asyncdispatch2, eth/[rlp, keys, p2p],
+  sequtils, options, unittest, tables, chronos, eth/[rlp, keys, p2p],
   eth/p2p/rlpx_protocols/[whisper_protocol], eth/p2p/[discovery, enode]
 
 const

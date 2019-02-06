@@ -8,7 +8,7 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  sequtils, options, strutils, parseopt, asyncdispatch2,
+  sequtils, options, strutils, parseopt, chronos,
   eth/[keys, rlp, p2p], eth/p2p/rlpx_protocols/[whisper_protocol],
   eth/p2p/[discovery, enode, peer_pool]
 

@@ -8,7 +8,7 @@
 
 import
   algorithm, bitops, endians, math, options, sequtils, strutils, tables, times,
-  secp256k1, chronicles, asyncdispatch2, eth/common/eth_types, eth/[keys, rlp],
+  secp256k1, chronicles, chronos, eth/common/eth_types, eth/[keys, rlp],
   hashes, byteutils, nimcrypto/[bcmode, hash, keccak, rijndael, sysrand],
   eth/p2p, ../ecies
 

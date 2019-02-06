@@ -10,7 +10,7 @@
 
 import
   tables, algorithm, random,
-  asyncdispatch2, asyncdispatch2/timer, chronicles,
+  chronos, chronos/timer, chronicles,
   eth/keys, eth/common/eth_types,
   eth/p2p/[kademlia, discovery, enode, peer_pool, rlpx],
   eth/p2p/private/p2p_types
