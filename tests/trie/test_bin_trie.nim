@@ -1,7 +1,7 @@
 import
   unittest, random,
   eth/trie/[trie_defs, db, binary],
-  test_utils
+  ./testutils
 
 suite "binary trie":
 

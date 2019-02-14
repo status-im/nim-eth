@@ -1,7 +1,7 @@
 import
   unittest, strutils, sequtils, os,
   ranges/typedranges, eth/trie/[hexary, db, trie_defs], nimcrypto/utils,
-  test_utils, algorithm, eth/rlp/types as rlpTypes, random
+  ./testutils, algorithm, eth/rlp/types as rlpTypes, random
 
 template put(t: HexaryTrie|SecureHexaryTrie, key, val: string) =
   t.put(key.toBytesRange, val.toBytesRange)

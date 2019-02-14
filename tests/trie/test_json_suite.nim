@@ -2,7 +2,7 @@ import
   os, json, tables, sequtils, strutils, algorithm,
   eth/rlp/types, nimcrypto/utils,
   eth/trie/[trie_defs, db, hexary],
-  test_utils
+  ./testutils
 
 proc `==`(lhs: JsonNode, rhs: string): bool =
   lhs.kind == JString and lhs.str == rhs
