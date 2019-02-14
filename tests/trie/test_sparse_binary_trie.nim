@@ -1,7 +1,7 @@
 import
   unittest, random,
   eth/trie/[trie_defs, db, sparse_binary, sparse_proofs],
-  test_utils
+  ./testutils
 
 suite "sparse binary trie":
   randomize()

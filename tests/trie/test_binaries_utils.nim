@@ -2,7 +2,7 @@ import
   unittest, strutils,
   ranges/bitranges, eth/rlp/types, nimcrypto/[keccak, hash],
   eth/trie/[binaries, trie_utils],
-  test_utils
+  ./testutils
 
 proc parseBitVector(x: string): BitRange =
   result = genBitVec(x.len)
