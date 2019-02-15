@@ -11,8 +11,9 @@ proc initNibbleRange*(bytes: ByteRange): NibblesRange =
   result.ibegin = 0
   result.iend = bytes.len * 2
 
-const
-  zeroNibblesRange* = initNibbleRange(zeroBytesRange)
+# can't be a const: https://github.com/status-im/nim-eth/issues/6
+# we can't initialise it here, but since it's already zeroed memory, we don't need to
+var zeroNibblesRange* {.threadvar.}: NibblesRange
 
 proc `{}`(r: NibblesRange, pos: int): byte {.inline.} =
   ## This is a helper for a more raw access to the nibbles.

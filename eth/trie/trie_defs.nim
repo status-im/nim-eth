@@ -8,8 +8,11 @@ type
   KeccakHash* = MDigest[256]
   BytesContainer* = ByteRange | Bytes | string
 
+# can't be a const: https://github.com/status-im/nim-eth/issues/6
+# we can't initialise it here, but since it's already zeroed memory, we don't need to
+var zeroBytesRange* {.threadvar.}: ByteRange
+
 const
-  zeroBytesRange* = ByteRange()
   blankStringHash* = "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
   emptyRlp* = @[128.byte]
   emptyRlpHash* = "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
