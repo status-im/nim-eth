@@ -15,15 +15,34 @@ requires "nim >= 0.19.0",
          "chronos",
          "chronicles"
 
-proc test(filename: string) =
-  echo "Running: ", filename
-  exec "nim c -r " & filename
-
 import strutils
 import oswalkdir, ospaths # In newer nim these are merged to os
 
+proc test(path: string) =
+  echo "Running: ", path
+  exec "nim c -r " & path
+
+proc run_tests(dir: string) =
+  for path in walkDirRec(dir):
+    let fname = splitPath(path).tail
+    if fname.startsWith("test_") and fname.endsWith(".nim"):
+      test(path)
+
 task test, "run tests":
-  for i in walkDirRec("tests"):
-    let fn = splitPath(i).tail
-    if fn.startsWith("test_") and fn.endsWith(".nim"):
-      test(i)
+  run_tests("tests")
+
+task test_keyfile, "run keyfile tests":
+  run_tests("tests/keyfile")
+
+task test_keys, "run keys tests":
+  run_tests("tests/keys")
+
+task test_p2p, "run p2p tests":
+  run_tests("tests/p2p")
+
+task test_rlp, "run rlp tests":
+  run_tests("tests/rlp")
+
+task test_trie, "run trie tests":
+  run_tests("tests/trie")
+
