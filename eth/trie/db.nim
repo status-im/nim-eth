@@ -34,7 +34,8 @@ type
     containsProc: ContainsProc
     mostInnerTransaction: DbTransaction
 
-  TransactionFlags = enum
+  TransactionState = enum
+    Pending
     Committed
     RolledBack
 
@@ -42,7 +43,7 @@ type
     db: TrieDatabaseRef
     parentTransaction: DbTransaction
     modifications: MemoryLayer
-    flags: set[TransactionFlags]
+    state: TransactionState
 
 proc put*(db: TrieDatabaseRef, key, val: openarray[byte]) {.gcsafe.}
 proc get*(db: TrieDatabaseRef, key: openarray[byte]): Bytes {.gcsafe.}
@@ -133,7 +134,7 @@ proc beginTransaction*(db: TrieDatabaseRef): DbTransaction =
   new result
   result.db = db
   init result.modifications
-
+  result.state = Pending
   result.parentTransaction = db.mostInnerTransaction
   db.mostInnerTransaction = result
 
@@ -141,32 +142,25 @@ proc rollback*(t: DbTransaction) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
-  doAssert t.db.mostInnerTransaction == t and
-    Committed notin t.flags and
-    RolledBack notin t.flags
+  doAssert t.db.mostInnerTransaction == t and t.state == Pending
   t.db.mostInnerTransaction = t.parentTransaction
-  t.flags.incl RolledBack
+  t.state = RolledBack
 
 proc commit*(t: DbTransaction) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
-  doAssert t.db.mostInnerTransaction == t and
-    Committed notin t.flags and
-    RolledBack notin t.flags
+  doAssert t.db.mostInnerTransaction == t and t.state == Pending
   t.db.mostInnerTransaction = t.parentTransaction
   t.modifications.commit(t.db)
-  t.flags.incl Committed
+  t.state = Committed
 
 proc dispose*(t: DbTransaction) {.inline.} =
-  if Committed notin t.flags and
-     RolledBack notin t.flags:
+  if t.state == Pending:
     t.rollback()
 
 proc safeDispose*(t: DbTransaction) {.inline.} =
-  if t != nil and
-     Committed notin t.flags and
-     RolledBack notin t.flags:
+  if t != nil and t.state == Pending:
     t.rollback()
 
 proc putImpl[T](db: RootRef, key, val: openarray[byte]) =
