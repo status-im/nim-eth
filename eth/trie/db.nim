@@ -160,7 +160,7 @@ proc dispose*(t: DbTransaction) {.inline.} =
     t.rollback()
 
 proc safeDispose*(t: DbTransaction) {.inline.} =
-  if t != nil and t.state == Pending:
+  if (not isNil(t)) and (t.state == Pending):
     t.rollback()
 
 proc putImpl[T](db: RootRef, key, val: openarray[byte]) =
