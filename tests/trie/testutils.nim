@@ -1,6 +1,7 @@
 import
   random, sets, eth/trie/trie_utils as ethUtils,
-  eth/rlp/types as rlpTypes, ranges/bitranges, nimcrypto/utils
+  eth/rlp/types as rlpTypes, ranges/bitranges,
+  nimcrypto/[utils, sysrand]
 
 type
   RandGen*[T] = object
@@ -29,8 +30,7 @@ proc randString*(len: int): string =
 
 proc randBytes*(len: int): Bytes =
   result = newSeq[byte](len)
-  for i in 0..<len:
-    result[i] = rand(255).byte
+  discard randomBytes(result[0].addr, len)
 
 proc toBytesRange*(str: string): BytesRange =
   var s: seq[byte]
