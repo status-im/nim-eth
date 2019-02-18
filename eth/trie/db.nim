@@ -34,11 +34,15 @@ type
     containsProc: ContainsProc
     mostInnerTransaction: DbTransaction
 
+  TransactionFlags = enum
+    Committed
+    RolledBack
+
   DbTransaction* = ref object
     db: TrieDatabaseRef
     parentTransaction: DbTransaction
     modifications: MemoryLayer
-    committed: bool
+    flags: set[TransactionFlags]
 
 proc put*(db: TrieDatabaseRef, key, val: openarray[byte]) {.gcsafe.}
 proc get*(db: TrieDatabaseRef, key: openarray[byte]): Bytes {.gcsafe.}
@@ -137,24 +141,32 @@ proc rollback*(t: DbTransaction) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
-  doAssert t.db.mostInnerTransaction == t and not t.committed
+  doAssert t.db.mostInnerTransaction == t and
+    Committed notin t.flags and
+    RolledBack notin t.flags
   t.db.mostInnerTransaction = t.parentTransaction
+  t.flags.incl RolledBack
 
 proc commit*(t: DbTransaction) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
-  doAssert t.db.mostInnerTransaction == t and not t.committed
+  doAssert t.db.mostInnerTransaction == t and
+    Committed notin t.flags and
+    RolledBack notin t.flags
   t.db.mostInnerTransaction = t.parentTransaction
   t.modifications.commit(t.db)
-  t.committed = true
+  t.flags.incl Committed
 
 proc dispose*(t: DbTransaction) {.inline.} =
-  if not t.committed:
+  if Committed notin t.flags and
+     RolledBack notin t.flags:
     t.rollback()
 
 proc safeDispose*(t: DbTransaction) {.inline.} =
-  if t != nil and not t.committed:
+  if t != nil and
+     Committed notin t.flags and
+     RolledBack notin t.flags:
     t.rollback()
 
 proc putImpl[T](db: RootRef, key, val: openarray[byte]) =
