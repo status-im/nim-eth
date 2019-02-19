@@ -384,7 +384,7 @@ proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthStatus =
     h.remoteHPubkey = pubkey
     h.version = cast[ptr byte](versionBr.baseAddr)[]
     result = Success
-  except:
+  except CatchableError:
     result = RlpError
 
 proc decodeAckMessageEip8*(h: var Handshake, m: openarray[byte]): AuthStatus =
@@ -417,7 +417,7 @@ proc decodeAckMessageEip8*(h: var Handshake, m: openarray[byte]): AuthStatus =
     copyMem(addr h.responderNonce[0], nonceBr.baseAddr, KeyLength)
     h.version = cast[ptr byte](versionBr.baseAddr)[]
     result = Success
-  except:
+  except CatchableError:
     result = RlpError
 
 proc decodeAckMessageV4(h: var Handshake, m: openarray[byte]): AuthStatus =
