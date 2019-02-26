@@ -2,7 +2,7 @@
 # on the given network.
 
 import
-  os, tables, times, random, sequtils,
+  os, tables, times, random, sequtils, options,
   chronos, chronicles, eth/[rlp, keys],
   private/p2p_types, discovery, kademlia, rlpx
 
@@ -99,8 +99,9 @@ proc lookupRandomNode(p: PeerPool) {.async.} =
     discard
   p.lastLookupTime = epochTime()
 
-proc getRandomBootnode(p: PeerPool): Node =
-  p.discovery.bootstrapNodes.rand()
+proc getRandomBootnode(p: PeerPool): Option[Node] =
+  if p.discovery.bootstrapNodes.len != 0:
+    result = option(p.discovery.bootstrapNodes.rand())
 
 proc addPeer*(pool: PeerPool, peer: Peer): bool =
   if peer.remote notin pool.connectedNodes:
@@ -157,8 +158,8 @@ proc maybeConnectToMorePeers(p: PeerPool) {.async.} =
   # In some cases (e.g ROPSTEN or private testnets), the discovery table might
   # be full of bad peers, so if we can't connect to any peers we try a random
   # bootstrap node as well.
-  if p.connectedNodes.len == 0:
-    await p.connectToNode(p.getRandomBootnode())
+  if p.connectedNodes.len == 0 and (let n = p.getRandomBootnode(); n.isSome):
+    await p.connectToNode(n.get())
 
 proc run(p: PeerPool) {.async.} =
   trace "Running PeerPool..."

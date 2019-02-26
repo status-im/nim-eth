@@ -77,7 +77,7 @@ proc `$`*(n: Node): string =
     "Node[" & $n.node.address.ip & ":" & $n.node.address.udpPort & "]"
 
 proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.data)
-proc `==`*(a, b: Node): bool = a.node.pubkey == b.node.pubkey
+proc `==`*(a, b: Node): bool = (a.isNil and b.isNil) or (not a.isNil and not b.isNil and a.node.pubkey == b.node.pubkey)
 
 proc newKBucket(istart, iend: NodeId): KBucket =
   result.new()
@@ -322,13 +322,13 @@ proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async.} =
   ##
   ## Bonding consists of pinging the node, waiting for a pong and maybe a ping as well.
   ## It is necessary to do this at least once before we send findNode requests to a node.
-  info "Bonding to peer", n
+  trace "Bonding to peer", n
   if n in k.routing:
     return true
 
   let pid = pingId(n, k.ping(n))
   if pid in k.pongFutures:
-    debug "Binding failed, already waiting for pong", n
+    debug "Bonding failed, already waiting for pong", n
     return false
 
   let gotPong = await k.waitPong(n, pid)
@@ -349,7 +349,7 @@ proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async.} =
 
   discard await k.waitPing(n)
 
-  debug "Bonding completed successfully", n
+  trace "Bonding completed successfully", n
   k.updateRoutingTable(n)
   return true
 
@@ -424,14 +424,14 @@ proc bootstrap*(k: KademliaProtocol, bootstrapNodes: seq[Node]) {.async.} =
   discard await k.lookupRandom()
 
 proc recvPong*(k: KademliaProtocol, n: Node, token: seq[byte]) =
-  debug "<<< pong from ", n
+  trace "<<< pong from ", n
   let pingid = token & @(n.node.pubkey.data)
   var future: Future[bool]
   if k.pongFutures.take(pingid, future):
     future.complete(true)
 
 proc recvPing*(k: KademliaProtocol, n: Node, msgHash: any) =
-  debug "<<< ping from ", n
+  trace "<<< ping from ", n
   k.updateRoutingTable(n)
   k.wire.sendPong(n, msgHash)
 
@@ -446,7 +446,7 @@ proc recvNeighbours*(k: KademliaProtocol, remote: Node, neighbours: seq[Node]) =
   ## done as part of node lookup, so the actual processing is left to the callback from
   ## neighbours_callbacks, which is added (and removed after it's done or timed out) in
   ## wait_neighbours().
-  debug "Received neighbours", remote, neighbours
+  trace "Received neighbours", remote, neighbours
   let cb = k.neighboursCallbacks.getOrDefault(remote)
   if not cb.isNil:
     cb(neighbours)
