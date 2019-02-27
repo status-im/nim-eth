@@ -738,7 +738,6 @@ macro p2pProtocolImpl(name: static[string],
       hasReqIds = useRequestIds and msgKind in {rlpxRequest, rlpxResponse}
 
     var
-      paramCount = 0
       userPragmas = n.pragma
 
       # variables used in the sending procs
@@ -774,7 +773,7 @@ macro p2pProtocolImpl(name: static[string],
     result = msgRecord
     if hasReqIds:
       # Messages using request Ids
-      readParamsPrelude.add quote do:
+      readParams.add quote do:
         let `reqId` = `read`(`receivedRlp`, int)
 
     case msgKind
@@ -844,8 +843,6 @@ macro p2pProtocolImpl(name: static[string],
       outRecvProcs.add(userHandlerProc)
 
     for param, paramType in n.typedParams(skip = 1):
-      inc paramCount
-
       # This is a fragment of the sending proc that
       # serializes each of the passed parameters:
       paramsToWrite.add param
@@ -868,6 +865,8 @@ macro p2pProtocolImpl(name: static[string],
       # unpacking the fields of the received message:
       if userHandlerCall != nil:
         userHandlerCall.add newDotExpr(receivedMsg, param)
+
+    let paramCount = paramsToWrite.len
 
     if paramCount > 1:
       readParamsPrelude.add newCall(enterList, receivedRlp)
