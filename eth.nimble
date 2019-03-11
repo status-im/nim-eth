@@ -13,7 +13,8 @@ requires "nim >= 0.19.0",
          "rocksdb",
          "package_visible_types",
          "chronos",
-         "chronicles"
+         "chronicles",
+         "std_shims"
 
 import strutils
 import oswalkdir, ospaths # In newer nim these are merged to os

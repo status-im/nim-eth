@@ -42,7 +42,7 @@ p2pProtocol abc(version = 1,
   requestResponse:
     proc abcReq(p: Peer, n: int) =
       echo "got req ", n
-      await p.abcRes(reqId, &"response to #{n}")
+      await response.send(&"response to #{n}")
 
     proc abcRes(p: Peer, data: string) =
       echo "got response ", data
@@ -89,6 +89,12 @@ template asyncTest(name, body: untyped) =
     proc scenario {.async.} = body
     waitFor scenario()
 
+template sendResponseWithId(peer: Peer, proto, msg: untyped, reqId: int, data: varargs[untyped]): auto =
+  msg(ResponseWithId[proto.msg](peer: peer, id: reqId), data)
+
+template sendResponse(peer: Peer, proto, msg: untyped, data: varargs[untyped]): auto =
+  msg(Response[proto.msg](peer), data)
+
 asyncTest "network with 3 peers using custom protocols":
   const useCompression = defined(useSnappy)
   let localKeys = newKeyPair()
@@ -101,7 +107,7 @@ asyncTest "network with 3 peers using custom protocols":
 
     m.expect(abc.abcReq) do (peer: Peer, data: Rlp):
       let reqId = data.readReqId()
-      await peer.abcRes(reqId, "mock response")
+      await sendResponseWithId(peer, abc, abcRes, reqId, "mock response")
       await sleepAsync(100)
       let r = await peer.abcReq(1)
       assert r.get.data == "response to #1"
@@ -116,7 +122,7 @@ asyncTest "network with 3 peers using custom protocols":
 
     m.expect(xyz.xyzReq) do (peer: Peer):
       echo "got xyz req"
-      await peer.xyzRes("mock peer data")
+      await sendResponse(peer, xyz, xyzRes, "mock peer data")
 
     when useCompression:
       m.useCompression = useCompression
