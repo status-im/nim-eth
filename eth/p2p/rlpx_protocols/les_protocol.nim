@@ -287,7 +287,7 @@ p2pProtocol les(version = lesVersion,
            costQuantity(req.maxResults.int, max = maxHeadersFetch).} =
 
       let headers = peer.network.chain.getBlockHeaders(req)
-      await peer.blockHeaders(reqId, updateBV(), headers)
+      await response.send(updateBV(), headers)
 
     proc blockHeaders(
            peer: Peer,
@@ -304,7 +304,7 @@ p2pProtocol les(version = lesVersion,
            costQuantity(blocks.len, max = maxBodiesFetch), gcsafe.} =
 
       let blocks = peer.network.chain.getBlockBodies(blocks)
-      await peer.blockBodies(reqId, updateBV(), blocks)
+      await response.send(updateBV(), blocks)
 
     proc blockBodies(
            peer: Peer,
@@ -318,7 +318,7 @@ p2pProtocol les(version = lesVersion,
            {.costQuantity(hashes.len, max = maxReceiptsFetch).} =
 
       let receipts = peer.network.chain.getReceipts(hashes)
-      await peer.receipts(reqId, updateBV(), receipts)
+      await response.send(updateBV(), receipts)
 
     proc receipts(
            peer: Peer,
@@ -332,7 +332,7 @@ p2pProtocol les(version = lesVersion,
            costQuantity(proofs.len, max = maxProofsFetch).} =
 
       let proofs = peer.network.chain.getProofs(proofs)
-      await peer.proofs(reqId, updateBV(), proofs)
+      await response.send(updateBV(), proofs)
 
     proc proofs(
            peer: Peer,
@@ -346,7 +346,7 @@ p2pProtocol les(version = lesVersion,
            costQuantity(reqs.len, max = maxCodeFetch).} =
 
       let results = peer.network.chain.getContractCodes(reqs)
-      await peer.contractCodes(reqId, updateBV(), results)
+      await response.send(updateBV(), results)
 
     proc contractCodes(
            peer: Peer,
@@ -362,7 +362,7 @@ p2pProtocol les(version = lesVersion,
            costQuantity(reqs.len, max = maxHeaderProofsFetch).} =
 
       let proofs = peer.network.chain.getHeaderProofs(reqs)
-      await peer.headerProofs(reqId, updateBV(), proofs)
+      await response.send(updateBV(), proofs)
 
     proc headerProofs(
            peer: Peer,
@@ -377,7 +377,7 @@ p2pProtocol les(version = lesVersion,
 
       var nodes, auxData: seq[Blob]
       peer.network.chain.getHelperTrieProofs(reqs, nodes, auxData)
-      await peer.helperTrieProofs(reqId, updateBV(), nodes, auxData)
+      await response.send(updateBV(), nodes, auxData)
 
     proc helperTrieProofs(
            peer: Peer,
@@ -409,7 +409,7 @@ p2pProtocol les(version = lesVersion,
 
         results.add s
 
-      await peer.txStatus(reqId, updateBV(), results)
+      await response.send(updateBV(), results)
 
     proc getTxStatus(
            peer: Peer,
@@ -421,7 +421,7 @@ p2pProtocol les(version = lesVersion,
       var results: seq[TransactionStatusMsg]
       for t in transactions:
         results.add chain.getTransactionStatus(t.rlpHash)
-      await peer.txStatus(reqId, updateBV(), results)
+      await response.send(updateBV(), results)
 
     proc txStatus(
            peer: Peer,

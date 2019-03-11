@@ -1,14 +1,11 @@
 import
   macros, tables, algorithm, deques, hashes, options, typetraits,
-  chronicles, nimcrypto, chronos, eth/[rlp, common, keys],
-  private/p2p_types, kademlia, auth, rlpxcrypt, enode, p2p_tracing
+  std_shims/macros_shim, chronicles, nimcrypto, chronos, eth/[rlp, common, keys],
+  private/p2p_types, kademlia, auth, rlpxcrypt, enode
 
 when useSnappy:
   import snappy
   const devp2pSnappyVersion* = 5
-
-const
-  tracingEnabled = defined(p2pdump)
 
 logScope:
   topics = "rlpx"
@@ -17,6 +14,8 @@ const
   devp2pVersion* = 4
   defaultReqTimeout = 10000
   maxMsgSize = 1024 * 1024
+
+include p2p_tracing
 
 when tracingEnabled:
   import
@@ -35,9 +34,6 @@ var
 # Nim to not consider them GcSafe violations:
 template allProtocols*: auto = {.gcsafe.}: gProtocols
 template devp2pInfo: auto = {.gcsafe.}: gDevp2pInfo
-
-proc newFuture[T](location: var Future[T]) =
-  location = newFuture[T]()
 
 proc `$`*(p: Peer): string {.inline.} =
   $p.remote
@@ -239,6 +235,10 @@ proc perPeerMsgIdImpl(peer: Peer, proto: ProtocolInfo, msgId: int): int {.inline
   result = msgId
   if not peer.dispatcher.isNil:
     result += peer.dispatcher.protocolOffsets[proto.index]
+
+template getPeer(peer: Peer): auto = peer
+template getPeer(response: Response): auto = Peer(response)
+template getPeer(response: ResponseWithId): auto = response.peer
 
 proc supports*(peer: Peer, Protocol: type): bool {.inline.} =
   ## Checks whether a Peer supports a particular protocol
@@ -490,6 +490,8 @@ proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
       warn "Dropped RLPX message",
            msg = peer.dispatcher.messages[nextMsgId].name
 
+include p2p_backends_helpers
+
 proc nextMsg*(peer: Peer, MsgType: type): Future[MsgType] =
   ## This procs awaits a specific RLPx message.
   ## Any messages received while waiting will be dispatched to their
@@ -524,77 +526,6 @@ proc dispatchMessages*(peer: Peer) {.async.} =
       let msgInfo = peer.dispatcher.messages[msgId]
       (msgInfo.nextMsgResolver)(msgData, peer.awaitedMessages[msgId])
       peer.awaitedMessages[msgId] = nil
-
-iterator typedParams(n: NimNode, skip = 0): (NimNode, NimNode) =
-  for i in (1 + skip) ..< n.params.len:
-    let paramNodes = n.params[i]
-    let paramType = paramNodes[^2]
-
-    for j in 0 ..< paramNodes.len - 2:
-      yield (paramNodes[j], paramType)
-
-proc chooseFieldType(n: NimNode): NimNode =
-  ## Examines the parameter types used in the message signature
-  ## and selects the corresponding field type for use in the
-  ## message object type (i.e. `p2p.hello`).
-  ##
-  ## For now, only openarray types are remapped to sequences.
-  result = n
-  if n.kind == nnkBracketExpr and eqIdent(n[0], "openarray"):
-    result = n.copyNimTree
-    result[0] = ident("seq")
-
-proc getState(peer: Peer, proto: ProtocolInfo): RootRef =
-  peer.protocolStates[proto.index]
-
-template state*(peer: Peer, Protocol: type): untyped =
-  ## Returns the state object of a particular protocol for a
-  ## particular connection.
-  mixin State
-  bind getState
-  cast[Protocol.State](getState(peer, Protocol.protocolInfo))
-
-proc getNetworkState(node: EthereumNode, proto: ProtocolInfo): RootRef =
-  node.protocolStates[proto.index]
-
-template protocolState*(node: EthereumNode, Protocol: type): untyped =
-  mixin NetworkState
-  bind getNetworkState
-  cast[Protocol.NetworkState](getNetworkState(node, Protocol.protocolInfo))
-
-template networkState*(connection: Peer, Protocol: type): untyped =
-  ## Returns the network state object of a particular protocol for a
-  ## particular connection.
-  protocolState(connection.network, Protocol)
-
-proc initProtocolState*[T](state: T, x: Peer|EthereumNode) {.gcsafe.} = discard
-
-proc createPeerState[ProtocolState](peer: Peer): RootRef =
-  var res = new ProtocolState
-  mixin initProtocolState
-  initProtocolState(res, peer)
-  return cast[RootRef](res)
-
-proc createNetworkState[NetworkState](network: EthereumNode): RootRef {.gcsafe.} =
-  var res = new NetworkState
-  mixin initProtocolState
-  initProtocolState(res, network)
-  return cast[RootRef](res)
-
-proc popTimeoutParam(n: NimNode): NimNode =
-  var lastParam = n.params[^1]
-  if eqIdent(lastParam[0], "timeout"):
-    if lastParam[2].kind == nnkEmpty:
-      macros.error "You must specify a default value for the `timeout` parameter", lastParam
-    result = lastParam
-    n.params.del(n.params.len - 1)
-
-proc verifyStateType(t: NimNode): NimNode =
-  result = t[1]
-  if result.kind == nnkSym and $result == "nil":
-    return nil
-  if result.kind != nnkBracketExpr or $result[0] != "ref":
-    macros.error($result & " must be a ref type")
 
 macro p2pProtocolImpl(name: static[string],
                       version: static[uint],
@@ -632,6 +563,7 @@ macro p2pProtocolImpl(name: static[string],
     protoNameIdent = ident(protoName)
     resultIdent = ident "result"
     perProtocolMsgId = ident"perProtocolMsgId"
+    response = ident"response"
     currentProtocolSym = ident"CurrentProtocol"
     protocol = ident(protoName & "Protocol")
     isSubprotocol = version > 0'u
@@ -674,7 +606,10 @@ macro p2pProtocolImpl(name: static[string],
   template applyDecorator(p: NimNode, decorator: NimNode) =
     if decorator.kind != nnkNilLit: p.addPragma decorator
 
-  proc augmentUserHandler(userHandlerProc: NimNode, msgId = -1, msgKind = rlpxNotification) =
+  proc augmentUserHandler(userHandlerProc: NimNode,
+                          msgId = -1,
+                          msgKind = rlpxNotification,
+                          extraDefinitions: NimNode = nil) =
     ## Turns a regular proc definition into an async proc and adds
     ## the helpers for accessing the peer and network protocol states.
     case msgKind
@@ -695,6 +630,9 @@ macro p2pProtocolImpl(name: static[string],
 
     userHandlerDefinitions.add quote do:
       type `currentProtocolSym` = `protoNameIdent`
+
+    if extraDefinitions != nil:
+      userHandlerDefinitions.add extraDefinitions
 
     if msgId >= 0:
       userHandlerDefinitions.add quote do:
@@ -729,7 +667,7 @@ macro p2pProtocolImpl(name: static[string],
                      responseMsgId = -1,
                      responseRecord: NimNode = nil): NimNode =
     if n[0].kind == nnkPostfix:
-      macros.error("rlpxProcotol procs are public by default. " &
+      macros.error("p2pProcotol procs are public by default. " &
                    "Please remove the postfix `*`.", n)
 
     let
@@ -742,6 +680,7 @@ macro p2pProtocolImpl(name: static[string],
 
       # variables used in the sending procs
       msgRecipient = ident"msgRecipient"
+      sendTo = ident"sendTo"
       reqTimeout: NimNode
       rlpWriter = ident"writer"
       appendParams = newNimNode(nnkStmtList)
@@ -819,14 +758,25 @@ macro p2pProtocolImpl(name: static[string],
                                  addr(`receivedMsg`),
                                  `reqIdVal`)
       if hasReqIds:
-        paramsToWrite.add reqId
+        paramsToWrite.add newDotExpr(sendTo, ident"id")
 
     if n.body.kind != nnkEmpty:
       # implement the receiving thunk proc that deserialzed the
       # message parameters and calls the user proc:
       userHandlerProc = n.copyNimTree
       userHandlerProc.name = genSym(nskProc, msgName)
-      augmentUserHandler userHandlerProc, msgId, msgKind
+
+      var extraDefs: NimNode
+      if msgKind == rlpxRequest:
+        let peer = userHandlerProc.params[1][0]
+        if hasReqIds:
+          extraDefs = quote do:
+            let `response` = ResponseWithId[`responseRecord`](peer: `peer`, id: `reqId`)
+        else:
+          extraDefs = quote do:
+            let `response` = Response[`responseRecord`](`peer`)
+
+      augmentUserHandler userHandlerProc, msgId, msgKind, extraDefs
 
       # This is the call to the user supplied handled. Here we add only the
       # initial peer param, while the rest of the params will be added later.
@@ -909,8 +859,11 @@ macro p2pProtocolImpl(name: static[string],
       template msgProtocol*(T: type `msgRecord`): type = `protoNameIdent`
 
     var msgSendProc = n
+    let msgSendProcName = n.name
+    outSendProcs.add msgSendProc
+
     # TODO: check that the first param has the correct type
-    msgSendProc.params[1][0] = msgRecipient
+    msgSendProc.params[1][0] = sendTo
     msgSendProc.addPragma ident"gcsafe"
 
     # Add a timeout parameter for all request procs
@@ -918,8 +871,20 @@ macro p2pProtocolImpl(name: static[string],
     of rlpxRequest:
       msgSendProc.params.add reqTimeout
     of rlpxResponse:
-      if useRequestIds:
-        msgSendProc.params.insert 2, newIdentDefs(reqId, ident"int")
+      # A response proc must be called with a response object that originates
+      # from a certain request. Here we change the Peer parameter at position
+      # 1 to the correct strongly-typed ResponseType. The incoming procs still
+      # gets the normal Peer paramter.
+      let
+        ResponseTypeHead = if useRequestIds: bindSym"ResponseWithId"
+                           else: bindSym"Response"
+        ResponseType = newTree(nnkBracketExpr, ResponseTypeHead, msgRecord)
+
+      msgSendProc.params[1][1] = ResponseType
+
+      outSendProcs.add quote do:
+        template send*(r: `ResponseType`, args: varargs[untyped]): auto =
+          `msgSendProcName`(r, args)
     else: discard
 
     # We change the return type of the sending proc to a Future.
@@ -946,7 +911,7 @@ macro p2pProtocolImpl(name: static[string],
       # `sendMsg` call.
       quote: return `sendCall`
 
-    let `perPeerMsgIdValue` = if isSubprotocol:
+    let perPeerMsgIdValue = if isSubprotocol:
       newCall(perPeerMsgIdImpl, msgRecipient, protocol, newLit(msgId))
     else:
       newLit(msgId)
@@ -975,6 +940,7 @@ macro p2pProtocolImpl(name: static[string],
 
     # let paramCountNode = newLit(paramCount)
     msgSendProc.body = quote do:
+      let `msgRecipient` = getPeer(`sendTo`)
       `initWriter`
       `appendParams`
       `finalizeRequest`
@@ -982,8 +948,6 @@ macro p2pProtocolImpl(name: static[string],
 
     if msgKind == rlpxRequest:
       msgSendProc.applyDecorator outgoingRequestDecorator
-
-    outSendProcs.add msgSendProc
 
     outProcRegistrations.add(
       newCall(bindSym("registerMsg"),
@@ -1052,7 +1016,7 @@ macro p2pProtocolImpl(name: static[string],
       elif eqIdent(n[0], "onPeerDisconnected"):
         disconnectHandler = liftEventHandler(n[1], "PeerDisconnect")
       else:
-        macros.error(repr(n) & " is not a recognized call in RLPx protocol definitions", n)
+        macros.error(repr(n) & " is not a recognized call in P2P protocol definitions", n)
     of nnkProcDef:
       discard addMsgHandler(nextId, n)
       inc nextId
@@ -1061,7 +1025,7 @@ macro p2pProtocolImpl(name: static[string],
       discard
 
     else:
-      macros.error("illegal syntax in a RLPx protocol definition", n)
+      macros.error("illegal syntax in a P2P protocol definition", n)
 
   let peerInit = if peerState == nil: newNilLit()
                  else: newTree(nnkBracketExpr, createPeerState, peerState)

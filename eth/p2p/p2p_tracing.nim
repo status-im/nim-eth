@@ -1,11 +1,8 @@
-import
-  private/p2p_types
-
-const tracingEnabled* = defined(p2pdump)
+const tracingEnabled = defined(p2pdump)
 
 when tracingEnabled:
   import
-    macros,
+    macros, typetraits,
     serialization, json_serialization/writer,
     chronicles, chronicles_tail/configuration
 
@@ -25,8 +22,8 @@ when tracingEnabled:
   template logRecord(eventName: static[string], args: varargs[untyped]) =
     p2pMessages.log LogLevel.NONE, eventName, topics = "p2pdump", args
 
-  proc initTracing*(baseProtocol: ProtocolInfo,
-                    userProtocols: seq[ProtocolInfo]) =
+  proc initTracing(baseProtocol: ProtocolInfo,
+                   userProtocols: seq[ProtocolInfo]) =
     once:
       var w = init StringJsonWriter
 
@@ -48,26 +45,27 @@ when tracingEnabled:
   proc logMsgEventImpl(eventName: static[string],
                        peer: Peer,
                        protocol: ProtocolInfo,
-                       msgId: int,
+                       msgName: string,
                        json: string) =
     # this is kept as a separate proc to reduce the code bloat
     logRecord eventName, port = int(peer.network.address.tcpPort),
                          peer = $peer.remote,
                          protocol = protocol.name,
-                         msgId, data = JsonString(json)
+                         msg = msgName,
+                         data = JsonString(json)
 
   proc logMsgEvent[Msg](eventName: static[string], peer: Peer, msg: Msg) =
     mixin msgProtocol, protocolInfo, msgId
 
     logMsgEventImpl(eventName, peer,
                     Msg.msgProtocol.protocolInfo,
-                    Msg.msgId,
+                    Msg.type.name,
                     StringJsonWriter.encode(msg))
 
-  proc logSentMsgFields*(peer: NimNode,
-                         protocolInfo: NimNode,
-                         msgId: int,
-                         fields: openarray[NimNode]): NimNode =
+  proc logSentMsgFields(peer: NimNode,
+                        protocolInfo: NimNode,
+                        msgName: string,
+                        fields: openarray[NimNode]): NimNode =
     ## This generates the tracing code inserted in the message sending procs
     ## `fields` contains all the params that were serialized in the message
     var tracer = ident("tracer")
@@ -82,35 +80,35 @@ when tracingEnabled:
     result.add quote do:
       endRecord(`tracer`)
       logMsgEventImpl("outgoing_msg", `peer`,
-                      `protocolInfo`, `msgId`, getOutput(`tracer`))
+                      `protocolInfo`, `msgName`, getOutput(`tracer`))
 
-  template logSentMsg*(peer: Peer, msg: auto) =
+  template logSentMsg(peer: Peer, msg: auto) =
     logMsgEvent("outgoing_msg", peer, msg)
 
-  template logReceivedMsg*(peer: Peer, msg: auto) =
+  template logReceivedMsg(peer: Peer, msg: auto) =
     logMsgEvent("incoming_msg", peer, msg)
 
-  template logConnectedPeer*(p: Peer) =
+  template logConnectedPeer(p: Peer) =
     logRecord "peer_connected",
               port = int(p.network.address.tcpPort),
               peer = $p.remote
 
-  template logAcceptedPeer*(p: Peer) =
+  template logAcceptedPeer(p: Peer) =
     logRecord "peer_accepted",
               port = int(p.network.address.tcpPort),
               peer = $p.remote
 
-  template logDisconnectedPeer*(p: Peer) =
+  template logDisconnectedPeer(p: Peer) =
     logRecord "peer_disconnected",
               port = int(p.network.address.tcpPort),
               peer = $p.remote
 
 else:
-  template initTracing*(baseProtocol: ProtocolInfo,
+  template initTracing(baseProtocol: ProtocolInfo,
                         userProtocols: seq[ProtocolInfo])= discard
-  template logSentMsg*(peer: Peer, msg: auto) = discard
-  template logReceivedMsg*(peer: Peer, msg: auto) = discard
-  template logConnectedPeer*(peer: Peer) = discard
-  template logAcceptedPeer*(peer: Peer) = discard
-  template logDisconnectedPeer*(peer: Peer) = discard
+  template logSentMsg(peer: Peer, msg: auto) = discard
+  template logReceivedMsg(peer: Peer, msg: auto) = discard
+  template logConnectedPeer(peer: Peer) = discard
+  template logAcceptedPeer(peer: Peer) = discard
+  template logDisconnectedPeer(peer: Peer) = discard
 
