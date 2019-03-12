@@ -12,13 +12,13 @@ proc getAccount*(db: TrieDatabaseRef,
   else:
     result = newAccount()
 
-proc getContractCode*(chain: AbstractChainDb, req: ContractCodeRequest): Blob {.gcsafe.} =
+proc getContractCode*(chain: AbstractChainDB, req: ContractCodeRequest): Blob {.gcsafe.} =
   let b = chain.getBlockHeader(req.blockHash)
   if b.hasData:
     let acc = getAccount(chain.getStateDb, b.stateRoot, req.key)
     result = chain.getCodeByHash(acc.codeHash)
 
-proc getStorageNode*(chain: AbstractChainDb, hash: KeccakHash): Blob =
+proc getStorageNode*(chain: AbstractChainDB, hash: KeccakHash): Blob =
   let db = chain.getStateDb
   return db.get(hash.data)
   # let trie = initSecureHexaryTrie(db, emptyRlpHash) # TODO emptyRlpHash is not correct here

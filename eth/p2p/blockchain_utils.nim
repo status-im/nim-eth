@@ -3,7 +3,7 @@ import
 
 # TODO: Perhaps we can move this to eth-common
 
-proc getBlockHeaders*(db: AbstractChainDb,
+proc getBlockHeaders*(db: AbstractChainDB,
                       req: BlocksRequest): seq[BlockHeader] {.gcsafe.} =
   result = newSeqOfCap[BlockHeader](req.maxResults)
 
@@ -17,7 +17,7 @@ proc getBlockHeaders*(db: AbstractChainDb,
       result.add foundBlock
 
 template fetcher*(fetcherName, fetchingFunc, InputType, ResultType: untyped) =
-  proc fetcherName*(db: AbstractChainDb,
+  proc fetcherName*(db: AbstractChainDB,
                     lookups: openarray[InputType]): seq[ResultType] {.gcsafe.} =
     for lookup in lookups:
       let fetched = fetchingFunc(db, lookup)
@@ -34,7 +34,7 @@ fetcher getReceipts,       getReceipt,       KeccakHash,    Receipt
 fetcher getProofs,         getProof,         ProofRequest,  Blob
 fetcher getHeaderProofs,   getHeaderProof,   ProofRequest,  Blob
 
-proc getHelperTrieProofs*(db: AbstractChainDb,
+proc getHelperTrieProofs*(db: AbstractChainDB,
                           reqs: openarray[HelperTrieProofRequest],
                           outNodes: var seq[Blob], outAuxData: var seq[Blob]) =
   discard

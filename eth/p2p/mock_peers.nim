@@ -18,7 +18,7 @@ type
     keys*: KeyPair
     address*: Address
     networkId*: uint
-    chain*: AbstractChainDb
+    chain*: AbstractChainDB
     clientId*: string
     waitForHello*: bool
 
