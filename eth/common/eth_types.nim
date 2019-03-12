@@ -310,7 +310,7 @@ proc rlpHash*[T](v: T): Hash256 =
 func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
 
 proc notImplemented =
-  assert false, "Method not impelemented"
+  doAssert false, "Method not implemented"
 
 template hasData*(b: Blob): bool = b.len > 0
 template hasData*(r: EthResourceRefs): bool = r != nil
