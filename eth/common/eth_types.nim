@@ -353,10 +353,10 @@ method getStateDb*(db: AbstractChainDB): TrieDatabaseRef {.base, gcsafe.} =
 method getCodeByHash*(db: AbstractChainDB, hash: KeccakHash): Blob {.base, gcsafe.} =
   notImplemented()
 
-method getSetting*(db: AbstractChainDb, key: string): Bytes {.base, gcsafe.} =
+method getSetting*(db: AbstractChainDB, key: string): Bytes {.base, gcsafe.} =
   notImplemented()
 
-method setSetting*(db: AbstractChainDb, key: string, val: openarray[byte]) {.base, gcsafe.} =
+method setSetting*(db: AbstractChainDB, key: string, val: openarray[byte]) {.base, gcsafe.} =
   notImplemented()
 
 method getHeaderProof*(db: AbstractChainDB, req: ProofRequest): Blob {.base, gcsafe.} =

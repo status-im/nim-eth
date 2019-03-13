@@ -92,7 +92,7 @@ proc persistMessageStats*(db: AbstractChainDB,
 
 proc loadMessageStats*(network: LesNetwork,
                        les: ProtocolInfo,
-                       db: AbstractChainDb): bool =
+                       db: AbstractChainDB): bool =
   block readFromDB:
     if db == nil:
       break readFromDB
@@ -262,7 +262,7 @@ proc delistFromFlowControl*(network: LesNetwork, peer: LesPeer) =
 
 proc initFlowControl*(network: LesNetwork, les: ProtocolInfo,
                       maxReqCount, maxReqCostSum, reqCostTarget: int,
-                      db: AbstractChainDb = nil) =
+                      db: AbstractChainDB = nil) =
   network.rechargingRate = (rechargingScale * rechargingScale) /
                            (100 * rechargingScale / reqCostTarget - rechargingScale)
   network.maxReqCount = maxReqCount
