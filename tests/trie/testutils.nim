@@ -12,7 +12,7 @@ type
     value*: string
 
 proc randGen*[T](minVal, maxVal: T): RandGen[T] =
-  assert(minVal <= maxVal)
+  doAssert(minVal <= maxVal)
   result.minVal = minVal
   result.maxVal = maxVal
 

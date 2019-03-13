@@ -226,22 +226,22 @@ proc getRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] {.noinit.} =
                                    addr length, unsafeAddr pubkey,
                                    SECP256K1_EC_UNCOMPRESSED) != 1:
     raiseSecp256k1Error()
-  assert(length == RawPublicKeySize + 1)
-  assert(key[0] == 0x04'u8)
+  doAssert(length == RawPublicKeySize + 1)
+  doAssert(key[0] == 0x04'u8)
   copyMem(addr result[0], addr key[1], RawPublicKeySize)
 
 proc toRaw*(pubkey: PublicKey, data: var openarray[byte]) =
   ## Converts public key `pubkey` to serialized form and store it in `data`.
   var key: array[RawPublicKeySize + 1, byte]
-  assert(len(data) >= RawPublicKeySize)
+  doAssert(len(data) >= RawPublicKeySize)
   var length = csize(sizeof(key))
   let ctx = getSecpContext()
   if secp256k1_ec_pubkey_serialize(ctx, cast[ptr cuchar](addr key),
                                    addr length, unsafeAddr pubkey,
                                    SECP256K1_EC_UNCOMPRESSED) != 1:
     raiseSecp256k1Error()
-  assert(length == RawPublicKeySize + 1)
-  assert(key[0] == 0x04'u8)
+  doAssert(length == RawPublicKeySize + 1)
+  doAssert(key[0] == 0x04'u8)
   copyMem(addr data[0], addr key[1], RawPublicKeySize)
 
 proc getRaw*(s: Signature): array[RawSignatureSize, byte] {.noinit.} =
@@ -257,7 +257,7 @@ proc toRaw*(s: Signature, data: var openarray[byte]) =
   ## Converts signature `s` to serialized form and store it in `data`.
   let ctx = getSecpContext()
   var recid = cint(0)
-  assert(len(data) >= RawSignatureSize)
+  doAssert(len(data) >= RawSignatureSize)
   if secp256k1_ecdsa_recoverable_signature_serialize_compact(
     ctx, cast[ptr cuchar](addr data[0]), addr recid, unsafeAddr s) != 1:
     raiseSecp256k1Error()

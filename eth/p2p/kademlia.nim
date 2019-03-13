@@ -170,7 +170,7 @@ proc computeSharedPrefixBits(nodes: openarray[Node]): int =
     for j in 1 .. nodes.high:
       if (nodes[j].id and mask) != reference: return i - 1
 
-  assert(false, "Unable to calculate number of shared prefix bits")
+  doAssert(false, "Unable to calculate number of shared prefix bits")
 
 proc init(r: var RoutingTable, thisNode: Node) {.inline.} =
   r.thisNode = thisNode
@@ -189,7 +189,7 @@ proc removeNode(r: var RoutingTable, n: Node) =
   r.bucketForNode(n).removeNode(n)
 
 proc addNode(r: var RoutingTable, n: Node): Node =
-  assert(n != r.thisNode)
+  doAssert(n != r.thisNode)
   let bucket = r.bucketForNode(n)
   let evictionCandidate = bucket.add(n)
   if not evictionCandidate.isNil:
@@ -262,7 +262,7 @@ proc pingId(n: Node, token: seq[byte]): seq[byte] {.inline.} =
   result = token & @(n.node.pubkey.data)
 
 proc waitPong(k: KademliaProtocol, n: Node, pingid: seq[byte]): Future[bool] =
-  assert(pingid notin k.pongFutures, "Already waiting for pong from " & $n)
+  doAssert(pingid notin k.pongFutures, "Already waiting for pong from " & $n)
   result = newFuture[bool]("waitPong")
   let fut = result
   k.pongFutures[pingid] = result
@@ -272,12 +272,12 @@ proc waitPong(k: KademliaProtocol, n: Node, pingid: seq[byte]): Future[bool] =
       fut.complete(false)
 
 proc ping(k: KademliaProtocol, n: Node): seq[byte] =
-  assert(n != k.thisNode)
+  doAssert(n != k.thisNode)
   result = k.wire.sendPing(n)
 
 proc waitPing(k: KademliaProtocol, n: Node): Future[bool] =
   result = newFuture[bool]("waitPing")
-  assert(n notin k.pingFutures)
+  doAssert(n notin k.pingFutures)
   k.pingFutures[n] = result
   let fut = result
   onTimeout:
@@ -286,7 +286,7 @@ proc waitPing(k: KademliaProtocol, n: Node): Future[bool] =
       fut.complete(false)
 
 proc waitNeighbours(k: KademliaProtocol, remote: Node): Future[seq[Node]] =
-  assert(remote notin k.neighboursCallbacks)
+  doAssert(remote notin k.neighboursCallbacks)
   result = newFuture[seq[Node]]("waitNeighbours")
   let fut = result
   var neighbours = newSeqOfCap[Node](BUCKET_SIZE)
@@ -300,7 +300,7 @@ proc waitNeighbours(k: KademliaProtocol, remote: Node): Future[seq[Node]] =
         neighbours.add(i)
         if neighbours.len == BUCKET_SIZE:
           k.neighboursCallbacks.del(remote)
-          assert(not fut.finished)
+          doAssert(not fut.finished)
           fut.complete(neighbours)
 
   onTimeout:

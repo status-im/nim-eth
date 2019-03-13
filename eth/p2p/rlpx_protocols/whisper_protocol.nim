@@ -143,7 +143,7 @@ proc fromLE32(v: array[4, byte]): uint32 =
 proc leadingZeroBits(hash: MDigest): int =
   ## Number of most significant zero bits before the first one
   for h in hash.data:
-    static: assert sizeof(h) == 1
+    static: doAssert sizeof(h) == 1
     if h == 0:
       result += 8
     else:
@@ -167,7 +167,7 @@ proc topicBloom*(topic: Topic): Bloom =
     if (topic[3] and byte(1 shl i)) != 0: # fetch the 9'th bit from the last byte
       idx = idx + 256
 
-    assert idx <= 511
+    doAssert idx <= 511
     result[idx div 8] = result[idx div 8] or byte(1 shl (idx and 7'u16))
 
 proc generateRandomID(): string =
@@ -182,7 +182,7 @@ proc `or`(a, b: Bloom): Bloom =
     result[i] = a[i] or b[i]
 
 proc bytesCopy(bloom: var Bloom, b: Bytes) =
-  assert b.len == bloomSize
+  doAssert b.len == bloomSize
   copyMem(addr bloom[0], unsafeAddr b[0], bloomSize)
 
 proc toBloom*(topics: openArray[Topic]): Bloom =

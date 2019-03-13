@@ -215,11 +215,11 @@ proc hasStateRoot*(rec: Receipt): bool {.inline.} =
   rec.stateRootOrStatus.isHash == true
 
 proc stateRoot*(rec: Receipt): Hash256 {.inline.} =
-  assert(rec.hasStateRoot)
+  doAssert(rec.hasStateRoot)
   rec.stateRootOrStatus.hash
 
 proc status*(rec: Receipt): int {.inline.} =
-  assert(rec.hasStatus)
+  doAssert(rec.hasStatus)
   if rec.stateRootOrStatus.status: 1 else: 0
 
 #
@@ -273,7 +273,7 @@ proc append*(rlpWriter: var RlpWriter, t: Transaction, a: EthAddress) {.inline.}
     rlpWriter.append(a)
 
 proc read*(rlp: var Rlp, T: typedesc[HashOrStatus]): T {.inline.} =
-  assert(rlp.blobLen() == 32 or rlp.blobLen() == 1)
+  doAssert(rlp.blobLen() == 32 or rlp.blobLen() == 1)
   if rlp.blobLen == 1:
     result = hashOrStatus(rlp.read(uint8) == 1)
   else:

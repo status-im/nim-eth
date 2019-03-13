@@ -22,8 +22,8 @@ type
   DoubleHash = array[64, byte]
 
 proc initDoubleHash(a, b: openArray[byte]): DoubleHash =
-  assert(a.len == 32, $a.len)
-  assert(b.len == 32, $b.len)
+  doAssert(a.len == 32, $a.len)
+  doAssert(b.len == 32, $b.len)
   copyMem(result[ 0].addr, a[0].unsafeAddr, 32)
   copyMem(result[32].addr, b[0].unsafeAddr, 32)
 
@@ -75,13 +75,13 @@ proc getAux(self: SparseBinaryTrie, path: BitRange, rootHash: ByteRange): ByteRa
 
 proc get*(self: SparseBinaryTrie, key: BytesContainer): ByteRange =
   ## gets a key from the tree.
-  assert(key.len == pathByteLen)
+  doAssert(key.len == pathByteLen)
   let path = MutByteRange(key.toRange).bits
   self.getAux(path, self.rootHash)
 
 proc get*(self: SparseBinaryTrie, key, rootHash: distinct BytesContainer): ByteRange =
   ## gets a key from the tree at a specific root.
-  assert(key.len == pathByteLen)
+  doAssert(key.len == pathByteLen)
   let path = MutByteRange(key.toRange).bits
   self.getAux(path, rootHash.toRange)
 
@@ -111,14 +111,14 @@ proc setAux(self: var SparseBinaryTrie, value: ByteRange,
 proc set*(self: var SparseBinaryTrie, key, value: distinct BytesContainer) =
   ## sets a new value for a key in the tree, returns the new root,
   ## and sets the new current root of the tree.
-  assert(key.len == pathByteLen)
+  doAssert(key.len == pathByteLen)
   let path = MutByteRange(key.toRange).bits
   self.rootHash = self.setAux(value.toRange, path, 0, self.rootHash)
 
 proc set*(self: var SparseBinaryTrie, key, value, rootHash: distinct BytesContainer): ByteRange =
   ## sets a new value for a key in the tree at a specific root,
   ## and returns the new root.
-  assert(key.len == pathByteLen)
+  doAssert(key.len == pathByteLen)
   let path = MutByteRange(key.toRange).bits
   self.setAux(value.toRange, path, 0, rootHash.toRange)
 
@@ -127,7 +127,7 @@ template exists*(self: SparseBinaryTrie, key: BytesContainer): bool =
 
 proc del*(self: var SparseBinaryTrie, key: BytesContainer) =
   ## Equals to setting the value to zeroBytesRange
-  assert(key.len == pathByteLen)
+  doAssert(key.len == pathByteLen)
   self.set(key, zeroBytesRange)
 
 # Dictionary API
@@ -141,7 +141,7 @@ template contains*(self: SparseBinaryTrie, key: BytesContainer): bool =
   self.exists(key)
 
 proc proveAux(self: SparseBinaryTrie, key, rootHash: ByteRange, output: var seq[ByteRange]): bool =
-  assert(key.len == pathByteLen)
+  doAssert(key.len == pathByteLen)
   var currVal = self.db.get(rootHash.toOpenArray).toRange
   if currVal.len == 0: return false
 

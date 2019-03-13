@@ -311,7 +311,7 @@ proc registerRequest*(peer: Peer,
                                timeoutAt: timeoutAt)
   peer.outstandingRequests[responseMsgId].addLast req
 
-  assert(not peer.dispatcher.isNil)
+  doAssert(not peer.dispatcher.isNil)
   let requestResolver = peer.dispatcher.messages[responseMsgId].requestResolver
   proc timeoutExpired(udata: pointer) = requestResolver(nil, responseFuture)
 
@@ -372,7 +372,7 @@ proc resolveResponseFuture(peer: Peer, msgId: int, msg: pointer, reqId: int) =
       template req: auto = outstandingReqs()[idx]
 
       if req.future.finished:
-        assert req.timeoutAt <= fastEpochTime()
+        doAssert req.timeoutAt <= fastEpochTime()
         # Here we'll remove the expired request by swapping
         # it with the last one in the deque (if necessary):
         if idx != outstandingReqs.len - 1:
@@ -601,7 +601,7 @@ macro p2pProtocolImpl(name: static[string],
     linkSendFailureToReqFuture = bindSym "linkSendFailureToReqFuture"
 
   # By convention, all Ethereum protocol names must be abbreviated to 3 letters
-  assert shortName.len == 3
+  doAssert shortName.len == 3
 
   template applyDecorator(p: NimNode, decorator: NimNode) =
     if decorator.kind != nnkNilLit: p.addPragma decorator

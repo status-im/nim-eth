@@ -89,11 +89,11 @@ proc getBranch*(db: DB; rootHash: BytesContainer | KeccakHash; key: BytesContain
 proc isValidBranch*(branch: seq[BytesRange], rootHash: BytesContainer | KeccakHash, key, value: BytesContainer): bool =
   checkValidHashZ(rootHash)
   # branch must not be empty
-  assert(branch.len != 0)
+  doAssert(branch.len != 0)
 
   var db = newMemoryDB()
   for node in branch:
-    assert(node.len != 0)
+    doAssert(node.len != 0)
     let nodeHash = keccakHash(node)
     db.put(nodeHash.toOpenArray, node.toOpenArray)
 

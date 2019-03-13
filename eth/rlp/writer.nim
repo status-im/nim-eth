@@ -91,7 +91,7 @@ proc decRet(n: var int, delta: int): int =
 proc maybeClosePendingLists(self) =
   while pendingLists.len > 0:
     let lastListIdx = pendingLists.len - 1
-    assert pendingLists[lastListIdx].remainingItems >= 1
+    doAssert pendingLists[lastListIdx].remainingItems >= 1
     if decRet(pendingLists[lastListIdx].remainingItems, 1) == 0:
       # A list have been just finished. It was started in `startList`.
       let listStartPos = pendingLists[lastListIdx].outBytes

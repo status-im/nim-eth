@@ -31,7 +31,7 @@ proc nodesToConnect(p: PeerPool): seq[Node] {.inline.} =
   p.discovery.randomNodes(p.minPeers).filterIt(it notin p.discovery.bootstrapNodes)
 
 proc addObserver(p: PeerPool, observerId: int, observer: PeerObserver) =
-  assert(observerId notin p.observers)
+  doAssert(observerId notin p.observers)
   p.observers[observerId] = observer
   if not observer.onPeerConnected.isNil:
     for peer in p.connectedNodes.values:

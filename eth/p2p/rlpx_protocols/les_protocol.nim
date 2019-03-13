@@ -92,7 +92,7 @@ proc getCostQuantity(fn: NimNode): tuple[quantityExpr, maxQuantity: NimNode] =
   # XXX: `getCustomPragmaVal` doesn't work yet on regular nnkProcDef nodes
   # (TODO: file as an issue)
   let p = fn.pragma
-  assert p.kind == nnkPragma and p.len > 0 and $p[0][0] == "costQuantity"
+  doAssert p.kind == nnkPragma and p.len > 0 and $p[0][0] == "costQuantity"
 
   result.quantityExpr = p[0][1]
   result.maxQuantity= p[0][2]

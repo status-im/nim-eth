@@ -292,9 +292,9 @@ when isMainModule:
     doAssert(recoverMsgPublicKey(m, remotePubkey))
 
     let (cmdId, payload) = unpack(m)
-    assert(payload == hexToSeqByte"f2cb842edbd4d182944382765da0ab56fb9e64a85a597e6bb27c656b4f1afb7e06b0fd4e41ccde6dba69a3c4a150845aaa4de2")
-    assert(cmdId == cmdPong)
-    assert(remotePubkey == initPublicKey("78de8a0916848093c73790ead81d1928bec737d565119932b98c6b100d944b7a95e94f847f689fc723399d2e31129d182f7ef3863f2b4c820abbf3ab2722344d"))
+    doAssert(payload == hexToSeqByte"f2cb842edbd4d182944382765da0ab56fb9e64a85a597e6bb27c656b4f1afb7e06b0fd4e41ccde6dba69a3c4a150845aaa4de2")
+    doAssert(cmdId == cmdPong)
+    doAssert(remotePubkey == initPublicKey("78de8a0916848093c73790ead81d1928bec737d565119932b98c6b100d944b7a95e94f847f689fc723399d2e31129d182f7ef3863f2b4c820abbf3ab2722344d"))
 
   let privKey = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")
 
@@ -304,7 +304,7 @@ when isMainModule:
   #   var b = @[1.byte, 2, 3]
   #   let m = pack(cmdPing, b.initBytesRange, privKey)
   #   let (remotePubkey, cmdId, payload) = unpack(m)
-  #   assert(remotePubkey.raw_key.toHex == privKey.public_key.raw_key.toHex)
+  #   doAssert(remotePubkey.raw_key.toHex == privKey.public_key.raw_key.toHex)
 
   var bootnodes = newSeq[ENode]()
   for item in LOCAL_BOOTNODES:

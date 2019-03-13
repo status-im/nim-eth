@@ -235,7 +235,7 @@ proc enlistInFlowControl*(network: LesNetwork,
                           peerRechargingPower = 100) =
   let t = now()
 
-  assert peer.isServer or peer.isClient
+  doAssert peer.isServer or peer.isClient
     # Each Peer must be potential communication partner for us.
     # There will be useless peers on the network, but the logic
     # should make sure to disconnect them earlier in `onPeerConnected`.

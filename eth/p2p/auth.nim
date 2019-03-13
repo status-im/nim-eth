@@ -85,7 +85,7 @@ template toa(a, b, c: untyped): untyped =
   toOpenArray((a), (b), (b) + (c) - 1)
 
 proc sxor[T](a: var openarray[T], b: openarray[T]) {.inline.} =
-  assert(len(a) == len(b))
+  doAssert(len(a) == len(b))
   for i in 0 ..< len(a):
     a[i] = a[i] xor b[i]
 
@@ -160,7 +160,7 @@ proc authMessageEIP8(h: var Handshake,
     buffer: array[PlainAuthMessageMaxEIP8, byte]
     padsize: byte
 
-  assert(EIP8 in h.flags)
+  doAssert(EIP8 in h.flags)
   outlen = 0
   if ecdhAgree(h.host.seckey, pubkey, secret) != EthKeysStatus.Success:
     return(EcdhError)
@@ -174,7 +174,7 @@ proc authMessageEIP8(h: var Handshake,
                                h.host.pubkey.getRaw(),
                                h.initiatorNonce,
                                [byte(h.version)])
-  assert(len(payload) == PlainAuthMessageEIP8Length)
+  doAssert(len(payload) == PlainAuthMessageEIP8Length)
   let pencsize = eciesEncryptedLength(len(payload))
   while true:
     if randomBytes(addr padsize, 1) != 1:
@@ -240,11 +240,11 @@ proc ackMessageEIP8(h: var Handshake,
   var
     buffer: array[PlainAckMessageMaxEIP8, byte]
     padsize: byte
-  assert(EIP8 in h.flags)
+  doAssert(EIP8 in h.flags)
   var payload = rlp.encodeList(h.ephemeral.pubkey.getRaw(),
                                h.responderNonce,
                                [byte(h.version)])
-  assert(len(payload) == PlainAckMessageEIP8Length)
+  doAssert(len(payload) == PlainAckMessageEIP8Length)
   outlen = 0
   let pencsize = eciesEncryptedLength(len(payload))
   while true:
@@ -319,7 +319,7 @@ proc decodeAuthMessageV4(h: var Handshake, m: openarray[byte]): AuthStatus =
     secret: SharedSecret
     buffer: array[PlainAuthMessageV4Length, byte]
     pubkey: PublicKey
-  assert(Responder in h.flags)
+  doAssert(Responder in h.flags)
   if eciesDecrypt(m, buffer, h.host.seckey) != EciesStatus.Success:
     return(EciesError)
   var header = cast[ptr AuthMessageV4](addr buffer[0])
@@ -424,7 +424,7 @@ proc decodeAckMessageV4(h: var Handshake, m: openarray[byte]): AuthStatus =
   ## Decodes V4 AckMessage.
   var
     buffer: array[PlainAckMessageV4Length, byte]
-  assert(Initiator in h.flags)
+  doAssert(Initiator in h.flags)
   if eciesDecrypt(m, buffer, h.host.seckey) != EciesStatus.Success:
     return(EciesError)
   var header = cast[ptr AckMessageV4](addr buffer[0])

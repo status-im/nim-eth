@@ -122,11 +122,11 @@ template isMemoryDB(db: TrieDatabaseRef): bool =
     db.mostInnerTransaction.parentTransaction == nil
 
 proc totalRecordsInMemoryDB*(db: TrieDatabaseRef): int =
-  assert isMemoryDB(db)
+  doAssert isMemoryDB(db)
   return db.mostInnerTransaction.modifications.records.len
 
 iterator pairsInMemoryDB*(db: TrieDatabaseRef): (Bytes, Bytes) =
-  assert isMemoryDB(db)
+  doAssert isMemoryDB(db)
   for k, v in db.mostInnerTransaction.modifications.records:
     yield (k, v.value)
 

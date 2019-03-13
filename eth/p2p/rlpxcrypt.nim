@@ -48,7 +48,7 @@ template toa(a, b, c: untyped): untyped =
   toOpenArray((a), (b), (b) + (c) - 1)
 
 proc sxor[T](a: var openarray[T], b: openarray[T]) {.inline.} =
-  assert(len(a) == len(b))
+  doAssert(len(a) == len(b))
   for i in 0 ..< len(a):
     a[i] = a[i] xor b[i]
 
@@ -145,7 +145,7 @@ proc encryptMsg*(msg: openarray[byte], secrets: var SecretState): seq[byte] =
   # This would be safer if we use a thread-local sequ for the temporary buffer
   result = newSeq[byte](encryptedLength(msg.len))
   let s = encrypt(secrets, header, msg, result)
-  assert s == Success
+  doAssert s == Success
 
 proc getBodySize*(a: RlpxHeader): int =
   (int(a[0]) shl 16) or (int(a[1]) shl 8) or int(a[2])

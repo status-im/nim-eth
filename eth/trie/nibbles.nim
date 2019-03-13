@@ -49,7 +49,7 @@ proc slice*(r: NibblesRange, ibegin: int, iend = -1): NibblesRange =
   result.ibegin = r.ibegin + ibegin
   let e = if iend < 0: r.iend + iend + 1
           else: r.ibegin + iend
-  assert ibegin >= 0 and e <= result.bytes.len * 2
+  doAssert ibegin >= 0 and e <= result.bytes.len * 2
   result.iend = e
 
 template writeFirstByte(nibbleCountExpr) {.dirty.} =
@@ -79,7 +79,7 @@ proc hexPrefixEncode*(r1, r2: NibblesRange, isLeaf = false): Bytes =
   writeNibbles(r2)
 
 proc hexPrefixEncodeByte*(val: byte, isLeaf = false): byte =
-  assert val < 16
+  doAssert val < 16
   result = (((byte(isLeaf) * 2) + 1) shl 4) or val
 
 proc sharedPrefixLen*(lhs, rhs: NibblesRange): int =

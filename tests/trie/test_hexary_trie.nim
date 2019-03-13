@@ -316,11 +316,11 @@ suite "hexary trie":
 
   proc isValidBranch(branch: seq[BytesRange], rootHash: KeccakHash, key, value: BytesRange): bool =
     # branch must not be empty
-    assert(branch.len != 0)
+    doAssert(branch.len != 0)
 
     var db = newMemoryDB()
     for node in branch:
-      assert(node.len != 0)
+      doAssert(node.len != 0)
       let nodeHash = hexary.keccak(node)
       db.put(nodeHash.data, node.toOpenArray)
 

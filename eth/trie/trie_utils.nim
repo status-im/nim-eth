@@ -11,7 +11,7 @@ proc toTrieNodeKey*(hash: KeccakHash): TrieNodeKey =
 
 template checkValidHashZ*(x: untyped) =
   when x.type isnot KeccakHash:
-    assert(x.len == 32 or x.len == 0)
+    doAssert(x.len == 32 or x.len == 0)
 
 template isZeroHash*(x: ByteRange): bool =
   x.len == 0

@@ -103,17 +103,17 @@ var db = newMemoryDB()
 var trie = initBinaryTrie(db)
 trie.set("key1", "value1")
 trie.set("key2", "value2")
-assert trie.get("key1") == "value1".toRange
-assert trie.get("key2") == "value2".toRange
+doAssert trie.get("key1") == "value1".toRange
+doAssert trie.get("key2") == "value2".toRange
 
 # delete all subtrie with key prefixes "key"
 trie.deleteSubtrie("key")
-assert trie.get("key1") == zeroBytesRange
-assert trie.get("key2") == zeroBytesRange
+doAssert trie.get("key1") == zeroBytesRange
+doAssert trie.get("key2") == zeroBytesRange
 
 trie["moon"] = "sun"
-assert "moon" in trie
-assert trie["moon"] == "sun".toRange
+doAssert "moon" in trie
+doAssert trie["moon"] == "sun".toRange
 ```
 
 Remember, `set` and `get` are trie operations. A single `set` operation may invoke
@@ -160,10 +160,10 @@ var trie = initBinaryTrie(db)
 trie.set("key1", "value1")
 trie.set("key2", "value2")
 
-assert checkIfBranchExist(db, trie.getRootHash(), "key") == true
-assert checkIfBranchExist(db, trie.getRootHash(), "key1") == true
-assert checkIfBranchExist(db, trie.getRootHash(), "ken") == false
-assert checkIfBranchExist(db, trie.getRootHash(), "key123") == false
+doAssert checkIfBranchExist(db, trie.getRootHash(), "key") == true
+doAssert checkIfBranchExist(db, trie.getRootHash(), "key1") == true
+doAssert checkIfBranchExist(db, trie.getRootHash(), "ken") == false
+doAssert checkIfBranchExist(db, trie.getRootHash(), "key123") == false
 ```
 
 The tree will looks like:
@@ -190,11 +190,11 @@ var branchA = getBranch(db, trie.getRootHash(), "key1")
 var branchB = getBranch(db, trie.getRootHash(), "key2")
 # ==> [A, B, C2, D2]
 
-assert isValidBranch(branchA, trie.getRootHash(), "key1", "value1") == true
+doAssert isValidBranch(branchA, trie.getRootHash(), "key1", "value1") == true
 # wrong key, return zero bytes
-assert isValidBranch(branchA, trie.getRootHash(), "key5", "") == true
+doAssert isValidBranch(branchA, trie.getRootHash(), "key5", "") == true
 
-assert isValidBranch(branchB, trie.getRootHash(), "key1", "value1") # InvalidNode
+doAssert isValidBranch(branchB, trie.getRootHash(), "key1", "value1") # InvalidNode
 
 var x = getBranch(db, trie.getRootHash(), "key")
 # ==> [A]
@@ -218,7 +218,7 @@ var wholeTrie = getWitness(db, trie.getRootHash(), "")
 var node = branch[1] # B
 let nodeHash = keccak256.digest(node.baseAddr, uint(node.len))
 var nodes = getTrieNodes(db, nodeHash)
-assert nodes.len == wholeTrie.len - 1
+doAssert nodes.len == wholeTrie.len - 1
 # ==> [B, C1, D1, C2, D2]
 ```
 
@@ -303,14 +303,14 @@ let
 
 trie.set(key1, "value1")
 trie.set(key2, "value2")
-assert trie.get(key1) == "value1".toRange
-assert trie.get(key2) == "value2".toRange
+doAssert trie.get(key1) == "value1".toRange
+doAssert trie.get(key2) == "value2".toRange
 
 trie.delete(key1)
-assert trie.get(key1) == zeroBytesRange
+doAssert trie.get(key1) == zeroBytesRange
 
 trie.delete(key2)
-assert trie[key2] == zeroBytesRange
+doAssert trie[key2] == zeroBytesRange
 ```
 
 Remember, `set` and `get` are trie operations. A single `set` operation may invoke
@@ -331,8 +331,8 @@ Using ``prove`` dan ``verifyProof`` API, we can do some merkling with SMT.
   trie[key1] = value1
   var proof = trie.prove(key1)
 
-  assert verifyProof(proof, trie.getRootHash(), key1, value1) == true
-  assert verifyProof(proof, trie.getRootHash(), key1, badValue) == false
-  assert verifyProof(proof, trie.getRootHash(), key2, value1) == false
+  doAssert verifyProof(proof, trie.getRootHash(), key1, value1) == true
+  doAssert verifyProof(proof, trie.getRootHash(), key1, badValue) == false
+  doAssert verifyProof(proof, trie.getRootHash(), key2, value1) == false
 ```
 

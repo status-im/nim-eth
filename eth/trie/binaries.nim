@@ -36,8 +36,8 @@ proc decodeToBinKeypath*(path: BytesRange): TrieBitRange =
   if path[0]:
     path = path[4..^1]
 
-  assert path[0] == false
-  assert path[1] == false
+  doAssert path[0] == false
+  doAssert path[1] == false
   var bits = path[2].int shl 1
   bits = bits or path[3].int
 
@@ -62,8 +62,8 @@ proc parseNode*(node: BytesRange): TrieNode =
       raise newException(InvalidNode, "Invalid branch node, both child node should be 32 bytes long each")
     # Output: node type, left child, right child
     result = TrieNode(kind: BRANCH_TYPE, leftChild: node[1..<33], rightChild: node[33..^1])
-    assert(result.leftChild.len == 32)
-    assert(result.rightChild.len == 32)
+    doAssert(result.leftChild.len == 32)
+    doAssert(result.rightChild.len == 32)
     return result
   of KV_TYPE:
     if node.len <= 33:

@@ -19,7 +19,7 @@ export
   p2p_types, rlpx, enode, kademlia
 
 proc addCapability*(node: var EthereumNode, p: ProtocolInfo) =
-  assert node.connectionState == ConnectionState.None
+  doAssert node.connectionState == ConnectionState.None
 
   let pos = lowerBound(node.protocols, p, rlpx.cmp)
   node.protocols.insert(p, pos)
@@ -95,7 +95,7 @@ proc connectToNetwork*(node: EthereumNode,
                        bootstrapNodes: seq[ENode],
                        startListening = true,
                        enableDiscovery = true) {.async.} =
-  assert node.connectionState == ConnectionState.None
+  doAssert node.connectionState == ConnectionState.None
 
   node.connectionState = Connecting
   node.discovery = newDiscoveryProtocol(node.keys.seckey,

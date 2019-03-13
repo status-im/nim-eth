@@ -110,7 +110,7 @@ asyncTest "network with 3 peers using custom protocols":
       await sendResponseWithId(peer, abc, abcRes, reqId, "mock response")
       await sleepAsync(100)
       let r = await peer.abcReq(1)
-      assert r.get.data == "response to #1"
+      doAssert r.get.data == "response to #1"
 
     m.expect(abc.abcRes)
 

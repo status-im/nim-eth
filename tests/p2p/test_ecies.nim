@@ -13,7 +13,7 @@ import eth/p2p/ecies
 
 proc compare[A, B](x: openarray[A], y: openarray[B], s: int = 0): bool =
   result = true
-  assert(s >= 0)
+  doAssert(s >= 0)
   var size = if s == 0: min(len(x), len(y)) else: min(s, min(len(x), len(y)))
   for i in 0..(size - 1):
     if x[i] != cast[A](y[i]):

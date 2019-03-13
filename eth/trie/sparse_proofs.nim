@@ -17,8 +17,8 @@ let emptyNodeHashes* = makeInitialEmptyTreeHash(treeHeight)
 
 # VerifyProof verifies a Merkle proof.
 proc verifyProofAux*(proof: seq[ByteRange], root, key, value: ByteRange): bool =
-  assert(root.len == 32)
-  assert(key.len == pathByteLen)
+  doAssert(root.len == 32)
+  doAssert(key.len == pathByteLen)
   var
     path = MutByteRange(key).bits
     curHash = keccakHash(value)

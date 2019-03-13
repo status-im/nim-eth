@@ -100,7 +100,7 @@ proc isSingleByte*(self: Rlp): bool =
   hasData() and bytes[position] < BLOB_START_MARKER
 
 proc getByteValue*(self: Rlp): byte =
-  assert self.isSingleByte()
+  doAssert self.isSingleByte()
   return bytes[position]
 
 proc payloadOffset(self: Rlp): int =
@@ -233,7 +233,7 @@ proc toBytes*(self: Rlp): BytesRange =
     result = bytes.slice(ibegin, iend)
 
 proc currentElemEnd(self: Rlp): int =
-  assert hasData()
+  doAssert hasData()
   result = position
 
   if isSingleByte():
@@ -242,14 +242,14 @@ proc currentElemEnd(self: Rlp): int =
     result += payloadOffset() + payloadBytesCount()
 
 proc enterList*(self: var Rlp) =
-  assert isList()
+  doAssert isList()
   position += payloadOffset()
 
 proc skipElem*(rlp: var Rlp) =
   rlp.position = rlp.currentElemEnd
 
 iterator items*(self: var Rlp): var Rlp =
-  assert isList()
+  doAssert isList()
 
   var
     payloadOffset = payloadOffset()
@@ -381,7 +381,7 @@ proc toNodes*(self: var Rlp): RlpNode =
     for e in self:
       result.elems.add e.toNodes
   else:
-    assert isBlob()
+    doAssert isBlob()
     result.kind = rlpBlob
     result.bytes = toBytes()
     position = currentElemEnd()

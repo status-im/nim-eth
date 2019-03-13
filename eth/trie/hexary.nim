@@ -30,7 +30,7 @@ proc keccak*(r: BytesRange): KeccakHash =
   keccak256.digest r.toOpenArray
 
 template asDbKey(k: TrieNodeKey): untyped =
-  assert k.usedBytes == 32
+  doAssert k.usedBytes == 32
   k.hash.data
 
 proc expectHash(r: Rlp): BytesRange =
@@ -79,7 +79,7 @@ proc isPruning*(t: HexaryTrie): bool =
 proc getLocalBytes(x: TrieNodeKey): BytesRange =
   ## This proc should be used on nodes using the optimization
   ## of short values within the key.
-  assert x.usedBytes < 32
+  doAssert x.usedBytes < 32
 
   when defined(rangesEnableUnsafeAPI):
     result = unsafeRangeConstruction(x.data, x.usedBytes)
@@ -152,7 +152,7 @@ proc getKeysAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]])
         key = path & k
 
       if isLeaf:
-        assert(key.len mod 2 == 0)
+        doAssert(key.len mod 2 == 0)
         return key.getBytes
       else:
         let
@@ -170,7 +170,7 @@ proc getKeysAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]])
 
       var lastElem = nodeRlp.listElem(16)
       if not lastElem.isEmpty:
-        assert(path.len mod 2 == 0)
+        doAssert(path.len mod 2 == 0)
         return path.getBytes
     else:
       raise newException(CorruptedTrieError,
@@ -236,7 +236,7 @@ proc getPairsAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]]
         value = nodeRlp.listElem(1)
 
       if isLeaf:
-        assert(key.len mod 2 == 0)
+        doAssert(key.len mod 2 == 0)
         return (key.getBytes, value.toBytes)
       else:
         let nextLookup = value.getLookup
@@ -252,7 +252,7 @@ proc getPairsAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]]
 
       var lastElem = nodeRlp.listElem(16)
       if not lastElem.isEmpty:
-        assert(path.len mod 2 == 0)
+        doAssert(path.len mod 2 == 0)
         return (path.getBytes, lastElem.toBytes)
     else:
       raise newException(CorruptedTrieError,
@@ -338,7 +338,7 @@ proc replaceValue(data: Rlp, key: NibblesRange, value: BytesRange): Bytes =
     let prefix = hexPrefixEncode(key, true)
     return encodeList(prefix, value)
 
-  assert data.isTrieBranch
+  doAssert data.isTrieBranch
   if data.listLen == 2:
     return encodeList(data.listElem(0), value)
 
@@ -363,7 +363,7 @@ proc isTwoItemNode(self: HexaryTrie; r: Rlp): bool =
     return r.isList and r.listLen == 2
 
 proc isLeaf(r: Rlp): bool =
-  assert r.isList and r.listLen == 2
+  doAssert r.isList and r.listLen == 2
   let b = r.listElem(0).toBytes()
   return (b[0] and 0x20) != 0
 
@@ -399,7 +399,7 @@ proc deleteAux(self: var HexaryTrie; rlpWriter: var RlpWriter;
   return true
 
 proc graft(self: var HexaryTrie; r: Rlp): Bytes =
-  assert r.isList and r.listLen == 2
+  doAssert r.isList and r.listLen == 2
   var (origIsLeaf, origPath) = r.extensionNodeKey
   var value = r.listElem(1)
 
@@ -410,7 +410,7 @@ proc graft(self: var HexaryTrie; r: Rlp): Bytes =
     self.prune(nodeKey.toOpenArray)
     value = rlpFromBytes resolvedData
 
-  assert value.listLen == 2
+  doAssert value.listLen == 2
   let (valueIsLeaf, valueKey) = value.extensionNodeKey
 
   var rlpWriter = initRlpList(2)
@@ -424,7 +424,7 @@ proc mergeAndGraft(self: var HexaryTrie;
   if childPos == 16:
     output.append hexPrefixEncode(zeroNibblesRange, true)
   else:
-    assert(not soleChild.isEmpty)
+    doAssert(not soleChild.isEmpty)
     output.append int(hexPrefixEncodeByte(childPos))
   output.append(soleChild)
   result = output.finish()
@@ -437,7 +437,7 @@ proc deleteAt(self: var HexaryTrie;
   if origRlp.isEmpty:
     return zeroBytesRange
 
-  assert origRlp.isTrieBranch
+  doAssert origRlp.isTrieBranch
   let origBytes = origRlp.rawData
   if origRlp.listLen == 2:
     let (isLeaf, k) = origRlp.extensionNodeKey
@@ -539,7 +539,7 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
   if orig.isEmpty:
     return origWithNewValue()
 
-  assert orig.isTrieBranch
+  doAssert orig.isTrieBranch
   if orig.listLen == 2:
     let (isLeaf, k) = orig.extensionNodeKey
     var origValue = orig.listElem(1)
@@ -574,7 +574,7 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
       var branches = initRlpList(17)
       if k.len == 0:
         # The key is now exhausted. This must be a leaf node
-        assert isLeaf
+        doAssert isLeaf
         for i in 0 ..< 16:
           branches.append ""
         branches.append origValue
@@ -618,7 +618,7 @@ proc put*(self: var HexaryTrie; key, value: BytesRange) =
   let root = self.root.hash
 
   var rootBytes = self.db.get(root.data).toRange
-  assert rootBytes.len > 0
+  doAssert rootBytes.len > 0
 
   let newRootBytes = self.mergeAt(rlpFromBytes(rootBytes), root,
                                   initNibbleRange(key), value)

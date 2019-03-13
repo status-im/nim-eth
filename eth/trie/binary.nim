@@ -35,7 +35,7 @@ proc getRootHash*(self: BinaryTrie): TrieNodeKey {.inline.} =
   self.rootHash
 
 template fetchNode(self: BinaryTrie, nodeHash: TrieNodeKey): TrieNode =
-  assert(nodeHash.len == 32)
+  doAssert(nodeHash.len == 32)
   parseNode self.db.get(nodeHash.toOpenArray).toRange
 
 proc getAux(self: BinaryTrie, nodeHash: TrieNodeKey, keyPath: TrieBitRange): BytesRange =
