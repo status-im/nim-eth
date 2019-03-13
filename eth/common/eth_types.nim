@@ -347,7 +347,7 @@ method getBlockBody*(db: AbstractChainDB, blockHash: KeccakHash): BlockBodyRef {
 method getReceipt*(db: AbstractChainDB, hash: KeccakHash): ReceiptRef {.base, gcsafe.} =
   notImplemented()
 
-method getStateDb*(db: AbstractChainDB): TrieDatabaseRef {.base, gcsafe.} =
+method getTrieDB*(db: AbstractChainDB): TrieDatabaseRef {.base, gcsafe.} =
   notImplemented()
 
 method getCodeByHash*(db: AbstractChainDB, hash: KeccakHash): Blob {.base, gcsafe.} =

@@ -15,11 +15,11 @@ proc getAccount*(db: TrieDatabaseRef,
 proc getContractCode*(chain: AbstractChainDB, req: ContractCodeRequest): Blob {.gcsafe.} =
   let b = chain.getBlockHeader(req.blockHash)
   if b.hasData:
-    let acc = getAccount(chain.getStateDb, b.stateRoot, req.key)
+    let acc = getAccount(chain.getTrieDB, b.stateRoot, req.key)
     result = chain.getCodeByHash(acc.codeHash)
 
 proc getStorageNode*(chain: AbstractChainDB, hash: KeccakHash): Blob =
-  let db = chain.getStateDb
+  let db = chain.getTrieDB
   return db.get(hash.data)
   # let trie = initSecureHexaryTrie(db, emptyRlpHash) # TODO emptyRlpHash is not correct here
   # return trie.get(unnecessary_OpenArrayToRange hash.data)
