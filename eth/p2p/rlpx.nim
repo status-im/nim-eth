@@ -576,7 +576,6 @@ macro p2pProtocolImpl(name: static[string],
     # Int = bindSym "int"
     Int = ident "int"
     Peer = bindSym "Peer"
-    append = bindSym "append"
     createNetworkState = bindSym "createNetworkState"
     createPeerState = bindSym "createPeerState"
     finish = bindSym "finish"
@@ -585,7 +584,8 @@ macro p2pProtocolImpl(name: static[string],
     messagePrinter = bindSym "messagePrinter"
     initProtocol = bindSym "initProtocol"
     nextMsgResolver = bindSym "nextMsgResolver"
-    read = bindSym "read"
+    append = bindSym("append", brForceOpen)
+    read = bindSym("read", brForceOpen)
     registerRequest = bindSym "registerRequest"
     requestResolver = bindSym "requestResolver"
     resolveResponseFuture = bindSym "resolveResponseFuture"
