@@ -83,7 +83,8 @@ proc listeningAddress*(node: EthereumNode): ENode =
   return initENode(node.keys.pubKey, node.address)
 
 proc startListening*(node: EthereumNode) =
-  let ta = initTAddress(node.address.ip, node.address.tcpPort)
+  # TODO allow binding to specific IP / IPv6 / etc
+  let ta = initTAddress(IPv4_any(), node.address.tcpPort)
   if node.listeningServer == nil:
     node.listeningServer = createStreamServer(ta, processIncoming,
                                               {ReuseAddr},
