@@ -48,6 +48,7 @@ type
   DiscoveryProtocol* = ref object
     privKey: PrivateKey
     address: Address
+    localBindIp: IpAddress
     bootstrapNodes*: seq[Node]
     thisNode*: Node
     kademlia: KademliaProtocol[DiscoveryProtocol]
@@ -153,11 +154,13 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
   if nodes.len != 0: flush()
 
 proc newDiscoveryProtocol*(privKey: PrivateKey, address: Address,
-                           bootstrapNodes: openarray[ENode]
+                           bootstrapNodes: openarray[ENode],
+                           localBindIp = IPv4_any(),
                            ): DiscoveryProtocol =
   result.new()
   result.privKey = privKey
   result.address = address
+  result.localBindIp = localBindIp
   result.bootstrapNodes = newSeqOfCap[Node](bootstrapNodes.len)
   for n in bootstrapNodes: result.bootstrapNodes.add(newNode(n))
   result.thisNode = newNode(privKey.getPublicKey(), address)
@@ -257,8 +260,7 @@ proc processClient(transp: DatagramTransport,
     debug "Receive failed", err = getCurrentExceptionMsg()
 
 proc open*(d: DiscoveryProtocol) =
-  # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(IPv4_any(), d.address.udpPort)
+  let ta = initTAddress(d.localBindIp, d.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
 proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] {.inline.} =

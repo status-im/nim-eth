@@ -38,7 +38,8 @@ proc newEthereumNode*(keys: KeyPair,
                       clientId = "nim-eth-p2p/0.2.0", # TODO: read this value from nimble somehow
                       addAllCapabilities = true,
                       useCompression: bool = false,
-                      minPeers = 10): EthereumNode =
+                      minPeers = 10,
+                      localBindIp = IPv4_any()): EthereumNode =
   new result
   result.keys = keys
   result.networkId = networkId
@@ -46,6 +47,7 @@ proc newEthereumNode*(keys: KeyPair,
   result.protocols.newSeq 0
   result.capabilities.newSeq 0
   result.address = address
+  result.localBindIp = localBindIp
   result.connectionState = ConnectionState.None
 
   when useSnappy:
@@ -83,8 +85,7 @@ proc listeningAddress*(node: EthereumNode): ENode =
   return initENode(node.keys.pubKey, node.address)
 
 proc startListening*(node: EthereumNode) =
-  # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(IPv4_any(), node.address.tcpPort)
+  let ta = initTAddress(node.localBindIp, node.address.tcpPort)
   if node.listeningServer == nil:
     node.listeningServer = createStreamServer(ta, processIncoming,
                                               {ReuseAddr},

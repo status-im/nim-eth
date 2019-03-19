@@ -15,6 +15,7 @@ type
     connectionState*: ConnectionState
     keys*: KeyPair
     address*: Address # The external address that the node will be advertising
+    localBindIp*: IpAddress # IP that the socket will bind to
     peerPool*: PeerPool
 
     # Private fields:

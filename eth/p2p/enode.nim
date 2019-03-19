@@ -25,7 +25,7 @@ type
 
   Address* = object
     ## Network address object
-    ip*: IpAddress        ## IPv4/IPv6 address
+    ip*: IpAddress        ## Public IPv4/IPv6 address
     udpPort*: Port        ## UDP discovery port number
     tcpPort*: Port        ## TCP port number
 
