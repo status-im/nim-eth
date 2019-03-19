@@ -14,7 +14,7 @@ type
     clientId*: string
     connectionState*: ConnectionState
     keys*: KeyPair
-    address*: Address
+    address*: Address # The external address that the node will be advertising
     peerPool*: PeerPool
 
     # Private fields:
