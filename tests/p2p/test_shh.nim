@@ -336,14 +336,16 @@ suite "Whisper filter":
     let padding = some(repeat(byte 0, 251))
     # this message has a PoW of 0.02962962962962963, number should be updated
     # in case PoW algorithm changes or contents of padding, payload, topic, etc.
+    # update: now with NON rlp encoded envelope size the PoW of this message is
+    # 0.02898550724637681
     let msg = prepFilterTestMsg(topic = topic, padding = padding)
 
     var filters = initTable[string, Filter]()
     let
       filterId1 = filters.subscribeFilter(
-                    newFilter(topics = @[topic], powReq = 0.02962962962962963))
+                    newFilter(topics = @[topic], powReq = 0.02898550724637681))
       filterId2 = filters.subscribeFilter(
-                    newFilter(topics = @[topic], powReq = 0.02962962962962964))
+                    newFilter(topics = @[topic], powReq = 0.02898550724637682))
 
     notify(filters, msg)
 
