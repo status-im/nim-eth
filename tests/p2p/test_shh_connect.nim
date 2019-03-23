@@ -17,6 +17,7 @@ proc resetMessageQueues(nodes: varargs[EthereumNode]) =
     node.resetMessageQueue()
 
 let bootENode = waitFor setupBootNode()
+let safeTTL = 5'u32
 
 var node1 = setupTestNode(Whisper)
 var node2 = setupTestNode(Whisper)
@@ -75,7 +76,6 @@ suite "Whisper connections":
     filters.add(node1.subscribeFilter(newFilter(some(signKeyPair.pubkey),
                                                 symKey = some(symKey),
                                                 topics = @[topic]), handler4))
-    var safeTTL = 5'u32
     # Messages
     check:
       # encrypted asym
@@ -122,7 +122,6 @@ suite "Whisper connections":
     var filter1 = node1.subscribeFilter(newFilter(topics = @[topic1]), handler1)
     var filter2 = node1.subscribeFilter(newFilter(topics = @[topic2]), handler2)
 
-    var safeTTL = 3'u32
     check:
       node2.postMessage(ttl = safeTTL + 1, topic = topic1,
                         payload = payloads[0]) == true
@@ -157,7 +156,6 @@ suite "Whisper connections":
     var filter2 = node1.subscribeFilter(newFilter(topics = @[topic],
                                         powReq = 1_000_000), handler2)
 
-    let safeTTL = 2'u32
     check:
       node2.postMessage(ttl = safeTTL, topic = topic, payload = payload) == true
 
@@ -179,8 +177,8 @@ suite "Whisper connections":
 
     var filter = node1.subscribeFilter(newFilter(topics = @[topic]))
     for i in countdown(10, 1):
-      check node2.postMessage(ttl = i.uint32, topic = topic,
-                                      payload = payload) == true
+      check node2.postMessage(ttl = safeTTL, topic = topic,
+                              payload = payload) == true
 
     await sleepAsync(messageInterval)
     check:
@@ -194,7 +192,6 @@ suite "Whisper connections":
     let topic = [byte 0, 0, 0, 0]
 
     var filter = node1.subscribeFilter(newFilter(topics = @[topic]))
-    let safeTTL = 2'u32
     check:
       node1.postMessage(ttl = safeTTL, topic = topic,
                         payload = repeat(byte 4, 10)) == true
@@ -216,7 +213,6 @@ suite "Whisper connections":
     var filter = node1.subscribeFilter(newFilter(topics = filterTopics), handler)
     await node1.setBloomFilter(node1.filtersToBloom())
 
-    let safeTTL = 2'u32
     check:
       node2.postMessage(ttl = safeTTL, topic = sendTopic1,
                         payload = payload) == true
@@ -251,7 +247,6 @@ suite "Whisper connections":
   asyncTest "PoW blocking":
     let topic = [byte 0, 0, 0, 0]
     let payload = repeat(byte 0, 10)
-    let safeTTL = 2'u32
 
     await node1.setPowRequirement(1_000_000)
     check:
@@ -279,15 +274,15 @@ suite "Whisper connections":
     # We need a minimum TTL of 2 as when set to 1 there is a small chance that
     # it is already expired after messageInterval due to rounding down of float
     # to uint32 in postMessage()
-    let minTTL = 2'u32
-    for i in countdown(minTTL + 9, minTTL):
-      check node2.postMessage(ttl = i, topic = topic, payload = payload) == true
+    let lowerTTL = 2'u32 # Lower TTL as we need to wait for messages to expire
+    for i in countdown(10, 1):
+      check node2.postMessage(ttl = lowerTTL, topic = topic, payload = payload) == true
     check node2.protocolState(Whisper).queue.items.len == 10
 
     await sleepAsync(messageInterval)
     check node1.protocolState(Whisper).queue.items.len == 10
 
-    await sleepAsync(int(minTTL*1000))
+    await sleepAsync(int((lowerTTL+1)*1000))
     check node1.protocolState(Whisper).queue.items.len == 0
     check node2.protocolState(Whisper).queue.items.len == 0
 
@@ -326,7 +321,6 @@ suite "Whisper connections":
 
     let topic = [byte 0, 0, 0, 0]
 
-    let safeTTL = 2'u32
     check:
       # normal post
       ln1.postMessage(ttl = safeTTL, topic = topic,
