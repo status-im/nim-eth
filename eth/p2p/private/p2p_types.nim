@@ -1,6 +1,5 @@
 import
   deques, tables,
-  package_visible_types,
   eth/[rlp, keys], chronos, eth/common/eth_types,
   ../enode, ../kademlia, ../discovery, ../options, ../rlpxcrypt
 

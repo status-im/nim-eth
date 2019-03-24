@@ -11,7 +11,6 @@ requires "nim >= 0.19.0",
          "byteutils",
          "secp256k1",
          "rocksdb",
-         "package_visible_types",
          "chronos",
          "chronicles",
          "std_shims"

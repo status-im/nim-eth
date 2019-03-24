@@ -78,9 +78,9 @@ proc currentRequestsCosts*(network: LesNetwork,
     if b < 0:
       b = 0
 
-    result.add ReqCostInfo.init(msgId = msg.id,
-                                baseCost = ReqCostInt(b * 2),
-                                reqCost  = ReqCostInt(m * 2))
+    result.add ReqCostInfo(msgId: msg.id,
+                           baseCost: ReqCostInt(b * 2),
+                           reqCost: ReqCostInt(m * 2))
 
 proc persistMessageStats*(db: AbstractChainDB,
                           network: LesNetwork) =
@@ -278,9 +278,11 @@ proc canMakeRequest(peer: var LesPeer, maxCost: int): (LesTime, float64) =
 
 template getRequestCost(peer: LesPeer, localOrRemote: untyped,
                         msgId, costQuantity: int): ReqCostInt =
-  template msgCostInfo: untyped = peer.`localOrRemote ReqCosts`[msgId]
+  let
+    baseCost = peer.`localOrRemote ReqCosts`[msgId].baseCost
+    reqCost  = peer.`localOrRemote ReqCosts`[msgId].reqCost
 
-  min(msgCostInfo.baseCost + msgCostInfo.reqCost * costQuantity,
+  min(baseCost + reqCost * costQuantity,
       peer.`localOrRemote FlowState`.bufLimit)
 
 proc trackOutgoingRequest*(network: LesNetwork, peer: LesPeer,
