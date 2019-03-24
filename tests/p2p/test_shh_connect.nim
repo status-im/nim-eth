@@ -18,6 +18,7 @@ proc resetMessageQueues(nodes: varargs[EthereumNode]) =
 
 let bootENode = waitFor setupBootNode()
 let safeTTL = 5'u32
+let waitInterval = messageInterval + 150
 
 var node1 = setupTestNode(Whisper)
 var node2 = setupTestNode(Whisper)
@@ -97,7 +98,7 @@ suite "Whisper connections":
       node2.protocolState(Whisper).queue.items.len == 4
 
     var f = all(futures)
-    await f or sleepAsync(messageInterval)
+    await f or sleepAsync(waitInterval)
     check:
       f.finished == true
       node1.protocolState(Whisper).queue.items.len == 4
@@ -130,7 +131,7 @@ suite "Whisper connections":
       node2.protocolState(Whisper).queue.items.len == 2
 
     var f = all(futures)
-    await f or sleepAsync(messageInterval)
+    await f or sleepAsync(waitInterval)
     check:
       f.finished == true
       node1.protocolState(Whisper).queue.items.len == 2
@@ -159,8 +160,8 @@ suite "Whisper connections":
     check:
       node2.postMessage(ttl = safeTTL, topic = topic, payload = payload) == true
 
-    await futures[0] or sleepAsync(messageInterval)
-    await futures[1] or sleepAsync(messageInterval)
+    await futures[0] or sleepAsync(waitInterval)
+    await futures[1] or sleepAsync(waitInterval)
     check:
       futures[0].finished == true
       futures[1].finished == false
@@ -180,7 +181,7 @@ suite "Whisper connections":
       check node2.postMessage(ttl = safeTTL, topic = topic,
                               payload = payload) == true
 
-    await sleepAsync(messageInterval)
+    await sleepAsync(waitInterval)
     check:
       node1.getFilterMessages(filter).len() == 10
       node1.getFilterMessages(filter).len() == 0
@@ -198,7 +199,7 @@ suite "Whisper connections":
       node1.getFilterMessages(filter).len() == 1
       node1.unsubscribeFilter(filter) == true
 
-    await sleepAsync(messageInterval)
+    await sleepAsync(waitInterval)
     resetMessageQueues(node1, node2)
 
   asyncTest "Bloomfilter blocking":
@@ -218,7 +219,7 @@ suite "Whisper connections":
                         payload = payload) == true
       node2.protocolState(Whisper).queue.items.len == 1
 
-    await f or sleepAsync(messageInterval)
+    await f or sleepAsync(waitInterval)
     check:
       f.finished == false
       node1.protocolState(Whisper).queue.items.len == 0
@@ -232,7 +233,7 @@ suite "Whisper connections":
                         payload = payload) == true
       node2.protocolState(Whisper).queue.items.len == 1
 
-    await f or sleepAsync(messageInterval)
+    await f or sleepAsync(waitInterval)
     check:
       f.finished == true
       f.read() == 1
@@ -252,7 +253,7 @@ suite "Whisper connections":
     check:
       node2.postMessage(ttl = safeTTL, topic = topic, payload = payload) == true
       node2.protocolState(Whisper).queue.items.len == 1
-    await sleepAsync(messageInterval)
+    await sleepAsync(waitInterval)
     check:
       node1.protocolState(Whisper).queue.items.len == 0
 
@@ -262,7 +263,7 @@ suite "Whisper connections":
     check:
       node2.postMessage(ttl = safeTTL, topic = topic, payload = payload) == true
       node2.protocolState(Whisper).queue.items.len == 1
-    await sleepAsync(messageInterval)
+    await sleepAsync(waitInterval)
     check:
       node1.protocolState(Whisper).queue.items.len == 1
 
@@ -279,7 +280,7 @@ suite "Whisper connections":
       check node2.postMessage(ttl = lowerTTL, topic = topic, payload = payload) == true
     check node2.protocolState(Whisper).queue.items.len == 10
 
-    await sleepAsync(messageInterval)
+    await sleepAsync(waitInterval)
     check node1.protocolState(Whisper).queue.items.len == 10
 
     await sleepAsync(int((lowerTTL+1)*1000))
@@ -303,7 +304,7 @@ suite "Whisper connections":
                         payload = repeat(byte 4, 10),
                         targetPeer = some(toNodeId(node1.keys.pubkey))) == true
 
-    await f or sleepAsync(messageInterval)
+    await f or sleepAsync(waitInterval)
     check:
       f.finished == true
       f.read() == 1
