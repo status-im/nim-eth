@@ -24,7 +24,7 @@ const
   defaultFilterQueueCapacity = 64
   whisperVersion* = 6
   whisperVersionStr* = "6.0"
-  defaultMinPow* = 0.001'f64
+  defaultMinPow* = 0.2'f64
   defaultMaxMsgSize* = 1024'u32 * 1024'u32 # * 10 # should be no higher than max RLPx size
   messageInterval* = 300 ## Interval at which messages are send to peers, in ms
   pruneInterval* = 1000 ## Interval at which message queue is pruned, in ms
