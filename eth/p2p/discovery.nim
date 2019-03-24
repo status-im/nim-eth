@@ -10,7 +10,8 @@
 
 import
   times,
-  chronos, eth/[keys, rlp], stint, nimcrypto, chronicles,
+  chronos, stint, nimcrypto, chronicles,
+  eth/common/eth_types_json_serialization, eth/[keys, rlp],
   kademlia, enode
 
 export

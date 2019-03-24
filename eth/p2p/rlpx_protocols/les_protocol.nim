@@ -15,7 +15,8 @@ import
   ../rlpx, ../kademlia, ../private/p2p_types, ../blockchain_utils,
   les/private/les_types, les/flow_control
 
-les_types.forwardPublicTypes
+export
+  les_types
 
 const
   lesVersion = 2'u
@@ -179,7 +180,7 @@ p2pProtocol les(version = lesVersion,
       lesNetwork = peer.networkState
 
     template `=>`(k, v: untyped): untyped =
-      KeyValuePair.init(key = k, value = rlp.encode(v))
+      KeyValuePair(key: k, value: rlp.encode(v))
 
     var lesProperties = @[
       keyProtocolVersion      => lesVersion,

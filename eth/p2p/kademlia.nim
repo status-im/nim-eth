@@ -10,7 +10,7 @@
 
 import
   tables, hashes, times, algorithm, sets, sequtils, random,
-  chronos, chronicles, eth/keys, stint, nimcrypto,
+  chronos, eth/keys, chronicles, stint, nimcrypto,
   enode
 
 export sets # TODO: This should not be needed, but compilation fails otherwise
