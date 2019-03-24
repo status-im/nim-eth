@@ -304,7 +304,9 @@ proc registerRequest*(peer: Peer,
   inc peer.lastReqId
   result = peer.lastReqId
 
-  let timeoutAt = fastEpochTime() + uint64(timeout)
+  # TODO turn timeout into Duration, but that requires messing with obnoxious
+  #      macro code
+  let timeoutAt = Moment.fromNow(milliseconds(timeout))
   let req = OutstandingRequest(id: result,
                                future: responseFuture,
                                timeoutAt: timeoutAt)
@@ -371,7 +373,7 @@ proc resolveResponseFuture(peer: Peer, msgId: int, msg: pointer, reqId: int) =
       template req: auto = outstandingReqs()[idx]
 
       if req.future.finished:
-        doAssert req.timeoutAt <= fastEpochTime()
+        doAssert req.timeoutAt <= Moment.now()
         # Here we'll remove the expired request by swapping
         # it with the last one in the deque (if necessary):
         if idx != outstandingReqs.len - 1:

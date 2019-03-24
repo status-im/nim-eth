@@ -128,7 +128,7 @@ type
   OutstandingRequest* = object
     id*: int
     future*: FutureBase
-    timeoutAt*: uint64
+    timeoutAt*: Moment
 
   # Private types:
   MessageHandlerDecorator* = proc(msgId: int, n: NimNode): NimNode
