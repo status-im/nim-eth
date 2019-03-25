@@ -12,7 +12,7 @@ logScope:
 
 const
   devp2pVersion* = 4
-  defaultReqTimeout = 10000
+  defaultReqTimeout = milliseconds(10000)
   maxMsgSize = 1024 * 1024
 
 include p2p_tracing
@@ -298,15 +298,13 @@ proc send*[Msg](peer: Peer, msg: Msg): Future[void] =
   peer.sendMsg rlpWriter.finish
 
 proc registerRequest*(peer: Peer,
-                      timeout: int,
+                      timeout: Duration,
                       responseFuture: FutureBase,
                       responseMsgId: int): int =
   inc peer.lastReqId
   result = peer.lastReqId
 
-  # TODO turn timeout into Duration, but that requires messing with obnoxious
-  #      macro code
-  let timeoutAt = Moment.fromNow(milliseconds(timeout))
+  let timeoutAt = Moment.fromNow(timeout)
   let req = OutstandingRequest(id: result,
                                future: responseFuture,
                                timeoutAt: timeoutAt)
@@ -531,8 +529,9 @@ proc dispatchMessages*(peer: Peer) {.async.} =
 macro p2pProtocolImpl(name: static[string],
                       version: static[uint],
                       body: untyped,
+                      # TODO Nim can't handle a proper duration paramter here
+                      timeout: static[int64] = defaultReqTimeout.milliseconds,
                       useRequestIds: static[bool] = true,
-                      timeout: static[int] = defaultReqTimeout,
                       shortName: static[string] = "",
                       outgoingRequestDecorator: untyped = nil,
                       incomingRequestDecorator: untyped = nil,
@@ -577,6 +576,8 @@ macro p2pProtocolImpl(name: static[string],
     # Int = bindSym "int"
     Int = ident "int"
     Peer = bindSym "Peer"
+    Duration = bindSym "Duration"
+    milliseconds = bindSym "milliseconds"
     createNetworkState = bindSym "createNetworkState"
     createPeerState = bindSym "createPeerState"
     finish = bindSym "finish"
@@ -727,7 +728,7 @@ macro p2pProtocolImpl(name: static[string],
       if reqTimeout == nil:
         reqTimeout = newTree(nnkIdentDefs,
                              ident"timeout",
-                             Int, newLit(defaultTimeout))
+                             Duration, newCall(milliseconds, newLit(defaultTimeout)))
 
       let reqToResponseOffset = responseMsgId - msgId
       let responseMsgId = quote do: `perPeerMsgIdVar` + `reqToResponseOffset`
@@ -1104,11 +1105,11 @@ proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason): Future[voi
 
 proc handshakeImpl(peer: Peer,
                    handshakeSendFut: Future[void],
-                   timeout: int,
+                   timeout: Duration,
                    HandshakeType: type): Future[HandshakeType] {.async.} =
   asyncCheck handshakeSendFut
   var response = nextMsg(peer, HandshakeType)
-  if timeout > 0:
+  if timeout.milliseconds > 0:
     await response or sleepAsync(timeout)
     if not response.finished:
       discard disconnectAndRaise(peer, BreachOfProtocol,
@@ -1117,7 +1118,7 @@ proc handshakeImpl(peer: Peer,
     discard await response
   return response.read
 
-macro handshake*(peer: Peer, timeout = 0, sendCall: untyped): untyped =
+macro handshake*(peer: Peer, timeout: untyped, sendCall: untyped): untyped =
   let
     msgName = $sendCall[0]
     msgType = newDotExpr(ident"CurrentProtocol", ident(msgName))
