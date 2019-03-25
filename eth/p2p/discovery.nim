@@ -86,13 +86,15 @@ proc pack(cmdId: CommandId, payload: BytesRange, pk: PrivateKey): Bytes =
   result = @(msgHash.data) & signature & encodedData
 
 proc validateMsgHash(msg: Bytes, msgHash: var MDigest[256]): bool =
-  msgHash.data[0 .. ^1] = msg.toOpenArray(0, msgHash.data.high)
-  result = msgHash == keccak256.digest(msg.toOpenArray(MAC_SIZE, msg.high))
+  if msg.len > HEAD_SIZE:
+    msgHash.data[0 .. ^1] = msg.toOpenArray(0, msgHash.data.high)
+    result = msgHash == keccak256.digest(msg.toOpenArray(MAC_SIZE, msg.high))
 
 proc recoverMsgPublicKey(msg: Bytes, pk: var PublicKey): bool =
-  recoverSignatureKey(msg.toOpenArray(MAC_SIZE, MAC_SIZE + 65),
-    keccak256.digest(msg.toOpenArray(HEAD_SIZE, msg.high)).data,
-    pk) == EthKeysStatus.Success
+  msg.len > HEAD_SIZE and
+    recoverSignatureKey(msg.toOpenArray(MAC_SIZE, HEAD_SIZE),
+      keccak256.digest(msg.toOpenArray(HEAD_SIZE, msg.high)).data,
+      pk) == EthKeysStatus.Success
 
 proc unpack(msg: Bytes): tuple[cmdId: CommandId, payload: Bytes] =
   result = (cmdId: msg[HEAD_SIZE].CommandId, payload: msg[HEAD_SIZE + 1 .. ^1])
