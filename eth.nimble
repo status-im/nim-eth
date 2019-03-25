@@ -15,34 +15,86 @@ requires "nim >= 0.19.0",
          "chronicles",
          "std_shims"
 
-import strutils
-import oswalkdir, ospaths # In newer nim these are merged to os
+proc runTest(path: string) =
+  echo "\nRunning: ", path
+  exec "nim c -r -d:release -d:chronicles_log_level=ERROR --verbosity:0 --hints:off --warnings:off " & path
+  rmFile path
 
-proc test(path: string) =
-  echo "Running: ", path
-  exec "nim c -r " & path
-
-proc run_tests(dir: string) =
-  for path in walkDirRec(dir):
-    let fname = splitPath(path).tail
-    if fname.startsWith("test_") and fname.endsWith(".nim"):
-      test(path)
-
-task test, "run tests":
-  run_tests("tests")
+proc runKeyfileTests() =
+  for filename in [
+      "test_keyfile",
+      "test_uuid",
+    ]:
+    runTest("tests/keyfile/" & filename)
 
 task test_keyfile, "run keyfile tests":
-  run_tests("tests/keyfile")
+  runKeyfileTests()
+
+proc runKeysTests() =
+  for filename in [
+      "test_keys",
+    ]:
+    runTest("tests/keys/" & filename)
 
 task test_keys, "run keys tests":
-  run_tests("tests/keys")
+  runKeysTests()
+
+proc runP2pTests() =
+  for filename in [
+      "les/test_flow_control",
+      "test_auth",
+      "test_crypt",
+      "test_discovery",
+      "test_ecies",
+      "test_enode",
+      "test_shh",
+      "test_shh_connect",
+    ]:
+    runTest("tests/p2p/" & filename)
 
 task test_p2p, "run p2p tests":
-  run_tests("tests/p2p")
+  runP2pTests()
+
+proc runRlpTests() =
+  for filename in [
+      "test_api_usage",
+      "test_json_suite",
+      "test_object_serialization",
+    ]:
+    runTest("tests/rlp/" & filename)
 
 task test_rlp, "run rlp tests":
-  run_tests("tests/rlp")
+  runRlpTests()
+
+proc runTrieTests() =
+  for filename in [
+      "test_binaries_utils",
+      "test_bin_trie",
+      "test_branches_utils",
+      "test_caching_db_backend",
+      "test_examples",
+      "test_hexary_trie",
+      "test_json_suite",
+      "test_nibbles",
+      "test_sparse_binary_trie",
+      "test_storage_backends",
+      "test_transaction_db",
+    ]:
+    runTest("tests/trie/" & filename)
 
 task test_trie, "run trie tests":
-  run_tests("tests/trie")
+  runTrieTests()
+
+task test, "run tests":
+  for filename in [
+      "test_bloom",
+      "test_common",
+    ]:
+    runTest("tests/" & filename)
+
+  runKeyfileTests()
+  runKeysTests()
+  runP2pTests()
+  runRlpTests()
+  runTrieTests()
 
