@@ -690,7 +690,7 @@ p2pProtocol Whisper(version = whisperVersion,
       whisperNet = peer.networkState
       whisperPeer = peer.state
 
-    let m = await handshake(peer, timeout = 500,
+    let m = await handshake(peer, timeout = chronos.milliseconds(500),
                             status(whisperVersion,
                                    cast[uint](whisperNet.config.powRequirement),
                                    @(whisperNet.config.bloom),
