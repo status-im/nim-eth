@@ -37,7 +37,7 @@ template devp2pInfo: auto = {.gcsafe.}: gDevp2pInfo
 
 chronicles.formatIt(Peer): $(it.remote)
 
-proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = true) {.gcsafe, async.}
+proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = false) {.gcsafe, async.}
 
 template raisePeerDisconnected(msg: string, r: DisconnectionReason) =
   var e = newException(PeerDisconnected, msg)
@@ -265,7 +265,7 @@ proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void] =
   return thunk(peer, msgId, msgData)
 
 proc linkSendFailureToReqFuture[S, R](sendFut: Future[S], resFut: Future[R]) =
-  sendFut.addCallback() do(arg: pointer):
+  sendFut.addCallback() do (arg: pointer):
     if not sendFut.error.isNil:
       resFut.fail(sendFut.error)
 
@@ -278,9 +278,8 @@ template compressMsg(peer: Peer, data: Bytes): Bytes =
     data
 
 proc sendMsg*(peer: Peer, data: Bytes) {.gcsafe, async.} =
-  var cipherText = encryptMsg(peer.compressMsg(data), peer.secretsState)
-
   try:
+    var cipherText = encryptMsg(peer.compressMsg(data), peer.secretsState)
     discard await peer.transport.write(cipherText)
   except:
     await peer.disconnect(TcpError)
@@ -483,7 +482,7 @@ proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
 
     elif nextMsgId == 1: # p2p.disconnect
       let reason = DisconnectionReason nextMsgData.listElem(0).toInt(uint32)
-      await peer.disconnect(reason, notifyOtherPeer = false)
+      await peer.disconnect(reason)
       raisePeerDisconnected("Unexpected disconnect", reason)
     else:
       warn "Dropped RLPX message",
@@ -511,7 +510,7 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     if msgId == 1: # p2p.disconnect
       await peer.transport.closeWait()
       let reason = msgData.listElem(0).toInt(uint32).DisconnectionReason
-      await peer.disconnect(reason, notifyOtherPeer = false)
+      await peer.disconnect(reason)
       break
 
     try:
@@ -520,10 +519,25 @@ proc dispatchMessages*(peer: Peer) {.async.} =
       debug "ending dispatchMessages loop", peer, err = getCurrentExceptionMsg()
       await peer.disconnect(BreachOfProtocol)
       return
+    except CatchableError:
+      warn "Error while handling RLPx message", peer,
+        msg = peer.getMsgName(msgId),
+        err = getCurrentExceptionMsg()
 
+    # TODO: Hmm, this can be safely moved into the message handler thunk.
+    # The documentation will need to be updated, explaning the fact that
+    # nextMsg will be resolved only if the message handler has executed
+    # successfully.
     if peer.awaitedMessages[msgId] != nil:
       let msgInfo = peer.dispatcher.messages[msgId]
-      (msgInfo.nextMsgResolver)(msgData, peer.awaitedMessages[msgId])
+      try:
+        (msgInfo.nextMsgResolver)(msgData, peer.awaitedMessages[msgId])
+      except:
+        # TODO: Handling errors here must be investigated more carefully.
+        # They also are supposed to be handled at the call-site where
+        # `nextMsg` is used.
+        debug "nextMsg resolver failed", err = getCurrentExceptionMsg()
+        raise
       peer.awaitedMessages[msgId] = nil
 
 macro p2pProtocolImpl(name: static[string],
@@ -1103,20 +1117,29 @@ proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason): Future[voi
 
   return all(futures)
 
-proc handshakeImpl(peer: Peer,
-                   handshakeSendFut: Future[void],
-                   timeout: Duration,
-                   HandshakeType: type): Future[HandshakeType] {.async.} =
-  asyncCheck handshakeSendFut
-  var response = nextMsg(peer, HandshakeType)
-  if timeout.milliseconds > 0:
-    await response or sleepAsync(timeout)
-    if not response.finished:
-      discard disconnectAndRaise(peer, BreachOfProtocol,
-                                 "sub-protocol handshake was not received in time.")
+proc handshakeImpl[T](peer: Peer,
+                      sendFut: Future[void],
+                      responseFut: Future[T],
+                      timeout: Duration): Future[T] {.async.} =
+  sendFut.addCallback do (arg: pointer):
+    if sendFut.failed:
+      debug "Handshake message not delivered", peer
+
+  doAssert timeout.milliseconds > 0
+  yield responseFut or sleepAsync(timeout)
+  if not responseFut.finished:
+    discard disconnectAndRaise(peer, BreachOfProtocol,
+                               "Protocol handshake was not received in time.")
+  elif responseFut.failed:
+    raise responseFut.error
   else:
-    discard await response
-  return response.read
+    return responseFut.read
+
+proc handshakeImpl(peer: Peer,
+                   sendFut: Future[void],
+                   timeout: Duration,
+                   HandshakeType: type): Future[HandshakeType] =
+  handshakeImpl(peer, sendFut, nextMsg(peer, HandshakeType), timeout)
 
 macro handshake*(peer: Peer, timeout: untyped, sendCall: untyped): untyped =
   let
@@ -1127,16 +1150,18 @@ macro handshake*(peer: Peer, timeout: untyped, sendCall: untyped): untyped =
 
   result = newCall(bindSym"handshakeImpl", peer, sendCall, timeout, msgType)
 
-proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = true) {.async.} =
+proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = false) {.async.} =
   if peer.connectionState notin {Disconnecting, Disconnected}:
     peer.connectionState = Disconnecting
+    if notifyOtherPeer and not peer.transport.closed:
+      var fut = peer.sendDisconnectMsg(reason)
+      yield fut
+      if fut.failed:
+        warn "Failed to delived disconnect message", peer
     try:
-      # TODO: investigate the failure here
-      if false and notifyOtherPeer and not peer.transport.closed:
-        await peer.sendDisconnectMsg(reason)
-    finally:
       if not peer.dispatcher.isNil:
         await callDisconnectHandlers(peer, reason)
+    finally:
       logDisconnectedPeer peer
       peer.connectionState = Disconnected
       removePeer(peer.network, peer)
@@ -1198,9 +1223,8 @@ proc postHelloSteps(peer: Peer, h: devp2p.hello) {.async.} =
 
   messageProcessingLoop.callback = proc(p: pointer) {.gcsafe.} =
     if messageProcessingLoop.failed:
-      error "dispatchMessages failed",
-            err = messageProcessingLoop.error.msg
-      asyncCheck peer.disconnect(ClientQuitting)
+      error "dispatchMessages failed", err = messageProcessingLoop.error.msg
+      asyncDiscard peer.disconnect(ClientQuitting)
 
   # The handshake may involve multiple async steps, so we wait
   # here for all of them to finish.
@@ -1216,7 +1240,7 @@ template `^`(arr): auto =
 
 proc check(status: AuthStatus) =
   if status != AuthStatus.Success:
-    raise newException(Exception, "Error: " & $status)
+    raise newException(CatchableError, "Error: " & $status)
 
 proc initSecretState(hs: var Handshake, authMsg, ackMsg: openarray[byte],
                      p: Peer) =
@@ -1288,13 +1312,18 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     # if handshake.remoteHPubkey != remote.node.pubKey:
     #   raise newException(Exception, "Remote pubkey is wrong")
     logConnectedPeer result
-    asyncCheck result.hello(handshake.getVersion(),
-                            node.clientId,
-                            node.capabilities,
-                            uint(node.address.tcpPort),
-                            node.keys.pubkey.getRaw())
 
-    var response = await result.waitSingleMsg(devp2p.hello)
+    var sendHelloFut = result.hello(
+      handshake.getVersion(),
+      node.clientId,
+      node.capabilities,
+      uint(node.address.tcpPort),
+      node.keys.pubkey.getRaw())
+
+    var response = await result.handshakeImpl(
+      sendHelloFut,
+      result.waitSingleMsg(devp2p.hello),
+      10.seconds)
 
     if not validatePubKeyInHello(response, remote.node.pubKey):
       warn "Remote nodeId is not its public key" # XXX: Do we care?
@@ -1362,11 +1391,19 @@ proc rlpxAccept*(node: EthereumNode,
     let listenPort = transport.localAddress().port
 
     logAcceptedPeer result
-    await result.hello(result.baseProtocolVersion, node.clientId,
-                       node.capabilities, listenPort.uint,
-                       node.keys.pubkey.getRaw())
 
-    var response = await result.waitSingleMsg(devp2p.hello)
+    var sendHelloFut = result.hello(
+      result.baseProtocolVersion,
+      node.clientId,
+      node.capabilities,
+      listenPort.uint,
+      node.keys.pubkey.getRaw())
+
+    var response = await result.handshakeImpl(
+      sendHelloFut,
+      result.waitSingleMsg(devp2p.hello),
+      10.seconds)
+
     if not validatePubKeyInHello(response, handshake.remoteHPubkey):
       warn "A Remote nodeId is not its public key" # XXX: Do we care?
 

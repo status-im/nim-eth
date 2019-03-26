@@ -64,16 +64,16 @@ type
     name*: string
     version*: int
 
-  UnsupportedProtocol* = object of Exception
+  UnsupportedProtocol* = object of Defect
     # This is raised when you attempt to send a message from a particular
     # protocol to a peer that doesn't support the protocol.
 
-  MalformedMessageError* = object of Exception
+  MalformedMessageError* = object of CatchableError
 
-  PeerDisconnected* = object of Exception
+  PeerDisconnected* = object of CatchableError
     reason*: DisconnectionReason
 
-  UselessPeerError* = object of Exception
+  UselessPeerError* = object of CatchableError
 
   ##
   ## Quasy-private types. Use at your own risk.
