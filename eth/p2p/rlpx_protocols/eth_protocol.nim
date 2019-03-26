@@ -46,12 +46,12 @@ p2pProtocol eth(version = protocolVersion,
       chain = network.chain
       bestBlock = chain.getBestBlockHeader
 
-    let m = await peer.handhake(timeout = 10.seconds,
-                                status(protocolVersion,
-                                       network.networkId,
-                                       bestBlock.difficulty,
-                                       bestBlock.blockHash,
-                                       chain.genesisHash))
+    let m = await peer.handshake(timeout = chronos.seconds(10),
+                                 status(protocolVersion,
+                                        network.networkId,
+                                        bestBlock.difficulty,
+                                        bestBlock.blockHash,
+                                        chain.genesisHash))
 
     if m.networkId == network.networkId and m.genesisHash == chain.genesisHash:
       trace "suitable peer", peer
