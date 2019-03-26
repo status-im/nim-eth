@@ -1157,7 +1157,7 @@ proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = fals
       var fut = peer.sendDisconnectMsg(reason)
       yield fut
       if fut.failed:
-        warn "Failed to delived disconnect message", peer
+        debug "Failed to delived disconnect message", peer
     try:
       if not peer.dispatcher.isNil:
         await callDisconnectHandlers(peer, reason)
