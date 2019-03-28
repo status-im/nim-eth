@@ -451,14 +451,14 @@ proc recvNeighbours*(k: KademliaProtocol, remote: Node, neighbours: seq[Node]) =
   if not cb.isNil:
     cb(neighbours)
   else:
-    debug "Unexpected neighbours, probably came too late", remote
+    trace "Unexpected neighbours, probably came too late", remote
 
 proc recvFindNode*(k: KademliaProtocol, remote: Node, nodeId: NodeId) =
   if remote notin k.routing:
     # FIXME: This is not correct; a node we've bonded before may have become unavailable
     # and thus removed from self.routing, but once it's back online we should accept
     # find_nodes from them.
-    debug "Ignoring find_node request from unknown node ", remote
+    trace "Ignoring find_node request from unknown node ", remote
     return
   k.updateRoutingTable(remote)
   var found = k.routing.neighbours(nodeId)
