@@ -469,7 +469,7 @@ proc randomNodes*(k: KademliaProtocol, count: int): seq[Node] =
   var count = count
   let sz = k.routing.len
   if count > sz:
-    debug  "Not enough nodes", requested = count, present = sz
+    debug  "Looking for peers", requested = count, present = sz
     count = sz
 
   result = newSeqOfCap[Node](count)
