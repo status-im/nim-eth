@@ -1121,7 +1121,7 @@ proc handshakeImpl[T](peer: Peer,
                       sendFut: Future[void],
                       responseFut: Future[T],
                       timeout: Duration): Future[T] {.async.} =
-  sendFut.addCallback do (arg: pointer):
+  sendFut.addCallback do (arg: pointer) {.gcsafe.}:
     if sendFut.failed:
       debug "Handshake message not delivered", peer
 
