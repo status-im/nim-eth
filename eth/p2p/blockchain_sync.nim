@@ -55,8 +55,9 @@ proc availableWorkItem(ctx: SyncContext): int =
     else:
       discard
 
-    let eb = ctx.workQueue[i].endIndex
-    if eb > maxPendingBlock: maxPendingBlock = eb
+    let endBlock = ctx.workQueue[i].endIndex
+    if endBlock > maxPendingBlock:
+      maxPendingBlock = endBlock
 
   let nextRequestedBlock = maxPendingBlock + 1
   if nextRequestedBlock >= ctx.endBlockNumber:
@@ -79,8 +80,8 @@ proc persistWorkItem(ctx: SyncContext, wi: var WantedBlocks) =
   of ValidationResult.Error:
     wi.state = Initial
   # successful or not, we're done with these blocks
-  wi.headers.setLen(0)
-  wi.bodies.setLen(0)
+  wi.headers = @[]
+  wi.bodies = @[]
 
 proc persistPendingWorkItems(ctx: SyncContext) =
   var nextStartIndex = ctx.finalizedBlock + 1
