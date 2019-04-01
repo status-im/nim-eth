@@ -35,7 +35,7 @@ proc del*(db: ChainDB, key: openarray[byte]) =
 proc close*(db: ChainDB) =
   db.store.close
 
-proc newChainDB*(basePath: string): ChainDB =
+proc newChainDB*(basePath: string, readOnly = false): ChainDB =
   result.new()
   let
     dataDir = basePath / "data"
@@ -44,8 +44,8 @@ proc newChainDB*(basePath: string): ChainDB =
   createDir(dataDir)
   createDir(backupsDir)
 
-  let s = result.store.init(dataDir, backupsDir)
+  let s = result.store.init(dataDir, backupsDir, readOnly)
   if not s.ok: raiseStorageInitError()
 
-  put(result, emptyRlpHash.data, emptyRlp)
-
+  if not readOnly:
+    put(result, emptyRlpHash.data, emptyRlp)

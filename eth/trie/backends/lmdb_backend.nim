@@ -10,6 +10,7 @@ else:
 
 const
   MDB_NOSUBDIR = 0x4000
+  MDB_RDONLY   = 0x20000
   MDB_NOTFOUND = -30798
 
 when defined(cpu64):
@@ -147,7 +148,7 @@ proc del*(db: ChainDB, key: openarray[byte]) =
 proc close*(db: ChainDB) =
   mdb_env_close(db.env)
 
-proc newChainDB*(basePath: string): ChainDB =
+proc newChainDB*(basePath: string, readOnly = false): ChainDB =
   result.new()
 
   let dataDir = basePath / "nimbus.db"
@@ -156,9 +157,12 @@ proc newChainDB*(basePath: string): ChainDB =
 
   ok = mdb_env_set_mapsize(result.env, LMDB_MAP_SIZE) == 0
   if not ok: raiseStorageInitError()
-
+  
+  var openFlags = MDB_NOSUBDIR
+  if readOnly: openFlags = openFlags or MDB_RDONLY
   # file mode ignored on windows
-  ok = mdb_env_open(result.env, dataDir, MDB_NOSUBDIR.cuint, 0o664.cint) == 0
+  ok = mdb_env_open(result.env, dataDir, openFlags.cuint, 0o664.cint) == 0
   if not ok: raiseStorageInitError()
 
-  result.put(emptyRlpHash.data, emptyRlp)
+  if not readOnly:
+    result.put(emptyRlpHash.data, emptyRlp)
