@@ -505,7 +505,16 @@ proc nextMsg*(peer: Peer, MsgType: type): Future[MsgType] =
 
 proc dispatchMessages*(peer: Peer) {.async.} =
   while true:
-    var (msgId, msgData) = await peer.recvMsg()
+    var msgId: int
+    var msgData: Rlp
+    try:
+      (msgId, msgData) = await peer.recvMsg()
+    except TransportIncompleteError:
+      trace "Connection dropped in dispatchMessages"
+      # This can happen during the rlpx connection setup or at any point after.
+      # Because this code does not know, a disconnect needs to be done.
+      asyncDiscard peer.disconnect(ClientQuitting)
+      return
 
     if msgId == 1: # p2p.disconnect
       await peer.transport.closeWait()
@@ -1337,7 +1346,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
   except TransportIncompleteError:
     trace "Connection dropped in rlpxConnect", remote
   except UselessPeerError:
-    trace "Useless peer ", peer = remote
+    trace "Disconnecting useless peer", peer = remote
   except RlpTypeMismatch:
     # Some peers report capabilities with names longer than 3 chars. We ignore
     # those for now. Maybe we should allow this though.
@@ -1345,9 +1354,11 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
   except TransportOsError:
     trace "TransportOsError", err = getCurrentExceptionMsg()
   except:
-    debug "Exception in rlpxConnect", remote,
+    error "Exception in rlpxConnect", remote,
           exc = getCurrentException().name,
           err = getCurrentExceptionMsg()
+    result = nil
+    raise
 
   if not ok:
     if not isNil(result.transport):
@@ -1365,6 +1376,7 @@ proc rlpxAccept*(node: EthereumNode,
   var handshake = newHandshake({Responder})
   handshake.host = node.keys
 
+  var ok = false
   try:
     let initialSize = handshake.expectedLength
     var authMsg = newSeqOfCap[byte](1024)
@@ -1414,22 +1426,26 @@ proc rlpxAccept*(node: EthereumNode,
     result.remote = newNode(initEnode(handshake.remoteHPubkey, address))
 
     await postHelloSteps(result, response)
+    ok = true
   except PeerDisconnected as e:
     if e.reason == AlreadyConnected:
-      debug "Disconnect during rlpxAccept", reason = e.reason
+      trace "Disconnect during rlpxAccept", reason = e.reason
     else:
       debug "Unexpected disconnect during rlpxAccept", reason = e.reason
-    transport.close()
-    result = nil
-    raise e
+  except TransportIncompleteError:
+    trace "Connection dropped in rlpxAccept", remote = result.remote
+  except UselessPeerError:
+    trace "Disconnecting useless peer", peer = result.remote
   except:
-    let e = getCurrentException()
-    debug "Exception in rlpxAccept",
+    error "Exception in rlpxAccept",
           err = getCurrentExceptionMsg(),
           stackTrace = getCurrentException().getStackTrace()
-    transport.close()
+
+  if not ok:
+    if not isNil(result.transport):
+      result.transport.close()
     result = nil
-    raise e
+    raise
 
 when isMainModule:
 
@@ -1450,4 +1466,3 @@ when isMainModule:
       dispatchMsgPtr = invokeThunk
       recvMsgPtr: GcSafeRecvMsg = recvMsg
       acceptPtr: GcSafeAccept = rlpxAccept
-
