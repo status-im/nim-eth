@@ -1170,6 +1170,9 @@ proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = fals
     try:
       if not peer.dispatcher.isNil:
         await callDisconnectHandlers(peer, reason)
+    except:
+      error "Exception in callDisconnectHandlers()",
+            err = getCurrentExceptionMsg()
     finally:
       logDisconnectedPeer peer
       peer.connectionState = Disconnected
