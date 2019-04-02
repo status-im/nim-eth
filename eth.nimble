@@ -49,6 +49,7 @@ proc runP2pTests() =
       "test_enode",
       "test_shh",
       "test_shh_connect",
+      "test_failing_handler",
     ]:
     runTest("tests/p2p/" & filename)
 
