@@ -416,11 +416,21 @@ proc resolve*(k: KademliaProtocol, id: NodeId): Future[Node] {.async.} =
   for n in closest:
     if n.id == id: return n
 
-proc bootstrap*(k: KademliaProtocol, bootstrapNodes: seq[Node]) {.async.} =
-  let bonded = await all(bootstrapNodes.mapIt(k.bond(it)))
-  if true notin bonded:
-    info "Failed to bond with bootstrap nodes "
-    return
+proc bootstrap*(k: KademliaProtocol, bootstrapNodes: seq[Node], retries = 0) {.async.} =
+  ## Bond with bootstrap nodes and do initial lookup. Retry `retries` times
+  ## in case of failure, or indefinitely if `retries` is 0.
+  var numTries = 0
+  while true:
+    let bonded = await all(bootstrapNodes.mapIt(k.bond(it)))
+    if true notin bonded:
+      info "Failed to bond with bootstrap nodes"
+      inc numTries
+      if retries == 0 or numTries < retries:
+        info "Retrying"
+      else:
+        return
+    else:
+      break
   discard await k.lookupRandom()
 
 proc recvPong*(k: KademliaProtocol, n: Node, token: seq[byte]) =
