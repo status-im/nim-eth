@@ -1,6 +1,6 @@
 import
   macros, tables, algorithm, deques, hashes, options, typetraits,
-  std_shims/macros_shim, chronicles, nimcrypto, chronos, eth/[rlp, common, keys],
+  std_shims/macros_shim, chronicles, nimcrypto, chronos, eth/[rlp, common, keys, async_utils],
   private/p2p_types, kademlia, auth, rlpxcrypt, enode
 
 when useSnappy:
@@ -503,6 +503,12 @@ proc nextMsg*(peer: Peer, MsgType: type): Future[MsgType] =
   newFuture result
   peer.awaitedMessages[wantedId] = result
 
+# Known fatal errors are handled inside dispatchMessages.
+# Errors we are currently unaware of are caught in the dispatchMessages
+# callback. There they will be logged if CatchableError and quit on Defect.
+# Non fatal errors such as the current CatchableError could be moved and
+# handled a layer lower for clarity (and consistency), as also the actual
+# message handler code as the TODO mentions already.
 proc dispatchMessages*(peer: Peer) {.async.} =
   while true:
     var msgId: int
@@ -510,10 +516,10 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     try:
       (msgId, msgData) = await peer.recvMsg()
     except TransportIncompleteError:
-      trace "Connection dropped in dispatchMessages"
+      trace "Connection dropped, ending dispatchMessages loop", peer
       # This can happen during the rlpx connection setup or at any point after.
       # Because this code does not know, a disconnect needs to be done.
-      asyncDiscard peer.disconnect(ClientQuitting)
+      await peer.disconnect(ClientQuitting)
       return
 
     if msgId == 1: # p2p.disconnect
@@ -525,8 +531,9 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     try:
       await peer.invokeThunk(msgId, msgData)
     except RlpError:
-      debug "ending dispatchMessages loop", peer, err = getCurrentExceptionMsg()
-      await peer.disconnect(BreachOfProtocol)
+      debug "RlpError, ending dispatchMessages loop", peer,
+             err = getCurrentExceptionMsg()
+      await peer.disconnect(BreachOfProtocol, true)
       return
     except CatchableError:
       warn "Error while handling RLPx message", peer,
@@ -545,8 +552,10 @@ proc dispatchMessages*(peer: Peer) {.async.} =
         # TODO: Handling errors here must be investigated more carefully.
         # They also are supposed to be handled at the call-site where
         # `nextMsg` is used.
-        debug "nextMsg resolver failed", err = getCurrentExceptionMsg()
-        raise
+        debug "nextMsg resolver failed, ending dispatchMessages loop", peer,
+               err = getCurrentExceptionMsg()
+        await peer.disconnect(BreachOfProtocol, true)
+        return
       peer.awaitedMessages[msgId] = nil
 
 macro p2pProtocolImpl(name: static[string],
@@ -1167,16 +1176,16 @@ proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = fals
       yield fut
       if fut.failed:
         debug "Failed to delived disconnect message", peer
-    try:
-      if not peer.dispatcher.isNil:
-        await callDisconnectHandlers(peer, reason)
-    except:
-      error "Exception in callDisconnectHandlers()",
-            err = getCurrentExceptionMsg()
-    finally:
-      logDisconnectedPeer peer
-      peer.connectionState = Disconnected
-      removePeer(peer.network, peer)
+
+    if not peer.dispatcher.isNil:
+      # In case of `CatchableError` in any of the handlers, this will be logged.
+      # Other handlers will still execute.
+      # In case of `Defect` in any of the handlers, program will quit.
+      traceAwaitErrors callDisconnectHandlers(peer, reason)
+
+    logDisconnectedPeer peer
+    peer.connectionState = Disconnected
+    removePeer(peer.network, peer)
 
 proc validatePubKeyInHello(msg: devp2p.hello, pubKey: PublicKey): bool =
   var pk: PublicKey
@@ -1237,7 +1246,7 @@ proc postHelloSteps(peer: Peer, h: devp2p.hello) {.async.} =
     if messageProcessingLoop.failed:
       debug "Ending dispatchMessages loop", peer,
             err = messageProcessingLoop.error.msg
-      asyncDiscard peer.disconnect(ClientQuitting)
+      traceAsyncErrors peer.disconnect(ClientQuitting)
 
   # The handshake may involve multiple async steps, so we wait
   # here for all of them to finish.

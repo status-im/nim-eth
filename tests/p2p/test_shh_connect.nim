@@ -8,52 +8,18 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  sequtils, options, unittest, tables, chronos, eth/[rlp, keys, p2p],
-  eth/p2p/rlpx_protocols/[whisper_protocol], eth/p2p/[discovery, enode]
-
-const
-  useCompression = defined(useSnappy)
-
-var nextPort = 30303
-
-proc localAddress(port: int): Address =
-  let port = Port(port)
-  result = Address(udpPort: port, tcpPort: port, ip: parseIpAddress("127.0.0.1"))
-
-proc startDiscoveryNode(privKey: PrivateKey, address: Address,
-                        bootnodes: seq[ENode]): Future[DiscoveryProtocol] {.async.} =
-  result = newDiscoveryProtocol(privKey, address, bootnodes)
-  result.open()
-  await result.bootstrap()
-
-proc setupBootNode(): Future[ENode] {.async.} =
-  let
-    bootNodeKey = newPrivateKey()
-    bootNodeAddr = localAddress(30301)
-    bootNode = await startDiscoveryNode(bootNodeKey, bootNodeAddr, @[])
-  result = initENode(bootNodeKey.getPublicKey, bootNodeAddr)
-
-template asyncTest(name, body: untyped) =
-  test name:
-    proc scenario {.async.} = body
-    waitFor scenario()
+  sequtils, options, unittest, tables, chronos, eth/[keys, p2p],
+  eth/p2p/rlpx_protocols/[whisper_protocol],
+  ./p2p_test_helper
 
 proc resetMessageQueues(nodes: varargs[EthereumNode]) =
   for node in nodes:
     node.resetMessageQueue()
 
-proc prepTestNode(): EthereumNode =
-  let keys1 = newKeyPair()
-  result = newEthereumNode(keys1, localAddress(nextPort), 1, nil,
-                           addAllCapabilities = false,
-                           useCompression = useCompression)
-  nextPort.inc
-  result.addCapability Whisper
-
 let bootENode = waitFor setupBootNode()
 
-var node1 = prepTestNode()
-var node2 = prepTestNode()
+var node1 = setupTestNode(Whisper)
+var node2 = setupTestNode(Whisper)
 # node2 listening and node1 not, to avoid many incoming vs outgoing
 var node1Connected = node1.connectToNetwork(@[bootENode], false, true)
 var node2Connected = node2.connectToNetwork(@[bootENode], true, true)
@@ -352,7 +318,7 @@ suite "Whisper connections":
       node1.unsubscribeFilter(filter) == true
 
   test "Light node posting":
-    var ln1 = prepTestNode()
+    var ln1 = setupTestNode(Whisper)
     ln1.setLightNode(true)
 
     # not listening, so will only connect to others that are listening (node2)
@@ -373,8 +339,8 @@ suite "Whisper connections":
       ln1.protocolState(Whisper).queue.items.len == 0
 
   test "Connect two light nodes":
-    var ln1 = prepTestNode()
-    var ln2 = prepTestNode()
+    var ln1 = setupTestNode(Whisper)
+    var ln2 = setupTestNode(Whisper)
 
     ln1.setLightNode(true)
     ln2.setLightNode(true)
