@@ -1,12 +1,20 @@
 import
-  chronos/asyncfutures2, chronicles
+  chronos/[asyncfutures2, asyncloop], chronicles
+
+proc catchOrQuit(error: Exception) =
+  if error of CatchableError:
+    trace "Async operation ended with a recoverable error", err = error.msg
+  else:
+    fatal "Fatal exception reached", err = error.msg
+    quit 1
 
 proc traceAsyncErrors*(fut: FutureBase) =
   fut.addCallback do (arg: pointer):
     if not fut.error.isNil:
-      if fut.error[] of CatchableError:
-        trace "Async operation ended with a recoverable error", err = fut.error.msg
-      else:
-        fatal "Fatal exception reached", err = fut.error.msg
-        quit 1
+      catchOrQuit fut.error[]
 
+template traceAwaitErrors*(fut: FutureBase) =
+  let f = fut
+  yield f
+  if not f.error.isNil:
+    catchOrQuit f.error[]
