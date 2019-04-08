@@ -607,6 +607,8 @@ proc notify*(filters: var Filters, msg: Message) {.gcsafe.} =
    if decoded.isNone():
      decoded = decode(msg.env.data, dst = filter.privateKey,
                       symKey = filter.symKey)
+     if decoded.isNone():
+       continue
      if filter.privateKey.isSome():
        keyHash = keccak256.digest(filter.privateKey.get().data)
        # TODO: Get rid of the hash and just use pubkey to compare?
@@ -615,8 +617,6 @@ proc notify*(filters: var Filters, msg: Message) {.gcsafe.} =
        keyHash = keccak256.digest(filter.symKey.get())
      # else:
        # NOTE: should we error on messages without encryption?
-     if decoded.isNone():
-       continue
    else:
      if filter.privateKey.isSome():
        if keyHash != keccak256.digest(filter.privateKey.get().data):

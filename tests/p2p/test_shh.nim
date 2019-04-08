@@ -22,6 +22,7 @@ suite "Whisper payload":
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
+      decoded.get().src.isNone()
       decoded.get().padding.get().len == 251 # 256 -1 -1 -3
 
   test "should roundtrip with symmetric encryption":
@@ -33,6 +34,7 @@ suite "Whisper payload":
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
+      decoded.get().src.isNone()
       decoded.get().padding.get().len == 251 # 256 -1 -1 -3
 
   test "should roundtrip with signature":
@@ -59,6 +61,7 @@ suite "Whisper payload":
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
+      decoded.get().src.isNone()
       decoded.get().padding.get().len == 251 # 256 -1 -1 -3
 
   test "should return specified bloom":
@@ -299,7 +302,10 @@ suite "Whisper filter":
     notify(filters, msg)
 
     let messages = filters.getFilterMessages(filterId)
-    check messages.len == 1
+    check:
+      messages.len == 1
+      messages[0].decoded.src.isNone()
+      messages[0].dst.isNone()
 
   test "should notify filter on message with asymmetric encryption":
     let privKey = keys.newPrivateKey()
@@ -314,7 +320,10 @@ suite "Whisper filter":
     notify(filters, msg)
 
     let messages = filters.getFilterMessages(filterId)
-    check messages.len == 1
+    check:
+      messages.len == 1
+      messages[0].decoded.src.isNone()
+      messages[0].dst.isSome()
 
   test "should notify filter on message with signature":
     let privKey = keys.newPrivateKey()
@@ -329,7 +338,10 @@ suite "Whisper filter":
     notify(filters, msg)
 
     let messages = filters.getFilterMessages(filterId)
-    check messages.len == 1
+    check:
+      messages.len == 1
+      messages[0].decoded.src.isSome()
+      messages[0].dst.isNone()
 
   test "test notify of filter against PoW requirement":
     let topic = [byte 0, 0, 0, 0]
