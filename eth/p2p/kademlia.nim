@@ -420,18 +420,21 @@ proc bootstrap*(k: KademliaProtocol, bootstrapNodes: seq[Node], retries = 0) {.a
   ## Bond with bootstrap nodes and do initial lookup. Retry `retries` times
   ## in case of failure, or indefinitely if `retries` is 0.
   var numTries = 0
-  while true:
-    let bonded = await all(bootstrapNodes.mapIt(k.bond(it)))
-    if true notin bonded:
-      info "Failed to bond with bootstrap nodes"
-      inc numTries
-      if retries == 0 or numTries < retries:
-        info "Retrying"
+  if bootstrapNodes.len != 0:
+    while true:
+      let bonded = await all(bootstrapNodes.mapIt(k.bond(it)))
+      if true notin bonded:
+        inc numTries
+        if retries == 0 or numTries < retries:
+          info "Failed to bond with bootstrap nodes, retrying"
+        else:
+          info "Failed to bond with bootstrap nodes"
+          return
       else:
-        return
-    else:
-      break
-  discard await k.lookupRandom()
+        break
+    discard await k.lookupRandom()
+  else:
+    info "Skipping discovery bootstrap, no bootnodes provided"
 
 proc recvPong*(k: KademliaProtocol, n: Node, token: seq[byte]) =
   trace "<<< pong from ", n
