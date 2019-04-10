@@ -61,6 +61,6 @@ proc verifyStateType(t: NimNode): NimNode =
   if result.kind != nnkBracketExpr or $result[0] != "ref":
     macros.error($result & " must be a ref type")
 
-proc newFuture[T](location: var Future[T]) =
-  location = newFuture[T]()
+proc initFuture[T](loc: var Future[T]) =
+  loc = newFuture[T]()
 

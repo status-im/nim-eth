@@ -46,7 +46,7 @@ type
 const
   BUCKET_SIZE = 16
   BITS_PER_HOP = 8
-  REQUEST_TIMEOUT = 900                 # timeout of message round trips
+  REQUEST_TIMEOUT = chronos.milliseconds(900) # timeout of message round trips
   FIND_CONCURRENCY = 3                  # parallel find node lookups
   ID_SIZE = 256
 
@@ -419,19 +419,25 @@ proc resolve*(k: KademliaProtocol, id: NodeId): Future[Node] {.async.} =
 proc bootstrap*(k: KademliaProtocol, bootstrapNodes: seq[Node], retries = 0) {.async.} =
   ## Bond with bootstrap nodes and do initial lookup. Retry `retries` times
   ## in case of failure, or indefinitely if `retries` is 0.
+  var retryInterval = chronos.milliseconds(2)
   var numTries = 0
-  while true:
-    let bonded = await all(bootstrapNodes.mapIt(k.bond(it)))
-    if true notin bonded:
-      info "Failed to bond with bootstrap nodes"
-      inc numTries
-      if retries == 0 or numTries < retries:
-        info "Retrying"
+  if bootstrapNodes.len != 0:
+    while true:
+      let bonded = await all(bootstrapNodes.mapIt(k.bond(it)))
+      if true notin bonded:
+        inc numTries
+        if retries == 0 or numTries < retries:
+          info "Failed to bond with bootstrap nodes, retrying"
+          retryInterval = min(chronos.seconds(10), retryInterval * 2)
+          await sleepAsync(retryInterval)
+        else:
+          info "Failed to bond with bootstrap nodes"
+          return
       else:
-        return
-    else:
-      break
-  discard await k.lookupRandom()
+        break
+    discard await k.lookupRandom() # Prepopulate the routing table
+  else:
+    info "Skipping discovery bootstrap, no bootnodes provided"
 
 proc recvPong*(k: KademliaProtocol, n: Node, token: seq[byte]) =
   trace "<<< pong from ", n
