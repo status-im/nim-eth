@@ -9,9 +9,10 @@ proc catchOrQuit(error: Exception) =
     quit 1
 
 proc traceAsyncErrors*(fut: FutureBase) =
-  fut.addCallback do (arg: pointer):
+  proc continuation(arg: pointer) {.gcsafe.} =
     if not fut.error.isNil:
       catchOrQuit fut.error[]
+  fut.addCallback continuation
 
 template traceAwaitErrors*(fut: FutureBase) =
   let f = fut
