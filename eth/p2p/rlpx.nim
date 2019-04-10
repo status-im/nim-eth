@@ -500,7 +500,7 @@ proc nextMsg*(peer: Peer, MsgType: type): Future[MsgType] =
   if not f.isNil:
     return Future[MsgType](f)
 
-  newFuture result
+  initFuture result
   peer.awaitedMessages[wantedId] = result
 
 # Known fatal errors are handled inside dispatchMessages.
@@ -776,12 +776,12 @@ macro p2pProtocolImpl(name: static[string],
                                                          responseMsgId)
       if hasReqIds:
         appendParams.add quote do:
-          newFuture `resultIdent`
+          initFuture `resultIdent`
           let `reqId` = `registerRequestCall`
         paramsToWrite.add reqId
       else:
         appendParams.add quote do:
-          newFuture `resultIdent`
+          initFuture `resultIdent`
           discard `registerRequestCall`
 
     of rlpxResponse:
