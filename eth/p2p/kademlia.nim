@@ -419,6 +419,7 @@ proc resolve*(k: KademliaProtocol, id: NodeId): Future[Node] {.async.} =
 proc bootstrap*(k: KademliaProtocol, bootstrapNodes: seq[Node], retries = 0) {.async.} =
   ## Bond with bootstrap nodes and do initial lookup. Retry `retries` times
   ## in case of failure, or indefinitely if `retries` is 0.
+  var retryInterval = 2
   var numTries = 0
   if bootstrapNodes.len != 0:
     while true:
@@ -427,12 +428,14 @@ proc bootstrap*(k: KademliaProtocol, bootstrapNodes: seq[Node], retries = 0) {.a
         inc numTries
         if retries == 0 or numTries < retries:
           info "Failed to bond with bootstrap nodes, retrying"
+          retryInterval = min(10000, retryInterval * 2)
+          await sleepAsync(retryInterval)
         else:
           info "Failed to bond with bootstrap nodes"
           return
       else:
         break
-    discard await k.lookupRandom()
+    discard await k.lookupRandom() # Prepopulate the routing table
   else:
     info "Skipping discovery bootstrap, no bootnodes provided"
 
