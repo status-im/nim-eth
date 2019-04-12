@@ -175,9 +175,8 @@ proc updateRechargingParams(peer: LesPeer, network: LesNetwork) =
     peer.reqCostGradient = rechargingScale / network.reqCount
 
   if peer.isRecharging:
-    peer.reqCostGradient = (network.rechargingRate * peer.rechargingPower /
-                                    network.totalRechargingPower          )
-
+    peer.reqCostGradient = (network.rechargingRate * (peer.rechargingPower /
+                                    network.totalRechargingPower).int64).int
     peer.rechargingEndsAt = peer.lastRechargeTime +
                             LesTime(peer.reqCostVal * rechargingScale /
                                          -peer.reqCostGradient        )
@@ -263,8 +262,8 @@ proc delistFromFlowControl*(network: LesNetwork, peer: LesPeer) =
 proc initFlowControl*(network: LesNetwork, les: ProtocolInfo,
                       maxReqCount, maxReqCostSum, reqCostTarget: int,
                       db: AbstractChainDB = nil) =
-  network.rechargingRate = (rechargingScale * rechargingScale) /
-                           (100 * rechargingScale / reqCostTarget - rechargingScale)
+  network.rechargingRate = rechargingScale * (rechargingScale /
+                           (100 * rechargingScale / reqCostTarget - rechargingScale))
   network.maxReqCount = maxReqCount
   network.maxReqCostSum = maxReqCostSum
 

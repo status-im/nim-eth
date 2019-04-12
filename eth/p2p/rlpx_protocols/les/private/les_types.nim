@@ -85,7 +85,7 @@ type
     reqCount*, maxReqCount*: int
     sumWeigth*: int
 
-    rechargingRate*: int
+    rechargingRate*: int64
     totalRechargedUnits*: int
     totalRechargingPower*: int
 
