@@ -12,6 +12,9 @@ import
   hashes, byteutils, nimcrypto/[bcmode, hash, keccak, rijndael, sysrand],
   eth/p2p, ../ecies
 
+logScope:
+  topics = "whisper"
+
 const
   flagsLen = 1 ## payload flags field length, bytes
   gcmIVLen = 12 ## Length of IV (seed) used for AES
@@ -694,7 +697,7 @@ p2pProtocol Whisper(version = whisperVersion,
                     networkState = WhisperNetwork):
 
   onPeerConnected do (peer: Peer):
-    debug "onPeerConnected Whisper"
+    trace "onPeerConnected Whisper"
     let
       whisperNet = peer.networkState
       whisperPeer = peer.state
@@ -753,7 +756,7 @@ p2pProtocol Whisper(version = whisperVersion,
     for envelope in envelopes:
       # check if expired or in future, or ttl not 0
       if not envelope.valid():
-        warn "Expired or future timed envelope"
+        warn "Expired or future timed envelope", peer
         # disconnect from peers sending bad envelopes
         # await peer.disconnect(SubprotocolReason)
         continue
@@ -769,8 +772,12 @@ p2pProtocol Whisper(version = whisperVersion,
       # it was either already received here from this peer or send to this peer.
       # Either way it will be in our queue already (and the peer should know
       # this) and this peer is sending duplicates.
+      # Note: geth does not check if a peer has send a message to them before
+      # broadcasting this message. This too is seen here as a duplicate message
+      # (see above comment). If we want to seperate these cases (e.g. when peer
+      # rating), then we have to add a "peer.state.send" HashSet.
       if peer.state.received.containsOrIncl(msg):
-        warn "Peer sending duplicate messages"
+        debug "Peer sending duplicate messages", peer, hash = msg.hash
         # await peer.disconnect(SubprotocolReason)
         continue
 
@@ -832,18 +839,19 @@ proc processQueue(peer: Peer) =
       continue
 
     if message.pow < whisperPeer.powRequirement:
-      debug "Message PoW too low for peer"
+      debug "Message PoW too low for peer", pow = message.pow,
+                                            powReq = whisperPeer.powRequirement
       continue
 
     if not bloomFilterMatch(whisperPeer.bloom, message.bloom):
       debug "Message does not match peer bloom filter"
       continue
 
-    debug "Adding envelope"
+    trace "Adding envelope"
     envelopes.add(message.env)
     whisperPeer.received.incl(message)
 
-  debug "Sending envelopes", amount=envelopes.len
+  trace "Sending envelopes", amount=envelopes.len
   # await peer.messages(envelopes)
   asyncCheck peer.messages(envelopes)
 
@@ -928,7 +936,7 @@ proc queueMessage(node: EthereumNode, msg: Message): bool =
   if not msg.allowed(whisperNet.config):
     return false
 
-  debug "Adding message to queue"
+  trace "Adding message to queue"
   if whisperNet.queue.add(msg):
     # Also notify our own filters of the message we are sending,
     # e.g. msg from local Dapp to Dapp
@@ -973,7 +981,7 @@ proc postMessage*(node: EthereumNode, pubKey = none[PublicKey](),
 
       return node.queueMessage(msg)
     else:
-      error "Light node not allowed to post messages"
+      warn "Light node not allowed to post messages"
       return false
   else:
     error "Encoding of payload failed"
