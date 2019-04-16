@@ -255,7 +255,7 @@ proc writeMsgId(p: ProtocolInfo, msgId: int, peer: Peer,
 
 proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void] =
   template invalidIdError: untyped =
-    raise newException(ValueError,
+    raise newException(UnsupportedMessageError,
       "RLPx message with an invalid id " & $msgId &
       " on a connection supporting " & peer.dispatcher.describeProtocols)
 
