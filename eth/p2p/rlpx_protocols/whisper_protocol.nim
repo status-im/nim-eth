@@ -807,6 +807,17 @@ p2pProtocol Whisper(version = whisperVersion,
       let msg = Message(env: envelope, isP2P: true)
       peer.networkState.filters.notify(msg)
 
+  # Following message IDs are not part of EIP-627, but are added and used by
+  # the Status application, we ignore them for now.
+  nextID 11
+  proc batchAcknowledged(peer: Peer) = discard
+  proc messageResponse(peer: Peer) = discard
+  nextID 123
+  requestResponse:
+    proc p2pSyncRequest(peer: Peer) = discard
+    proc p2pSyncResponse(peer: Peer) = discard
+  proc p2pRequestComplete(peer: Peer) = discard
+
 # 'Runner' calls ---------------------------------------------------------------
 
 proc processQueue(peer: Peer) =
