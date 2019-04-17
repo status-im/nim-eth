@@ -333,7 +333,7 @@ proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async.} =
 
   let gotPong = await k.waitPong(n, pid)
   if not gotPong:
-    debug "Bonding failed, didn't receive pong from", n
+    trace "Bonding failed, didn't receive pong from", n
     # Drop the failing node and schedule a populateNotFullBuckets() call to try and
     # fill its spot.
     k.routing.removeNode(n)
