@@ -13,7 +13,9 @@ requires "nim >= 0.19.0",
          "rocksdb",
          "chronos",
          "chronicles",
-         "std_shims"
+         "std_shims",
+         "result",
+         "nat_traversal"
 
 proc runTest(path: string) =
   echo "\nRunning: ", path
