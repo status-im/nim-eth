@@ -1122,10 +1122,13 @@ proc removePeer(network: EthereumNode, peer: Peer) =
   if network.peerPool != nil and not peer.remote.isNil:
     network.peerPool.connectedNodes.del(peer.remote)
 
-    for observer in network.peerPool.observers.values:
-      if not observer.onPeerDisconnected.isNil:
-        if observer.protocol.isNil or peer.supports(observer.protocol):
-          observer.onPeerDisconnected(peer)
+    # Note: we need to do this check as disconnect (and thus removePeer)
+    # currently can get called before the dispatcher is initialized.
+    if not peer.dispatcher.isNil:
+      for observer in network.peerPool.observers.values:
+        if not observer.onPeerDisconnected.isNil:
+          if observer.protocol.isNil or peer.supports(observer.protocol):
+            observer.onPeerDisconnected(peer)
 
 proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason): Future[void] =
   var futures = newSeqOfCap[Future[void]](allProtocols.len)
