@@ -331,10 +331,12 @@ proc onPeerDisconnected(ctx: SyncContext, p: Peer) =
 proc startSync(ctx: SyncContext) =
   var po: PeerObserver
   po.onPeerConnected = proc(p: Peer) {.gcsafe.} =
-    ctx.onPeerConnected(p)
+    if p.supports(eth):
+      ctx.onPeerConnected(p)
 
   po.onPeerDisconnected = proc(p: Peer) {.gcsafe.} =
-    ctx.onPeerDisconnected(p)
+    if p.supports(eth):
+      ctx.onPeerDisconnected(p)
 
   ctx.peerPool.addObserver(ctx, po)
 
