@@ -59,6 +59,7 @@ type
   PeerObserver* = object
     onPeerConnected*: proc(p: Peer) {.gcsafe.}
     onPeerDisconnected*: proc(p: Peer) {.gcsafe.}
+    protocol*: ProtocolInfo
 
   Capability* = object
     name*: string

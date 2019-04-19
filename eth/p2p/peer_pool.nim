@@ -35,7 +35,8 @@ proc addObserver(p: PeerPool, observerId: int, observer: PeerObserver) =
   p.observers[observerId] = observer
   if not observer.onPeerConnected.isNil:
     for peer in p.connectedNodes.values:
-      observer.onPeerConnected(peer)
+      if observer.protocol.isNil or peer.supports(observer.protocol):
+        observer.onPeerConnected(peer)
 
 proc delObserver(p: PeerPool, observerId: int) =
   p.observers.del(observerId)
@@ -45,6 +46,9 @@ proc addObserver*(p: PeerPool, observerId: ref, observer: PeerObserver) {.inline
 
 proc delObserver*(p: PeerPool, observerId: ref) {.inline.} =
   p.delObserver(cast[int](observerId))
+
+template setProtocol*(observer: PeerObserver, Protocol: type) =
+  observer.protocol = Protocol.protocolInfo
 
 proc stopAllPeers(p: PeerPool) {.async.} =
   debug "Stopping all peers ..."
@@ -108,7 +112,8 @@ proc addPeer*(pool: PeerPool, peer: Peer): bool =
     pool.connectedNodes[peer.remote] = peer
     for o in pool.observers.values:
       if not o.onPeerConnected.isNil:
-        o.onPeerConnected(peer)
+        if o.protocol.isNil or peer.supports(o.protocol):
+          o.onPeerConnected(peer)
     return true
   else: return false
 

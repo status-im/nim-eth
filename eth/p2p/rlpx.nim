@@ -227,9 +227,6 @@ proc registerProtocol(protocol: ProtocolInfo) =
 # Message composition and encryption
 #
 
-template protocolOffset(peer: Peer, Protocol: type): int =
-  peer.dispatcher.protocolOffsets[Protocol.protocolInfo.index]
-
 proc perPeerMsgIdImpl(peer: Peer, proto: ProtocolInfo, msgId: int): int {.inline.} =
   result = msgId
   if not peer.dispatcher.isNil:
@@ -239,9 +236,12 @@ template getPeer(peer: Peer): auto = peer
 template getPeer(response: Response): auto = Peer(response)
 template getPeer(response: ResponseWithId): auto = response.peer
 
+proc supports*(peer: Peer, proto: ProtocolInfo): bool {.inline.} =
+  peer.dispatcher.protocolOffsets[proto.index] != -1
+
 proc supports*(peer: Peer, Protocol: type): bool {.inline.} =
   ## Checks whether a Peer supports a particular protocol
-  peer.protocolOffset(Protocol) != -1
+  peer.supports(Protocol.protocolInfo)
 
 template perPeerMsgId(peer: Peer, MsgType: type): int =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
@@ -1122,9 +1122,13 @@ proc removePeer(network: EthereumNode, peer: Peer) =
   if network.peerPool != nil and not peer.remote.isNil:
     network.peerPool.connectedNodes.del(peer.remote)
 
-    for observer in network.peerPool.observers.values:
-      if not observer.onPeerDisconnected.isNil:
-        observer.onPeerDisconnected(peer)
+    # Note: we need to do this check as disconnect (and thus removePeer)
+    # currently can get called before the dispatcher is initialized.
+    if not peer.dispatcher.isNil:
+      for observer in network.peerPool.observers.values:
+        if not observer.onPeerDisconnected.isNil:
+          if observer.protocol.isNil or peer.supports(observer.protocol):
+            observer.onPeerDisconnected(peer)
 
 proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason): Future[void] =
   var futures = newSeqOfCap[Future[void]](allProtocols.len)

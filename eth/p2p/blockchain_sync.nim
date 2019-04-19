@@ -336,6 +336,7 @@ proc startSync(ctx: SyncContext) =
   po.onPeerDisconnected = proc(p: Peer) {.gcsafe.} =
     ctx.onPeerDisconnected(p)
 
+  po.setProtocol eth
   ctx.peerPool.addObserver(ctx, po)
 
 proc findBestPeer(node: EthereumNode): (Peer, DifficultyInt) =
