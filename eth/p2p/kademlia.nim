@@ -240,7 +240,7 @@ proc newKademliaProtocol*[Wire](thisNode: Node,
 
 proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async.}
 
-proc updateRoutingTable(k: KademliaProtocol, n: Node) =
+proc updateRoutingTable(k: KademliaProtocol, n: Node) {.gcsafe.} =
   ## Update the routing table entry for the given node.
   let evictionCandidate = k.routing.addNode(n)
   if not evictionCandidate.isNil:
@@ -250,7 +250,7 @@ proc updateRoutingTable(k: KademliaProtocol, n: Node) =
       # replacement cache.
       asyncCheck k.bond(evictionCandidate)
 
-proc doSleep(p: proc()) {.async.} =
+proc doSleep(p: proc() {.gcsafe.}) {.async, gcsafe.} =
   await sleepAsync(REQUEST_TIMEOUT)
   p()
 
@@ -275,7 +275,7 @@ proc ping(k: KademliaProtocol, n: Node): seq[byte] =
   doAssert(n != k.thisNode)
   result = k.wire.sendPing(n)
 
-proc waitPing(k: KademliaProtocol, n: Node): Future[bool] =
+proc waitPing(k: KademliaProtocol, n: Node): Future[bool] {.gcsafe.} =
   result = newFuture[bool]("waitPing")
   doAssert(n notin k.pingFutures)
   k.pingFutures[n] = result
@@ -317,7 +317,7 @@ proc populateNotFullBuckets(k: KademliaProtocol) =
     for node in bucket.replacementCache:
       asyncCheck k.bond(node)
 
-proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async.} =
+proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async, gcsafe.} =
   ## Bond with the given node.
   ##
   ## Bonding consists of pinging the node, waiting for a pong and maybe a ping as well.
@@ -469,7 +469,7 @@ proc recvNeighbours*(k: KademliaProtocol, remote: Node, neighbours: seq[Node]) =
   else:
     trace "Unexpected neighbours, probably came too late", remote
 
-proc recvFindNode*(k: KademliaProtocol, remote: Node, nodeId: NodeId) =
+proc recvFindNode*(k: KademliaProtocol, remote: Node, nodeId: NodeId) {.gcsafe.} =
   if remote notin k.routing:
     # FIXME: This is not correct; a node we've bonded before may have become unavailable
     # and thus removed from self.routing, but once it's back online we should accept

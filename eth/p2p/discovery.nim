@@ -207,7 +207,7 @@ proc recvNeighbours(d: DiscoveryProtocol, node: Node,
     neighbours.add(newNode(pk, Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
   d.kademlia.recvNeighbours(node, neighbours)
 
-proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: Bytes) {.inline.} =
+proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: Bytes) {.inline, gcsafe.} =
   let rlp = rlpFromBytes(payload.toRange)
   trace "<<< find_node from ", node
   let rng = rlp.listElem(0).toBytes
@@ -219,7 +219,7 @@ proc expirationValid(rlpEncodedPayload: seq[byte]): bool {.inline.} =
   let expiration = rlp.listElem(rlp.listLen - 1).toInt(uint32)
   result = epochTime() <= expiration.float
 
-proc receive(d: DiscoveryProtocol, a: Address, msg: Bytes) =
+proc receive(d: DiscoveryProtocol, a: Address, msg: Bytes) {.gcsafe.} =
   var msgHash: MDigest[256]
   if validateMsgHash(msg, msgHash):
     var remotePubkey: PublicKey
