@@ -198,6 +198,7 @@ proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
         debug "Exception in requestResolver()",
           exc = getCurrentException().name,
           err = getCurrentExceptionMsg()
+        raise
 
 proc registerMsg(protocol: ProtocolInfo,
                  id: int, name: string,
