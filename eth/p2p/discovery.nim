@@ -258,6 +258,7 @@ proc processClient(transp: DatagramTransport,
     proto.receive(a, buf)
   except:
     debug "Receive failed", err = getCurrentExceptionMsg()
+    raise
 
 proc open*(d: DiscoveryProtocol) =
   # TODO allow binding to specific IP / IPv6 / etc

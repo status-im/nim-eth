@@ -164,7 +164,7 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
     if bestBlockNumber > syncCtx.endBlockNumber:
       trace "New sync end block number", number = bestBlockNumber
       syncCtx.endBlockNumber = bestBlockNumber
-  except:
+  except CatchableError:
     debug "Exception in getBestBlockNumber()",
       exc = getCurrentException().name,
       err = getCurrentExceptionMsg()
@@ -210,7 +210,7 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
           dataReceived = true
         else:
           warn "Bodies len != headers.len", bodies = bodies.len, headers = workItem.headers.len
-    except:
+    except CatchableError:
       # the success case sets `dataReceived`, so we can just fall back to the
       # failure path below. If we signal time-outs with exceptions such
       # failures will be easier to handle.
@@ -231,7 +231,7 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
       workItem.state = Initial
       try:
         await peer.disconnect(SubprotocolReason)
-      except:
+      except CatchableError:
         discard
       syncCtx.handleLostPeer()
       break
@@ -318,7 +318,7 @@ proc onPeerConnected(ctx: SyncContext, peer: Peer) =
     f.callback = proc(data: pointer) {.gcsafe.} =
       if f.failed:
         error "startSyncWithPeer failed", msg = f.readError.msg, peer
-  except:
+  except CatchableError:
     debug "Exception in startSyncWithPeer()",
       exc = getCurrentException().name,
       err = getCurrentExceptionMsg()
