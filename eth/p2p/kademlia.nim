@@ -189,7 +189,9 @@ proc removeNode(r: var RoutingTable, n: Node) =
   r.bucketForNode(n).removeNode(n)
 
 proc addNode(r: var RoutingTable, n: Node): Node =
-  doAssert(n != r.thisNode)
+  if n == r.thisNode:
+    warn "Trying to add ourselves to the routing table", node = n
+    return
   let bucket = r.bucketForNode(n)
   let evictionCandidate = bucket.add(n)
   if not evictionCandidate.isNil:
