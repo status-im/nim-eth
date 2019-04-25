@@ -37,7 +37,7 @@ logScope:
 
 ## Also does threadvar initialisation.
 ## Must be called before redirectPorts() in each thread.
-proc getExternalIP*(natStrategy: NatStrategy): Option[IpAddress] =
+proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] =
   if natStrategy == NatAny or natStrategy == NatUpnp:
     upnp = newMiniupnp()
     upnp.discoverDelay = UPNP_TIMEOUT
@@ -58,7 +58,8 @@ proc getExternalIP*(natStrategy: NatStrategy): Option[IpAddress] =
           msg = "Internet Gateway Device found but it's not connected. Trying anyway."
         of NotAnIGD:
           msg = "Some device found, but it's not recognised as an Internet Gateway Device. Trying anyway."
-      debug "UPnP", msg
+      if not quiet:
+        debug "UPnP", msg
       if canContinue:
         let ires = upnp.externalIPAddress()
         if ires.isErr:
@@ -162,7 +163,7 @@ proc repeatPortMapping(args: PortMappingArgs) {.thread.} =
   # We can't use copies of Miniupnp and NatPmp objects in this thread, because they share
   # C pointers with other instances that have already been garbage collected, so
   # we use threadvars instead and initialise them again with getExternalIP().
-  let ipres = getExternalIP(strategy)
+  let ipres = getExternalIP(strategy, quiet = true)
   if ipres.isSome:
     externalIP = ipres.get()
     while true:
@@ -181,12 +182,16 @@ proc repeatPortMapping(args: PortMappingArgs) {.thread.} =
 var mainThreadId = getThreadId()
 
 proc stopNatThread() {.noconv.} =
-  if getThreadId() == mainThreadId:
-    # stop the thread
-    natCloseChan.send(true)
-    natThread.joinThread()
-    natCloseChan.close()
-    # delete our port mappings
+  # stop the thread
+  natCloseChan.send(true)
+  natThread.joinThread()
+  natCloseChan.close()
+  # delete our port mappings
+
+  # In Windows, a new thread is created for the signal handler, so we need to
+  # initialise our threadvars again.
+  let ipres = getExternalIP(strategy, quiet = true)
+  if ipres.isSome:
     if strategy == NatUpnp:
       for t in [(externalTcpPort, internalTcpPort, UPNPProtocol.TCP), (externalUdpPort, internalUdpPort, UPNPProtocol.UDP)]:
         let
