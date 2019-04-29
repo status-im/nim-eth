@@ -70,6 +70,7 @@ type
     # protocol to a peer that doesn't support the protocol.
 
   MalformedMessageError* = object of CatchableError
+  UnsupportedMessageError* = object of CatchableError
 
   PeerDisconnected* = object of CatchableError
     reason*: DisconnectionReason
