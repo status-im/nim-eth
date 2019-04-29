@@ -118,13 +118,12 @@ proc doPortMapping(tcpPort, udpPort: Port, description: string): Option[(Port, P
         if cres.isErr:
           warn "UPnP port mapping check failed. Assuming the check itself is broken and the port mapping was done.", msg = cres.error
 
-        let extPort = Port(parseUInt(cres.value.externalPort))
-        debug "UPnP: added port mapping", externalPort = extPort, internalPort = port, protocol = protocol
+        debug "UPnP: added port mapping", externalPort = port, internalPort = port, protocol = protocol
         case protocol:
           of UPNPProtocol.TCP:
-            extTcpPort = extPort
+            extTcpPort = port
           of UPNPProtocol.UDP:
-            extUdpPort = extPort
+            extUdpPort = port
   elif strategy == NatPmp:
     for t in [(tcpPort, NatPmpProtocol.TCP), (udpPort, NatPmpProtocol.UDP)]:
       let
