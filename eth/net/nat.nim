@@ -177,8 +177,6 @@ proc repeatPortMapping(args: PortMappingArgs) {.thread.} =
           lastUpdate = currTime
         sleep(sleepDuration)
 
-var mainThreadId = getThreadId()
-
 proc stopNatThread() {.noconv.} =
   # stop the thread
   natCloseChan.send(true)
