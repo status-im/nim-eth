@@ -215,11 +215,13 @@ proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: Bytes) {.inline, gc
   d.kademlia.recvFindNode(node, nodeId)
 
 proc expirationValid(rlpEncodedPayload: seq[byte]): bool {.inline.} =
+  ## Can raise RlpTypeMismatch
   let rlp = rlpFromBytes(rlpEncodedPayload.toRange)
   let expiration = rlp.listElem(rlp.listLen - 1).toInt(uint32)
   result = epochTime() <= expiration.float
 
 proc receive(d: DiscoveryProtocol, a: Address, msg: Bytes) {.gcsafe.} =
+  ## Can raise RlpTypeMismatch
   var msgHash: MDigest[256]
   if validateMsgHash(msg, msgHash):
     var remotePubkey: PublicKey
@@ -256,6 +258,8 @@ proc processClient(transp: DatagramTransport,
     var buf = transp.getMessage()
     let a = Address(ip: raddr.address, udpPort: raddr.port, tcpPort: raddr.port)
     proto.receive(a, buf)
+  except RlpTypeMismatch:
+    debug "Receive failed", err = getCurrentExceptionMsg()
   except:
     debug "Receive failed", err = getCurrentExceptionMsg()
     raise
