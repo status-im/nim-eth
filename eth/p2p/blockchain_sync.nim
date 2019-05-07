@@ -192,17 +192,21 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
         var nextIndex = workItem.startIndex
         for i in workItem.headers:
           if i.blockNumber != nextIndex:
-            raise newException(Exception, "The block numbers are not in sequence. Not processing this workItem.")
+            raise newException(CatchableError, "The block numbers are not in sequence. Not processing this workItem.")
           else:
             nextIndex = nextIndex + 1
           hashes.add(blockHash(i))
           if hashes.len == maxBodiesFetch:
             let b = await peer.getBlockBodies(hashes)
+            if b.isNone:
+              raise newException(CatchableError, "Was not able to get the block bodies.")
             hashes.setLen(0)
             bodies.add(b.get.blocks)
 
         if hashes.len != 0:
           let b = await peer.getBlockBodies(hashes)
+          if b.isNone:
+            raise newException(CatchableError, "Was not able to get the block bodies.")
           bodies.add(b.get.blocks)
 
         if bodies.len == workItem.headers.len:
