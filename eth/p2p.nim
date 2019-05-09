@@ -154,8 +154,15 @@ proc randomPeer*(node: EthereumNode): Peer =
     if i == peerIdx: return peer
     inc i
 
+iterator randomPeers*(node: EthereumNode, maxPeers: int, Protocol: type): Peer =
+  var peers = newSeqOfCap[Peer](node.peerPool.connectedNodes.len)
+  for peer in node.peers(Protocol):
+    peers.add(peer)
+  shuffle(peers)
+  if peers.len > maxPeers: peers.setLen(maxPeers)
+  for p in peers: yield p
+
 proc randomPeerWith*(node: EthereumNode, Protocol: type): Peer =
-  mixin state
   var candidates = newSeq[Peer]()
   for p in node.peers(Protocol):
     candidates.add(p)
