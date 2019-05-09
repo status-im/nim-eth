@@ -1207,9 +1207,9 @@ proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = fals
         await peer.transport.closeWait()
 
       # Give the peer a chance to disconnect
-      await peer.waitAndClose(2.seconds)
+      traceAsyncErrors peer.waitAndClose(2.seconds)
     elif not peer.transport.closed:
-      await peer.transport.closeWait()
+      peer.transport.close()
 
     logDisconnectedPeer peer
     peer.connectionState = Disconnected
