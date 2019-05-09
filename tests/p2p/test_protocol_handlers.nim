@@ -39,8 +39,20 @@ p2pProtocol xyz(version = 1,
     if true:
       raise newException(CatchableError, "Fake xyz exception")
 
+p2pProtocol hah(version = 1,
+                shortName = "hah",
+                networkState = network):
+
+  onPeerConnected do (peer: Peer):
+    if true:
+      raise newException(UselessPeerError, "Fake hah exception")
+    peer.networkState.count += 1
+
+  onPeerDisconnected do (peer: Peer, reason: DisconnectionReason) {.gcsafe.}:
+    peer.networkState.count -= 1
+
 suite "Testing protocol handlers":
-  asyncTest "Failing disconnect handler":
+  asyncTest "Failing disconnection handler":
     let bootENode = waitFor setupBootNode()
     var node1 = setupTestNode(abc, xyz)
     var node2 = setupTestNode(abc, xyz)
@@ -60,3 +72,14 @@ suite "Testing protocol handlers":
       # handlers, each handler still ran
       node1.protocolState(abc).count == 0
       node1.protocolState(xyz).count == 0
+
+  asyncTest "Failing connection handler":
+    var node1 = setupTestNode(hah)
+    var node2 = setupTestNode(hah)
+    node2.startListening()
+    let peer = waitFor node1.rlpxConnect(newNode(initENode(node2.keys.pubKey,
+                                                           node2.address)))
+    check:
+      peer.isNil == true
+      # To check if the disconnection handler did not run
+      node1.protocolState(hah).count == 0

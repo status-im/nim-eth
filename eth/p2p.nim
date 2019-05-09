@@ -76,8 +76,6 @@ proc processIncoming(server: StreamServer,
         # malicious peer opens multiple connections
         debug "Disconnecting peer (incoming)", reason = AlreadyConnected
         await peer.disconnect(AlreadyConnected)
-  else:
-    remote.close()
 
 proc listeningAddress*(node: EthereumNode): ENode =
   return initENode(node.keys.pubKey, node.address)
