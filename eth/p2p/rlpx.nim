@@ -194,6 +194,14 @@ proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
       try:
         if not f.read.isSome:
           doAssert false, "a request timed out twice"
+      # This can except when the future still completes with an error.
+      # E.g. the `sendMsg` fails because of an already closed transport or a
+      # broken pipe
+      except TransportOsError:
+        # E.g. broken pipe
+        trace "TransportOsError during request", err = getCurrentExceptionMsg()
+      except TransportError:
+        trace "Transport got closed during request"
       except:
         debug "Exception in requestResolver()",
           exc = getCurrentException().name,
@@ -516,9 +524,11 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     var msgData: Rlp
     try:
       (msgId, msgData) = await peer.recvMsg()
-    except TransportIncompleteError:
-      # Note: Could also "Transport is already closed!" error occur? Might have
-      # to change here to the general TransportError.
+    except TransportError:
+      # Note: This will also catch TransportIncompleteError. TransportError will
+      # here usually occur when a read is attempted when the transport is
+      # already closed. TransportIncompleteError when the transport is closed
+      # during read.
       case peer.connectionState
       of Connected:
         # Dropped connection, still need to cleanup the peer.
@@ -544,8 +554,7 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     try:
       await peer.invokeThunk(msgId, msgData)
     except RlpError:
-      debug "RlpError, ending dispatchMessages loop", peer,
-             err = getCurrentExceptionMsg()
+      debug "RlpError, ending dispatchMessages loop", peer
       await peer.disconnect(BreachOfProtocol, true)
       return
     except CatchableError:
