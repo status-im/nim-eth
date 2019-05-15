@@ -8,7 +8,7 @@
 
 import
   algorithm, bitops, endians, math, options, sequtils, strutils, tables, times,
-  secp256k1, chronicles, chronos, eth/common/eth_types, eth/[keys, rlp],
+  secp256k1, chronicles, chronos, eth/common/eth_types, eth/[keys, rlp, async_utils],
   hashes, byteutils, nimcrypto/[bcmode, hash, keccak, rijndael, sysrand],
   eth/p2p, ../ecies
 
@@ -554,7 +554,7 @@ proc initQueue*(capacity: int): Queue =
   result.capacity = capacity
   result.itemHashes.init()
 
-proc prune(self: var Queue) =
+proc prune(self: var Queue) {.raises: [].} =
   ## Remove items that are past their expiry time
   let now = epochTime().uint32
 
@@ -766,7 +766,7 @@ p2pProtocol Whisper(version = whisperVersion,
     whisperPeer.initialized = true
 
     if not whisperNet.config.isLightNode:
-      asyncCheck peer.run()
+      traceAsyncErrors peer.run()
 
     debug "Whisper peer initialized"
 
@@ -860,6 +860,7 @@ p2pProtocol Whisper(version = whisperVersion,
 # 'Runner' calls ---------------------------------------------------------------
 
 proc processQueue(peer: Peer) =
+  # Send to peer all valid and previously not send envelopes in the queue.
   var
     envelopes: seq[Envelope] = @[]
     whisperPeer = peer.state(Whisper)
@@ -884,8 +885,9 @@ proc processQueue(peer: Peer) =
     whisperPeer.received.incl(message)
 
   trace "Sending envelopes", amount=envelopes.len
-  # await peer.messages(envelopes)
-  asyncCheck peer.messages(envelopes)
+  # Ignore failure of sending messages, this could occur when the connection
+  # gets dropped
+  traceAsyncErrors peer.messages(envelopes)
 
 proc run(peer: Peer) {.async.} =
   var
@@ -897,7 +899,7 @@ proc run(peer: Peer) {.async.} =
     peer.processQueue()
     await sleepAsync(messageInterval)
 
-proc pruneReceived(node: EthereumNode) =
+proc pruneReceived(node: EthereumNode) {.raises: [].} =
   if node.peerPool != nil: # XXX: a bit dirty to need to check for this here ...
     var whisperNet = node.protocolState(Whisper)
 
