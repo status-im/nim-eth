@@ -165,11 +165,8 @@ p2pProtocol les(version = lesVersion,
                 outgoingRequestDecorator = outgoingRequestDecorator,
                 incomingRequestDecorator = incomingRequestDecorator,
                 incomingResponseThunkDecorator = incomingResponseDecorator):
-
-  ## Handshake
-  ##
-
-  proc status(p: Peer, values: openarray[KeyValuePair])
+  handshake:
+    proc status(p: Peer, values: openarray[KeyValuePair])
 
   onPeerConnected do (peer: Peer):
     let
@@ -208,7 +205,7 @@ p2pProtocol les(version = lesVersion,
       lesProperties.add(keyAnnounceType => lesNetwork.ourAnnounceType)
 
     let
-      s = await peer.handshake(timeout = chronos.seconds(10), status(lesProperties))
+      s = await peer.status(lesProperties, timeout = chronos.seconds(10))
       peerNetworkId   = s.values.getRequiredValue(keyNetworkId, uint)
       peerGenesisHash = s.values.getRequiredValue(keyGenesisHash, KeccakHash)
       peerLesVersion = s.values.getRequiredValue(keyProtocolVersion, uint)

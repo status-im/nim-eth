@@ -733,11 +733,11 @@ p2pProtocol Whisper(version = whisperVersion,
       whisperNet = peer.networkState
       whisperPeer = peer.state
 
-    let m = await handshake(peer, timeout = chronos.milliseconds(500),
-                            status(whisperVersion,
-                                   cast[uint](whisperNet.config.powRequirement),
-                                   @(whisperNet.config.bloom),
-                                   whisperNet.config.isLightNode))
+    let m = await peer.status(whisperVersion,
+                              cast[uint](whisperNet.config.powRequirement),
+                              @(whisperNet.config.bloom),
+                              whisperNet.config.isLightNode,
+                              timeout = chronos.milliseconds(500))
 
     if m.protocolVersion == whisperVersion:
       debug "Whisper peer", peer, whisperVersion
@@ -769,12 +769,12 @@ p2pProtocol Whisper(version = whisperVersion,
 
     debug "Whisper peer initialized", peer
 
-  proc status(peer: Peer,
-              protocolVersion: uint,
-              powConverted: uint,
-              bloom: Bytes,
-              isLightNode: bool) =
-    discard
+  handshake:
+    proc status(peer: Peer,
+                protocolVersion: uint,
+                powConverted: uint,
+                bloom: Bytes,
+                isLightNode: bool)
 
   proc messages(peer: Peer, envelopes: openarray[Envelope]) =
     if not peer.state.initialized:
@@ -1050,7 +1050,6 @@ proc setLightNode*(node: EthereumNode, isLightNode: bool) =
   ## NOTE: Should be run before connection is made with peers as this
   ## setting is only communicated at peer handshake
   node.protocolState(Whisper).config.isLightNode = isLightNode
-
 
 proc configureWhisper*(node: EthereumNode, config: WhisperConfig) =
   ## Apply a Whisper configuration

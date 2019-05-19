@@ -144,11 +144,6 @@ type
   DisconnectionHandler* = proc(peer: Peer,
                                reason: DisconnectionReason): Future[void] {.gcsafe.}
 
-  RlpxMessageKind* = enum
-    rlpxNotification,
-    rlpxRequest,
-    rlpxResponse
-
   ConnectionState* = enum
     None,
     Connecting,
@@ -176,4 +171,6 @@ type
     id*: int
 
   Response*[MsgType] = distinct Peer
+
+proc `$`*(peer: Peer): string = $peer.remote
 

@@ -71,7 +71,7 @@ p2pProtocol xyz(version = 1,
   proc bar(p: Peer, i: int, s: string)
 
   requestResponse:
-    proc xyzReq(p: Peer, n: int, timeout = 3000) =
+    proc xyzReq(p: Peer, n: int, timeout = 3.seconds) =
       echo "got req ", n
 
     proc xyzRes(p: Peer, data: string) =

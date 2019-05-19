@@ -46,12 +46,12 @@ p2pProtocol eth(version = protocolVersion,
       chain = network.chain
       bestBlock = chain.getBestBlockHeader
 
-    let m = await peer.handshake(timeout = chronos.seconds(10),
-                                 status(protocolVersion,
-                                        network.networkId,
-                                        bestBlock.difficulty,
-                                        bestBlock.blockHash,
-                                        chain.genesisHash))
+    let m = await peer.status(protocolVersion,
+                              network.networkId,
+                              bestBlock.difficulty,
+                              bestBlock.blockHash,
+                              chain.genesisHash,
+                              timeout = chronos.seconds(10))
 
     if m.networkId == network.networkId and m.genesisHash == chain.genesisHash:
       trace "suitable peer", peer
@@ -61,12 +61,13 @@ p2pProtocol eth(version = protocolVersion,
     peer.state.bestDifficulty = m.totalDifficulty
     peer.state.bestBlockHash = m.bestHash
 
-  proc status(peer: Peer,
-              protocolVersion: uint,
-              networkId: uint,
-              totalDifficulty: DifficultyInt,
-              bestHash: KeccakHash,
-              genesisHash: KeccakHash)
+  handshake:
+    proc status(peer: Peer,
+                protocolVersion: uint,
+                networkId: uint,
+                totalDifficulty: DifficultyInt,
+                bestHash: KeccakHash,
+                genesisHash: KeccakHash)
 
   proc newBlockHashes(peer: Peer, hashes: openarray[NewBlockHashesAnnounce]) =
     discard
