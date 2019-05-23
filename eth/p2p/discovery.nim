@@ -60,7 +60,10 @@ type
     cmdFindNode = 3
     cmdNeighbours = 4
 
+  DiscProtocolError* = object of CatchableError
+
 const MaxDgramSize = 1280
+const MinListLen: array[CommandId, int] = [4, 3, 2, 2]
 
 proc append*(w: var RlpWriter, a: IpAddress) =
   case a.family
@@ -97,6 +100,11 @@ proc recoverMsgPublicKey(msg: Bytes, pk: var PublicKey): bool =
       pk) == EthKeysStatus.Success
 
 proc unpack(msg: Bytes): tuple[cmdId: CommandId, payload: Bytes] =
+  # Check against possible RangeError
+  if msg[HEAD_SIZE].int < CommandId.low.ord or
+     msg[HEAD_SIZE].int > CommandId.high.ord:
+    raise newException(DiscProtocolError, "Unsupported packet id")
+
   result = (cmdId: msg[HEAD_SIZE].CommandId, payload: msg[HEAD_SIZE + 1 .. ^1])
 
 proc expiration(): uint32 =
@@ -211,17 +219,31 @@ proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: Bytes) {.inline, gc
   let rlp = rlpFromBytes(payload.toRange)
   trace "<<< find_node from ", node
   let rng = rlp.listElem(0).toBytes
-  let nodeId = readUIntBE[256](rng[32 .. ^1].toOpenArray())
-  d.kademlia.recvFindNode(node, nodeId)
+  # Check for pubkey len
+  if rng.len == 64:
+    let nodeId = readUIntBE[256](rng[32 .. ^1].toOpenArray())
+    d.kademlia.recvFindNode(node, nodeId)
+  else:
+    trace "Invalid target public key received"
 
-proc expirationValid(rlpEncodedPayload: seq[byte]): bool {.inline.} =
-  ## Can raise RlpTypeMismatch
+proc expirationValid(cmdId: CommandId, rlpEncodedPayload: seq[byte]):
+    bool {.inline, raises:[DiscProtocolError, RlpError].} =
+  ## Can only raise `DiscProtocolError` and all of `RlpError`
+  # Check if there is a payload, TODO: perhaps this should be an RLP error?
+  if rlpEncodedPayload.len <= 0:
+    raise newException(DiscProtocolError, "RLP stream is empty")
   let rlp = rlpFromBytes(rlpEncodedPayload.toRange)
-  let expiration = rlp.listElem(rlp.listLen - 1).toInt(uint32)
-  result = epochTime() <= expiration.float
+  # Check payload is an RLP list and if the list has the minimum items required
+  # for this packet type
+  if rlp.listLen >= MinListLen[cmdId]:
+    # Expiration is always the last mandatory item of the list
+    let expiration = rlp.listElem(MinListLen[cmdId] - 1).toInt(uint32)
+    result = epochTime() <= expiration.float
+  else:
+    raise newException(DiscProtocolError, "Invalid RLP list for this packet id")
 
 proc receive(d: DiscoveryProtocol, a: Address, msg: Bytes) {.gcsafe.} =
-  ## Can raise RlpTypeMismatch
+  ## Can raise `DiscProtocolError` and all of `RlpError`
   var msgHash: MDigest[256]
   if validateMsgHash(msg, msgHash):
     var remotePubkey: PublicKey
@@ -229,7 +251,7 @@ proc receive(d: DiscoveryProtocol, a: Address, msg: Bytes) {.gcsafe.} =
       let (cmdId, payload) = unpack(msg)
       # echo "received cmd: ", cmdId, ", from: ", a
       # echo "pubkey: ", remotePubkey.raw_key.toHex()
-      if expirationValid(payload):
+      if expirationValid(cmdId, payload):
         let node = newNode(remotePubkey, a)
         case cmdId
         of cmdPing:
@@ -258,7 +280,7 @@ proc processClient(transp: DatagramTransport,
     var buf = transp.getMessage()
     let a = Address(ip: raddr.address, udpPort: raddr.port, tcpPort: raddr.port)
     proto.receive(a, buf)
-  except RlpTypeMismatch:
+  except RlpError, DiscProtocolError:
     debug "Receive failed", err = getCurrentExceptionMsg()
   except:
     debug "Receive failed", err = getCurrentExceptionMsg()
