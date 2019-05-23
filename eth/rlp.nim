@@ -26,7 +26,7 @@ type
     of rlpList:
       elems*: seq[RlpNode]
 
-  RlpError* = object of Exception
+  RlpError* = object of CatchableError
   MalformedRlpError* = object of RlpError
   UnsupportedRlpError* = object of RlpError
   RlpTypeMismatch* = object of RlpError
@@ -275,7 +275,7 @@ proc listElem*(self: Rlp, i: int): Rlp =
 
 proc listLen*(self: Rlp): int =
   if not isList():
-    return 0
+    raise newException(RlpTypeMismatch, "List expected, but the source RLP is not a list.")
 
   var rlp = self
   for elem in rlp:
