@@ -229,13 +229,13 @@ proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: Bytes) {.inline, gc
 proc expirationValid(cmdId: CommandId, rlpEncodedPayload: seq[byte]):
     bool {.inline, raises:[DiscProtocolError, RlpError].} =
   ## Can only raise `DiscProtocolError` and all of `RlpError`
-  # Check if there is a payload, TODO: perhaps this should be an RLP error?
+  # Check if there is a payload
   if rlpEncodedPayload.len <= 0:
     raise newException(DiscProtocolError, "RLP stream is empty")
   let rlp = rlpFromBytes(rlpEncodedPayload.toRange)
   # Check payload is an RLP list and if the list has the minimum items required
   # for this packet type
-  if rlp.listLen >= MinListLen[cmdId]:
+  if rlp.isList and rlp.listLen >= MinListLen[cmdId]:
     # Expiration is always the last mandatory item of the list
     let expiration = rlp.listElem(MinListLen[cmdId] - 1).toInt(uint32)
     result = epochTime() <= expiration.float

@@ -275,7 +275,7 @@ proc listElem*(self: Rlp, i: int): Rlp =
 
 proc listLen*(self: Rlp): int =
   if not isList():
-    raise newException(RlpTypeMismatch, "List expected, but the source RLP is not a list.")
+    return 0
 
   var rlp = self
   for elem in rlp:
