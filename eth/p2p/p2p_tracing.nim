@@ -62,26 +62,6 @@ when tracingEnabled:
                     Msg.type.name,
                     StringJsonWriter.encode(msg))
 
-  proc logSentMsgFields(peer: NimNode,
-                        protocolInfo: NimNode,
-                        msgName: string,
-                        fields: openarray[NimNode]): NimNode =
-    ## This generates the tracing code inserted in the message sending procs
-    ## `fields` contains all the params that were serialized in the message
-    var tracer = ident("tracer")
-
-    result = quote do:
-      var `tracer` = init StringJsonWriter
-      beginRecord(`tracer`)
-
-    for f in fields:
-      result.add newCall(bindSym"writeField", tracer, newLit($f), f)
-
-    result.add quote do:
-      endRecord(`tracer`)
-      logMsgEventImpl("outgoing_msg", `peer`,
-                      `protocolInfo`, `msgName`, getOutput(`tracer`))
-
   template logSentMsg(peer: Peer, msg: auto) =
     logMsgEvent("outgoing_msg", peer, msg)
 
@@ -105,7 +85,7 @@ when tracingEnabled:
 
 else:
   template initTracing(baseProtocol: ProtocolInfo,
-                        userProtocols: seq[ProtocolInfo])= discard
+                       userProtocols: seq[ProtocolInfo])= discard
   template logSentMsg(peer: Peer, msg: auto) = discard
   template logReceivedMsg(peer: Peer, msg: auto) = discard
   template logConnectedPeer(peer: Peer) = discard

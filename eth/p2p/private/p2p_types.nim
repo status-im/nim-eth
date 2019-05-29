@@ -101,7 +101,7 @@ type
     name*: string
 
     # Private fields:
-    thunk*: MessageHandler
+    thunk*: ThunkProc
     printer*: MessageContentPrinter
     requestResolver*: RequestResolver
     nextMsgResolver*: NextMsgResolver
@@ -134,7 +134,7 @@ type
 
   # Private types:
   MessageHandlerDecorator* = proc(msgId: int, n: NimNode): NimNode
-  MessageHandler* = proc(x: Peer, msgId: int, data: Rlp): Future[void] {.gcsafe.}
+  ThunkProc* = proc(x: Peer, msgId: int, data: Rlp): Future[void] {.gcsafe.}
   MessageContentPrinter* = proc(msg: pointer): string {.gcsafe.}
   RequestResolver* = proc(msg: pointer, future: FutureBase) {.gcsafe.}
   NextMsgResolver* = proc(msgData: Rlp, future: FutureBase) {.gcsafe.}

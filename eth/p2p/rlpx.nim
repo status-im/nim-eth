@@ -53,6 +53,8 @@ proc disconnectAndRaise(peer: Peer,
   await peer.disconnect(r)
   raisePeerDisconnected(msg, r)
 
+include p2p_backends_helpers
+
 # Dispatcher
 #
 
@@ -166,53 +168,13 @@ proc cmp*(lhs, rhs: ProtocolInfo): int =
       return int16(lhs.name[i]) - int16(rhs.name[i])
   return 0
 
-proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
-  result = ""
-  # TODO: uncommenting the line below increases the compile-time
-  # tremendously (for reasons not yet known)
-  # result = $(cast[ptr MsgType](msg)[])
-
 proc nextMsgResolver[MsgType](msgData: Rlp, future: FutureBase) {.gcsafe.} =
   var reader = msgData
   Future[MsgType](future).complete reader.readRecordType(MsgType, MsgType.rlpFieldsCount > 1)
 
-proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
-  var f = Future[Option[MsgType]](future)
-  if not f.finished:
-    if msg != nil:
-      f.complete some(cast[ptr MsgType](msg)[])
-    else:
-      f.complete none(MsgType)
-  else:
-    # This future was already resolved, but let's do some sanity checks
-    # here. The only reasonable explanation is that the request should
-    # have timed out.
-    if msg != nil:
-      if f.read.isSome:
-        doAssert false, "trying to resolve a request twice"
-      else:
-        doAssert false, "trying to resolve a timed out request with a value"
-    else:
-      try:
-        if not f.read.isSome:
-          doAssert false, "a request timed out twice"
-      # This can except when the future still completes with an error.
-      # E.g. the `sendMsg` fails because of an already closed transport or a
-      # broken pipe
-      except TransportOsError:
-        # E.g. broken pipe
-        trace "TransportOsError during request", err = getCurrentExceptionMsg()
-      except TransportError:
-        trace "Transport got closed during request"
-      except:
-        debug "Exception in requestResolver()",
-          exc = getCurrentException().name,
-          err = getCurrentExceptionMsg()
-        raise
-
 proc registerMsg(protocol: ProtocolInfo,
                  id: int, name: string,
-                 thunk: MessageHandler,
+                 thunk: ThunkProc,
                  printer: MessageContentPrinter,
                  requestResolver: RequestResolver,
                  nextMsgResolver: NextMsgResolver) =
@@ -257,12 +219,6 @@ proc supports*(peer: Peer, Protocol: type): bool {.inline.} =
 template perPeerMsgId(peer: Peer, MsgType: type): int =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
 
-proc writeMsgId(p: ProtocolInfo, msgId: int, peer: Peer,
-                rlpOut: var RlpWriter) =
-  let baseMsgId = peer.dispatcher.protocolOffsets[p.index]
-  doAssert baseMsgId != -1
-  rlpOut.append(baseMsgId + msgId)
-
 proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void] =
   template invalidIdError: untyped =
     raise newException(UnsupportedMessageError,
@@ -274,11 +230,6 @@ proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void] =
   if thunk == nil: invalidIdError()
 
   return thunk(peer, msgId, msgData)
-
-proc linkSendFailureToReqFuture[S, R](sendFut: Future[S], resFut: Future[R]) =
-  sendFut.addCallback() do (arg: pointer):
-    if not sendFut.error.isNil:
-      resFut.fail(sendFut.error)
 
 template compressMsg(peer: Peer, data: Bytes): Bytes =
   when useSnappy:
@@ -499,8 +450,6 @@ proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
       warn "Dropped RLPX message",
            msg = peer.dispatcher.messages[nextMsgId].name
 
-include p2p_backends_helpers
-
 proc nextMsg*(peer: Peer, MsgType: type): Future[MsgType] =
   ## This procs awaits a specific RLPx message.
   ## Any messages received while waiting will be dispatched to their
@@ -619,7 +568,6 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
     nextMsg = bindSym "nextMsg"
     initProtocol = bindSym"initProtocol"
     registerMsg = bindSym "registerMsg"
-    writeMsgId = bindSym "writeMsgId"
     perPeerMsgId = bindSym "perPeerMsgId"
     perPeerMsgIdImpl = bindSym "perPeerMsgIdImpl"
     linkSendFailureToReqFuture = bindSym "linkSendFailureToReqFuture"

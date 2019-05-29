@@ -1,6 +1,6 @@
 import
   macros,
-  std_shims/macros_shim, chronos/timer
+  std_shims/macros_shim, chronos
 
 type
   MessageKind* = enum
@@ -18,6 +18,10 @@ type
     recIdent*: NimNode
     recBody*: NimNode
     userHandler*: NimNode
+    protocol*: P2PProtocol
+
+    sendProcPeerParam*: NimNode
+    sendProcMsgParams*: seq[NimNode]
 
   Request* = ref object
     queries*: seq[Message]
@@ -69,11 +73,17 @@ type
     # Bound symbols to the back-end run-time types and procs
     PeerType*: NimNode
     NetworkType*: NimNode
+    SerializationFormat*: NimNode
 
     registerProtocol*: NimNode
     setEventHandlers*: NimNode
 
   BackendFactory* = proc (p: P2PProtocol): Backend
+
+  P2PBackendError* = object of CatchableError
+  InvalidMsgError* = object of P2PBackendError
+
+  ProtocolInfoBase* = object
 
 const
   defaultReqTimeout = 10.seconds
@@ -296,23 +306,107 @@ proc createSendProc*(msg: Message, procType = nnkProcDef): NimNode =
   # TODO: file an issue:
   # macros.newProc and macros.params doesn't work with nnkMacroDef
 
-  let pragmas = if procType == nnkProcDef: newTree(nnkPragma, ident"gcsafe")
-                else: newEmptyNode()
+  # createSendProc must be called only once
+  assert msg.sendProcPeerParam == nil
+
+  let
+    pragmas = if procType == nnkProcDef: newTree(nnkPragma, ident"gcsafe")
+              else: newEmptyNode()
 
   result = newNimNode(procType).add(
     msg.identWithExportMarker, ## name
     newEmptyNode(),
     newEmptyNode(),
-    msg.procDef.params.copy, ## params
+    copy msg.procDef.params, ## params
     pragmas,
     newEmptyNode(),
     newStmtList()) ## body
+
+  for param, paramType in result.typedParams():
+    if msg.sendProcPeerParam == nil:
+      msg.sendProcPeerParam = param
+    else:
+      msg.sendProcMsgParams.add param
 
   if msg.kind in {msgHandshake, msgRequest}:
     result[3].add msg.timeoutParam
 
   result[3][0] = if procType == nnkMacroDef: ident "untyped"
                  else: newTree(nnkBracketExpr, ident("Future"), msg.recIdent)
+
+const tracingEnabled = defined(p2pdump)
+
+when tracingEnabled:
+  proc logSentMsgFields(peer: NimNode,
+                        protocolInfo: NimNode,
+                        msgName: string,
+                        fields: openarray[NimNode]): NimNode =
+    ## This generates the tracing code inserted in the message sending procs
+    ## `fields` contains all the params that were serialized in the message
+    var tracer = ident("tracer")
+
+    result = quote do:
+      var `tracer` = init StringJsonWriter
+      beginRecord(`tracer`)
+
+    for f in fields:
+      result.add newCall(bindSym"writeField", tracer, newLit($f), f)
+
+    result.add quote do:
+      endRecord(`tracer`)
+      logMsgEventImpl("outgoing_msg", `peer`,
+                      `protocolInfo`, `msgName`, getOutput(`tracer`))
+
+proc initFuture*[T](loc: var Future[T]) =
+  loc = newFuture[T]()
+
+proc createSendProcBody*(msg: Message,
+                         preludeGenerator: proc(stream: NimNode): NimNode,
+                         sendCallGenerator: proc (peer, bytes: NimNode): NimNode): NimNode =
+  let
+    outputStream = ident "outputStream"
+    msgBytes = ident "msgBytes"
+    writer = ident "writer"
+    writeField = ident "writeField"
+    resultIdent = ident "result"
+
+    initFuture = bindSym "initFuture"
+    recipient = msg.sendProcPeerParam
+    msgRecName = msg.recIdent
+    Format = msg.protocol.backend.SerializationFormat
+
+    prelude = if preludeGenerator.isNil: newStmtList()
+              else: preludeGenerator(outputStream)
+    appendParams = newStmtList()
+
+    initResultFuture = if msg.kind != msgRequest: newStmtList()
+                       else: newCall(initFuture, resultIdent)
+
+    sendCall = sendCallGenerator(recipient, msgBytes)
+
+    tracing = when tracingEnabled: logSentMsgFields(recipient,
+                                                    newLit(msg.protocol.name),
+                                                    $msg.ident,
+                                                    msg.sendProcMsgParams)
+              else: newStmtList()
+
+
+  for param in msg.sendProcMsgParams:
+    appendParams.add newCall(writeField, writer, newLit($param), param)
+
+  result = quote do:
+    mixin init, WriterType, beginRecord, endRecord, getOutput
+
+    `initResultFuture`
+    var `outputStream` = init OutputStream
+    `prelude`
+    var writer = init(WriterType(`Format`), `outputStream`)
+    var recordStartMemo = beginRecord(writer, `msgRecName`)
+    `appendParams`
+    `tracing`
+    endRecord(writer, recordStartMemo)
+    let `msgBytes` = getOutput(`outputStream`)
+    `sendCall`
 
 proc appendAllParams*(node: NimNode, procDef: NimNode, skipFirst = 0): NimNode =
   result = node
