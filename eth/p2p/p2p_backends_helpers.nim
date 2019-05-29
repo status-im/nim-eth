@@ -68,3 +68,21 @@ proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
   # tremendously (for reasons not yet known)
   # result = $(cast[ptr MsgType](msg)[])
 
+proc handshakeImpl[T](peer: Peer,
+                      sendFut: Future[void],
+                      responseFut: Future[T],
+                      timeout: Duration): Future[T] {.async.} =
+  sendFut.addCallback do (arg: pointer) {.gcsafe.}:
+    if sendFut.failed:
+      debug "Handshake message not delivered", peer
+
+  doAssert timeout.milliseconds > 0
+  yield responseFut or sleepAsync(timeout)
+  if not responseFut.finished:
+    discard disconnectAndRaise(peer, HandshakeTimeout,
+                               "Protocol handshake was not received in time.")
+  elif responseFut.failed:
+    raise responseFut.error
+  else:
+    return responseFut.read
+

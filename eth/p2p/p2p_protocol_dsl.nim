@@ -19,13 +19,38 @@ type
     recBody*: NimNode
     userHandler*: NimNode
     protocol*: P2PProtocol
-
-    sendProcPeerParam*: NimNode
-    sendProcMsgParams*: seq[NimNode]
+    response*: Message
 
   Request* = ref object
     queries*: seq[Message]
     response*: Message
+
+  SendProc* = object
+    ## A `SendProc` is a proc used to send a single P2P message
+    ## If it's a Request, the return type will be a Future returing
+    ## the respective Response type. All send procs also have an
+    ## automatically inserted `timeout` parameter.
+
+    msg*: Message
+      ## The message being implemented
+
+    def*: NimNode
+      ## The definition of the proc
+
+    peerParam*: NimNode
+      ## Cached ident for the peer param
+
+    msgParams*: seq[NimNode]
+      ## Cached param ident for all values that must be written
+      ## on the wire. The automatically inserted `timeout` is not
+      ## included.
+
+    timeoutParam*: NimNode
+      ## Cached ident for the timeout parameter
+
+    allDefs*: NimNode
+      ## The final definitions that must be become part of the
+      ## p2pProtocol macro output. May include helper templates.
 
   P2PProtocol* = ref object
     # Settings
@@ -66,7 +91,7 @@ type
 
   Backend* = ref object
     # Code generators
-    implementMsg*: proc (p: P2PProtocol, msg: Message, resp: Message = nil)
+    implementMsg*: proc (p: P2PProtocol, msg: Message)
     implementProtocolInit*: proc (p: P2PProtocol): NimNode
     afterProtocolInit*: proc (p: P2PProtocol)
 
@@ -74,6 +99,7 @@ type
     PeerType*: NimNode
     NetworkType*: NimNode
     SerializationFormat*: NimNode
+    ResponseType*: NimNode
 
     registerProtocol*: NimNode
     setEventHandlers*: NimNode
@@ -82,8 +108,6 @@ type
 
   P2PBackendError* = object of CatchableError
   InvalidMsgError* = object of P2PBackendError
-
-  ProtocolInfoBase* = object
 
 const
   defaultReqTimeout = 10.seconds
@@ -267,8 +291,9 @@ proc ensureTimeoutParam(procDef: NimNode, timeouts: int64): NimNode =
                      Duration,
                      newCall(milliseconds, newLit(timeouts)))
 
-proc newMsg(p: P2PProtocol, kind: MessageKind, id: int,
-            procDef: NimNode, timeoutParam: NimNode = nil): Message =
+proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
+            procDef: NimNode, timeoutParam: NimNode = nil,
+            response: Message = nil): Message =
 
   if procDef[0].kind == nnkPostfix:
     error("p2pProcotol procs are public by default. " &
@@ -288,51 +313,89 @@ proc newMsg(p: P2PProtocol, kind: MessageKind, id: int,
                                               # are automatically remapped
       newEmptyNode())
 
-  result = Message(id: id, ident: msgIdent, kind: kind,
+  result = Message(protocol: protocol, id: id, ident: msgIdent, kind: kind,
                    procDef: procDef, recIdent: recName, recBody: recBody,
-                   timeoutParam: timeoutParam)
+                   timeoutParam: timeoutParam, response: response)
 
   if procDef.body.kind != nnkEmpty:
     result.userHandler = copy procDef
-    p.augmentUserHandler result.userHandler
+    protocol.augmentUserHandler result.userHandler
     result.userHandler.name = genSym(nskProc, msgName)
 
-  p.messages.add result
+  protocol.messages.add result
 
 proc identWithExportMarker*(msg: Message): NimNode =
   newTree(nnkPostfix, ident("*"), msg.ident)
 
-proc createSendProc*(msg: Message, procType = nnkProcDef): NimNode =
+proc createSendProc*(msg: Message,
+                     procType = nnkProcDef,
+                     isRawSender = false): SendProc =
   # TODO: file an issue:
   # macros.newProc and macros.params doesn't work with nnkMacroDef
 
-  # createSendProc must be called only once
-  assert msg.sendProcPeerParam == nil
-
   let
+    name = if not isRawSender: msg.identWithExportMarker
+           else: genSym(nskProc, $msg.ident & "RawSender")
+
     pragmas = if procType == nnkProcDef: newTree(nnkPragma, ident"gcsafe")
               else: newEmptyNode()
 
-  result = newNimNode(procType).add(
-    msg.identWithExportMarker, ## name
+  var def = newNimNode(procType).add(
+    name,
     newEmptyNode(),
     newEmptyNode(),
-    copy msg.procDef.params, ## params
+    copy msg.procDef.params,
     pragmas,
     newEmptyNode(),
     newStmtList()) ## body
 
-  for param, paramType in result.typedParams():
-    if msg.sendProcPeerParam == nil:
-      msg.sendProcPeerParam = param
+  result.msg = msg
+  result.def = def
+  result.allDefs = newStmtList(def)
+
+  for param, paramType in def.typedParams():
+    if result.peerParam.isNil:
+      result.peerParam = param
     else:
-      msg.sendProcMsgParams.add param
+      result.msgParams.add param
 
-  if msg.kind in {msgHandshake, msgRequest}:
-    result[3].add msg.timeoutParam
+  case msg.kind
+  of msgHandshake, msgRequest:
+    # Add a timeout parameter for all request procs
+    let timeout = copy msg.timeoutParam
+    def[3].add timeout
+    result.timeoutParam = timeout[0]
 
-  result[3][0] = if procType == nnkMacroDef: ident "untyped"
-                 else: newTree(nnkBracketExpr, ident("Future"), msg.recIdent)
+  of msgResponse:
+    # A response proc must be called with a response object that originates
+    # from a certain request. Here we change the Peer parameter at position
+    # 1 to the correct strongly-typed ResponseType. The incoming procs still
+    # gets the normal Peer paramter.
+    let
+      ResponseType = msg.protocol.backend.ResponseType
+      sendProcName = msg.ident
+
+    assert ResponseType != nil
+
+    def[3][1][1] = newTree(nnkBracketExpr, ResponseType, msg.recIdent)
+
+    # We create a helper that enables the `response.send()` syntax
+    # inside the user handler of the request proc:
+    result.allDefs.add quote do:
+      template send*(r: `ResponseType`, args: varargs[untyped]): auto =
+        `sendProcName`(r, args)
+
+  of msgNotification:
+    discard
+
+  def[3][0] = if procType == nnkMacroDef:
+                ident "untyped"
+              elif msg.kind == msgRequest and not isRawSender:
+                newTree(nnkBracketExpr, ident("Future"), msg.response.recIdent)
+              elif msg.kind == msgHandshake and not isRawSender:
+                newTree(nnkBracketExpr, ident("Future"), msg.recIdent)
+              else:
+                newTree(nnkBracketExpr, ident("Future"), ident"void")
 
 const tracingEnabled = defined(p2pdump)
 
@@ -360,10 +423,11 @@ when tracingEnabled:
 proc initFuture*[T](loc: var Future[T]) =
   loc = newFuture[T]()
 
-proc createSendProcBody*(msg: Message,
-                         preludeGenerator: proc(stream: NimNode): NimNode,
-                         sendCallGenerator: proc (peer, bytes: NimNode): NimNode): NimNode =
+proc implementBody*(sendProc: SendProc,
+                    preludeGenerator: proc(stream: NimNode): NimNode,
+                    sendCallGenerator: proc (peer, bytes: NimNode): NimNode) =
   let
+    msg = sendProc.msg
     outputStream = ident "outputStream"
     msgBytes = ident "msgBytes"
     writer = ident "writer"
@@ -371,7 +435,7 @@ proc createSendProcBody*(msg: Message,
     resultIdent = ident "result"
 
     initFuture = bindSym "initFuture"
-    recipient = msg.sendProcPeerParam
+    recipient = sendProc.peerParam
     msgRecName = msg.recIdent
     Format = msg.protocol.backend.SerializationFormat
 
@@ -387,14 +451,13 @@ proc createSendProcBody*(msg: Message,
     tracing = when tracingEnabled: logSentMsgFields(recipient,
                                                     newLit(msg.protocol.name),
                                                     $msg.ident,
-                                                    msg.sendProcMsgParams)
+                                                    sendProc.msgParams)
               else: newStmtList()
 
-
-  for param in msg.sendProcMsgParams:
+  for param in sendProc.msgParams:
     appendParams.add newCall(writeField, writer, newLit($param), param)
 
-  result = quote do:
+  sendProc.def.body = quote do:
     mixin init, WriterType, beginRecord, endRecord, getOutput
 
     `initResultFuture`
@@ -407,6 +470,20 @@ proc createSendProcBody*(msg: Message,
     endRecord(writer, recordStartMemo)
     let `msgBytes` = getOutput(`outputStream`)
     `sendCall`
+
+proc genAwaitUserHandler*(msg: Message, receivedMsg: NimNode,
+                          leadingParams: varargs[NimNode]): NimNode =
+  if msg.userHandler == nil:
+    return newStmtList()
+
+  var userHandlerCall = newCall(msg.userHandler.name, leadingParams)
+
+  for param, paramType in msg.procDef.typedParams(skip = 1):
+    # If there is user message handler, we'll place a call to it by
+    # unpacking the fields of the received message:
+    userHandlerCall.add newDotExpr(receivedMsg, param)
+
+  return newCall("await", userHandlerCall)
 
 proc appendAllParams*(node: NimNode, procDef: NimNode, skipFirst = 0): NimNode =
   result = node
@@ -465,13 +542,14 @@ proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode) =
           error "requestResponse expects a block with at least two proc definitions"
 
         var queries = newSeq[Message]()
+        let responseMsg = p.newMsg(msgResponse, nextId + procs.len - 1, procs[^1])
+
         for i in 0 .. procs.len - 2:
           var timeout = ensureTimeoutParam(procs[i], p.timeouts)
-          queries.add p.newMsg(msgRequest, nextId + i, procs[i], timeout)
+          queries.add p.newMsg(msgRequest, nextId + i, procs[i], timeout,
+                               response = responseMsg)
 
-        p.requests.add Request(
-          queries: queries,
-          response: p.newMsg(msgResponse, nextId + procs.len - 1, procs[^1]))
+        p.requests.add Request(queries: queries, response: responseMsg)
 
         inc nextId, procs.len
 
@@ -556,7 +634,7 @@ proc genCode*(p: P2PProtocol): NimNode =
 
   for req in p.requests:
     p.backend.implementMsg p, req.response
-    for query in req.queries: p.backend.implementMsg(p, query, req.response)
+    for query in req.queries: p.backend.implementMsg(p, query)
 
   result = newStmtList()
   result.add p.genTypeSection()

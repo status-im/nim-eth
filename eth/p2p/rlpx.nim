@@ -16,6 +16,7 @@ logScope:
 const
   devp2pVersion* = 4
   maxMsgSize = 1024 * 1024
+  HandshakeTimeout = BreachOfProtocol
 
 include p2p_tracing
 
@@ -535,10 +536,10 @@ proc dispatchMessages*(peer: Peer) {.async.} =
 template applyDecorator(p: NimNode, decorator: NimNode) =
   if decorator.kind != nnkNilLit: p.addPragma decorator
 
-proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
+proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
   let
     resultIdent = ident "result"
-    isSubprotocol = p.version > 0
+    isSubprotocol = protocol.version > 0
     Option = bindSym "Option"
     # XXX: Binding the int type causes instantiation failure for some reason
     # Int = bindSym "int"
@@ -571,7 +572,9 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
     perPeerMsgId = bindSym "perPeerMsgId"
     perPeerMsgIdImpl = bindSym "perPeerMsgIdImpl"
     linkSendFailureToReqFuture = bindSym "linkSendFailureToReqFuture"
-    shortName = if p.shortName.len > 0: p.shortName else: p.name
+    handshakeImpl = bindSym "handshakeImpl"
+    shortName = if protocol.shortName.len > 0: protocol.shortName
+                else: protocol.name
 
   # By convention, all Ethereum protocol names must be abbreviated to 3 letters
   doAssert shortName.len == 3
@@ -583,17 +586,17 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
   result.PeerType = Peer
   result.NetworkType = EthereumNode
 
-  result.implementMsg = proc (p: P2PProtocol, msg: Message, resp: Message = nil) =
+  result.implementMsg = proc (protocol: P2PProtocol, msg: Message) =
     var
       msgId = msg.id
       msgRecName = msg.recIdent
       msgKind = msg.kind
       n = msg.procDef
-      responseMsgId = if resp != nil: resp.id else: -1
-      responseRecord = if resp != nil: resp.recIdent else: nil
+      responseMsgId = if msg.response != nil: msg.response.id else: -1
+      responseRecord = if msg.response != nil: msg.response.recIdent else: nil
       msgIdent = n.name
       msgName = $msgIdent
-      hasReqIds = p.useRequestIds and msgKind in {msgRequest, msgResponse}
+      hasReqIds = protocol.useRequestIds and msgKind in {msgRequest, msgResponse}
       userPragmas = n.pragma
 
       # variables used in the sending procs
@@ -684,7 +687,7 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
       # Above, by default `awaitUserHandler` is set to a no-op statement list.
       awaitUserHandler = newCall("await", userHandlerCall)
 
-      p.outRecvProcs.add(msg.userHandler)
+      protocol.outRecvProcs.add msg.userHandler
 
     for param, paramType in n.typedParams(skip = 1):
       # This is a fragment of the sending proc that
@@ -723,17 +726,17 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
     for p in userPragmas: thunkProc.addPragma p
 
     case msgKind
-    of msgRequest:  thunkProc.applyDecorator p.incomingRequestThunkDecorator
-    of msgResponse: thunkProc.applyDecorator p.incomingResponseThunkDecorator
+    of msgRequest:  thunkProc.applyDecorator protocol.incomingRequestThunkDecorator
+    of msgResponse: thunkProc.applyDecorator protocol.incomingResponseThunkDecorator
     else: discard
 
     thunkProc.addPragma ident"async"
 
-    p.outRecvProcs.add thunkProc
+    protocol.outRecvProcs.add thunkProc
 
     var msgSendProc = n
     let msgSendProcName = n.name
-    p.outSendProcs.add msgSendProc
+    protocol.outSendProcs.add msgSendProc
 
     # TODO: check that the first param has the correct type
     msgSendProc.params[1][0] = sendTo
@@ -751,13 +754,13 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
       # let rsp = bindSym "Response"
       # let rspId = bindSym "ResponseWithId"
       let
-        ResponseTypeHead = if p.useRequestIds: ResponseWithId
+        ResponseTypeHead = if protocol.useRequestIds: ResponseWithId
                            else: Response
         ResponseType = newTree(nnkBracketExpr, ResponseTypeHead, msgRecName)
 
       msgSendProc.params[1][1] = ResponseType
 
-      p.outSendProcs.add quote do:
+      protocol.outSendProcs.add quote do:
         template send*(r: `ResponseType`, args: varargs[untyped]): auto =
           `msgSendProcName`(r, args)
     else: discard
@@ -787,7 +790,7 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
       quote: return `sendCall`
 
     let perPeerMsgIdValue = if isSubprotocol:
-      newCall(perPeerMsgIdImpl, msgRecipient, p.protocolInfoVar, newLit(msgId))
+      newCall(perPeerMsgIdImpl, msgRecipient, protocol.protocolInfoVar, newLit(msgId))
     else:
       newLit(msgId)
 
@@ -798,8 +801,8 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
         newCall(startList, rlpWriter, newLit(paramCount)),
         appendParams)
 
-    for p in paramsToWrite:
-      appendParams.add newCall(append, rlpWriter, p)
+    for param in paramsToWrite:
+      appendParams.add newCall(append, rlpWriter, param)
 
     if msgKind == msgHandshake:
       var
@@ -813,10 +816,9 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
 
       var
         forwardCall = newCall(rawSendProc).appendAllParams(handshakeExchanger)
-        peerVariable = ident"peer"
+        peerVariable = ident "peer"
         peerValue = forwardCall[1]
         timeoutValue = msg.timeoutParam[0]
-        handshakeImpl = ident"handshakeImpl"
 
       forwardCall[1] = peerVariable
       forwardCall.del(forwardCall.len - 1)
@@ -830,7 +832,7 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
                         `timeoutValue`)
 
       msgSendProc.name = rawSendProc
-      p.outSendProcs.add handshakeExchanger
+      protocol.outSendProcs.add handshakeExchanger
     else:
       # Make the send proc public
       msgSendProc.name = msg.identWithExportMarker
@@ -853,11 +855,11 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
       `senderEpilogue`
 
     if msgKind == msgRequest:
-      msgSendProc.applyDecorator p.outgoingRequestDecorator
+      msgSendProc.applyDecorator protocol.outgoingRequestDecorator
 
-    p.outProcRegistrations.add(
+    protocol.outProcRegistrations.add(
       newCall(registerMsg,
-              p.protocolInfoVar,
+              protocol.protocolInfoVar,
               newIntLitNode(msgId),
               newStrLitNode($n.name),
               thunkName,
@@ -865,11 +867,11 @@ proc p2pProtocolBackendImpl*(p: P2PProtocol): Backend =
               newTree(nnkBracketExpr, requestResolver, msgRecName),
               newTree(nnkBracketExpr, nextMsgResolver, msgRecName)))
 
-  result.implementProtocolInit = proc (p: P2PProtocol): NimNode =
+  result.implementProtocolInit = proc (protocol: P2PProtocol): NimNode =
     return newCall(initProtocol,
-                   newLit(p.shortName),
-                   newLit(p.version),
-                   p.peerInit, p.netInit)
+                   newLit(protocol.shortName),
+                   newLit(protocol.version),
+                   protocol.peerInit, protocol.netInit)
 
 p2pProtocol devp2p(version = 0, shortName = "p2p"):
   proc hello(peer: Peer,
@@ -911,24 +913,6 @@ proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason): Future[voi
       futures.add((protocol.disconnectHandler)(peer, reason))
 
   return all(futures)
-
-proc handshakeImpl*[T](peer: Peer,
-                      sendFut: Future[void],
-                      responseFut: Future[T],
-                      timeout: Duration): Future[T] {.async.} =
-  sendFut.addCallback do (arg: pointer) {.gcsafe.}:
-    if sendFut.failed:
-      debug "Handshake message not delivered", peer
-
-  doAssert timeout.milliseconds > 0
-  yield responseFut or sleepAsync(timeout)
-  if not responseFut.finished:
-    discard disconnectAndRaise(peer, BreachOfProtocol,
-                               "Protocol handshake was not received in time.")
-  elif responseFut.failed:
-    raise responseFut.error
-  else:
-    return responseFut.read
 
 proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = false) {.async.} =
   if peer.connectionState notin {Disconnecting, Disconnected}:
