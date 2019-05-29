@@ -289,12 +289,12 @@ template compressMsg(peer: Peer, data: Bytes): Bytes =
 proc sendMsg*(peer: Peer, data: Bytes) {.gcsafe, async.} =
   try:
     var cipherText = encryptMsg(peer.compressMsg(data), peer.secretsState)
-    discard await peer.transport.write(cipherText)
+    var res = await peer.transport.write(cipherText)
+    if res != len(cipherText):
+      # This is ECONNRESET or EPIPE case when remote peer disconnected.
+      await peer.disconnect(TcpError)
   except:
     await peer.disconnect(TcpError)
-    # this is usually a "(32) Broken pipe":
-    # FIXME: this exception should be caught somewhere in addMsgHandler() and
-    # sending should be retried a few times
     raise
 
 proc send*[Msg](peer: Peer, msg: Msg): Future[void] =
@@ -1349,7 +1349,10 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     var authMsg: array[AuthMessageMaxEIP8, byte]
     var authMsgLen = 0
     check authMessage(handshake, remote.node.pubkey, authMsg, authMsgLen)
-    var res = result.transport.write(addr authMsg[0], authMsgLen)
+    var res = await result.transport.write(addr authMsg[0], authMsgLen)
+    if res != authMsgLen:
+      raisePeerDisconnected("Unexpected disconnect while authenticating",
+                            TcpError)
 
     let initialSize = handshake.expectedLength
     var ackMsg = newSeqOfCap[byte](1024)
@@ -1446,7 +1449,10 @@ proc rlpxAccept*(node: EthereumNode,
     var ackMsg: array[AckMessageMaxEIP8, byte]
     var ackMsgLen: int
     check handshake.ackMessage(ackMsg, ackMsgLen)
-    var res = transport.write(addr ackMsg[0], ackMsgLen)
+    var res = await transport.write(addr ackMsg[0], ackMsgLen)
+    if res != ackMsgLen:
+      raisePeerDisconnected("Unexpected disconnect while authenticating",
+                            TcpError)
 
     initSecretState(handshake, authMsg, ^ackMsg, result)
 
