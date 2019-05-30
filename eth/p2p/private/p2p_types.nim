@@ -166,11 +166,5 @@ type
     MessageTimeout,
     SubprotocolReason = 0x10
 
-  ResponseWithId*[MsgType] = object
-    peer*: Peer
-    id*: int
-
-  Response*[MsgType] = distinct Peer
-
 proc `$`*(peer: Peer): string = $peer.remote
 

@@ -26,10 +26,10 @@ type
     response*: Message
 
   SendProc* = object
-    ## A `SendProc` is a proc used to send a single P2P message
-    ## If it's a Request, the return type will be a Future returing
-    ## the respective Response type. All send procs also have an
-    ## automatically inserted `timeout` parameter.
+    ## A `SendProc` is a proc used to send a single P2P message.
+    ## If it's a Request, then the return type will be a Future
+    ## of the respective Response type. All send procs also have
+    ## an automatically inserted `timeout` parameter.
 
     msg*: Message
       ## The message being implemented
@@ -91,15 +91,15 @@ type
 
   Backend* = ref object
     # Code generators
-    implementMsg*: proc (p: P2PProtocol, msg: Message)
-    implementProtocolInit*: proc (p: P2PProtocol): NimNode
-    afterProtocolInit*: proc (p: P2PProtocol)
+    implementMsg*: proc (msg: Message)
+    implementProtocolInit*: proc (protocol: P2PProtocol): NimNode
+    afterProtocolInit*: proc (protocol: P2PProtocol)
 
     # Bound symbols to the back-end run-time types and procs
     PeerType*: NimNode
     NetworkType*: NimNode
     SerializationFormat*: NimNode
-    ResponseType*: NimNode
+    ResponderType*: NimNode
 
     registerProtocol*: NimNode
     setEventHandlers*: NimNode
@@ -111,6 +111,16 @@ type
 
 const
   defaultReqTimeout = 10.seconds
+
+let
+  reqIdVar*             {.compileTime.} = ident "reqId"
+  # XXX: Binding the int type causes instantiation failure for some reason
+  reqIdVarType*         {.compileTime.} = ident "int"
+  peerVar*              {.compileTime.} = ident "peer"
+  responseVar*          {.compileTime.} = ident "response"
+  perProtocolMsgIdVar*  {.compileTime.} = ident "perProtocolMsgId"
+  currentProtocolSym*   {.compileTime.} = ident "CurrentProtocol"
+  resultIdent*          {.compileTime.} = ident "resultIdent"
 
 proc createPeerState[Peer, ProtocolState](peer: Peer): RootRef =
   var res = new ProtocolState
@@ -202,20 +212,19 @@ proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
 proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
   ## This procs adds a set of common helpers available in all messages handlers
   ## (e.g. `perProtocolMsgId`, `peer.state`, etc).
+
+  userHandlerProc.addPragma ident"gcsafe"
+  userHandlerProc.addPragma ident"async"
+
   var
-    prelude = newStmtList()
     getState = ident"getState"
     getNetworkState = ident"getNetworkState"
-    currentProtocolSym = ident"CurrentProtocol"
-    perProtocolMsgId = ident"perProtocolMsgId"
     protocolInfoVar = p.protocolInfoVar
     protocolNameIdent = p.nameIdent
     PeerType = p.backend.PeerType
     PeerStateType = p.PeerStateType
     NetworkStateType = p.NetworkStateType
-
-  userHandlerProc.addPragma ident"gcsafe"
-  userHandlerProc.addPragma ident"async"
+    prelude = newStmtList()
 
   userHandlerProc.body.insert 0, prelude
 
@@ -239,7 +248,7 @@ proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
 
   if msgId >= 0:
     prelude.add quote do:
-      const `perProtocolMsgId` = `msgId`
+      const `perProtocolMsgIdVar` = `msgId`
 
   # Define local accessors for the peer and the network protocol states
   # inside each user message handler proc (e.g. peer.state.foo = bar)
@@ -291,6 +300,9 @@ proc ensureTimeoutParam(procDef: NimNode, timeouts: int64): NimNode =
                      Duration,
                      newCall(milliseconds, newLit(timeouts)))
 
+proc hasReqId*(msg: Message): bool =
+  msg.protocol.useRequestIds and msg.kind in {msgRequest, msgResponse}
+
 proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
             procDef: NimNode, timeoutParam: NimNode = nil,
             response: Message = nil): Message =
@@ -318,9 +330,34 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
                    timeoutParam: timeoutParam, response: response)
 
   if procDef.body.kind != nnkEmpty:
-    result.userHandler = copy procDef
-    protocol.augmentUserHandler result.userHandler
-    result.userHandler.name = genSym(nskProc, msgName)
+    var userHandler = copy procDef
+
+    protocol.augmentUserHandler userHandler
+    userHandler.name = genSym(nskProc, msgName)
+
+    # Request and Response handlers get an extra `reqId` parameter if the
+    # protocol uses them:
+    if result.hasReqId:
+      userHandler.params.insert(2, newIdentDefs(reqIdVar, reqIdVarType))
+
+    # All request handlers get an automatically inserter `response` variable:
+    if kind == msgRequest:
+      assert response != nil
+      let
+        peerParam = userHandler.params[1][0]
+        ResponderType = protocol.backend.ResponderType
+        ResponseRecord = response.recIdent
+
+      if protocol.useRequestIds:
+        userHandler.addPreludeDefs quote do:
+          let `responseVar` = `ResponderType`[`ResponseRecord`](peer: `peerParam`,
+                                                                reqId: `reqIdVar`)
+      else:
+        userHandler.addPreludeDefs quote do:
+          let `responseVar` = `ResponderType`[`ResponseRecord`](peer: `peerParam`)
+
+    protocol.outRecvProcs.add userHandler
+    result.userHandler = userHandler
 
   protocol.messages.add result
 
@@ -369,20 +406,20 @@ proc createSendProc*(msg: Message,
   of msgResponse:
     # A response proc must be called with a response object that originates
     # from a certain request. Here we change the Peer parameter at position
-    # 1 to the correct strongly-typed ResponseType. The incoming procs still
+    # 1 to the correct strongly-typed ResponderType. The incoming procs still
     # gets the normal Peer paramter.
     let
-      ResponseType = msg.protocol.backend.ResponseType
+      ResponderType = msg.protocol.backend.ResponderType
       sendProcName = msg.ident
 
-    assert ResponseType != nil
+    assert ResponderType != nil
 
-    def[3][1][1] = newTree(nnkBracketExpr, ResponseType, msg.recIdent)
+    def[3][1][1] = newTree(nnkBracketExpr, ResponderType, msg.recIdent)
 
     # We create a helper that enables the `response.send()` syntax
     # inside the user handler of the request proc:
     result.allDefs.add quote do:
-      template send*(r: `ResponseType`, args: varargs[untyped]): auto =
+      template send*(r: `ResponderType`, args: varargs[untyped]): auto =
         `sendProcName`(r, args)
 
   of msgNotification:
@@ -497,6 +534,29 @@ proc netInit*(p: P2PProtocol): NimNode =
     newTree(nnkBracketExpr, bindSym"createNetworkState",
                             p.backend.NetworkType,
                             p.NetworkStateType)
+
+proc genHandshakeTemplate*(msg: Message,
+                           rawSendProc, handshakeImpl, nextMsg: NimNode): NimNode =
+  let
+    handshakeExchanger = msg.createSendProc(procType = nnkTemplateDef)
+    forwardCall = newCall(rawSendProc).appendAllParams(handshakeExchanger.def)
+    peerValue = forwardCall[1]
+    timeoutValue = msg.timeoutParam[0]
+    peerVarSym = genSym(nskLet, "peer")
+    msgRecName = msg.recIdent
+
+  forwardCall[1] = peerVarSym
+  forwardCall.del(forwardCall.len - 1)
+
+  handshakeExchanger.def.body = quote do:
+    let `peerVarSym` = `peerValue`
+    let sendingFuture = `forwardCall`
+    `handshakeImpl`(`peerVarSym`,
+                    sendingFuture,
+                    `nextMsg`(`peerVarSym`, `msgRecName`),
+                    `timeoutValue`)
+
+  return handshakeExchanger.def
 
 proc peerInit*(p: P2PProtocol): NimNode =
   if p.PeerStateType == nil:
@@ -626,15 +686,19 @@ proc genTypeSection*(p: P2PProtocol): NimNode =
 
 proc genCode*(p: P2PProtocol): NimNode =
   # TODO: try switching to a simpler for msg in p.messages: loop
-  if p.handshake != nil:
-    p.backend.implementMsg p, p.handshake
+  when true:
+    for msg in p.messages:
+      p.backend.implementMsg msg
+  else:
+    if p.handshake != nil:
+      p.backend.implementMsg p.handshake
 
-  for msg in p.notifications:
-    p.backend.implementMsg p, msg
+    for msg in p.notifications:
+      p.backend.implementMsg msg
 
-  for req in p.requests:
-    p.backend.implementMsg p, req.response
-    for query in req.queries: p.backend.implementMsg(p, query)
+    for req in p.requests:
+      p.backend.implementMsg req.response
+      for query in req.queries: p.backend.implementMsg(query)
 
   result = newStmtList()
   result.add p.genTypeSection()

@@ -847,10 +847,12 @@ p2pProtocol Whisper(version = whisperVersion,
   nextID 11
   proc batchAcknowledged(peer: Peer) = discard
   proc messageResponse(peer: Peer) = discard
+
   nextID 123
   requestResponse:
     proc p2pSyncRequest(peer: Peer) = discard
     proc p2pSyncResponse(peer: Peer) = discard
+
   proc p2pRequestComplete(peer: Peer) = discard
 
 # 'Runner' calls ---------------------------------------------------------------

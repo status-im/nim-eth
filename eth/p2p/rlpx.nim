@@ -13,6 +13,13 @@ export
 logScope:
   topics = "rlpx"
 
+type
+  ResponderWithId*[MsgType] = object
+    peer*: Peer
+    reqId*: int
+
+  ResponderWithoutId*[MsgType] = distinct Peer
+
 const
   devp2pVersion* = 4
   maxMsgSize = 1024 * 1024
@@ -207,8 +214,8 @@ proc perPeerMsgIdImpl(peer: Peer, proto: ProtocolInfo, msgId: int): int {.inline
     result += peer.dispatcher.protocolOffsets[proto.index]
 
 template getPeer(peer: Peer): auto = peer
-template getPeer(response: Response): auto = Peer(response)
-template getPeer(response: ResponseWithId): auto = response.peer
+template getPeer(responder: ResponderWithId): auto = responder.peer
+template getPeer(responder: ResponderWithoutId): auto = Peer(responder)
 
 proc supports*(peer: Peer, proto: ProtocolInfo): bool {.inline.} =
   peer.dispatcher.protocolOffsets[proto.index] != -1
@@ -539,24 +546,18 @@ template applyDecorator(p: NimNode, decorator: NimNode) =
 proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
   let
     resultIdent = ident "result"
-    isSubprotocol = protocol.version > 0
     Option = bindSym "Option"
-    # XXX: Binding the int type causes instantiation failure for some reason
-    # Int = bindSym "int"
-    Int = ident "int"
     Peer = bindSym "Peer"
     EthereumNode = bindSym "EthereumNode"
-    Response = bindSym "Response"
-    ResponseWithId = bindSym "ResponseWithId"
-    perProtocolMsgId = ident"perProtocolMsgId"
 
     initRlpWriter = bindSym "initRlpWriter"
     safeEnterList = bindSym "safeEnterList"
     rlpFromBytes = bindSym "rlpFromBytes"
     append = bindSym("append", brForceOpen)
     read = bindSym("read", brForceOpen)
+    checkedRlpRead = bindSym "checkedRlpRead"
     startList = bindSym "startList"
-    enterList = bindSym "enterList"
+    safeEnterList = bindSym "safeEnterList"
     finish = bindSym "finish"
 
     messagePrinter = bindSym "messagePrinter"
@@ -564,7 +565,6 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     registerRequest = bindSym "registerRequest"
     requestResolver = bindSym "requestResolver"
     resolveResponseFuture = bindSym "resolveResponseFuture"
-    checkedRlpRead = bindSym "checkedRlpRead"
     sendMsg = bindSym "sendMsg"
     nextMsg = bindSym "nextMsg"
     initProtocol = bindSym"initProtocol"
@@ -573,6 +573,11 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     perPeerMsgIdImpl = bindSym "perPeerMsgIdImpl"
     linkSendFailureToReqFuture = bindSym "linkSendFailureToReqFuture"
     handshakeImpl = bindSym "handshakeImpl"
+
+    ResponderWithId = bindSym "ResponderWithId"
+    ResponderWithoutId = bindSym "ResponderWithoutId"
+
+    isSubprotocol = protocol.version > 0
     shortName = if protocol.shortName.len > 0: protocol.shortName
                 else: protocol.name
 
@@ -585,47 +590,41 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
   result.setEventHandlers = bindSym "setEventHandlers"
   result.PeerType = Peer
   result.NetworkType = EthereumNode
+  result.ResponderType = if protocol.useRequestIds: ResponderWithId
+                         else: ResponderWithoutId
 
-  result.implementMsg = proc (protocol: P2PProtocol, msg: Message) =
+  result.implementMsg = proc (msg: Message) =
     var
       msgId = msg.id
-      msgRecName = msg.recIdent
-      msgKind = msg.kind
-      n = msg.procDef
-      responseMsgId = if msg.response != nil: msg.response.id else: -1
-      responseRecord = if msg.response != nil: msg.response.recIdent else: nil
-      msgIdent = n.name
+      msgIdent = msg.ident
       msgName = $msgIdent
-      hasReqIds = protocol.useRequestIds and msgKind in {msgRequest, msgResponse}
-      userPragmas = n.pragma
+      msgRecName = msg.recIdent
+      responseMsgId = if msg.response != nil: msg.response.id else: -1
+      ResponseRecord = if msg.response != nil: msg.response.recIdent else: nil
+      hasReqId = msg.hasReqId
+      protocol = msg.protocol
+      userPragmas = msg.procDef.pragma
 
       # variables used in the sending procs
-      msgRecipient = ident"msgRecipient"
-      sendTo = ident"sendTo"
+      peerOrResponder = ident"peerOrResponder"
       rlpWriter = ident"writer"
-      appendParams = newNimNode(nnkStmtList)
-      paramsToWrite = newSeq[NimNode](0)
-      reqId = ident"reqId"
       perPeerMsgIdVar  = ident"perPeerMsgId"
 
       # variables used in the receiving procs
-      msgSender = ident"msgSender"
       receivedRlp = ident"rlp"
       receivedMsg = ident"msg"
+
+    var
       readParams = newNimNode(nnkStmtList)
-      readParamsPrelude = newNimNode(nnkStmtList)
-      callResolvedResponseFuture = newNimNode(nnkStmtList)
+      paramsToWrite = newSeq[NimNode](0)
+      appendParams = newNimNode(nnkStmtList)
 
-      # nodes to store the user-supplied message handling proc if present
-      userHandlerCall: NimNode = nil
-      awaitUserHandler = newStmtList()
-
-    if hasReqIds:
+    if hasReqId:
       # Messages using request Ids
       readParams.add quote do:
-        let `reqId` = `read`(`receivedRlp`, int)
+        let `reqIdVar` = `read`(`receivedRlp`, int)
 
-    case msgKind
+    case msg.kind
     of msgRequest:
       let reqToResponseOffset = responseMsgId - msgId
       let responseMsgId = quote do: `perPeerMsgIdVar` + `reqToResponseOffset`
@@ -635,61 +634,27 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       # explicit `reqId` sent over the wire, while the ETH wire protocol
       # assumes there is one outstanding request at a time (if there are
       # multiple requests we'll resolve them in FIFO order).
-      let registerRequestCall = newCall(registerRequest, msgRecipient,
+      let registerRequestCall = newCall(registerRequest, peerVar,
                                                          msg.timeoutParam[0],
                                                          resultIdent,
                                                          responseMsgId)
-      if hasReqIds:
+      if hasReqId:
         appendParams.add quote do:
           initFuture `resultIdent`
-          let `reqId` = `registerRequestCall`
-        paramsToWrite.add reqId
+          let `reqIdVar` = `registerRequestCall`
+        paramsToWrite.add reqIdVar
       else:
         appendParams.add quote do:
           initFuture `resultIdent`
           discard `registerRequestCall`
 
     of msgResponse:
-      let reqIdVal = if hasReqIds: `reqId` else: newLit(-1)
-      callResolvedResponseFuture.add quote do:
-        `resolveResponseFuture`(`msgSender`,
-                                `perPeerMsgId`(`msgSender`, `msgRecName`),
-                                 addr(`receivedMsg`),
-                                 `reqIdVal`)
-      if hasReqIds:
-        paramsToWrite.add newDotExpr(sendTo, ident"id")
+      if hasReqId:
+        paramsToWrite.add newDotExpr(peerOrResponder, reqIdVar)
 
     of msgHandshake, msgNotification: discard
 
-    if msg.userHandler != nil:
-      var extraDefs: NimNode
-      if msgKind == msgRequest:
-        let peer = msg.userHandler.params[1][0]
-        let response = ident"response"
-        if hasReqIds:
-          extraDefs = quote do:
-            let `response` = `ResponseWithId`[`responseRecord`](peer: `peer`, id: `reqId`)
-        else:
-          extraDefs = quote do:
-            let `response` = `Response`[`responseRecord`](`peer`)
-
-        msg.userHandler.addPreludeDefs extraDefs
-
-      # This is the call to the user supplied handled. Here we add only the
-      # initial peer param, while the rest of the params will be added later.
-      userHandlerCall = newCall(msg.userHandler.name, msgSender)
-
-      if hasReqIds:
-        msg.userHandler.params.insert(2, newIdentDefs(reqId, ident"int"))
-        userHandlerCall.add reqId
-
-      # When there is a user handler, it must be awaited in the thunk proc.
-      # Above, by default `awaitUserHandler` is set to a no-op statement list.
-      awaitUserHandler = newCall("await", userHandlerCall)
-
-      protocol.outRecvProcs.add msg.userHandler
-
-    for param, paramType in n.typedParams(skip = 1):
+    for param, paramType in msg.procDef.typedParams(skip = 1):
       # This is a fragment of the sending proc that
       # serializes each of the passed parameters:
       paramsToWrite.add param
@@ -698,24 +663,33 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       # the message-specific type. This is done field by field here:
       let msgNameLit = newLit(msgName)
       readParams.add quote do:
-        `receivedMsg`.`param` = `checkedRlpRead`(`msgSender`, `receivedRlp`, `paramType`)
+        `receivedMsg`.`param` = `checkedRlpRead`(`peerVar`, `receivedRlp`, `paramType`)
 
-      # If there is user message handler, we'll place a call to it by
-      # unpacking the fields of the received message:
-      if userHandlerCall != nil:
-        userHandlerCall.add newDotExpr(receivedMsg, param)
-
-    let paramCount = paramsToWrite.len
-
-    if paramCount > 1:
-      readParamsPrelude.add newCall(safeEnterList, receivedRlp)
+    let
+      paramCount = paramsToWrite.len
+      readParamsPrelude = if paramCount > 1: newCall(safeEnterList, receivedRlp)
+                          else: newStmtList()
 
     when tracingEnabled:
-      readParams.add newCall(bindSym"logReceivedMsg", msgSender, receivedMsg)
+      readParams.add newCall(bindSym"logReceivedMsg", peerVar, receivedMsg)
+
+    let callResolvedResponseFuture = if msg.kind == msgResponse:
+      newCall(resolveResponseFuture,
+              peerVar,
+              newCall(perPeerMsgId, peerVar, msgRecName),
+              newCall("addr", receivedMsg),
+              if hasReqId: reqIdVar else: newLit(-1))
+    else:
+      newStmtList()
+
+    var userHandlerParams = @[peerVar]
+    if hasReqId: userHandlerParams.add reqIdVar
+
+    let awaitUserHandler = msg.genAwaitUserHandler(receivedMsg, userHandlerParams)
 
     let thunkName = ident(msgName & "_thunk")
     var thunkProc = quote do:
-      proc `thunkName`(`msgSender`: `Peer`, _: int, data: Rlp) {.gcsafe.} =
+      proc `thunkName`(`peerVar`: `Peer`, _: int, data: Rlp) {.async, gcsafe.} =
         var `receivedRlp` = data
         var `receivedMsg` {.noinit.}: `msgRecName`
         `readParamsPrelude`
@@ -723,61 +697,28 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
         `awaitUserHandler`
         `callResolvedResponseFuture`
 
-    for p in userPragmas: thunkProc.addPragma p
-
-    case msgKind
+    case msg.kind
     of msgRequest:  thunkProc.applyDecorator protocol.incomingRequestThunkDecorator
     of msgResponse: thunkProc.applyDecorator protocol.incomingResponseThunkDecorator
     else: discard
 
-    thunkProc.addPragma ident"async"
-
     protocol.outRecvProcs.add thunkProc
 
-    var msgSendProc = n
-    let msgSendProcName = n.name
-    protocol.outSendProcs.add msgSendProc
+    var sendProc = msg.createSendProc(isRawSender = (msg.kind == msgHandshake))
+    sendProc.def.params[1][0] = peerOrResponder
 
-    # TODO: check that the first param has the correct type
-    msgSendProc.params[1][0] = sendTo
-    msgSendProc.addPragma ident"gcsafe"
+    protocol.outSendProcs.add sendProc.allDefs
 
-    case msgKind
-    of msgRequest:
-      # Add a timeout parameter for all request procs
-      msgSendProc.params.add msg.timeoutParam
-    of msgResponse:
-      # A response proc must be called with a response object that originates
-      # from a certain request. Here we change the Peer parameter at position
-      # 1 to the correct strongly-typed ResponseType. The incoming procs still
-      # gets the normal Peer paramter.
-      # let rsp = bindSym "Response"
-      # let rspId = bindSym "ResponseWithId"
-      let
-        ResponseTypeHead = if protocol.useRequestIds: ResponseWithId
-                           else: Response
-        ResponseType = newTree(nnkBracketExpr, ResponseTypeHead, msgRecName)
+    if msg.kind == msgHandshake:
+      protocol.outSendProcs.add msg.genHandshakeTemplate(sendProc.def.name,
+                                                         handshakeImpl, nextMsg)
+    let
+      msgBytes = ident"msgBytes"
+      finalizeRequest = quote do:
+        let `msgBytes` = `finish`(`rlpWriter`)
 
-      msgSendProc.params[1][1] = ResponseType
-
-      protocol.outSendProcs.add quote do:
-        template send*(r: `ResponseType`, args: varargs[untyped]): auto =
-          `msgSendProcName`(r, args)
-    else: discard
-
-    # We change the return type of the sending proc to a Future.
-    # If this is a request proc, the future will return the response record.
-    let rt = if msgKind != msgRequest: ident"void"
-             else: newTree(nnkBracketExpr, Option, responseRecord)
-    msgSendProc.params[0] = newTree(nnkBracketExpr, ident("Future"), rt)
-
-    let msgBytes = ident"msgBytes"
-
-    let finalizeRequest = quote do:
-      let `msgBytes` = `finish`(`rlpWriter`)
-
-    var sendCall = newCall(sendMsg, msgRecipient, msgBytes)
-    let senderEpilogue = if msgKind == msgRequest:
+    var sendCall = newCall(sendMsg, peerVar, msgBytes)
+    let senderEpilogue = if msg.kind == msgRequest:
       # In RLPx requests, the returned future was allocated here and passed
       # to `registerRequest`. It's already assigned to the result variable
       # of the proc, so we just wait for the sending operation to complete
@@ -790,7 +731,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       quote: return `sendCall`
 
     let perPeerMsgIdValue = if isSubprotocol:
-      newCall(perPeerMsgIdImpl, msgRecipient, protocol.protocolInfoVar, newLit(msgId))
+      newCall(perPeerMsgIdImpl, peerVar, protocol.protocolInfoVar, newLit(msgId))
     else:
       newLit(msgId)
 
@@ -804,64 +745,31 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     for param in paramsToWrite:
       appendParams.add newCall(append, rlpWriter, param)
 
-    if msgKind == msgHandshake:
-      var
-        rawSendProc = genSym(nskProc, msgName & "RawSend")
-        handshakeExchanger = newProc(name = msg.identWithExportMarker,
-                                     procType = nnkTemplateDef)
-
-      handshakeExchanger.params = msgSendProc.params.copyNimTree
-      handshakeExchanger.params.add msg.timeoutParam
-      handshakeExchanger.params[0] = newTree(nnkBracketExpr, ident("Future"), msgRecName)
-
-      var
-        forwardCall = newCall(rawSendProc).appendAllParams(handshakeExchanger)
-        peerVariable = ident "peer"
-        peerValue = forwardCall[1]
-        timeoutValue = msg.timeoutParam[0]
-
-      forwardCall[1] = peerVariable
-      forwardCall.del(forwardCall.len - 1)
-
-      handshakeExchanger.body = quote do:
-        let `peerVariable` = `peerValue`
-        let sendingFuture = `forwardCall`
-        `handshakeImpl`(`peerVariable`,
-                        sendingFuture,
-                        `nextMsg`(`peerVariable`, `msgRecName`),
-                        `timeoutValue`)
-
-      msgSendProc.name = rawSendProc
-      protocol.outSendProcs.add handshakeExchanger
-    else:
-      # Make the send proc public
-      msgSendProc.name = msg.identWithExportMarker
-
     let initWriter = quote do:
       var `rlpWriter` = `initRlpWriter`()
-      const `perProtocolMsgId` = `msgId`
+      const `perProtocolMsgIdVar` = `msgId`
       let `perPeerMsgIdVar` = `perPeerMsgIdValue`
       `append`(`rlpWriter`, `perPeerMsgIdVar`)
 
     when tracingEnabled:
-      appendParams.add logSentMsgFields(msgRecipient, protocol, msgId, paramsToWrite)
+      appendParams.add logSentMsgFields(peerVar, protocol, msgId, paramsToWrite)
 
     # let paramCountNode = newLit(paramCount)
-    msgSendProc.body = quote do:
-      let `msgRecipient` = getPeer(`sendTo`)
+    sendProc.def.body = quote do:
+      let `peerVar` = getPeer(`peerOrResponder`)
       `initWriter`
       `appendParams`
       `finalizeRequest`
       `senderEpilogue`
 
-    if msgKind == msgRequest:
-      msgSendProc.applyDecorator protocol.outgoingRequestDecorator
+    if msg.kind == msgRequest:
+      sendProc.def.applyDecorator protocol.outgoingRequestDecorator
 
     protocol.outProcRegistrations.add(
       newCall(registerMsg,
               protocol.protocolInfoVar,
-              newIntLitNode(msgId),
-              newStrLitNode($n.name),
+              newLit(msgId),
+              newLit(msgName),
               thunkName,
               newTree(nnkBracketExpr, messagePrinter, msgRecName),
               newTree(nnkBracketExpr, requestResolver, msgRecName),
@@ -1152,7 +1060,7 @@ proc rlpxAccept*(node: EthereumNode,
   result.transport = transport
   result.network = node
 
-  var handshake = newHandshake({Responder})
+  var handshake = newHandshake({auth.Responder})
   handshake.host = node.keys
 
   var ok = false
