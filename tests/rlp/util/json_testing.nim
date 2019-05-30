@@ -48,7 +48,7 @@ proc runTests*(filename: string) =
         inspectOutput = rlp.inspect(1)
         discard rlp.getType
         while rlp.hasData: discard rlp.toNodes
-      except MalformedRlpError, ValueError:
+      except MalformedRlpError, UnsupportedRlpError, ValueError:
         success = true
       if not success:
         testStatus "FAILED"

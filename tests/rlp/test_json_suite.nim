@@ -1,8 +1,12 @@
 import
-  os, strutils,
+  os, strutils, strformat,
   util/json_testing
 
-for file in walkDirRec("tests/cases"):
+template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
+
+const casesDir = &"{sourceDir}{DirSep}cases{DirSep}"
+
+for file in walkDirRec(casesDir):
   if file.endsWith("json"):
     runTests(file)
 

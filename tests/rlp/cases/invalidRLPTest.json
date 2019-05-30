@@ -42,5 +42,46 @@
 	"bytesShouldBeSingleByte7F": {
 		"in": "INVALID",
 		"out": "817F"
+	},
+
+	"fakelonglist": {
+		"in": "INVALID",
+		"out": "ff7fffffffffffffffff"
+	},
+
+	"fakelonglist2": {
+		"in": "INVALID",
+		"out": "ff800000000000000000"
+	},
+
+	"fakelongblob": {
+		"in": "INVALID",
+		"out": "bf7fffffffffffffffff"
+	},
+
+	"fakelongblob2": {
+		"in": "INVALID",
+		"out": "bf800000000000000000"
+	},
+
+	"fakelongblobinlist": {
+		"in": "INVALID",
+		"out": "f2bf7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	},
+
+	"fakelongblobinlist2": {
+		"in": "INVALID",
+		"out": "f2bf80000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+	},
+
+	"fakelonglistinlist": {
+		"in": "INVALID",
+		"out": "f2ff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	},
+
+	"fakelonglistinlist2": {
+		"in": "INVALID",
+		"out": "f2ff80000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 	}
+
 }

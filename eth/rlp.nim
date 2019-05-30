@@ -107,7 +107,9 @@ proc payloadOffset(self: Rlp): int =
   if isSingleByte(): 0 else: 1 + lengthBytesCount()
 
 template readAheadCheck(numberOfBytes) =
-  if position + numberOfBytes >= bytes.len: eosError()
+  # important to add nothing to the left side of the equation as `numberOfBytes`
+  # can in theory be at max size of its type already
+  if numberOfBytes >= bytes.len - position: eosError()
 
 template nonCanonicalNumberError =
   raise newException(MalformedRlpError, "Small number encoded in a non-canonical way")
@@ -138,7 +140,9 @@ proc payloadBytesCount(self: Rlp): int =
     if remainingBytes > 1 and self.bytes[self.position + 1] == 0:
       raise newException(MalformedRlpError, "Number encoded with a leading zero")
 
-    if lengthBytes > sizeof(result):
+    # check if the size is not bigger than the max that result can hold
+    if lengthBytes > sizeof(result) or
+      (lengthBytes == sizeof(result) and self.bytes[self.position + 1].int > 127):
       raise newException(UnsupportedRlpError, "Message too large to fit in memory")
 
     for i in 1 .. lengthBytes:
