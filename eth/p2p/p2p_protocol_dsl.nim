@@ -113,14 +113,23 @@ const
   defaultReqTimeout = 10.seconds
 
 let
+  # Variable names affecting the public interface of the library:
   reqIdVar*             {.compileTime.} = ident "reqId"
   # XXX: Binding the int type causes instantiation failure for some reason
-  reqIdVarType*         {.compileTime.} = ident "int"
+  ReqIdType*            {.compileTime.} = ident "int"
   peerVar*              {.compileTime.} = ident "peer"
   responseVar*          {.compileTime.} = ident "response"
   perProtocolMsgIdVar*  {.compileTime.} = ident "perProtocolMsgId"
   currentProtocolSym*   {.compileTime.} = ident "CurrentProtocol"
-  resultIdent*          {.compileTime.} = ident "resultIdent"
+  resultIdent*          {.compileTime.} = ident "result"
+
+  # Locally used symbols:
+  Option                {.compileTime.} = ident "Option"
+  Future                {.compileTime.} = ident "Future"
+  Void                  {.compileTime.} = ident "void"
+
+template Opt(T): auto = newTree(nnkBracketExpr, Option, T)
+template Fut(T): auto = newTree(nnkBracketExpr, Future, T)
 
 proc createPeerState[Peer, ProtocolState](peer: Peer): RootRef =
   var res = new ProtocolState
@@ -338,7 +347,7 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
     # Request and Response handlers get an extra `reqId` parameter if the
     # protocol uses them:
     if result.hasReqId:
-      userHandler.params.insert(2, newIdentDefs(reqIdVar, reqIdVarType))
+      userHandler.params.insert(2, newIdentDefs(reqIdVar, ReqIdType))
 
     # All request handlers get an automatically inserter `response` variable:
     if kind == msgRequest:
@@ -409,12 +418,13 @@ proc createSendProc*(msg: Message,
     # 1 to the correct strongly-typed ResponderType. The incoming procs still
     # gets the normal Peer paramter.
     let
-      ResponderType = msg.protocol.backend.ResponderType
+      ResponderTypeHead = msg.protocol.backend.ResponderType
+      ResponderType = newTree(nnkBracketExpr, ResponderTypeHead, msg.recIdent)
       sendProcName = msg.ident
 
-    assert ResponderType != nil
+    assert ResponderTypeHead != nil
 
-    def[3][1][1] = newTree(nnkBracketExpr, ResponderType, msg.recIdent)
+    def[3][1][1] = ResponderType
 
     # We create a helper that enables the `response.send()` syntax
     # inside the user handler of the request proc:
@@ -428,11 +438,11 @@ proc createSendProc*(msg: Message,
   def[3][0] = if procType == nnkMacroDef:
                 ident "untyped"
               elif msg.kind == msgRequest and not isRawSender:
-                newTree(nnkBracketExpr, ident("Future"), msg.response.recIdent)
+                Fut(Opt(msg.response.recIdent))
               elif msg.kind == msgHandshake and not isRawSender:
-                newTree(nnkBracketExpr, ident("Future"), msg.recIdent)
+                Fut(msg.recIdent)
               else:
-                newTree(nnkBracketExpr, ident("Future"), ident"void")
+                Fut(Void)
 
 const tracingEnabled = defined(p2pdump)
 
@@ -469,7 +479,6 @@ proc implementBody*(sendProc: SendProc,
     msgBytes = ident "msgBytes"
     writer = ident "writer"
     writeField = ident "writeField"
-    resultIdent = ident "result"
 
     initFuture = bindSym "initFuture"
     recipient = sendProc.peerParam
@@ -500,11 +509,11 @@ proc implementBody*(sendProc: SendProc,
     `initResultFuture`
     var `outputStream` = init OutputStream
     `prelude`
-    var writer = init(WriterType(`Format`), `outputStream`)
-    var recordStartMemo = beginRecord(writer, `msgRecName`)
+    var `writer` = init(WriterType(`Format`), `outputStream`)
+    var recordStartMemo = beginRecord(`writer`, `msgRecName`)
     `appendParams`
     `tracing`
-    endRecord(writer, recordStartMemo)
+    endRecord(`writer`, recordStartMemo)
     let `msgBytes` = getOutput(`outputStream`)
     `sendCall`
 
@@ -761,7 +770,7 @@ macro emitForSingleBackend(
 
   result = p.genCode()
 
-  when defined(debugRlpxProtocol) or defined(debugMacros):
+  when defined(debugP2pProtocol) or defined(debugMacros):
     echo repr(result)
 
 macro emitForAllBackends(backendSyms: typed, options: untyped, body: untyped): untyped =

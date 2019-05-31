@@ -546,7 +546,6 @@ template applyDecorator(p: NimNode, decorator: NimNode) =
 proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
   let
     resultIdent = ident "result"
-    Option = bindSym "Option"
     Peer = bindSym "Peer"
     EthereumNode = bindSym "EthereumNode"
 
