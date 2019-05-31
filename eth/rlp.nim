@@ -109,7 +109,7 @@ proc payloadOffset(self: Rlp): int =
 template readAheadCheck(numberOfBytes) =
   # important to add nothing to the left side of the equation as `numberOfBytes`
   # can in theory be at max size of its type already
-  if numberOfBytes >= bytes.len - position: eosError()
+  if numberOfBytes > bytes.len - position - payloadOffset(): eosError()
 
 template nonCanonicalNumberError =
   raise newException(MalformedRlpError, "Small number encoded in a non-canonical way")
@@ -212,10 +212,6 @@ proc toString*(self: Rlp): string =
   let
     payloadOffset = payloadOffset()
     payloadLen = payloadBytesCount()
-    remainingBytes = bytes.len - position - payloadOffset
-
-  if payloadLen > remainingBytes:
-    eosError()
 
   result = newString(payloadLen)
   for i in 0 ..< payloadLen:
@@ -227,13 +223,7 @@ proc toBytes*(self: Rlp): BytesRange =
     raise newException(RlpTypeMismatch,
                        "Bytes expected, but the source RLP in not a blob")
 
-  let
-    payloadLen = payloadBytesCount()
-    payloadOffset = payloadOffset()
-    remainingBytes = bytes.len - position - payloadOffset
-
-  if payloadLen > remainingBytes:
-    eosError()
+  let payloadLen = payloadBytesCount()
 
   if payloadLen > 0:
     let

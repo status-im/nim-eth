@@ -36,7 +36,7 @@
 
 	"bytesShouldBeSingleByte01": {
 		"in": "INVALID",
-		"out": "8100"
+		"out": "8101"
 	},
 
 	"bytesShouldBeSingleByte7F": {
@@ -82,6 +82,15 @@
 	"fakelonglistinlist2": {
 		"in": "INVALID",
 		"out": "f2ff80000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-	}
+	},
 
+	"smallblob1byteshort": {
+		"in": "INVALID",
+		"out": "82ff"
+	},
+
+	"longblob1byteshort": {
+		"in": "INVALID",
+		"out": "b840ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	}
 }
