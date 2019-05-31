@@ -227,7 +227,14 @@ proc toBytes*(self: Rlp): BytesRange =
     raise newException(RlpTypeMismatch,
                        "Bytes expected, but the source RLP in not a blob")
 
-  let payloadLen = payloadBytesCount()
+  let
+    payloadLen = payloadBytesCount()
+    payloadOffset = payloadOffset()
+    remainingBytes = bytes.len - position - payloadOffset
+
+  if payloadLen > remainingBytes:
+    eosError()
+
   if payloadLen > 0:
     let
       payloadOffset = payloadOffset()
