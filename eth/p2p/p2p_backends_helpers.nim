@@ -23,6 +23,11 @@ template networkState*(connection: Peer, Protocol: type): untyped =
 
 proc initProtocolState*[T](state: T, x: Peer|EthereumNode) {.gcsafe.} = discard
 
+proc resolveFuture[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
+  var f = Future[MsgType](future)
+  doAssert(not f.finished())
+  f.complete(cast[ptr MsgType](msg)[])
+
 proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
   var f = Future[Option[MsgType]](future)
   if not f.finished:

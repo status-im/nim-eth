@@ -45,9 +45,17 @@ var
 template allProtocols*: auto = {.gcsafe.}: gProtocols
 template devp2pInfo: auto = {.gcsafe.}: gDevp2pInfo
 
+proc init*[MsgName](T: type ResponderWithId[MsgName],
+                    peer: Peer, reqId: int): T =
+  T(peer: peer, reqId: reqId)
+
+proc init*[MsgName](T: type ResponderWithoutId[MsgName], peer: Peer): T =
+  T(peer)
+
 chronicles.formatIt(Peer): $(it.remote)
 
-proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = false) {.gcsafe, async.}
+proc disconnect*(peer: Peer, reason: DisconnectionReason,
+                 notifyOtherPeer = false) {.gcsafe, async.}
 
 template raisePeerDisconnected(msg: string, r: DisconnectionReason) =
   var e = newException(PeerDisconnected, msg)

@@ -17,9 +17,10 @@ type
     timeoutParam*: NimNode
     recIdent*: NimNode
     recBody*: NimNode
-    userHandler*: NimNode
     protocol*: P2PProtocol
     response*: Message
+    userHandler*: NimNode
+    initResponderCall*: NimNode
 
   Request* = ref object
     queries*: seq[Message]
@@ -93,6 +94,7 @@ type
     # Code generators
     implementMsg*: proc (msg: Message)
     implementProtocolInit*: proc (protocol: P2PProtocol): NimNode
+
     afterProtocolInit*: proc (protocol: P2PProtocol)
 
     # Bound symbols to the back-end run-time types and procs
@@ -213,6 +215,9 @@ proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
     outProcRegistrations: newStmtList())
 
   result.backend = backendFactory(result)
+  assert(not result.backend.implementProtocolInit.isNil)
+  assert(not result.backend.ResponderType.isNil)
+
   result.processProtocolBody body
 
   if not result.backend.afterProtocolInit.isNil:
@@ -312,6 +317,11 @@ proc ensureTimeoutParam(procDef: NimNode, timeouts: int64): NimNode =
 proc hasReqId*(msg: Message): bool =
   msg.protocol.useRequestIds and msg.kind in {msgRequest, msgResponse}
 
+proc ResponderType(msg: Message): NimNode =
+  var resp = if msg.kind == msgRequest: msg.response else: msg
+  newTree(nnkBracketExpr,
+          msg.protocol.backend.ResponderType, resp.recIdent)
+
 proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
             procDef: NimNode, timeoutParam: NimNode = nil,
             response: Message = nil): Message =
@@ -354,16 +364,16 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
       assert response != nil
       let
         peerParam = userHandler.params[1][0]
-        ResponderType = protocol.backend.ResponderType
-        ResponseRecord = response.recIdent
+        ResponderType = result.ResponderType
+        initResponderCall = newCall(ident"init", ResponderType, peerParam)
 
       if protocol.useRequestIds:
-        userHandler.addPreludeDefs quote do:
-          let `responseVar` = `ResponderType`[`ResponseRecord`](peer: `peerParam`,
-                                                                reqId: `reqIdVar`)
-      else:
-        userHandler.addPreludeDefs quote do:
-          let `responseVar` = `ResponderType`[`ResponseRecord`](peer: `peerParam`)
+        initResponderCall.add reqIdVar
+
+      userHandler.addPreludeDefs quote do:
+        let `responseVar` = `initResponderCall`
+
+      result.initResponderCall = initResponderCall
 
     protocol.outRecvProcs.add userHandler
     result.userHandler = userHandler
@@ -418,11 +428,8 @@ proc createSendProc*(msg: Message,
     # 1 to the correct strongly-typed ResponderType. The incoming procs still
     # gets the normal Peer paramter.
     let
-      ResponderTypeHead = msg.protocol.backend.ResponderType
-      ResponderType = newTree(nnkBracketExpr, ResponderTypeHead, msg.recIdent)
+      ResponderType = msg.ResponderType
       sendProcName = msg.ident
-
-    assert ResponderTypeHead != nil
 
     def[3][1][1] = ResponderType
 
