@@ -13,6 +13,16 @@
 - [trie](doc/trie.md)
 - [bloom](doc/bloom.md)
 
+## Building & Testing
+
+### Prerequisites
+
+Nimble is installed.
+
+```
+nimble install
+nimble test
+```
 
 ## License
 
