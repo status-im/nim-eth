@@ -256,7 +256,7 @@ template perPeerMsgId(peer: Peer, MsgType: type): int =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
 
 proc join*(peer: Peer): Future[void] =
-  ## Wait until `peer` is alive.
+  ## Wait as long as the ``peer`` is alive.
   var retFuture = newFuture[void]("rlpx.peer.join")
   proc continuation(udata: pointer) = retFuture.complete()
   if not peer.messageLoop.finished:
