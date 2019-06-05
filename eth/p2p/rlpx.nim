@@ -576,11 +576,10 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     ResponderWithoutId = bindSym "ResponderWithoutId"
 
     isSubprotocol = protocol.version > 0
-    shortName = if protocol.shortName.len > 0: protocol.shortName
-                else: protocol.name
 
+  if protocol.shortName.len == 0: protocol.shortName = protocol.name
   # By convention, all Ethereum protocol names must be abbreviated to 3 letters
-  doAssert shortName.len == 3
+  doAssert protocol.shortName.len == 3
 
   new result
 
