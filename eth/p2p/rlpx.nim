@@ -8,7 +8,7 @@ when useSnappy:
   const devp2pSnappyVersion* = 5
 
 export
-  p2pProtocol
+  options, p2pProtocol
 
 logScope:
   topics = "rlpx"
@@ -36,15 +36,6 @@ when tracingEnabled:
     # See a more detailed comment in p2p_tracing.nim
     init, writeValue, getOutput
 
-var
-  gProtocols: seq[ProtocolInfo]
-  gDevp2pInfo: ProtocolInfo
-
-# The variables above are immutable RTTI information. We need to tell
-# Nim to not consider them GcSafe violations:
-template allProtocols*: auto = {.gcsafe.}: gProtocols
-template devp2pInfo: auto = {.gcsafe.}: gDevp2pInfo
-
 proc init*[MsgName](T: type ResponderWithId[MsgName],
                     peer: Peer, reqId: int): T =
   T(peer: peer, reqId: reqId)
@@ -70,6 +61,9 @@ proc disconnectAndRaise(peer: Peer,
   raisePeerDisconnected(msg, r)
 
 include p2p_backends_helpers
+
+var gDevp2pInfo: ProtocolInfo
+template devp2pInfo: auto = {.gcsafe.}: gDevp2pInfo
 
 # Dispatcher
 #
@@ -548,9 +542,6 @@ proc dispatchMessages*(peer: Peer) {.async.} =
         return
       peer.awaitedMessages[msgId] = nil
 
-template applyDecorator(p: NimNode, decorator: NimNode) =
-  if decorator.kind != nnkNilLit: p.addPragma decorator
-
 proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
   let
     resultIdent = ident "result"
@@ -692,10 +683,11 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     var userHandlerParams = @[peerVar]
     if hasReqId: userHandlerParams.add reqIdVar
 
-    let awaitUserHandler = msg.genAwaitUserHandler(receivedMsg, userHandlerParams)
+    let
+      awaitUserHandler = msg.genAwaitUserHandler(receivedMsg, userHandlerParams)
+      thunkName = ident(msgName & "_thunk")
 
-    let thunkName = ident(msgName & "_thunk")
-    var thunkProc = quote do:
+    msg.defineThunk quote do:
       proc `thunkName`(`peerVar`: `Peer`, _: int, data: Rlp) {.async, gcsafe.} =
         var `receivedRlp` = data
         var `receivedMsg` {.noinit.}: `msgRecName`
@@ -704,21 +696,9 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
         `awaitUserHandler`
         `callResolvedResponseFuture`
 
-    case msg.kind
-    of msgRequest:  thunkProc.applyDecorator protocol.incomingRequestThunkDecorator
-    of msgResponse: thunkProc.applyDecorator protocol.incomingResponseThunkDecorator
-    else: discard
-
-    protocol.outRecvProcs.add thunkProc
-
     var sendProc = msg.createSendProc(isRawSender = (msg.kind == msgHandshake))
     sendProc.def.params[1][0] = peerOrResponder
 
-    protocol.outSendProcs.add sendProc.allDefs
-
-    if msg.kind == msgHandshake:
-      protocol.outSendProcs.add msg.genHandshakeTemplate(sendProc.def.name,
-                                                         handshakeImpl, nextMsg)
     let
       msgBytes = ident"msgBytes"
       finalizeRequest = quote do:
@@ -762,15 +742,15 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       appendParams.add logSentMsgFields(peerVar, protocol, msgId, paramsToWrite)
 
     # let paramCountNode = newLit(paramCount)
-    sendProc.def.body = quote do:
+    sendProc.setBody quote do:
       let `peerVar` = getPeer(`peerOrResponder`)
       `initWriter`
       `appendParams`
       `finalizeRequest`
       `senderEpilogue`
 
-    if msg.kind == msgRequest:
-      sendProc.def.applyDecorator protocol.outgoingRequestDecorator
+    if msg.kind == msgHandshake:
+      discard msg.createHandshakeTemplate(sendProc.def.name, handshakeImpl, nextMsg)
 
     protocol.outProcRegistrations.add(
       newCall(registerMsg,

@@ -1,5 +1,5 @@
 import
-  macros,
+  macros, options,
   std_shims/macros_shim, chronos
 
 type
@@ -49,9 +49,9 @@ type
     timeoutParam*: NimNode
       ## Cached ident for the timeout parameter
 
-    allDefs*: NimNode
-      ## The final definitions that must be become part of the
-      ## p2pProtocol macro output. May include helper templates.
+    extraDefs*: NimNode
+      ## The reponse procs have extra templates that must become
+      ## part of the generated code
 
   P2PProtocol* = ref object
     # Settings
@@ -102,6 +102,7 @@ type
     NetworkType*: NimNode
     SerializationFormat*: NimNode
     ResponderType*: NimNode
+    ReqIdType*: NimNode
 
     registerProtocol*: NimNode
     setEventHandlers*: NimNode
@@ -113,6 +114,7 @@ type
 
 const
   defaultReqTimeout = 10.seconds
+  tracingEnabled = defined(p2pdump)
 
 let
   # Variable names affecting the public interface of the library:
@@ -132,6 +134,34 @@ let
 
 template Opt(T): auto = newTree(nnkBracketExpr, Option, T)
 template Fut(T): auto = newTree(nnkBracketExpr, Future, T)
+
+proc initFuture*[T](loc: var Future[T]) =
+  loc = newFuture[T]()
+
+template applyDecorator(p: NimNode, decorator: NimNode) =
+  if decorator.kind != nnkNilLit:
+    p.pragma.insert(0, decorator)
+
+when tracingEnabled:
+  proc logSentMsgFields(peer: NimNode,
+                        protocolInfo: NimNode,
+                        msgName: string,
+                        fields: openarray[NimNode]): NimNode =
+    ## This generates the tracing code inserted in the message sending procs
+    ## `fields` contains all the params that were serialized in the message
+    var tracer = ident("tracer")
+
+    result = quote do:
+      var `tracer` = init StringJsonWriter
+      beginRecord(`tracer`)
+
+    for f in fields:
+      result.add newCall(bindSym"writeField", tracer, newLit($f), f)
+
+    result.add quote do:
+      endRecord(`tracer`)
+      logMsgEventImpl("outgoing_msg", `peer`,
+                      `protocolInfo`, `msgName`, getOutput(`tracer`))
 
 proc createPeerState[Peer, ProtocolState](peer: Peer): RootRef =
   var res = new ProtocolState
@@ -218,6 +248,9 @@ proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
   assert(not result.backend.implementProtocolInit.isNil)
   assert(not result.backend.ResponderType.isNil)
 
+  if result.backend.ReqIdType.isNil:
+    result.backend.ReqIdType = ident "int"
+
   result.processProtocolBody body
 
   if not result.backend.afterProtocolInit.isNil:
@@ -241,15 +274,6 @@ proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
     prelude = newStmtList()
 
   userHandlerProc.body.insert 0, prelude
-
-  when false:
-    # TODO
-    ## Turns a regular proc definition into an async proc and adds
-    ## the helpers for accessing the peer and network protocol states.
-    case msgKind
-    of msgRequest:  userHandlerProc.applyDecorator incomingRequestDecorator
-    of msgResponse: userHandlerProc.applyDecorator incomingResponseDecorator
-    else: discard
 
   # We allow the user handler to use `openarray` params, but we turn
   # those into sequences to make the `async` pragma happy.
@@ -351,13 +375,13 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
   if procDef.body.kind != nnkEmpty:
     var userHandler = copy procDef
 
-    protocol.augmentUserHandler userHandler
+    protocol.augmentUserHandler userHandler, id
     userHandler.name = genSym(nskProc, msgName)
 
     # Request and Response handlers get an extra `reqId` parameter if the
     # protocol uses them:
     if result.hasReqId:
-      userHandler.params.insert(2, newIdentDefs(reqIdVar, ReqIdType))
+      userHandler.params.insert(2, newIdentDefs(reqIdVar, protocol.backend.ReqIdType))
 
     # All request handlers get an automatically inserter `response` variable:
     if kind == msgRequest:
@@ -370,13 +394,17 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
       if protocol.useRequestIds:
         initResponderCall.add reqIdVar
 
-      userHandler.addPreludeDefs quote do:
-        let `responseVar` = `initResponderCall`
+      userHandler.addPreludeDefs newVarStmt(responseVar, initResponderCall)
 
       result.initResponderCall = initResponderCall
 
-    protocol.outRecvProcs.add userHandler
+    case kind
+    of msgRequest:  userHandler.applyDecorator protocol.incomingRequestDecorator
+    of msgResponse: userHandler.applyDecorator protocol.incomingResponseDecorator
+    else: discard
+
     result.userHandler = userHandler
+    protocol.outRecvProcs.add result.userHandler
 
   protocol.messages.add result
 
@@ -391,7 +419,7 @@ proc createSendProc*(msg: Message,
 
   let
     name = if not isRawSender: msg.identWithExportMarker
-           else: genSym(nskProc, $msg.ident & "RawSender")
+           else: ident($msg.ident & "RawSender")
 
     pragmas = if procType == nnkProcDef: newTree(nnkPragma, ident"gcsafe")
               else: newEmptyNode()
@@ -405,9 +433,12 @@ proc createSendProc*(msg: Message,
     newEmptyNode(),
     newStmtList()) ## body
 
+  if proctype == nnkProcDef:
+    for p in msg.procDef.pragma:
+      def.addPragma p
+
   result.msg = msg
   result.def = def
-  result.allDefs = newStmtList(def)
 
   for param, paramType in def.typedParams():
     if result.peerParam.isNil:
@@ -435,7 +466,7 @@ proc createSendProc*(msg: Message,
 
     # We create a helper that enables the `response.send()` syntax
     # inside the user handler of the request proc:
-    result.allDefs.add quote do:
+    result.extraDefs = quote do:
       template send*(r: `ResponderType`, args: varargs[untyped]): auto =
         `sendProcName`(r, args)
 
@@ -451,35 +482,26 @@ proc createSendProc*(msg: Message,
               else:
                 Fut(Void)
 
-const tracingEnabled = defined(p2pdump)
+proc setBody*(sendProc: SendProc, body: NimNode) =
+  var
+    msg = sendProc.msg
+    protocol = msg.protocol
+    def = sendProc.def
 
-when tracingEnabled:
-  proc logSentMsgFields(peer: NimNode,
-                        protocolInfo: NimNode,
-                        msgName: string,
-                        fields: openarray[NimNode]): NimNode =
-    ## This generates the tracing code inserted in the message sending procs
-    ## `fields` contains all the params that were serialized in the message
-    var tracer = ident("tracer")
+  # TODO: macros.body triggers an assertion error when the proc type is nnkMacroDef
+  def[6] = body
 
-    result = quote do:
-      var `tracer` = init StringJsonWriter
-      beginRecord(`tracer`)
+  if msg.kind == msgRequest:
+    def.applyDecorator protocol.outgoingRequestDecorator
 
-    for f in fields:
-      result.add newCall(bindSym"writeField", tracer, newLit($f), f)
+  msg.protocol.outSendProcs.add def
 
-    result.add quote do:
-      endRecord(`tracer`)
-      logMsgEventImpl("outgoing_msg", `peer`,
-                      `protocolInfo`, `msgName`, getOutput(`tracer`))
+  if sendProc.extraDefs != nil:
+    msg.protocol.outSendProcs.add sendProc.extraDefs
 
-proc initFuture*[T](loc: var Future[T]) =
-  loc = newFuture[T]()
-
-proc implementBody*(sendProc: SendProc,
-                    preludeGenerator: proc(stream: NimNode): NimNode,
-                    sendCallGenerator: proc (peer, bytes: NimNode): NimNode) =
+proc useStandardBody*(sendProc: SendProc,
+                      preludeGenerator: proc(stream: NimNode): NimNode,
+                      sendCallGenerator: proc (peer, bytes: NimNode): NimNode) =
   let
     msg = sendProc.msg
     outputStream = ident "outputStream"
@@ -510,7 +532,7 @@ proc implementBody*(sendProc: SendProc,
   for param in sendProc.msgParams:
     appendParams.add newCall(writeField, writer, newLit($param), param)
 
-  sendProc.def.body = quote do:
+  sendProc.setBody quote do:
     mixin init, WriterType, beginRecord, endRecord, getOutput
 
     `initResultFuture`
@@ -523,6 +545,16 @@ proc implementBody*(sendProc: SendProc,
     endRecord(`writer`, recordStartMemo)
     let `msgBytes` = getOutput(`outputStream`)
     `sendCall`
+
+proc defineThunk*(msg: Message, thunk: NimNode) =
+  let protocol = msg.protocol
+
+  case msg.kind
+  of msgRequest:  thunk.applyDecorator protocol.incomingRequestThunkDecorator
+  of msgResponse: thunk.applyDecorator protocol.incomingResponseThunkDecorator
+  else: discard
+
+  protocol.outRecvProcs.add thunk
 
 proc genAwaitUserHandler*(msg: Message, receivedMsg: NimNode,
                           leadingParams: varargs[NimNode]): NimNode =
@@ -551,8 +583,9 @@ proc netInit*(p: P2PProtocol): NimNode =
                             p.backend.NetworkType,
                             p.NetworkStateType)
 
-proc genHandshakeTemplate*(msg: Message,
-                           rawSendProc, handshakeImpl, nextMsg: NimNode): NimNode =
+proc createHandshakeTemplate*(msg: Message,
+                              rawSendProc, handshakeImpl,
+                              nextMsg: NimNode): SendProc =
   let
     handshakeExchanger = msg.createSendProc(procType = nnkTemplateDef)
     forwardCall = newCall(rawSendProc).appendAllParams(handshakeExchanger.def)
@@ -564,7 +597,7 @@ proc genHandshakeTemplate*(msg: Message,
   forwardCall[1] = peerVarSym
   forwardCall.del(forwardCall.len - 1)
 
-  handshakeExchanger.def.body = quote do:
+  handshakeExchanger.setBody quote do:
     let `peerVarSym` = `peerValue`
     let sendingFuture = `forwardCall`
     `handshakeImpl`(`peerVarSym`,
@@ -572,7 +605,7 @@ proc genHandshakeTemplate*(msg: Message,
                     `nextMsg`(`peerVarSym`, `msgRecName`),
                     `timeoutValue`)
 
-  return handshakeExchanger.def
+  return handshakeExchanger
 
 proc peerInit*(p: P2PProtocol): NimNode =
   if p.PeerStateType == nil:

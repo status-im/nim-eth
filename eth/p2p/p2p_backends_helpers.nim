@@ -1,3 +1,10 @@
+var
+  gProtocols: seq[ProtocolInfo]
+
+# The variables above are immutable RTTI information. We need to tell
+# Nim to not consider them GcSafe violations:
+template allProtocols*: auto = {.gcsafe.}: gProtocols
+
 proc getState*(peer: Peer, proto: ProtocolInfo): RootRef =
   peer.protocolStates[proto.index]
 

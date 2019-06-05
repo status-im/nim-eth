@@ -9,7 +9,7 @@
 #
 
 import
-  times, tables, options, sets, hashes, strutils, macros,
+  times, tables, options, sets, hashes, strutils, std_shims/macros_shim,
   chronicles, chronos, nimcrypto/[keccak, hash],
   eth/[rlp, keys], eth/common/eth_types,
   ../rlpx, ../kademlia, ../private/p2p_types, ../blockchain_utils,
@@ -19,7 +19,7 @@ export
   les_types
 
 const
-  lesVersion = 2'u
+  lesVersion = 2
   maxHeadersFetch = 192
   maxBodiesFetch = 32
   maxReceiptsFetch = 128
@@ -92,11 +92,11 @@ template costQuantity(quantityExpr, max: untyped) {.pragma.}
 proc getCostQuantity(fn: NimNode): tuple[quantityExpr, maxQuantity: NimNode] =
   # XXX: `getCustomPragmaVal` doesn't work yet on regular nnkProcDef nodes
   # (TODO: file as an issue)
-  let p = fn.pragma
-  doAssert p.kind == nnkPragma and p.len > 0 and $p[0][0] == "costQuantity"
+  let costQuantity = fn.pragma.findPragma(bindSym"costQuantity")
+  doAssert costQuantity != nil
 
-  result.quantityExpr = p[0][1]
-  result.maxQuantity= p[0][2]
+  result.quantityExpr = costQuantity[1]
+  result.maxQuantity= costQuantity[2]
 
   if result.maxQuantity.kind == nnkExprEqExpr:
     result.maxQuantity = result.maxQuantity[1]
@@ -106,8 +106,8 @@ macro outgoingRequestDecorator(n: untyped): untyped =
   let (costQuantity, maxQuantity) = n.getCostQuantity
 
   result.body.add quote do:
-    trackOutgoingRequest(msgRecipient.networkState(les),
-                         msgRecipient.state(les),
+    trackOutgoingRequest(peer.networkState(les),
+                         peer.state(les),
                          perProtocolMsgId, reqId, `costQuantity`)
   # echo result.repr
 
@@ -115,7 +115,7 @@ macro incomingResponseDecorator(n: untyped): untyped =
   result = n
 
   let trackingCall = quote do:
-    trackIncomingResponse(msgSender.state(les), reqId, msg.bufValue)
+    trackIncomingResponse(peer.state(les), reqId, msg.bufValue)
 
   result.body.insert(n.body.len - 1, trackingCall)
   # echo result.repr
@@ -216,7 +216,7 @@ p2pProtocol les(version = lesVersion,
                            "Incompatibility detected! $1 mismatch ($2 != $3)" %
                            [varName, $localVar, $peerVar])
 
-    requireCompatibility(peerLesVersion,  lesVersion,        "les version")
+    requireCompatibility(peerLesVersion,  uint(lesVersion),  "les version")
     requireCompatibility(peerNetworkId,   network.networkId, "network id")
     requireCompatibility(peerGenesisHash, chain.genesisHash, "genesis hash")
 
