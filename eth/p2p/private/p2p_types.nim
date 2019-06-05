@@ -38,6 +38,7 @@ type
     protocolStates*: seq[RootRef]
     outstandingRequests*: seq[Deque[OutstandingRequest]]
     awaitedMessages*: seq[FutureBase]
+    messageLoop*: Future[void]
     when useSnappy:
       snappyEnabled*: bool
 
