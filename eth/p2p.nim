@@ -70,12 +70,10 @@ proc processIncoming(server: StreamServer,
   yield peerfut
   if not peerfut.failed:
     let peer = peerfut.read()
+    trace "Connection established (incoming)", peer
     if node.peerPool != nil:
-      if not node.peerPool.addPeer(peer):
-        # In case an outgoing connection was added in the meanwhile or a
-        # malicious peer opens multiple connections
-        debug "Disconnecting peer (incoming)", reason = AlreadyConnected
-        await peer.disconnect(AlreadyConnected)
+      node.peerPool.connectingNodes.excl(peer.remote)
+      node.peerPool.addPeer(peer)
 
 proc listeningAddress*(node: EthereumNode): ENode =
   return initENode(node.keys.pubKey, node.address)

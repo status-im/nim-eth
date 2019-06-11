@@ -1480,6 +1480,16 @@ proc rlpxAccept*(node: EthereumNode,
                           udpPort: remote.port)
     result.remote = newNode(initEnode(handshake.remoteHPubkey, address))
 
+    # In case there is an outgoing connection started with this peer we give
+    # precedence to that one and we disconnect here with `AlreadyConnected`
+    if result.remote in node.peerPool.connectedNodes or
+        result.remote in node.peerPool.connectingNodes:
+      trace "Duplicate connection in rlpxAccept"
+      raisePeerDisconnected("Peer already connecting or connected",
+                            AlreadyConnected)
+
+    node.peerPool.connectingNodes.incl(result.remote)
+
     await postHelloSteps(result, response)
     ok = true
   except PeerDisconnected as e:
