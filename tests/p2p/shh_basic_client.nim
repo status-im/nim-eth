@@ -113,8 +113,8 @@ if config.main:
 else:
   netId = 15
 
-let keys = newKeyPair()
-var node = newEthereumNode(keys, address, netId, nil, addAllCapabilities = false)
+let keypair = newKeyPair()
+var node = newEthereumNode(keypair, address, netId, nil, addAllCapabilities = false)
 node.addCapability Whisper
 
 # lets prepare some prearranged keypairs
