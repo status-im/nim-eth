@@ -8,7 +8,7 @@ import
 
 const
   lookupInterval = 5
-  connectLoopSleepMs = 2000
+  connectLoopSleep = chronos.milliseconds(2000)
 
 proc newPeerPool*(network: EthereumNode,
                   networkId: uint, keyPair: KeyPair,
@@ -179,7 +179,7 @@ proc run(p: PeerPool) {.async.} =
     if dropConnections:
       await p.stopAllPeers()
 
-    await sleepAsync(connectLoopSleepMs)
+    await sleepAsync(connectLoopSleep)
 
 proc start*(p: PeerPool) =
   if not p.running:

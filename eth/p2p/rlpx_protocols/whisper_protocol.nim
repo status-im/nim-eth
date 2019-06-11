@@ -29,8 +29,8 @@ const
   whisperVersionStr* = $whisperVersion
   defaultMinPow* = 0.2'f64
   defaultMaxMsgSize* = 1024'u32 * 1024'u32 # * 10 # should be no higher than max RLPx size
-  messageInterval* = 300 ## Interval at which messages are send to peers, in ms
-  pruneInterval* = 1000 ## Interval at which message queue is pruned, in ms
+  messageInterval* = chronos.milliseconds(300) ## Interval at which messages are send to peers, in ms
+  pruneInterval* = chronos.milliseconds(1000)  ## Interval at which message queue is pruned, in ms
 
 type
   Hash* = MDigest[256]

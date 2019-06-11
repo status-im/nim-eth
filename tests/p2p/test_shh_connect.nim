@@ -18,7 +18,7 @@ proc resetMessageQueues(nodes: varargs[EthereumNode]) =
 
 let bootENode = waitFor setupBootNode()
 let safeTTL = 5'u32
-let waitInterval = messageInterval + 150
+let waitInterval = messageInterval + 150.milliseconds
 
 var node1 = setupTestNode(Whisper)
 var node2 = setupTestNode(Whisper)
@@ -283,7 +283,7 @@ suite "Whisper connections":
     await sleepAsync(waitInterval)
     check node1.protocolState(Whisper).queue.items.len == 10
 
-    await sleepAsync(int((lowerTTL+1)*1000))
+    await sleepAsync(milliseconds((lowerTTL+1)*1000))
     check node1.protocolState(Whisper).queue.items.len == 0
     check node2.protocolState(Whisper).queue.items.len == 0
 

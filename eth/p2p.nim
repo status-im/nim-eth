@@ -111,7 +111,7 @@ proc connectToNetwork*(node: EthereumNode,
 
   while node.peerPool.connectedNodes.len == 0:
     trace "Waiting for more peers", peers = node.peerPool.connectedNodes.len
-    await sleepAsync(500)
+    await sleepAsync(500.milliseconds)
 
 proc stopListening*(node: EthereumNode) =
   node.listeningServer.stop()
