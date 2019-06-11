@@ -66,10 +66,8 @@ proc newEthereumNode*(keys: KeyPair,
 proc processIncoming(server: StreamServer,
                      remote: StreamTransport): Future[void] {.async, gcsafe.} =
   var node = getUserData[EthereumNode](server)
-  let peerfut = node.rlpxAccept(remote)
-  yield peerfut
-  if not peerfut.failed:
-    let peer = peerfut.read()
+  let peer = await node.rlpxAccept(remote)
+  if not peer.isNil:
     trace "Connection established (incoming)", peer
     if node.peerPool != nil:
       node.peerPool.connectingNodes.excl(peer.remote)

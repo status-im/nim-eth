@@ -1393,8 +1393,10 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     await postHelloSteps(result, response)
     ok = true
   except PeerDisconnected as e:
-    if e.reason != TooManyPeers:
-      debug "Unexpected disconnect during rlpxConnect", reason = e.reason
+    if e.reason == AlreadyConnected or e.reason == TooManyPeers:
+      trace "Disconnect during rlpxAccept", reason = e.reason
+    else:
+      debug "Unexpected disconnect during rlpxAccept", reason = e.reason
   except TransportIncompleteError:
     trace "Connection dropped in rlpxConnect", remote
   except UselessPeerError:
@@ -1405,12 +1407,10 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     debug "Rlp error in rlpxConnect"
   except TransportOsError:
     trace "TransportOsError", err = getCurrentExceptionMsg()
-  except:
-    error "Exception in rlpxConnect", remote,
+  except CatchableError:
+    error "Unexpected exception in rlpxConnect", remote,
           exc = getCurrentException().name,
           err = getCurrentExceptionMsg()
-    result = nil
-    raise
 
   if not ok:
     if not isNil(result.transport):
@@ -1493,7 +1493,7 @@ proc rlpxAccept*(node: EthereumNode,
     await postHelloSteps(result, response)
     ok = true
   except PeerDisconnected as e:
-    if e.reason == AlreadyConnected:
+    if e.reason == AlreadyConnected or e.reason == TooManyPeers:
       trace "Disconnect during rlpxAccept", reason = e.reason
     else:
       debug "Unexpected disconnect during rlpxAccept", reason = e.reason
@@ -1501,16 +1501,21 @@ proc rlpxAccept*(node: EthereumNode,
     trace "Connection dropped in rlpxAccept", remote = result.remote
   except UselessPeerError:
     trace "Disconnecting useless peer", peer = result.remote
-  except:
-    error "Exception in rlpxAccept",
-          err = getCurrentExceptionMsg(),
-          stackTrace = getCurrentException().getStackTrace()
+  except RlpTypeMismatch:
+    # Some peers report capabilities with names longer than 3 chars. We ignore
+    # those for now. Maybe we should allow this though.
+    debug "Rlp error in rlpxAccept"
+  except TransportOsError:
+    trace "TransportOsError", err = getCurrentExceptionMsg()
+  except CatchableError:
+    error "Unexpected exception in rlpxAccept",
+          exc = getCurrentException().name,
+          err = getCurrentExceptionMsg()
 
   if not ok:
     if not isNil(result.transport):
       result.transport.close()
     result = nil
-    raise
 
 when isMainModule:
 
