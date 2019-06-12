@@ -171,7 +171,8 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
     # no need to exit here, because the context might still have blocks to fetch
     # from this peer
 
-  while (let workItemIdx = syncCtx.availableWorkItem(); workItemIdx != -1):
+  while (let workItemIdx = syncCtx.availableWorkItem(); workItemIdx != -1 and
+         peer.connectionState notin {Disconnecting, Disconnected}):
     template workItem: auto = syncCtx.workQueue[workItemIdx]
     workItem.state = Requested
     trace "Requesting block headers", start = workItem.startIndex, count = workItem.numBlocks, peer
