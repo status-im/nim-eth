@@ -8,7 +8,7 @@ import
 
 const
   lookupInterval = 5
-  connectLoopSleepMs = 2000
+  connectLoopSleep = chronos.milliseconds(2000)
 
 proc newPeerPool*(network: EthereumNode,
                   networkId: uint, keyPair: KeyPair,
@@ -107,24 +107,19 @@ proc getRandomBootnode(p: PeerPool): Option[Node] =
   if p.discovery.bootstrapNodes.len != 0:
     result = option(p.discovery.bootstrapNodes.rand())
 
-proc addPeer*(pool: PeerPool, peer: Peer): bool =
-  if peer.remote notin pool.connectedNodes:
-    pool.connectedNodes[peer.remote] = peer
-    for o in pool.observers.values:
-      if not o.onPeerConnected.isNil:
-        if o.protocol.isNil or peer.supports(o.protocol):
-          o.onPeerConnected(peer)
-    return true
-  else: return false
+proc addPeer*(pool: PeerPool, peer: Peer) =
+  doAssert(peer.remote notin pool.connectedNodes)
+  pool.connectedNodes[peer.remote] = peer
+  for o in pool.observers.values:
+    if not o.onPeerConnected.isNil:
+      if o.protocol.isNil or peer.supports(o.protocol):
+        o.onPeerConnected(peer)
 
 proc connectToNode*(p: PeerPool, n: Node) {.async.} =
   let peer = await p.connect(n)
   if not peer.isNil:
-    trace "Connection established", peer
-    if not p.addPeer(peer):
-      # In case an incoming connection was added in the meanwhile
-      trace "Disconnecting peer (outgoing)", reason = AlreadyConnected
-      await peer.disconnect(AlreadyConnected)
+    trace "Connection established (outgoing)", peer
+    p.addPeer(peer)
 
 proc connectToNodes(p: PeerPool, nodes: seq[Node]) {.async.} =
   for node in nodes:
@@ -184,7 +179,7 @@ proc run(p: PeerPool) {.async.} =
     if dropConnections:
       await p.stopAllPeers()
 
-    await sleepAsync(connectLoopSleepMs)
+    await sleepAsync(connectLoopSleep)
 
 proc start*(p: PeerPool) =
   if not p.running:

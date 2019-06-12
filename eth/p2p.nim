@@ -66,16 +66,12 @@ proc newEthereumNode*(keys: KeyPair,
 proc processIncoming(server: StreamServer,
                      remote: StreamTransport): Future[void] {.async, gcsafe.} =
   var node = getUserData[EthereumNode](server)
-  let peerfut = node.rlpxAccept(remote)
-  yield peerfut
-  if not peerfut.failed:
-    let peer = peerfut.read()
+  let peer = await node.rlpxAccept(remote)
+  if not peer.isNil:
+    trace "Connection established (incoming)", peer
     if node.peerPool != nil:
-      if not node.peerPool.addPeer(peer):
-        # In case an outgoing connection was added in the meanwhile or a
-        # malicious peer opens multiple connections
-        debug "Disconnecting peer (incoming)", reason = AlreadyConnected
-        await peer.disconnect(AlreadyConnected)
+      node.peerPool.connectingNodes.excl(peer.remote)
+      node.peerPool.addPeer(peer)
 
 proc listeningAddress*(node: EthereumNode): ENode =
   return initENode(node.keys.pubKey, node.address)
@@ -115,7 +111,7 @@ proc connectToNetwork*(node: EthereumNode,
 
   while node.peerPool.connectedNodes.len == 0:
     trace "Waiting for more peers", peers = node.peerPool.connectedNodes.len
-    await sleepAsync(500)
+    await sleepAsync(500.milliseconds)
 
 proc stopListening*(node: EthereumNode) =
   node.listeningServer.stop()
