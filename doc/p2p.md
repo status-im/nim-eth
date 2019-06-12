@@ -265,6 +265,10 @@ p2pProtocol les(version = 2):
     debug "peer disconnected", peer
 ```
 
+**Note:** Be aware that if currently one of the subprotocol `onPeerConnected`
+calls fails, the client will be disconnected as `UselessPeer` but no
+`onPeerDisconnect` calls are run.
+
 ### Checking the other peer's supported sub-protocols
 
 Upon establishing a connection, RLPx will automatically negotiate the list of

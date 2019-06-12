@@ -704,7 +704,6 @@ type
     isLightNode*: bool
     trusted*: bool
     received: HashSet[Message]
-    running: bool
 
   WhisperNetwork = ref object
     queue*: Queue
@@ -768,10 +767,7 @@ p2pProtocol Whisper(version = whisperVersion,
     if not whisperNet.config.isLightNode:
       traceAsyncErrors peer.run()
 
-    debug "Whisper peer initialized"
-
-  onPeerDisconnected do (peer: Peer, reason: DisconnectionReason) {.gcsafe.}:
-     peer.state.running = false
+    debug "Whisper peer initialized", peer
 
   proc status(peer: Peer,
               protocolVersion: uint,
@@ -890,12 +886,7 @@ proc processQueue(peer: Peer) =
   traceAsyncErrors peer.messages(envelopes)
 
 proc run(peer: Peer) {.async.} =
-  var
-    whisperPeer = peer.state(Whisper)
-    whisperNet = peer.networkState(Whisper)
-
-  whisperPeer.running = true
-  while whisperPeer.running:
+  while peer.connectionState notin {Disconnecting, Disconnected}:
     peer.processQueue()
     await sleepAsync(messageInterval)
 
