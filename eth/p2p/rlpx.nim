@@ -554,7 +554,8 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     try:
       await peer.invokeThunk(msgId, msgData)
     except RlpError:
-      debug "RlpError, ending dispatchMessages loop", peer
+      debug "RlpError, ending dispatchMessages loop", peer,
+        msg = peer.getMsgName(msgId)
       await peer.disconnect(BreachOfProtocol, true)
       return
     except CatchableError:
@@ -636,7 +637,7 @@ macro p2pProtocolImpl(name: static[string],
     createPeerState = bindSym "createPeerState"
     finish = bindSym "finish"
     initRlpWriter = bindSym "initRlpWriter"
-    enterList = bindSym "enterList"
+    safeEnterList = bindSym "safeEnterList"
     messagePrinter = bindSym "messagePrinter"
     initProtocol = bindSym "initProtocol"
     nextMsgResolver = bindSym "nextMsgResolver"
@@ -875,7 +876,7 @@ macro p2pProtocolImpl(name: static[string],
     let paramCount = paramsToWrite.len
 
     if paramCount > 1:
-      readParamsPrelude.add newCall(enterList, receivedRlp)
+      readParamsPrelude.add newCall(safeEnterList, receivedRlp)
 
     when tracingEnabled:
       readParams.add newCall(bindSym"logReceivedMsg", msgSender, receivedMsg)
