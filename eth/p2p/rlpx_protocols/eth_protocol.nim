@@ -90,7 +90,8 @@ p2pProtocol eth(version = protocolVersion,
         await peer.disconnect(BreachOfProtocol)
         return
 
-      await response.send(peer.network.chain.getBlockBodies(hashes))
+      # TODO: implement `getBlockBodies` and reactivate this code
+      # await response.send(peer.network.chain.getBlockBodies(hashes))
 
     proc blockBodies(peer: Peer, blocks: openarray[BlockBody])
 
@@ -106,8 +107,9 @@ p2pProtocol eth(version = protocolVersion,
     proc nodeData(peer: Peer, data: openarray[Blob])
 
   requestResponse:
-    proc getReceipts(peer: Peer, hashes: openarray[KeccakHash]) =
-      await response.send(peer.network.chain.getReceipts(hashes))
+    proc getReceipts(peer: Peer, hashes: openarray[KeccakHash]) = discard
+      # TODO: implement `getReceipts` and reactivate this code
+      # await response.send(peer.network.chain.getReceipts(hashes))
 
     proc receipts(peer: Peer, receipts: openarray[Receipt])
 
