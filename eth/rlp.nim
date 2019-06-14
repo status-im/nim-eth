@@ -320,7 +320,7 @@ proc readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
 
     var bytes = rlp.toBytes
     if result.len != bytes.len:
-      raise newException(RlpTypeMismatch, "Fixed-size array expected, but the source RLP contains a blob of different lenght")
+      raise newException(RlpTypeMismatch, "Fixed-size array expected, but the source RLP contains a blob of different length")
 
     copyMem(addr result[0], bytes.baseAddr, bytes.len)
 

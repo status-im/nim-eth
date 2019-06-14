@@ -230,7 +230,11 @@ proc read*(rlp: var Rlp, T: typedesc[StUint]): T {.inline.} =
   if rlp.isBlob:
     let bytes = rlp.toBytes
     if bytes.len > 0:
-      result.initFromBytesBE(bytes.toOpenArray)
+      # be sure the amount of bytes matches the size of the stint
+      if bytes.len <= sizeof(result):
+        result.initFromBytesBE(bytes.toOpenArray)
+      else:
+        raise newException(RlpTypeMismatch, "Unsigned integer expected, but the source RLP has the wrong length")
     else:
       result = 0.to(T)
   else:
@@ -250,13 +254,13 @@ proc append*(rlpWriter: var RlpWriter, value: StUint) =
 proc read*(rlp: var Rlp, T: typedesc[Stint]): T {.inline.} =
   # The Ethereum Yellow Paper defines the RLP serialization only
   # for unsigned integers:
-  {.error: "RLP serialization of signed integers is not allowed".}
+  {.fatal: "RLP serialization of signed integers is not allowed".}
   discard
 
 proc append*(rlpWriter: var RlpWriter, value: Stint) =
   # The Ethereum Yellow Paper defines the RLP serialization only
   # for unsigned integers:
-  {.error: "RLP serialization of signed integers is not allowed".}
+  {.fatal: "RLP serialization of signed integers is not allowed".}
   discard
 
 proc read*(rlp: var Rlp, t: var Transaction, _: type EthAddress): EthAddress {.inline.} =
