@@ -30,6 +30,14 @@ template networkState*(connection: Peer, Protocol: type): untyped =
 
 proc initProtocolState*[T](state: T, x: Peer|EthereumNode) {.gcsafe.} = discard
 
+proc initProtocolStates(peer: Peer, protocols: openarray[ProtocolInfo]) =
+  # Initialize all the active protocol states
+  newSeq(peer.protocolStates, allProtocols.len)
+  for protocol in protocols:
+    let peerStateInit = protocol.peerStateInitializer
+    if peerStateInit != nil:
+      peer.protocolStates[protocol.index] = peerStateInit(peer)
+
 proc resolveFuture[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
   var f = Future[MsgType](future)
   doAssert(not f.finished())
@@ -91,8 +99,8 @@ proc handshakeImpl[T](peer: Peer,
   doAssert timeout.milliseconds > 0
   yield responseFut or sleepAsync(timeout)
   if not responseFut.finished:
-    discard disconnectAndRaise(peer, HandshakeTimeout,
-                               "Protocol handshake was not received in time.")
+    await disconnectAndRaise(peer, HandshakeTimeout,
+                             "Protocol handshake was not received in time.")
   elif responseFut.failed:
     raise responseFut.error
   else:

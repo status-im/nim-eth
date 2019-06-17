@@ -862,15 +862,8 @@ proc initPeerState*(peer: Peer, capabilities: openarray[Capability]) =
   # Similarly, we need a bit of book-keeping data to keep track
   # of the potentially concurrent calls to `nextMsg`.
   peer.awaitedMessages.newSeq(peer.dispatcher.messages.len)
-
   peer.lastReqId = 0
-
-  # Initialize all the active protocol states
-  newSeq(peer.protocolStates, allProtocols.len)
-  for protocol in peer.dispatcher.activeProtocols:
-    let peerStateInit = protocol.peerStateInitializer
-    if peerStateInit != nil:
-      peer.protocolStates[protocol.index] = peerStateInit(peer)
+  peer.initProtocolStates peer.dispatcher.activeProtocols
 
 proc postHelloSteps(peer: Peer, h: devp2p.hello) {.async.} =
   initPeerState(peer, h.capabilities)

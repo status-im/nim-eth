@@ -500,7 +500,8 @@ proc setBody*(sendProc: SendProc, body: NimNode) =
     msg.protocol.outSendProcs.add sendProc.extraDefs
 
 proc useStandardBody*(sendProc: SendProc,
-                      preludeGenerator: proc(stream: NimNode): NimNode,
+                      preSerializationStep: proc(stream: NimNode): NimNode,
+                      postSerializationStep: proc(stream: NimNode): NimNode,
                       sendCallGenerator: proc (peer, bytes: NimNode): NimNode) =
   let
     msg = sendProc.msg
@@ -514,8 +515,12 @@ proc useStandardBody*(sendProc: SendProc,
     msgRecName = msg.recIdent
     Format = msg.protocol.backend.SerializationFormat
 
-    prelude = if preludeGenerator.isNil: newStmtList()
-              else: preludeGenerator(outputStream)
+    preSerialization = if preSerializationStep.isNil: newStmtList()
+                       else: preSerializationStep(outputStream)
+
+    postSerialization = if postSerializationStep.isNil: newStmtList()
+                        else: postSerializationStep(outputStream)
+
     appendParams = newStmtList()
 
     initResultFuture = if msg.kind != msgRequest: newStmtList()
@@ -537,12 +542,13 @@ proc useStandardBody*(sendProc: SendProc,
 
     `initResultFuture`
     var `outputStream` = init OutputStream
-    `prelude`
+    `preSerialization`
     var `writer` = init(WriterType(`Format`), `outputStream`)
     var recordStartMemo = beginRecord(`writer`, `msgRecName`)
     `appendParams`
     `tracing`
     endRecord(`writer`, recordStartMemo)
+    `postSerialization`
     let `msgBytes` = getOutput(`outputStream`)
     `sendCall`
 
