@@ -242,15 +242,15 @@ proc expirationValid(cmdId: CommandId, rlpEncodedPayload: seq[byte]):
   else:
     raise newException(DiscProtocolError, "Invalid RLP list for this packet id")
 
-proc receive(d: DiscoveryProtocol, a: Address, msg: Bytes) {.gcsafe.} =
+proc receive*(d: DiscoveryProtocol, a: Address, msg: Bytes) {.gcsafe.} =
   ## Can raise `DiscProtocolError` and all of `RlpError`
+  # Note: export only needed for testing
   var msgHash: MDigest[256]
   if validateMsgHash(msg, msgHash):
     var remotePubkey: PublicKey
     if recoverMsgPublicKey(msg, remotePubkey):
       let (cmdId, payload) = unpack(msg)
-      # echo "received cmd: ", cmdId, ", from: ", a
-      # echo "pubkey: ", remotePubkey.raw_key.toHex()
+
       if expirationValid(cmdId, payload):
         let node = newNode(remotePubkey, a)
         case cmdId
