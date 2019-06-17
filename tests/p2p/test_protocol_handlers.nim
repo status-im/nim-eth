@@ -53,20 +53,20 @@ p2pProtocol hah(version = 1,
 
 suite "Testing protocol handlers":
   asyncTest "Failing disconnection handler":
-    let bootENode = waitFor setupBootNode()
+    let bootENode = await setupBootNode()
     var node1 = setupTestNode(abc, xyz)
     var node2 = setupTestNode(abc, xyz)
     # node2 listening and node1 not, to avoid many incoming vs outgoing
     var node1Connected = node1.connectToNetwork(@[bootENode], false, true)
     var node2Connected = node2.connectToNetwork(@[bootENode], true, true)
-    waitFor node1Connected
-    waitFor node2Connected
+    await node1Connected
+    await node2Connected
     check:
       node1.peerPool.connectedNodes.len() == 1
       node2.peerPool.connectedNodes.len() == 1
 
     for peer in node1.peers():
-      waitFor peer.disconnect(SubprotocolReason, true)
+      await peer.disconnect(SubprotocolReason, true)
     check:
       # we want to check that even though the exceptions in the disconnect
       # handlers, each handler still ran
@@ -77,7 +77,7 @@ suite "Testing protocol handlers":
     var node1 = setupTestNode(hah)
     var node2 = setupTestNode(hah)
     node2.startListening()
-    let peer = waitFor node1.rlpxConnect(newNode(initENode(node2.keys.pubKey,
+    let peer = await node1.rlpxConnect(newNode(initENode(node2.keys.pubKey,
                                                            node2.address)))
     check:
       peer.isNil == true
