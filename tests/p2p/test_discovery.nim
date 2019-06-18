@@ -8,19 +8,13 @@
 #
 
 import
-  sequtils, unittest, chronos, byteutils, nimcrypto,
+  sequtils, unittest, chronos, byteutils,
   eth/[keys, rlp], eth/p2p/[discovery, kademlia, enode],
   ./p2p_test_helper
 
 proc nodeIdInNodes(id: NodeId, nodes: openarray[Node]): bool =
   for n in nodes:
     if id == n.id: return true
-
-proc packData(payload: seq[byte], pk: PrivateKey): seq[byte] =
-  let
-    signature = @(pk.signMessage(payload).getRaw())
-    msgHash = keccak256.digest(signature & payload)
-  result = @(msgHash.data) & signature & payload
 
 proc test() {.async.} =
   suite "Discovery Tests":

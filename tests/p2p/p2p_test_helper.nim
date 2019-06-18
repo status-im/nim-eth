@@ -1,5 +1,5 @@
 import
-  unittest, chronos, eth/[keys, p2p], eth/p2p/[discovery, enode]
+  unittest, chronos, nimcrypto, eth/[keys, p2p], eth/p2p/[discovery, enode]
 
 var nextPort = 30303
 
@@ -32,3 +32,9 @@ template asyncTest*(name, body: untyped) =
   test name:
     proc scenario {.async.} = body
     waitFor scenario()
+
+proc packData*(payload: seq[byte], pk: PrivateKey): seq[byte] =
+  let
+    signature = @(pk.signMessage(payload).getRaw())
+    msgHash = keccak256.digest(signature & payload)
+  result = @(msgHash.data) & signature & payload
