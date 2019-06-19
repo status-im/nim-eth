@@ -549,7 +549,6 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     EthereumNode = bindSym "EthereumNode"
 
     initRlpWriter = bindSym "initRlpWriter"
-    safeEnterList = bindSym "safeEnterList"
     rlpFromBytes = bindSym "rlpFromBytes"
     append = bindSym("append", brForceOpen)
     read = bindSym("read", brForceOpen)
