@@ -9,30 +9,25 @@
 
 import
   sequtils, options, unittest, tables, chronos, eth/[keys, p2p],
-  eth/p2p/rlpx_protocols/[whisper_protocol],
+  eth/p2p/rlpx_protocols/whisper_protocol, eth/p2p/peer_pool,
   ./p2p_test_helper
 
 proc resetMessageQueues(nodes: varargs[EthereumNode]) =
   for node in nodes:
     node.resetMessageQueue()
 
-let bootENode = waitFor setupBootNode()
 let safeTTL = 5'u32
 let waitInterval = messageInterval + 150.milliseconds
 
-var node1 = setupTestNode(Whisper)
-var node2 = setupTestNode(Whisper)
-# node2 listening and node1 not, to avoid many incoming vs outgoing
-var node1Connected = node1.connectToNetwork(@[bootENode], false, true)
-var node2Connected = node2.connectToNetwork(@[bootENode], true, true)
-waitFor node1Connected
-waitFor node2Connected
-
 suite "Whisper connections":
+  var node1 = setupTestNode(Whisper)
+  var node2 = setupTestNode(Whisper)
+  node2.startListening()
+  waitFor node1.peerPool.connectToNode(newNode(initENode(node2.keys.pubKey,
+                                                         node2.address)))
   asyncTest "Two peers connected":
     check:
       node1.peerPool.connectedNodes.len() == 1
-      node2.peerPool.connectedNodes.len() == 1
 
   asyncTest "Filters with encryption and signing":
     let encryptKeyPair = newKeyPair()
@@ -313,12 +308,12 @@ suite "Whisper connections":
 
       node1.unsubscribeFilter(filter) == true
 
-  test "Light node posting":
+  asyncTest "Light node posting":
     var ln1 = setupTestNode(Whisper)
     ln1.setLightNode(true)
 
-    # not listening, so will only connect to others that are listening (node2)
-    waitFor ln1.connectToNetwork(@[bootENode], false, true)
+    await ln1.peerPool.connectToNode(newNode(initENode(node2.keys.pubKey,
+                                                       node2.address)))
 
     let topic = [byte 0, 0, 0, 0]
 
@@ -333,7 +328,7 @@ suite "Whisper connections":
                         targetPeer = some(toNodeId(node2.keys.pubkey))) == true
       ln1.protocolState(Whisper).queue.items.len == 0
 
-  test "Connect two light nodes":
+  asyncTest "Connect two light nodes":
     var ln1 = setupTestNode(Whisper)
     var ln2 = setupTestNode(Whisper)
 
@@ -341,6 +336,6 @@ suite "Whisper connections":
     ln2.setLightNode(true)
 
     ln2.startListening()
-    let peer = waitFor ln1.rlpxConnect(newNode(initENode(ln2.keys.pubKey,
-                                                         ln2.address)))
+    let peer = await ln1.rlpxConnect(newNode(initENode(ln2.keys.pubKey,
+                                                       ln2.address)))
     check peer.isNil == true
