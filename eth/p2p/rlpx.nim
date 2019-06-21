@@ -1291,6 +1291,13 @@ proc postHelloSteps(peer: Peer, h: devp2p.hello) {.async.} =
   #
   await all(subProtocolsHandshakes)
 
+  # This is needed as a peer might have already disconnected. In this case
+  # we need to raise so that rlpxConnect/rlpxAccept fails.
+  # Disconnect is done only to run the disconnect handlers. TODO: improve this
+  # also TODO: Should we discern the type of error?
+  if messageProcessingLoop.finished:
+    await peer.disconnectAndRaise(ClientQuitting,
+                                  "messageProcessingLoop ended while connecting")
   peer.connectionState = Connected
 
 template `^`(arr): auto =
