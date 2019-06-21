@@ -56,17 +56,14 @@ suite "Testing protocol handlers":
     let bootENode = await setupBootNode()
     var node1 = setupTestNode(abc, xyz)
     var node2 = setupTestNode(abc, xyz)
-    # node2 listening and node1 not, to avoid many incoming vs outgoing
-    var node1Connected = node1.connectToNetwork(@[bootENode], false, true)
-    var node2Connected = node2.connectToNetwork(@[bootENode], true, true)
-    await node1Connected
-    await node2Connected
-    check:
-      node1.peerPool.connectedNodes.len() == 1
-      node2.peerPool.connectedNodes.len() == 1
 
-    for peer in node1.peers():
-      await peer.disconnect(SubprotocolReason, true)
+    node2.startListening()
+    let peer = await node1.rlpxConnect(newNode(initENode(node2.keys.pubKey,
+                                                         node2.address)))
+    check:
+      peer.isNil == false
+
+    await peer.disconnect(SubprotocolReason, true)
     check:
       # we want to check that even though the exceptions in the disconnect
       # handlers, each handler still ran
@@ -78,7 +75,7 @@ suite "Testing protocol handlers":
     var node2 = setupTestNode(hah)
     node2.startListening()
     let peer = await node1.rlpxConnect(newNode(initENode(node2.keys.pubKey,
-                                                           node2.address)))
+                                                         node2.address)))
     check:
       peer.isNil == true
       # To check if the disconnection handler did not run
