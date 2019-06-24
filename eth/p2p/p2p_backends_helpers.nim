@@ -88,6 +88,10 @@ proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
   # tremendously (for reasons not yet known)
   # result = $(cast[ptr MsgType](msg)[])
 
+proc disconnectAndRaise(peer: Peer,
+                        reason: DisconnectionReason,
+                        msg: string) {.async.}
+
 proc handshakeImpl[T](peer: Peer,
                       sendFut: Future[void],
                       responseFut: Future[T],

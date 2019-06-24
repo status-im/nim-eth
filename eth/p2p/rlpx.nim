@@ -45,6 +45,8 @@ proc init*[MsgName](T: type ResponderWithoutId[MsgName], peer: Peer): T =
 
 chronicles.formatIt(Peer): $(it.remote)
 
+include p2p_backends_helpers
+
 proc disconnect*(peer: Peer, reason: DisconnectionReason,
                  notifyOtherPeer = false) {.gcsafe, async.}
 
@@ -59,8 +61,6 @@ proc disconnectAndRaise(peer: Peer,
   let r = reason
   await peer.disconnect(r)
   raisePeerDisconnected(msg, r)
-
-include p2p_backends_helpers
 
 var gDevp2pInfo: ProtocolInfo
 template devp2pInfo: auto = {.gcsafe.}: gDevp2pInfo

@@ -1,6 +1,6 @@
 import
   macros, options,
-  std_shims/macros_shim, chronos
+  std_shims/macros_shim, chronos, faststreams/output_stream
 
 type
   MessageKind* = enum
@@ -123,6 +123,8 @@ let
   ReqIdType*            {.compileTime.} = ident "int"
   peerVar*              {.compileTime.} = ident "peer"
   responseVar*          {.compileTime.} = ident "response"
+  streamVar*            {.compileTime.} = ident "stream"
+  deadlineVar*          {.compileTime.} = ident "deadline"
   perProtocolMsgIdVar*  {.compileTime.} = ident "perProtocolMsgId"
   currentProtocolSym*   {.compileTime.} = ident "CurrentProtocol"
   resultIdent*          {.compileTime.} = ident "result"
@@ -413,13 +415,17 @@ proc identWithExportMarker*(msg: Message): NimNode =
 
 proc createSendProc*(msg: Message,
                      procType = nnkProcDef,
-                     isRawSender = false): SendProc =
+                     isRawSender = false,
+                     nameSuffix = ""): SendProc =
   # TODO: file an issue:
   # macros.newProc and macros.params doesn't work with nnkMacroDef
 
   let
-    name = if not isRawSender: msg.identWithExportMarker
-           else: ident($msg.ident & "RawSender")
+    nameSuffix = if nameSuffix.len == 0: (if isRawSender: "RawSender" else: "")
+                 else: nameSuffix
+
+    name = if nameSuffix.len == 0: msg.identWithExportMarker
+           else: ident($msg.ident & nameSuffix)
 
     pragmas = if procType == nnkProcDef: newTree(nnkPragma, ident"gcsafe")
               else: newEmptyNode()
@@ -499,6 +505,24 @@ proc setBody*(sendProc: SendProc, body: NimNode) =
   if sendProc.extraDefs != nil:
     msg.protocol.outSendProcs.add sendProc.extraDefs
 
+proc writeParamsAsRecord*(params: openarray[NimNode],
+                          outputStream, Format, RecordType: NimNode): NimNode =
+  var
+    appendParams = newStmtList()
+    writeField = ident "writeField"
+    writer = ident "writer"
+
+  for param in params:
+    appendParams.add newCall(writeField, writer, newLit($param), param)
+
+  result = quote do:
+    mixin init, writerType, beginRecord, endRecord
+
+    var `writer` = init(WriterType(`Format`), `outputStream`)
+    var recordStartMemo = beginRecord(`writer`, `RecordType`)
+    `appendParams`
+    endRecord(`writer`, recordStartMemo)
+
 proc useStandardBody*(sendProc: SendProc,
                       preSerializationStep: proc(stream: NimNode): NimNode,
                       postSerializationStep: proc(stream: NimNode): NimNode,
@@ -507,8 +531,6 @@ proc useStandardBody*(sendProc: SendProc,
     msg = sendProc.msg
     outputStream = ident "outputStream"
     msgBytes = ident "msgBytes"
-    writer = ident "writer"
-    writeField = ident "writeField"
 
     initFuture = bindSym "initFuture"
     recipient = sendProc.peerParam
@@ -517,6 +539,9 @@ proc useStandardBody*(sendProc: SendProc,
 
     preSerialization = if preSerializationStep.isNil: newStmtList()
                        else: preSerializationStep(outputStream)
+
+    serilization = writeParamsAsRecord(sendProc.msgParams,
+                                       outputStream, Format, msgRecName)
 
     postSerialization = if postSerializationStep.isNil: newStmtList()
                         else: postSerializationStep(outputStream)
@@ -534,23 +559,38 @@ proc useStandardBody*(sendProc: SendProc,
                                                     sendProc.msgParams)
               else: newStmtList()
 
-  for param in sendProc.msgParams:
-    appendParams.add newCall(writeField, writer, newLit($param), param)
-
   sendProc.setBody quote do:
     mixin init, WriterType, beginRecord, endRecord, getOutput
 
     `initResultFuture`
     var `outputStream` = init OutputStream
     `preSerialization`
-    var `writer` = init(WriterType(`Format`), `outputStream`)
-    var recordStartMemo = beginRecord(`writer`, `msgRecName`)
-    `appendParams`
-    `tracing`
-    endRecord(`writer`, recordStartMemo)
+    `serilization`
     `postSerialization`
+    `tracing`
     let `msgBytes` = getOutput(`outputStream`)
     `sendCall`
+
+proc correctSerializerProcParams(params: NimNode) =
+  # A serializer proc is just like a send proc, but:
+  # 1. it has a void return type
+  params[0] = ident "void"
+  # 2. The peer params is replaced with OutputStream
+  params[1] = newIdentDefs(streamVar, bindSym "OutputStreamVar")
+  # 3. The timeout param is removed
+  params.del(params.len - 1)
+
+proc createSerializer*(msg: Message, procType = nnkProcDef): NimNode =
+  var serializer = msg.createSendProc(procType, nameSuffix = "Serializer")
+  correctSerializerProcParams serializer.def.params
+
+  serializer.setBody writeParamsAsRecord(
+    serializer.msgParams,
+    streamVar,
+    msg.protocol.backend.SerializationFormat,
+    msg.recIdent)
+
+  return serializer.def
 
 proc defineThunk*(msg: Message, thunk: NimNode) =
   let protocol = msg.protocol
@@ -580,6 +620,11 @@ proc appendAllParams*(node: NimNode, procDef: NimNode, skipFirst = 0): NimNode =
   result = node
   for p, _ in procDef.typedParams(skip = skipFirst):
     result.add p
+
+proc paramNames*(procDef: NimNode, skipFirst = 0): seq[NimNode] =
+  result = newSeq[NimNode]()
+  for name, _ in procDef.typedParams(skip = skipFirst):
+    result.add name
 
 proc netInit*(p: P2PProtocol): NimNode =
   if p.NetworkStateType == nil:
