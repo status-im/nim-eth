@@ -186,12 +186,44 @@ let
     data: repeat(byte 9, 256), nonce: 1010102)
 
 suite "Whisper envelope":
-  test "should use correct fields for pow hash":
-    # XXX checked with parity, should check with geth too - found a potential bug
-    #     in parity while playing with it:
-    #     https://github.com/paritytech/parity-ethereum/issues/9625
-    check $calcPowHash(env0) ==
-      "A13B48480AEB3123CD2358516E2E8EE9FCB0F4CB37E68CD09FDF7F9A7E14767C"
+
+  proc hashAndPow(env: Envelope): (string, float64) =
+    # This is the current implementation of go-ethereum
+    let size = env.toShortRlp().len().uint32
+    # This is our current implementation in `whisper_protocol.nim`
+    # let size = env.len().uint32
+    # This is the EIP-627 specification
+    # let size = env.toRlp().len().uint32
+    let hash = env.calcPowHash()
+    ($hash, calcPow(size, env.ttl, hash))
+
+  test "PoW calculation leading zeroes tests":
+    # Test values from Parity, in message.rs
+    let testHashes = [
+      # 256 leading zeroes
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      # 255 leading zeroes
+      "0x0000000000000000000000000000000000000000000000000000000000000001",
+      # no leading zeroes
+      "0xff00000000000000000000000000000000000000000000000000000000000000"
+    ]
+    check:
+      calcPow(1, 1, Hash.fromHex(testHashes[0])) ==
+        115792089237316200000000000000000000000000000000000000000000000000000000000000.0
+      calcPow(1, 1, Hash.fromHex(testHashes[1])) ==
+        57896044618658100000000000000000000000000000000000000000000000000000000000000.0
+      calcPow(1, 1, Hash.fromHex(testHashes[2])) == 1.0
+
+    # Test values from go-ethereum whisperv6 in envelope_test
+    var env = Envelope(ttl: 1, data: @[byte 0xde, 0xad, 0xbe, 0xef])
+    # PoW calculation with no leading zeroes
+    env.nonce = 100000
+    check hashAndPoW(env) == ("A788E02A95BFC673709E97CA81E39CA903BAD5638D3388964C51EB64952172D6",
+                              0.07692307692307693)
+    # PoW calculation with 8 leading zeroes
+    env.nonce = 276
+    check hashAndPoW(env) == ("00E2374C6353C243E4073E209A7F2ACB2506522AF318B3B78CF9A88310A2A11C",
+                              19.692307692307693)
 
   test "should validate and allow envelope according to config":
     let ttl = 1'u32
@@ -349,15 +381,15 @@ suite "Whisper filter":
     # this message has a PoW of 0.02962962962962963, number should be updated
     # in case PoW algorithm changes or contents of padding, payload, topic, etc.
     # update: now with NON rlp encoded envelope size the PoW of this message is
-    # 0.02898550724637681
+    # 0.014492753623188406
     let msg = prepFilterTestMsg(topic = topic, padding = padding)
 
     var filters = initTable[string, Filter]()
     let
       filterId1 = filters.subscribeFilter(
-                    newFilter(topics = @[topic], powReq = 0.02898550724637681))
+                    newFilter(topics = @[topic], powReq = 0.014492753623188406))
       filterId2 = filters.subscribeFilter(
-                    newFilter(topics = @[topic], powReq = 0.02898550724637682))
+                    newFilter(topics = @[topic], powReq = 0.014492753623188407))
 
     notify(filters, msg)
 
