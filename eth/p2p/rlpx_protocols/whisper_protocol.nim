@@ -155,12 +155,12 @@ proc leadingZeroBits(hash: MDigest): int =
       result += countLeadingZeroBits(h)
       break
 
-proc calcPow(size, ttl: uint64, hash: Hash): float64 =
+proc calcPow*(size, ttl: uint64, hash: Hash): float64 =
   ## Whisper proof-of-work is defined as the best bit of a hash divided by
   ## encoded size and time-to-live, such that large and long-lived messages get
   ## penalized
 
-  let bits = leadingZeroBits(hash) + 1
+  let bits = leadingZeroBits(hash)
   return pow(2.0, bits.float64) / (size.float64 * ttl.float64)
 
 proc topicBloom*(topic: Topic): Bloom =
@@ -431,7 +431,7 @@ proc valid*(self: Envelope, now = epochTime()): bool =
 
 proc len(self: Envelope): int = 20 + self.data.len
 
-proc toShortRlp(self: Envelope): Bytes =
+proc toShortRlp*(self: Envelope): Bytes =
   ## RLP-encoded message without nonce is used during proof-of-work calculations
   rlp.encodeList(self.expiry, self.ttl, self.topic, self.data)
 
@@ -458,7 +458,7 @@ proc minePow*(self: Envelope, seconds: float, bestBitTarget: int = 0): (uint64, 
     tmp.update(i.toBE())
     # XXX:a random nonce here would not leak number of iters
     let hash = tmp.finish()
-    let zeroBits = leadingZeroBits(hash) + 1
+    let zeroBits = leadingZeroBits(hash)
     if zeroBits > bestBit: # XXX: could also compare hashes as numbers instead
       bestBit = zeroBits
       result = (i, hash)
@@ -494,7 +494,7 @@ proc initMessage*(env: Envelope, powCalc = true): Message =
   if powCalc:
     result.hash = env.calcPowHash()
     result.pow = calcPow(result.env.len.uint32, result.env.ttl, result.hash)
-    trace "Message PoW", pow = result.pow
+    trace "Message PoW", pow = result.pow.formatFloat(ffScientific)
 
 proc hash*(msg: Message): hashes.Hash = hash(msg.hash.data)
 
@@ -515,16 +515,18 @@ proc allowed*(msg: Message, config: WhisperConfig): bool =
 
   return true
 
-# NOTE: PoW calculations are different from go-ethereum implementation,
-# which is not conform EIP-627.
-# See here: https://github.com/ethereum/go-ethereum/issues/18070
-# However, this implementation is also not conform EIP-627 as we do not use the
-# size of the RLP-encoded envelope, but the size of the envelope object itself.
+# NOTE: Hashing and leading zeroes calculation is now the same between geth,
+# parity and this implementation.
+# However, there is still a difference in the size calculation.
+# See also here: https://github.com/ethereum/go-ethereum/pull/19753
+# This implementation is not conform EIP-627 as we do not use the size of the
+# RLP-encoded envelope, but the size of the envelope object itself.
 # This is done to be able to correctly calculate the bestBitTarget.
 # Other options would be:
 # - work directly with powTarget in minePow, but this requires recalculation of
 #   rlp size + calcPow
 # - Use worst case size of envelope nonce
+# - Mine PoW for x interval, calcPow of best result, if target not met .. repeat
 proc sealEnvelope(msg: var Message, powTime: float, powTarget: float): bool =
   let size = msg.env.len
   if powTarget > 0:
