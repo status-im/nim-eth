@@ -3,7 +3,7 @@
 
 import
   os, tables, times, random, sequtils, options,
-  chronos, chronicles, eth/[rlp, keys],
+  chronos, chronicles, eth/[rlp, keys, common],
   private/p2p_types, discovery, kademlia, rlpx
 
 const
@@ -110,6 +110,7 @@ proc getRandomBootnode(p: PeerPool): Option[Node] =
 proc addPeer*(pool: PeerPool, peer: Peer) =
   doAssert(peer.remote notin pool.connectedNodes)
   pool.connectedNodes[peer.remote] = peer
+  inc(nimbusStats.num_peers)
   for o in pool.observers.values:
     if not o.onPeerConnected.isNil:
       if o.protocol.isNil or peer.supports(o.protocol):
