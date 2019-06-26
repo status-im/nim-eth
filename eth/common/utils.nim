@@ -8,3 +8,5 @@ proc parseAddress*(hexString: string): EthAddress =
 proc `$`*(a: EthAddress): string =
   a.toHex()
 
+var nimbusStats*: NimbusStats
+

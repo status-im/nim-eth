@@ -787,8 +787,9 @@ proc removePeer(network: EthereumNode, peer: Peer) =
   # have been dropped already from the peers side.
   # E.g. when receiving a p2p.disconnect message from a peer, a race will happen
   # between which side disconnects first.
-  if network.peerPool != nil and not peer.remote.isNil:
+  if network.peerPool != nil and not peer.remote.isNil and peer.remote in network.peerPool.connectedNodes:
     network.peerPool.connectedNodes.del(peer.remote)
+    dec(nimbusStats.num_peers)
 
     # Note: we need to do this check as disconnect (and thus removePeer)
     # currently can get called before the dispatcher is initialized.
