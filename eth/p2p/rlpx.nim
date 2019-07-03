@@ -20,6 +20,8 @@ type
 
   ResponderWithoutId*[MsgType] = distinct Peer
 
+  EmptyList = object
+
 const
   devp2pVersion* = 4
   maxMsgSize = 1024 * 1024
@@ -777,10 +779,13 @@ p2pProtocol devp2p(version = 0, shortName = "p2p"):
 
   proc sendDisconnectMsg(peer: Peer, reason: DisconnectionReason)
 
-  proc ping(peer: Peer) =
-    discard peer.pong()
+  # Adding an empty RLP list as the spec defines.
+  # The parity client specifically checks if there is rlp data.
+  # TODO: can we do this in the macro instead?
+  proc ping(peer: Peer, emptyList: EmptyList) =
+    discard peer.pong(EmptyList())
 
-  proc pong(peer: Peer) =
+  proc pong(peer: Peer, emptyList: EmptyList) =
     discard
 
 proc removePeer(network: EthereumNode, peer: Peer) =
