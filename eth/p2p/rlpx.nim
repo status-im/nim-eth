@@ -23,7 +23,7 @@ type
 const
   devp2pVersion* = 4
   maxMsgSize = 1024 * 1024
-  HandshakeTimeout = BreachOfProtocol
+  HandshakeTimeout = MessageTimeout
 
 include p2p_tracing
 
@@ -429,12 +429,11 @@ proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type): auto {.inline.} =
     try:
       return r.read(MsgType)
     except:
-      # echo "Failed rlp.read:", tmp.inspect
       debug "Failed rlp.read",
             peer = peer,
-            msg = MsgType.name,
+            dataType = MsgType.name,
             exception = getCurrentExceptionMsg()
-            # dataHex = r.rawData.toSeq().toHex()
+            # rlpData = r.inspect
 
       raise
 
@@ -455,6 +454,7 @@ proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
     elif nextMsgId == 1: # p2p.disconnect
       let reason = DisconnectionReason nextMsgData.listElem(0).toInt(uint32)
       await peer.disconnect(reason)
+      trace "disconnect message received in waitSingleMsg", reason, peer
       raisePeerDisconnected("Unexpected disconnect", reason)
     else:
       warn "Dropped RLPX message",
@@ -509,6 +509,7 @@ proc dispatchMessages*(peer: Peer) {.async.} =
 
     if msgId == 1: # p2p.disconnect
       let reason = msgData.listElem(0).toInt(uint32).DisconnectionReason
+      trace "disconnect message received in dispatchMessages", reason, peer
       await peer.disconnect(reason, false)
       break
 
@@ -1004,13 +1005,19 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     if not validatePubKeyInHello(response, remote.node.pubKey):
       warn "Remote nodeId is not its public key" # XXX: Do we care?
 
+    trace "devp2p handshake completed", peer = remote,
+      clientId = response.clientId
+
     await postHelloSteps(result, response)
     ok = true
+    trace "Peer fully connected", peer = remote, clientId = response.clientId
   except PeerDisconnected as e:
-    if e.reason == AlreadyConnected or e.reason == TooManyPeers:
-      trace "Disconnect during rlpxAccept", reason = e.reason
+    case e.reason
+    of AlreadyConnected, TooManyPeers, MessageTimeout:
+      trace "Disconnect during rlpxConnect", reason = e.reason, peer = remote
     else:
-      debug "Unexpected disconnect during rlpxAccept", reason = e.reason
+      debug "Unexpected disconnect during rlpxConnect", reason = e.reason,
+        msg = e.msg, peer = remote
   except TransportIncompleteError:
     trace "Connection dropped in rlpxConnect", remote
   except UselessPeerError:
@@ -1086,6 +1093,8 @@ proc rlpxAccept*(node: EthereumNode,
       result.waitSingleMsg(devp2p.hello),
       10.seconds)
 
+    trace "Received Hello", version=response.version, id=response.clientId
+
     if not validatePubKeyInHello(response, handshake.remoteHPubkey):
       warn "A Remote nodeId is not its public key" # XXX: Do we care?
 
@@ -1093,6 +1102,9 @@ proc rlpxAccept*(node: EthereumNode,
     let address = Address(ip: remote.address, tcpPort: remote.port,
                           udpPort: remote.port)
     result.remote = newNode(initEnode(handshake.remoteHPubkey, address))
+
+    trace "devp2p handshake completed", peer = result.remote,
+      clientId = response.clientId
 
     # In case there is an outgoing connection started with this peer we give
     # precedence to that one and we disconnect here with `AlreadyConnected`
@@ -1106,11 +1118,14 @@ proc rlpxAccept*(node: EthereumNode,
 
     await postHelloSteps(result, response)
     ok = true
+    trace "Peer fully connected", peer = result.remote, clientId = response.clientId
   except PeerDisconnected as e:
-    if e.reason == AlreadyConnected or e.reason == TooManyPeers:
-      trace "Disconnect during rlpxAccept", reason = e.reason
-    else:
-      debug "Unexpected disconnect during rlpxAccept", reason = e.reason
+    case e.reason
+      of AlreadyConnected, TooManyPeers, MessageTimeout:
+        trace "Disconnect during rlpxAccept", reason = e.reason, peer = result.remote
+      else:
+        debug "Unexpected disconnect during rlpxAccept", reason = e.reason,
+          msg = e.msg, peer = result.remote
   except TransportIncompleteError:
     trace "Connection dropped in rlpxAccept", remote = result.remote
   except UselessPeerError:
