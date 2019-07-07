@@ -8,7 +8,7 @@
 #
 
 import
-  sequtils, unittest, chronos, byteutils,
+  sequtils, unittest, chronos, stew/byteutils,
   eth/[keys, rlp], eth/p2p/[discovery, kademlia, enode],
   ./p2p_test_helper
 

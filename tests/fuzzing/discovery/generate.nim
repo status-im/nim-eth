@@ -1,5 +1,5 @@
 import
-  chronos, times, byteutils, stint, chronicles, streams, nimcrypto, os,
+  chronos, times, stew/byteutils, stint, chronicles, streams, nimcrypto, os,
   strformat, strutils, eth/p2p/[discovery, kademlia], eth/[keys, rlp],
   ../../p2p/p2p_test_helper
 
