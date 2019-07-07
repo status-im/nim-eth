@@ -1,4 +1,4 @@
-import os, rocksdb, ranges, eth/trie/[trie_defs, db_tracing]
+import os, rocksdb, stew/ranges, eth/trie/[trie_defs, db_tracing]
 import backend_defs
 
 type

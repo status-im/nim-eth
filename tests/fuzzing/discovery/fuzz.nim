@@ -1,5 +1,5 @@
 import
-  streams, posix, sequtils, strutils, chronicles, chronos, byteutils,
+  streams, posix, sequtils, strutils, chronicles, chronos, stew/byteutils,
   eth/p2p/[discovery, kademlia, enode], eth/[keys, rlp],
   ../../p2p/p2p_test_helper
 

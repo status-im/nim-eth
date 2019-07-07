@@ -10,7 +10,7 @@
 
 ## This module implements RLPx cryptography
 
-import ranges/stackarrays, eth/rlp/types, nimcrypto
+import stew/ranges/stackarrays, eth/rlp/types, nimcrypto
 from auth import ConnectionSecret
 
 const

@@ -1,4 +1,4 @@
-import ranges
+import stew/ranges
 export ranges
 
 type

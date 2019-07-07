@@ -1,4 +1,4 @@
-import os, ranges, eth/trie/[trie_defs, db_tracing]
+import os, stew/ranges, eth/trie/[trie_defs, db_tracing]
 import backend_defs
 
 when defined(windows):
@@ -157,7 +157,7 @@ proc newChainDB*(basePath: string, readOnly = false): ChainDB =
 
   ok = mdb_env_set_mapsize(result.env, LMDB_MAP_SIZE) == 0
   if not ok: raiseStorageInitError()
-  
+
   var openFlags = MDB_NOSUBDIR
   if readOnly: openFlags = openFlags or MDB_RDONLY
   # file mode ignored on windows

@@ -1,5 +1,5 @@
 import
-  ranges/[typedranges, bitranges],
+  stew/ranges/[typedranges, bitranges],
   trie_defs, db, trie_utils
 
 const

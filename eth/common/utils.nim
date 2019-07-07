@@ -1,4 +1,4 @@
-import nimcrypto, hashes, byteutils, eth_types
+import nimcrypto, hashes, stew/byteutils, eth_types
 
 proc hash*(d: MDigest): Hash {.inline.} = hash(d.data)
 

@@ -311,7 +311,7 @@ proc randomNodes*(d: DiscoveryProtocol, count: int): seq[Node] {.inline.} =
   d.kademlia.randomNodes(count)
 
 when isMainModule:
-  import logging, byteutils
+  import logging, stew/byteutils
 
   addHandler(newConsoleLogger())
 

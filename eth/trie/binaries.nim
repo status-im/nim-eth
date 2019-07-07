@@ -1,6 +1,6 @@
 import
   sequtils,
-  ranges/[ptr_arith, bitranges], eth/rlp/types
+  stew/ranges/[ptr_arith, bitranges], eth/rlp/types
 
 type
   TrieNodeKind* = enum

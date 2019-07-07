@@ -1,6 +1,6 @@
 import
-  macros, tables, algorithm, deques, hashes, options, typetraits,
-  std_shims/macros_shim, chronicles, nimcrypto, chronos, eth/[rlp, common, keys, async_utils],
+  tables, algorithm, deques, hashes, options, typetraits,
+  stew/shims/macros, chronicles, nimcrypto, chronos, eth/[rlp, common, keys, async_utils],
   private/p2p_types, kademlia, auth, rlpxcrypt, enode, p2p_protocol_dsl
 
 when useSnappy:

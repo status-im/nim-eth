@@ -1,6 +1,6 @@
 import
   unittest, strutils,
-  ranges/bitranges, eth/rlp/types, nimcrypto/[keccak, hash],
+  stew/ranges/bitranges, eth/rlp/types, nimcrypto/[keccak, hash],
   eth/trie/[binaries, trie_utils],
   ./testutils
 

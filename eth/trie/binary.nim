@@ -1,5 +1,5 @@
 import
-  ranges/[ptr_arith, typedranges, bitranges], eth/rlp/types,
+  stew/ranges/[ptr_arith, typedranges, bitranges], eth/rlp/types,
   trie_defs, db, binaries, trie_utils
 
 export

@@ -1,6 +1,6 @@
 import
   strutils, parseutils,
-  ranges/[typedranges, ptr_arith], nimcrypto/[hash, keccak],
+  stew/ranges/[typedranges, ptr_arith], nimcrypto/[hash, keccak],
   trie_defs, binaries
 
 #proc baseAddr*(x: Bytes): ptr byte = x[0].unsafeAddr

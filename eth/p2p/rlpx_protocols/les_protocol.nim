@@ -9,7 +9,7 @@
 #
 
 import
-  times, tables, options, sets, hashes, strutils, std_shims/macros_shim,
+  times, tables, options, sets, hashes, strutils, stew/shims/macros,
   chronicles, chronos, nimcrypto/[keccak, hash],
   eth/[rlp, keys], eth/common/eth_types,
   ../rlpx, ../kademlia, ../private/p2p_types, ../blockchain_utils,

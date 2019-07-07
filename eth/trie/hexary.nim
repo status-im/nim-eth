@@ -1,6 +1,6 @@
 import
   tables,
-  nimcrypto/[keccak, hash, utils], ranges/ptr_arith, eth/rlp,
+  nimcrypto/[keccak, hash, utils], stew/ranges/ptr_arith, eth/rlp,
   trie_defs, nibbles, trie_utils as trieUtils, db
 
 type

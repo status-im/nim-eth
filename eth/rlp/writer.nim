@@ -1,6 +1,6 @@
 import
   macros, types,
-  ranges/[memranges, ptr_arith],
+  stew/ranges/[memranges, ptr_arith],
   object_serialization, priv/defs
 
 export

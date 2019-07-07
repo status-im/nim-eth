@@ -1,6 +1,6 @@
 import
   random, sets, eth/trie/trie_utils as ethUtils,
-  eth/rlp/types as rlpTypes, ranges/bitranges,
+  eth/rlp/types as rlpTypes, stew/ranges/bitranges,
   nimcrypto/[utils, sysrand]
 
 type

@@ -6,14 +6,12 @@ skipDirs      = @["tests"]
 
 requires "nim >= 0.19.0",
          "nimcrypto",
-         "ranges",
          "stint",
-         "byteutils",
          "secp256k1",
          "rocksdb",
          "chronos",
          "chronicles",
-         "std_shims",
+         "stew",
          "result",
          "nat_traversal"
 

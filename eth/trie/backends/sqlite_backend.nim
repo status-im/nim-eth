@@ -1,5 +1,5 @@
 import
-  os, sqlite3, ranges, ranges/ptr_arith, eth/trie/[db_tracing, trie_defs],
+  os, sqlite3, stew/ranges, stew/ranges/ptr_arith, eth/trie/[db_tracing, trie_defs],
   backend_defs
 
 type

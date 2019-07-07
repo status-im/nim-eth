@@ -1,5 +1,5 @@
 import
-  eth/rlp/types, ranges/bitranges,
+  eth/rlp/types, stew/ranges/bitranges,
   trie_defs, binary, binaries, db, trie_utils
 
 type

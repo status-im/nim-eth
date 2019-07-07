@@ -1,5 +1,5 @@
 import
-  eth/rlp, ranges/typedranges, nimcrypto/hash
+  eth/rlp, stew/ranges/typedranges, nimcrypto/hash
 
 export
   typedranges, Bytes
