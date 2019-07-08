@@ -91,8 +91,7 @@ p2pProtocol eth(version = protocolVersion,
         await peer.disconnect(BreachOfProtocol)
         return
 
-      # TODO: implement `getBlockBodies` and reactivate this code
-      # await response.send(peer.network.chain.getBlockBodies(hashes))
+      await response.send(peer.network.chain.getBlockBodies(hashes))
 
     proc blockBodies(peer: Peer, blocks: openarray[BlockBody])
 

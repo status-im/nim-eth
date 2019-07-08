@@ -345,7 +345,10 @@ proc getBlockHeader*(db: AbstractChainDB, b: BlockNumber): BlockHeaderRef {.gcsa
 method getBestBlockHeader*(self: AbstractChainDB): BlockHeader {.base, gcsafe.} =
   notImplemented()
 
-method getSuccessorHeader*(db: AbstractChainDB, h: BlockHeader, output: var BlockHeader): bool {.base, gcsafe.} =
+method getSuccessorHeader*(db: AbstractChainDB, h: BlockHeader, output: var BlockHeader, skip = 0'u): bool {.base, gcsafe.} =
+  notImplemented()
+
+method getAncestorHeader*(db: AbstractChainDB, h: BlockHeader, output: var BlockHeader, skip = 0'u): bool {.base, gcsafe.} =
   notImplemented()
 
 method getBlockBody*(db: AbstractChainDB, blockHash: KeccakHash): BlockBodyRef {.base, gcsafe.} =
