@@ -12,8 +12,12 @@ proc getBlockHeaders*(db: AbstractChainDB,
     result.add foundBlock
 
     while uint64(result.len) < req.maxResults:
-      if not db.getSuccessorHeader(foundBlock, foundBlock):
-        break
+      if not req.reverse:
+        if not db.getSuccessorHeader(foundBlock, foundBlock, req.skip):
+          break
+      else:
+        if not db.getAncestorHeader(foundBlock, foundBlock, req.skip):
+          break
       result.add foundBlock
 
 template fetcher*(fetcherName, fetchingFunc, InputType, ResultType: untyped) =
