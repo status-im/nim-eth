@@ -1,4 +1,6 @@
-import nimcrypto, hashes, stew/byteutils, eth_types
+import nimcrypto, hashes, stew/byteutils, eth_types, metrics
+
+export metrics
 
 proc hash*(d: MDigest): Hash {.inline.} = hash(d.data)
 
@@ -8,5 +10,5 @@ proc parseAddress*(hexString: string): EthAddress =
 proc `$`*(a: EthAddress): string =
   a.toHex()
 
-var nimbusStats*: NimbusStats
+var peerGauge* = newGauge("connected peers", "number of peers in the pool")
 

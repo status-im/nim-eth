@@ -168,9 +168,6 @@ type
     OK
     Error
 
-  NimbusStats* = object
-    num_peers*: int
-
 when BlockNumber is int64:
   ## The goal of these templates is to make it easier to switch
   ## the block number type to a different representation

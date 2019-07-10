@@ -107,10 +107,11 @@ proc getRandomBootnode(p: PeerPool): Option[Node] =
   if p.discovery.bootstrapNodes.len != 0:
     result = option(p.discovery.bootstrapNodes.rand())
 
-proc addPeer*(pool: PeerPool, peer: Peer) =
+proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe.} =
   doAssert(peer.remote notin pool.connectedNodes)
   pool.connectedNodes[peer.remote] = peer
-  inc(nimbusStats.num_peers)
+  {.gcsafe.}:
+    peerGauge.inc()
   for o in pool.observers.values:
     if not o.onPeerConnected.isNil:
       if o.protocol.isNil or peer.supports(o.protocol):
