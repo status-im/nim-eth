@@ -40,7 +40,7 @@ proc hash*(p: Peer): Hash {.inline.} = hash(cast[pointer](p))
 
 proc endIndex(b: WantedBlocks): BlockNumber =
   result = b.startIndex
-  result += (b.numBlocks - 1).u256
+  result += (b.numBlocks - 1).toBlockNumber
 
 proc availableWorkItem(ctx: SyncContext): int =
   var maxPendingBlock = ctx.finalizedBlock

@@ -180,6 +180,12 @@ when BlockNumber is int64:
   template toBlockNumber*(n: SomeInteger): BlockNumber =
     int64(n)
 
+  template toBlockNumber*(n: UInt256): BlockNumber =
+    n.toInt
+
+  template toInt*(n: BlockNumber): int =
+    int(n)
+
 else:
   template vmWordToBlockNumber*(word: VMWord): BlockNumber =
     word
@@ -189,6 +195,12 @@ else:
 
   template toBlockNumber*(n: SomeInteger): BlockNumber =
     u256(n)
+
+  template toBlockNumber*(n: UInt256): BlockNumber =
+    n
+
+  template u256*(n: BlockNumber): UInt256 =
+    n
 
 proc toBlockNonce*(n: uint64): BlockNonce =
   bigEndian64(addr result[0], unsafeAddr n)
@@ -303,7 +315,7 @@ proc read*(rlp: var Rlp, T: typedesc[HashOrNum]): T =
   if rlp.blobLen == 32:
     result = HashOrNum(isHash: true, hash: rlp.read(Hash256))
   else:
-    result = HashOrNum(isHash: false, number: rlp.read(UInt256))
+    result = HashOrNum(isHash: false, number: rlp.read(BlockNumber))
 
 proc append*(rlpWriter: var RlpWriter, t: Time) {.inline.} =
   rlpWriter.append(t.toUnix())
