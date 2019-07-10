@@ -10,16 +10,15 @@ proc getBlockHeaders*(db: AbstractChainDB,
   var foundBlock: BlockHeader
   if db.getBlockHeader(req.startBlock, foundBlock):
     result.add foundBlock
-    # Quick sanity check for lower bounds, code should be safe though without.
-    if not req.reverse or (foundBlock.blockNumber >= (req.skip + 1).toBlockNumber):
-      while uint64(result.len) < req.maxResults:
-        if not req.reverse:
-          if not db.getSuccessorHeader(foundBlock, foundBlock, req.skip):
-            break
-        else:
-          if not db.getAncestorHeader(foundBlock, foundBlock, req.skip):
-            break
-        result.add foundBlock
+
+    while uint64(result.len) < req.maxResults:
+      if not req.reverse:
+        if not db.getSuccessorHeader(foundBlock, foundBlock, req.skip):
+          break
+      else:
+        if not db.getAncestorHeader(foundBlock, foundBlock, req.skip):
+          break
+      result.add foundBlock
 
 
 template fetcher*(fetcherName, fetchingFunc, InputType, ResultType: untyped) =
