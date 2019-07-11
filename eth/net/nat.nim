@@ -225,10 +225,3 @@ proc redirectPorts*(tcpPort, udpPort: Port, description: string): Option[(Port, 
     # atexit() in disguise
     addQuitProc(stopNatThread)
 
-# workaround for https://github.com/nim-lang/Nim/issues/4057
-when defined(windows):
-  proc handler() {.noconv.} =
-    setupForeignThreadGc()
-    quit(1)
-  setControlCHook(handler)
-
