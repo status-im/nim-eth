@@ -24,7 +24,7 @@ type
 
 const
   devp2pVersion* = 4
-  maxMsgSize = 1024 * 1024
+  maxMsgSize = 1024 * 1024 * 10
   HandshakeTimeout = MessageTimeout
 
 include p2p_tracing
