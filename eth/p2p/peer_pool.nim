@@ -110,8 +110,7 @@ proc getRandomBootnode(p: PeerPool): Option[Node] =
 proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe.} =
   doAssert(peer.remote notin pool.connectedNodes)
   pool.connectedNodes[peer.remote] = peer
-  {.gcsafe.}:
-    peerGauge.inc()
+  connected_peers.inc()
   for o in pool.observers.values:
     if not o.onPeerConnected.isNil:
       if o.protocol.isNil or peer.supports(o.protocol):

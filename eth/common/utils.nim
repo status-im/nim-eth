@@ -10,5 +10,5 @@ proc parseAddress*(hexString: string): EthAddress =
 proc `$`*(a: EthAddress): string =
   a.toHex()
 
-var peerGauge* = newGauge("connected_peers", "number of peers in the pool")
+newPublicGauge(connected_peers, "number of peers in the pool")
 
