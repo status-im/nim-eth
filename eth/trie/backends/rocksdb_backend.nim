@@ -7,6 +7,10 @@ type
 
   ChainDB* = RocksChainDB
 
+# Maximum open files for rocksdb, set to 512 to be safe for usual 1024 Linux
+# limit per application
+const maxOpenFiles = 512
+
 proc get*(db: ChainDB, key: openarray[byte]): seq[byte] =
   let s = db.store.getBytes(key)
   if s.ok:
@@ -44,7 +48,8 @@ proc newChainDB*(basePath: string, readOnly = false): ChainDB =
   createDir(dataDir)
   createDir(backupsDir)
 
-  let s = result.store.init(dataDir, backupsDir, readOnly)
+  let s = result.store.init(dataDir, backupsDir, readOnly,
+                            maxOpenFiles = maxOpenFiles)
   if not s.ok: raiseStorageInitError()
 
   if not readOnly:
