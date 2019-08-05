@@ -359,7 +359,7 @@ when defined(testing):
   proc isMax(s: FlowControlState): bool =
     s.bufValue == s.bufLimit
 
-  p2pProtocol dummyLes(version = 1, shortName = "abc"):
+  p2pProtocol dummyLes(version = 1, rlpxName = "abc"):
     proc a(p: Peer)
     proc b(p: Peer)
     proc c(p: Peer)

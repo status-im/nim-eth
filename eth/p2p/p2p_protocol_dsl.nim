@@ -59,7 +59,7 @@ type
     version*: int
     timeouts*: int64
     useRequestIds*: bool
-    shortName*: string
+    rlpxName*: string
     outgoingRequestDecorator*: NimNode
     incomingRequestDecorator*: NimNode
     incomingRequestThunkDecorator*: NimNode
@@ -219,7 +219,7 @@ proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode)
 
 proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
            name: string, version: int, body: NimNode,
-           timeouts: int64, useRequestIds: bool, shortName: string,
+           timeouts: int64, useRequestIds: bool, rlpxName: string,
            outgoingRequestDecorator: NimNode,
            incomingRequestDecorator: NimNode,
            incomingRequestThunkDecorator: NimNode,
@@ -232,7 +232,7 @@ proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
     version: version,
     timeouts: timeouts,
     useRequestIds: useRequestIds,
-    shortName: shortName,
+    rlpxName: rlpxName,
     outgoingRequestDecorator: outgoingRequestDecorator,
     incomingRequestDecorator: incomingRequestDecorator,
     incomingRequestThunkDecorator: incomingRequestThunkDecorator,
@@ -510,18 +510,21 @@ proc writeParamsAsRecord*(params: openarray[NimNode],
   var
     appendParams = newStmtList()
     writeField = ident "writeField"
+    recordWriterCtx = ident "recordWriterCtx"
     writer = ident "writer"
 
   for param in params:
-    appendParams.add newCall(writeField, writer, newLit($param), param)
+    appendParams.add newCall(writeField,
+                             writer, recordWriterCtx,
+                             newLit($param), param)
 
   result = quote do:
     mixin init, writerType, beginRecord, endRecord
 
     var `writer` = init(WriterType(`Format`), `outputStream`)
-    var recordStartMemo = beginRecord(`writer`, `RecordType`)
+    var `recordWriterCtx` = beginRecord(`writer`, `RecordType`)
     `appendParams`
-    endRecord(`writer`, recordStartMemo)
+    endRecord(`writer`, `recordWriterCtx`)
 
 proc useStandardBody*(sendProc: SendProc,
                       preSerializationStep: proc(stream: NimNode): NimNode,
@@ -839,7 +842,7 @@ macro emitForSingleBackend(
     # TODO Nim can't handle a proper duration paramter here
     timeouts: static[int64] = defaultReqTimeout.milliseconds,
     useRequestIds: static[bool] = true,
-    shortName: static[string] = "",
+    rlpxName: static[string] = "",
     outgoingRequestDecorator: untyped = nil,
     incomingRequestDecorator: untyped = nil,
     incomingRequestThunkDecorator: untyped = nil,
@@ -851,7 +854,7 @@ macro emitForSingleBackend(
   var p = P2PProtocol.init(
     backend,
     name, version, body, timeouts,
-    useRequestIds, shortName,
+    useRequestIds, rlpxName,
     outgoingRequestDecorator,
     incomingRequestDecorator,
     incomingRequestThunkDecorator,

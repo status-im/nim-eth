@@ -579,9 +579,9 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
 
     isSubprotocol = protocol.version > 0
 
-  if protocol.shortName.len == 0: protocol.shortName = protocol.name
+  if protocol.rlpxName.len == 0: protocol.rlpxName = protocol.name
   # By convention, all Ethereum protocol names must be abbreviated to 3 letters
-  doAssert protocol.shortName.len == 3
+  doAssert protocol.rlpxName.len == 3
 
   new result
 
@@ -765,11 +765,11 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
 
   result.implementProtocolInit = proc (protocol: P2PProtocol): NimNode =
     return newCall(initProtocol,
-                   newLit(protocol.shortName),
+                   newLit(protocol.rlpxName),
                    newLit(protocol.version),
                    protocol.peerInit, protocol.netInit)
 
-p2pProtocol devp2p(version = 0, shortName = "p2p"):
+p2pProtocol devp2p(version = 0, rlpxName = "p2p"):
   proc hello(peer: Peer,
              version: uint,
              clientId: string,

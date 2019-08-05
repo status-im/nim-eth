@@ -725,7 +725,7 @@ proc initProtocolState*(network: WhisperNetwork, node: EthereumNode) {.gcsafe.} 
   asyncCheck node.run(network)
 
 p2pProtocol Whisper(version = whisperVersion,
-                    shortName = "shh",
+                    rlpxName = "shh",
                     peerState = WhisperPeer,
                     networkState = WhisperNetwork):
 

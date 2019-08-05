@@ -16,7 +16,7 @@ type
     count*: int
 
 p2pProtocol abc(version = 1,
-                shortName = "abc",
+                rlpxName = "abc",
                 networkState = network):
 
   onPeerConnected do (peer: Peer):
@@ -28,7 +28,7 @@ p2pProtocol abc(version = 1,
       raise newException(CatchableError, "Fake abc exception")
 
 p2pProtocol xyz(version = 1,
-                shortName = "xyz",
+                rlpxName = "xyz",
                 networkState = network):
 
   onPeerConnected do (peer: Peer):
@@ -40,7 +40,7 @@ p2pProtocol xyz(version = 1,
       raise newException(CatchableError, "Fake xyz exception")
 
 p2pProtocol hah(version = 1,
-                shortName = "hah",
+                rlpxName = "hah",
                 networkState = network):
 
   onPeerConnected do (peer: Peer):
