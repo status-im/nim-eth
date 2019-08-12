@@ -7,8 +7,9 @@
 # those terms.
 
 import
-  net, options, os, strutils, times,
-  result, nat_traversal/[miniupnpc, natpmp], chronicles
+  options, os, strutils, times,
+  result, nat_traversal/[miniupnpc, natpmp],
+  chronicles, json_serialization/std/net
 
 type
   NatStrategy* = enum
