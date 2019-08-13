@@ -37,7 +37,7 @@ proc append(rlpWriter: var RlpWriter, t: TransHashObj, a: EthAddress) {.inline.}
     rlpWriter.append(a)
 
 const
-  EIP155_CHAIN_ID_OFFSET = 35
+  EIP155_CHAIN_ID_OFFSET* = 35
 
 func rlpEncode*(transaction: Transaction): auto =
   # Encode transaction without signature
