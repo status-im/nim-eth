@@ -1,11 +1,11 @@
-# p2p
+## p2p
 
-## Introduction
+### Introduction
 
 This library implements the DevP2P family of networking protocols used
 in the Ethereum world.
 
-## Connecting to the Ethereum network
+### Connecting to the Ethereum network
 
 A connection to the Ethereum network can be created by instantiating
 the `EthereumNode` type:
@@ -76,7 +76,7 @@ The `EthereumNode` will automatically find and maintan a pool of peers
 using the Ethereum node discovery protocol. You can access the pool as
 `node.peers`.
 
-## Communicating with Peers using RLPx
+### Communicating with Peers using RLPx
 
 [RLPx](https://github.com/ethereum/devp2p/blob/master/rlpx.md) is the
 high-level protocol for exchanging messages between peers in the Ethereum
@@ -94,7 +94,7 @@ others fit the request/response pattern.
 To understand more about how messages are defined and used, let's look at
 the definition of a RLPx protocol:
 
-### RLPx sub-protocols
+#### RLPx sub-protocols
 
 The sub-protocols are defined with the `p2pProtocol` macro. It will accept
 a 3-letter identifier for the protocol and the current protocol version:
@@ -124,7 +124,7 @@ As seen in the example above, a protocol definition determines both the
 available messages that can be sent to another peer (e.g. as in `peer.pong()`)
 and the asynchronous code responsible for handling the incoming messages.
 
-### Protocol state
+#### Protocol state
 
 The protocol implementations are expected to maintain a state and to act
 like a state machine handling the incoming messages. You are allowed to
@@ -171,7 +171,7 @@ be more convenient to use more imperative style of communication where the
 code is able to wait for a particular response after sending a particular
 request. The library provides two mechanisms for achieving this:
 
-### Waiting particular messages with `nextMsg`
+#### Waiting particular messages with `nextMsg`
 
 The `nextMsg` helper proc can be used to pause the execution of an async
 proc until a particular incoming message from a peer arrives:
@@ -205,7 +205,7 @@ place). If there are multiple outstanding calls to `nextMsg`, they will
 complete together. Any other messages received in the meantime will still
 be dispatched to their respective handlers.
 
-### `requestResponse` pairs
+#### `requestResponse` pairs
 
 ``` nim
 p2pProtocol les(version = 2):
@@ -243,7 +243,7 @@ parameter as used in the [LES protocol](https://github.com/zsfelfoldi/go-ethereu
 but you can disable this behavior by overriding the protocol setting
 `useRequestIds`.
 
-### Implementing handshakes and reacting to other events
+#### Implementing handshakes and reacting to other events
 
 Besides message definitions and implementations, a protocol specification may
 also include handlers for certain important events such as newly connected
@@ -269,7 +269,7 @@ p2pProtocol les(version = 2):
 calls fails, the client will be disconnected as `UselessPeer` but no
 `onPeerDisconnect` calls are run.
 
-### Checking the other peer's supported sub-protocols
+#### Checking the other peer's supported sub-protocols
 
 Upon establishing a connection, RLPx will automatically negotiate the list of
 mutually supported protocols by the peers. To check whether a particular peer
