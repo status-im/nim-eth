@@ -4,8 +4,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
 
+## Introduction
 
-# Docs
+Ethereum-related utilities written in Nim. Includes things like Bloom filters, private/public key utilities, RLP, devp2p, and more.
+
+## Docs
+
 - [rlp](doc/rlp.md)
 - [p2p](doc/p2p.md)
 - [keys](doc/keys.md)
