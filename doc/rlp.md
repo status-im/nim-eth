@@ -1,13 +1,13 @@
-# rlp
+## rlp
 
-## Introduction
+### Introduction
 
 A Nim implementation of the Recursive Length Prefix encoding (RLP) as specified
 in the Ethereum's [Yellow Papper](https://ethereum.github.io/yellowpaper/paper.pdf)
 and [Wiki](https://github.com/ethereum/wiki/wiki/RLP).
 
 
-## Reading RLP data
+### Reading RLP data
 
 The `Rlp` type provided by this library represents a cursor over a RLP-encoded
 byte stream. Before instantiating such a cursor, you must convert your
@@ -81,7 +81,7 @@ of the Rlp nodes by calling the `inspect` proc:
 proc inspect*(self: Rlp, indent = 0): string
 ```
 
-## Creating RLP data
+### Creating RLP data
 
 The `RlpWriter` type can be used to encode RLP data. Instances are created
 with the `initRlpWriter` proc. This should be followed by one or more calls
@@ -98,7 +98,7 @@ As an alternative short-cut, you can also call `encode` on an arbitrary value
 once and directly obtain the final RLP bytes. `encodeList(varargs)` is another
 short-cut for creating RLP lists.
 
-## Object serialization
+### Object serialization
 
 As previously explained, generic procs such as `read`, `append`, `encode` and
 `decode` can be used with arbitrary used-defined object types. By default, the
@@ -135,7 +135,7 @@ circumstances, you may need to serialize the same field type differently dependi
 on the enclosing object type. You can use the `rlpCustomSerialization` pragma to
 achieve this.
 
-## Contributing / Testing
+### Contributing / Testing
 
 To test the correctness of any modifications to the library, please execute
 `nimble test` at the root of the repo.
