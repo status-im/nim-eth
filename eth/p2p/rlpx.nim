@@ -581,7 +581,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
 
   if protocol.rlpxName.len == 0: protocol.rlpxName = protocol.name
   # By convention, all Ethereum protocol names must be abbreviated to 3 letters
-  doAssert protocol.rlpxName.len == 3
+  doAssert protocol.rlpxName.len > 2 
 
   new result
 
