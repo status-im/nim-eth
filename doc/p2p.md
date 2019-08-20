@@ -56,7 +56,7 @@ proc newEthereumNode*(keys: KeyPair,
 
   ```nim
   node.addCapability(eth)
-  node.addCapability(ssh)
+  node.addCapability(shh)
   ```
 
   Each supplied protocol identifier is a name of a protocol introduced
@@ -72,7 +72,7 @@ proc connectToNetwork*(node: var EthereumNode,
                        enableDiscovery = true)
 ```
 
-The `EthereumNode` will automatically find and maintan a pool of peers
+The `EthereumNode` will automatically find and maintain a pool of peers
 using the Ethereum node discovery protocol. You can access the pool as
 `node.peers`.
 
@@ -99,7 +99,7 @@ the definition of a RLPx protocol:
 The sub-protocols are defined with the `p2pProtocol` macro. It will accept
 a 3-letter identifier for the protocol and the current protocol version:
 
-Here is how the [DevP2P wire protocol](https://github.com/ethereum/wiki/wiki/%C3%90%CE%9EVp2p-Wire-Protocol) might look like:
+Here is how the [DevP2P wire protocol](https://github.com/ethereum/devp2p/blob/master/rlpx.md#p2p-capability) might look like:
 
 ``` nim
 p2pProtocol p2p(version = 0):
@@ -177,12 +177,12 @@ The `nextMsg` helper proc can be used to pause the execution of an async
 proc until a particular incoming message from a peer arrives:
 
 ``` nim
-proc handshakeExample(peer: Peer) {.async.} =
+proc helloExample(peer: Peer) {.async.} =
   ...
   # send a hello message
   peer.hello(...)
 
-  # wait for a matching hello response
+  # wait for a matching hello response, might want to add a timeout here
   let response = await peer.nextMsg(p2p.hello)
   echo response.clientId # print the name of the Ethereum client
                          # used by the other peer (Geth, Parity, Nimbus, etc)
@@ -204,6 +204,9 @@ by `nextMsg` will be resolved only after the handler has been fully executed
 place). If there are multiple outstanding calls to `nextMsg`, they will
 complete together. Any other messages received in the meantime will still
 be dispatched to their respective handlers.
+
+For implementing protocol handshakes with `nextMsg` there are specific helpers
+which are explained [below](https://github.com/status-im/nim-eth/blob/master/doc/p2p.md#implementing-handshakes-and-reacting-to-other-events).
 
 #### `requestResponse` pairs
 
@@ -250,20 +253,34 @@ also include handlers for certain important events such as newly connected
 peers or misbehaving or disconnecting peers:
 
 ``` nim
-p2pProtocol les(version = 2):
+p2pProtocol foo(version = fooVersion):
+
   onPeerConnected do (peer: Peer):
-    asyncCheck peer.status [
-      "networkId": rlp.encode(1),
-      "keyGenesisHash": rlp.encode(peer.network.chain.genesisHash)
-      ...
-    ]
+    let m = await peer.status(fooVersion,
+                              timeout = chronos.milliseconds(5000))
 
-    let otherPeerStatus = await peer.nextMsg(les.status)
-    ...
-
+    if m.protocolVersion == fooVersion:
+      debug "Foo peer", peer, fooVersion
+    else:
+      raise newException(UselessPeerError, "Incompatible Foo version")
+ 
   onPeerDisconnected do (peer: Peer, reason: DisconnectionReason):
     debug "peer disconnected", peer
+ 
+  handshake:
+    proc status(peer: Peer,
+                protocolVersion: uint)
 ```
+
+For handshake messages, where the same type of message needs to be send to and
+received from the peer, a `handshake` helper is introduced, as you can see in
+the code example above.
+
+Thanks to the `handshake` helper the `status` message will both be send, and be
+awaited for receival from the peer, with the defined timeout. In case no `status`
+message is received within the defined timeout, an error will be raised which
+will result in a disconnect from the peer.
+
 
 **Note:** Be aware that if currently one of the subprotocol `onPeerConnected`
 calls fails, the client will be disconnected as `UselessPeer` but no
