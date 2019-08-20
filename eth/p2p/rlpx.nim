@@ -7,8 +7,11 @@ when useSnappy:
   import snappy
   const devp2pSnappyVersion* = 5
 
+# TODO: chronicles re-export here is added for the error
+# "undeclared identifier: 'activeChroniclesStream'", when the code using p2p
+# does not import chronicles. Need to resolve this properly.
 export
-  options, p2pProtocol
+  options, p2pProtocol, rlp, chronicles
 
 logScope:
   topics = "rlpx"
