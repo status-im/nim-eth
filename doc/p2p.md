@@ -177,10 +177,10 @@ The `nextMsg` helper proc can be used to pause the execution of an async
 proc until a particular incoming message from a peer arrives:
 
 ``` nim
-proc helloExample(peer: Peer) {.async.} =
+proc helloExample(peer: Peer) =
   ...
   # send a hello message
-  peer.hello(...)
+  await peer.hello(...)
 
   # wait for a matching hello response, might want to add a timeout here
   let response = await peer.nextMsg(p2p.hello)
@@ -204,6 +204,10 @@ by `nextMsg` will be resolved only after the handler has been fully executed
 place). If there are multiple outstanding calls to `nextMsg`, they will
 complete together. Any other messages received in the meantime will still
 be dispatched to their respective handlers.
+
+Please also note that the `p2pProtocol` macro will make this `helloExample` proc
+`async`. Practically see it as `proc helloExample(peer: Peer) {.async.}`, and
+thus never use `waitFor`, but rather `await` inside this proc.
 
 For implementing protocol handshakes with `nextMsg` there are specific helpers
 which are explained [below](https://github.com/status-im/nim-eth/blob/master/doc/p2p.md#implementing-handshakes-and-reacting-to-other-events).
@@ -254,7 +258,6 @@ peers or misbehaving or disconnecting peers:
 
 ``` nim
 p2pProtocol foo(version = fooVersion):
-
   onPeerConnected do (peer: Peer):
     let m = await peer.status(fooVersion,
                               timeout = chronos.milliseconds(5000))
@@ -263,10 +266,10 @@ p2pProtocol foo(version = fooVersion):
       debug "Foo peer", peer, fooVersion
     else:
       raise newException(UselessPeerError, "Incompatible Foo version")
- 
+
   onPeerDisconnected do (peer: Peer, reason: DisconnectionReason):
     debug "peer disconnected", peer
- 
+
   handshake:
     proc status(peer: Peer,
                 protocolVersion: uint)
