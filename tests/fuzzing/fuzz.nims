@@ -7,8 +7,7 @@ if not dirExists("generated-input"):
 if not fileExists("fuzz"):
   # Requires afl-gcc to be installed
   # TODO: add + test option for clang
-  exec "nim c --cc=gcc --gcc.exe=afl-gcc --gcc.linkerexe=afl-gcc fuzz"
-
+  exec "nim c -d:afl -d:noSignalHandler --cc=gcc --gcc.exe=afl-gcc --gcc.linkerexe=afl-gcc fuzz"
 if dirExists("output"):
   exec "afl-fuzz -i - -o output -M fuzzer01 -- ./fuzz"
 else:
