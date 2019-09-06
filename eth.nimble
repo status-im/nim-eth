@@ -14,7 +14,7 @@ requires "nim >= 0.19.0",
          "stew",
          "result",
          "nat_traversal",
-         "https://github.com/status-im/nim-metrics"
+         "metrics"
 
 proc runTest(path: string) =
   echo "\nRunning: ", path
