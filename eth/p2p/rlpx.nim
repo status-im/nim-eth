@@ -609,9 +609,9 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       msgId = msg.id
       msgIdent = msg.ident
       msgName = $msgIdent
-      msgRecName = msg.recIdent
+      msgRecName = msg.recName
       responseMsgId = if msg.response != nil: msg.response.id else: -1
-      ResponseRecord = if msg.response != nil: msg.response.recIdent else: nil
+      ResponseRecord = if msg.response != nil: msg.response.recName else: nil
       hasReqId = msg.hasReqId
       protocol = msg.protocol
       userPragmas = msg.procDef.pragma
