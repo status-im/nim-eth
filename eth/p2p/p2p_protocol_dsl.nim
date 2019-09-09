@@ -347,7 +347,7 @@ proc hasReqId*(msg: Message): bool =
 proc ResponderType(msg: Message): NimNode =
   var resp = if msg.kind == msgRequest: msg.response else: msg
   newTree(nnkBracketExpr,
-          msg.protocol.backend.ResponderType, resp.recName)
+          msg.protocol.backend.ResponderType, resp.strongRecName)
 
 proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
             procDef: NimNode, timeoutParam: NimNode = nil,
@@ -814,6 +814,7 @@ proc genTypeSection*(p: P2PProtocol): NimNode =
       # a particular message type:
       template msgId*(T: type `msgStrongRecName`): int = `msgId`
       template msgProtocol*(T: type `msgStrongRecName`): type = `protocolName`
+      template RecType*(T: type `msgStrongRecName`): untyped = `msgRecName`
 
 proc genCode*(p: P2PProtocol): NimNode =
   # TODO: try switching to a simpler for msg in p.messages: loop
