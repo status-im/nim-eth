@@ -1,5 +1,5 @@
 import
-  chronos/[asyncfutures2, asyncloop], chronicles
+  chronos, chronicles
 
 proc catchOrQuit(error: Exception) =
   if error of CatchableError:

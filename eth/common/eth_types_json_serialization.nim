@@ -1,9 +1,9 @@
 import
   times, net,
-  json_serialization, nimcrypto/hash, eth_types
+  json_serialization, nimcrypto/[hash, utils], eth_types
 
 proc writeValue*(w: var JsonWriter, a: MDigest) {.inline.} =
-  w.writeValue $a
+  w.writeValue a.data.toHex(true)
 
 proc readValue*(r: var JsonReader, a: var MDigest) {.inline.} =
   a = fromHex(type(a), r.readValue(string))
