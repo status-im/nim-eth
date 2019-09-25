@@ -30,34 +30,30 @@ proc NimMain() {.importc: "NimMain".}
 template `+`*[T](p: ptr T, off: int): ptr T =
   cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
 
-macro test*(body: untyped): untyped =
+template test*(body: untyped): untyped =
   when defined(afl):
-    result = quote do:
-      var payload {.inject.} = readStdin()
+    var payload {.inject.} = readStdin()
 
-      fuzz: `body`
+    fuzz: `body`
   else:
-    result = quote do:
-      proc fuzzerCall(data: ptr byte, len: csize):
-          cint {.exportc: "LLVMFuzzerTestOneInput".} =
-        var payload {.inject.} : seq[byte]
-        if len > 0:
-          # TODO: something better to get this data in the seq?
-          newSeq(payload, len)
-          for i in 0..<len:
-            payload[i] = (data + i)[]
+    proc fuzzerCall(data: ptr byte, len: csize):
+        cint {.exportc: "LLVMFuzzerTestOneInput".} =
+      var payload {.inject.} : seq[byte]
+      if len > 0:
+        # TODO: something better to get this data in the seq?
+        newSeq(payload, len)
+        for i in 0..<len:
+          payload[i] = (data + i)[]
 
-        `body`
+      `body`
 
-macro init*(body: untyped): untyped =
+template init*(body: untyped): untyped =
   when defined(afl):
-    result = quote do:
-      fuzz: `body`
+    fuzz: `body`
   else:
-    result = quote do:
-      proc fuzzerInit(): cint {.exportc: "LLVMFuzzerInitialize".} =
-        NimMain()
+    proc fuzzerInit(): cint {.exportc: "LLVMFuzzerInitialize".} =
+      NimMain()
 
-        `body`
+      `body`
 
-        return 0
+      return 0
