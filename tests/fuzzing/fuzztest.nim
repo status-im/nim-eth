@@ -3,7 +3,7 @@ import streams, posix, strutils, chronicles, macros
 template fuzz(body) =
   # For code we want to fuzz, SIGSEGV is needed on unwanted exceptions.
   # However, this is only needed when fuzzing with afl.
-  when defined(afl):
+  when defined(standalone):
     try:
       body
     except Exception as e:
@@ -31,7 +31,7 @@ template `+`*[T](p: ptr T, off: int): ptr T =
   cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
 
 template test*(body: untyped): untyped =
-  when defined(afl):
+  when defined(standalone):
     var payload {.inject.} = readStdin()
 
     fuzz: `body`
@@ -48,7 +48,7 @@ template test*(body: untyped): untyped =
       `body`
 
 template init*(body: untyped): untyped =
-  when defined(afl):
+  when defined(standalone):
     fuzz: `body`
   else:
     proc fuzzerInit(): cint {.exportc: "LLVMFuzzerInitialize".} =
