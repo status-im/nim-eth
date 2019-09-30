@@ -1,4 +1,4 @@
-import chronicles, eth/rlp, ../fuzz_helpers
+import chronicles, eth/rlp, ../fuzztest
 
 # TODO: have a default init as such
 init:

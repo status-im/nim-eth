@@ -1,6 +1,6 @@
 import
   chronicles, eth/p2p/[discovery, enode], eth/[keys, rlp],
-  ../../p2p/p2p_test_helper, ../fuzz_helpers
+  ../../p2p/p2p_test_helper, ../fuzztest
 
 const DefaultListeningPort = 30303
 var targetNode: DiscoveryProtocol
