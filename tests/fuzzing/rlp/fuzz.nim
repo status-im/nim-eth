@@ -1,9 +1,5 @@
 import chronicles, eth/rlp, ../fuzztest
 
-# TODO: have a default init as such
-init:
-  discard
-
 test:
   try:
     var rlp = rlpFromBytes(@payload.toRange)

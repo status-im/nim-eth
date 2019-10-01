@@ -27,7 +27,31 @@ proc readStdin*(): seq[byte] =
 
 proc NimMain() {.importc: "NimMain".}
 
+# The default init, gets redefined when init template is used.
+template initImpl(): untyped =
+  when defined(standalone):
+    discard
+  else:
+    proc fuzzerInit(): cint {.exportc: "LLVMFuzzerInitialize".} =
+      NimMain()
+
+      return 0
+
+template init*(body: untyped) =
+  when defined(standalone):
+    template initImpl(): untyped = fuzz: `body`
+  else:
+    template initImpl() =
+      proc fuzzerInit(): cint {.exportc: "LLVMFuzzerInitialize".} =
+        NimMain()
+
+        `body`
+
+        return 0
+
 template test*(body: untyped): untyped =
+  mixin initImpl
+  initImpl()
   when defined(standalone):
     var payload {.inject.} = readStdin()
 
@@ -39,14 +63,3 @@ template test*(body: untyped): untyped =
         makeOpenArray(data, len)
 
       `body`
-
-template init*(body: untyped): untyped =
-  when defined(standalone):
-    fuzz: `body`
-  else:
-    proc fuzzerInit(): cint {.exportc: "LLVMFuzzerInitialize".} =
-      NimMain()
-
-      `body`
-
-      return 0
