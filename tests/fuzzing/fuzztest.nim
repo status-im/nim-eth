@@ -1,4 +1,4 @@
-import streams, posix, strutils, chronicles, macros
+import streams, posix, strutils, chronicles, macros, stew/ranges/ptr_arith
 
 template fuzz(body) =
   # For code we want to fuzz, SIGSEGV is needed on unwanted exceptions.
@@ -27,9 +27,6 @@ proc readStdin*(): seq[byte] =
 
 proc NimMain() {.importc: "NimMain".}
 
-template `+`*[T](p: ptr T, off: int): ptr T =
-  cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
-
 template test*(body: untyped): untyped =
   when defined(standalone):
     var payload {.inject.} = readStdin()
@@ -38,12 +35,8 @@ template test*(body: untyped): untyped =
   else:
     proc fuzzerCall(data: ptr byte, len: csize):
         cint {.exportc: "LLVMFuzzerTestOneInput".} =
-      var payload {.inject.} : seq[byte]
-      if len > 0:
-        # TODO: something better to get this data in the seq?
-        newSeq(payload, len)
-        for i in 0..<len:
-          payload[i] = (data + i)[]
+      template payload(): auto =
+        makeOpenArray(data, len)
 
       `body`
 
