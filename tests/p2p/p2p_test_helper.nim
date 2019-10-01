@@ -33,8 +33,9 @@ template asyncTest*(name, body: untyped) =
     proc scenario {.async.} = body
     waitFor scenario()
 
-proc packData*(payload: seq[byte], pk: PrivateKey): seq[byte] =
+proc packData*(payload: openArray[byte], pk: PrivateKey): seq[byte] =
   let
+    payloadSeq = @payload
     signature = @(pk.signMessage(payload).getRaw())
-    msgHash = keccak256.digest(signature & payload)
-  result = @(msgHash.data) & signature & payload
+    msgHash = keccak256.digest(signature & payloadSeq)
+  result = @(msgHash.data) & signature & payloadSeq

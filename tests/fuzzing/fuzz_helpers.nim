@@ -44,7 +44,7 @@ type
 
 proc aflCompile*(target: string, c: Compiler) =
   let aflOptions = &"-d:standalone -d:noSignalHandler {$c}"
-  let compileCmd = &"nim c {defaultFlags} {aflOptions} {target}"
+  let compileCmd = &"""nim c {defaultFlags} {aflOptions} {target}"""
   exec compileCmd
 
 proc aflExec*(target: string, inputDir: string, resultsDir: string,
@@ -57,14 +57,14 @@ proc aflExec*(target: string, inputDir: string, resultsDir: string,
   var fuzzCmd: string
   # if there is an output dir already, continue fuzzing from previous run
   if (not dirExists(resultsDir)) or cleanStart:
-    fuzzCmd = &"afl-fuzz -i {inputDir} -o {resultsDir} -M fuzzer01 -- ./{target}"
+    fuzzCmd = &"""afl-fuzz -i {inputDir} -o {resultsDir} -M fuzzer01 -- ./{target}"""
   else:
-    fuzzCmd = &"afl-fuzz -i - -o {resultsDir} -M fuzzer01 -- ./{target}"
+    fuzzCmd = &"""afl-fuzz -i - -o {resultsDir} -M fuzzer01 -- ./{target}"""
   exec fuzzCmd
 
 proc libFuzzerCompile*(target: string) =
   let libFuzzerOptions = &"--noMain {libFuzzerClang}"
-  let compileCmd = &"nim c {defaultFlags} {libFuzzerOptions} {target}"
+  let compileCmd = &"""nim c {defaultFlags} {libFuzzerOptions} {target}"""
   exec compileCmd
 
 proc libFuzzerExec*(target: string, corpusDir: string) =
@@ -72,7 +72,7 @@ proc libFuzzerExec*(target: string, corpusDir: string) =
     # libFuzzer is OK when starting with empty corpus dir
     mkDir(corpusDir)
 
-  exec &"./{target} {corpusDir}"
+  exec &"""./{target} {corpusDir}"""
 
 proc getDir*(path: string): string =
   # TODO: This is not platform friendly at all.
