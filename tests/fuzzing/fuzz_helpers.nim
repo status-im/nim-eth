@@ -1,4 +1,4 @@
-import strformat, strutils
+import strformat, ospaths
 
 # Dependencies:
 # - afl fuzzing: afl and gcc or clang/llvm
@@ -42,75 +42,54 @@ type
     clang = aflClang,
     clangFast = aflClangFast
 
-
-proc quote(s: string): string {.noSideEffect.} =
-  ## Copy of quoteShellPosix from os module
-  const safeUnixChars = {'%', '+', '-', '.', '/', '_', ':', '=', '@',
-                          '0'..'9', 'A'..'Z', 'a'..'z'}
-  if s.len == 0:
-    return "''"
-
-  let safe = s.allCharsInSet(safeUnixChars)
-
-  if safe:
-    return s
-  else:
-    return "'" & s.replace("'", "'\"'\"'") & "'"
-
 proc aflCompile*(target: string, c: Compiler) =
   let aflOptions = &"-d:standalone -d:noSignalHandler {$c}"
-  let compileCmd = &"nim c {defaultFlags} {aflOptions} {target.quote()}"
+  let compileCmd = &"nim c {defaultFlags} {aflOptions} {target.quoteShell()}"
   exec compileCmd
 
 proc aflExec*(target: string, inputDir: string, resultsDir: string,
     cleanStart = false) =
+  let exe = target.addFileExt(ExeExt)
   if not dirExists(inputDir):
     # create a input dir with one 0 file for afl
     mkDir(inputDir)
+    # TODO: improve
     withDir inputDir: exec "echo '0' > test"
 
   var fuzzCmd: string
   # if there is an output dir already, continue fuzzing from previous run
   if (not dirExists(resultsDir)) or cleanStart:
-    fuzzCmd = &"afl-fuzz -i {inputDir.quote()} -o {resultsDir.quote()} -M fuzzer01 -- ./{target.quote()}"
+    fuzzCmd = &"afl-fuzz -i {inputDir.quoteShell()} -o {resultsDir.quoteShell()} -M fuzzer01 -- {exe.quoteShell()}"
   else:
-    fuzzCmd = &"afl-fuzz -i - -o {resultsDir.quote()} -M fuzzer01 -- ./{target.quote()}"
+    fuzzCmd = &"afl-fuzz -i - -o {resultsDir.quoteShell()} -M fuzzer01 -- {exe.quoteShell()}"
   exec fuzzCmd
 
 proc libFuzzerCompile*(target: string) =
   let libFuzzerOptions = &"--noMain {libFuzzerClang}"
-  let compileCmd = &"nim c {defaultFlags} {libFuzzerOptions} {target.quote()}"
+  let compileCmd = &"nim c {defaultFlags} {libFuzzerOptions} {target.quoteShell()}"
   exec compileCmd
 
 proc libFuzzerExec*(target: string, corpusDir: string) =
+  let exe = target.addFileExt(ExeExt)
   if not dirExists(corpusDir):
     # libFuzzer is OK when starting with empty corpus dir
     mkDir(corpusDir)
 
-  exec &"./{target.quote()} {corpusDir.quote()}"
-
-proc getDir*(path: string): string =
-  # TODO: This is not platform friendly at all.
-  let splitFile = path.rsplit("/", 1)
-  result = splitFile[0]
-
-proc getTarget*(path: string): string =
-  # TODO: error handling
-  result = path
-  result.removeSuffix(".nim")
+  exec &"{exe.quoteShell()} {corpusDir.quoteShell()}"
 
 proc runFuzzer*(targetPath: string, fuzzer: Fuzzer) =
-  let
-    path = getDir(targetPath)
-    target = getTarget(targetPath)
+  let (path, target, ext) = splitFile(targetPath)
+
   case fuzzer
   of afl:
     aflCompile(targetPath, gcc)
-    aflExec(target, path & "/input", path & "/results")
+    aflExec(path & DirSep & target,
+            path & DirSep & "input",
+            path & DirSep & "results")
 
   of libFuzzer:
     libFuzzerCompile(targetPath)
     # Note: Lets not mix afl input with libFuzzer corpus default. This can have
     # consequences on speed for afl. Better to look into merging afl results &
     # libFuzzer corpus.
-    libFuzzerExec(target, path & "/corpus")
+    libFuzzerExec(path & DirSep & target, path & DirSep & "corpus")
