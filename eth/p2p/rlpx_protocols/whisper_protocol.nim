@@ -7,10 +7,10 @@
 ## or long-lived messages must spend more work.
 
 import
-  algorithm, bitops, endians, math, options, sequtils, strutils, tables, times,
-  secp256k1, chronicles, chronos, eth/common/eth_types, eth/[keys, rlp, async_utils],
-  hashes, stew/byteutils, nimcrypto/[bcmode, hash, keccak, rijndael, sysrand],
-  eth/p2p, ../ecies
+  algorithm, bitops, math, options, sequtils, strutils, tables, times, chronos,
+  secp256k1, chronicles, hashes, stew/[byteutils, endians2],
+  nimcrypto/[bcmode, hash, keccak, rijndael, sysrand],
+  eth/common/eth_types, eth/[keys, rlp, async_utils, p2p], eth/p2p/ecies
 
 logScope:
   topics = "whisper"
@@ -128,22 +128,6 @@ type
     maxMsgSize*: uint32
 
 # Utilities --------------------------------------------------------------------
-
-proc toBE(v: uint64): array[8, byte] =
-  # return uint64 as bigendian array - for easy consumption with hash function
-  var v = cast[array[8, byte]](v)
-  bigEndian64(result.addr, v.addr)
-proc toLE(v: uint32): array[4, byte] =
-  # return uint32 as bigendian array - for easy consumption with hash function
-  var v = cast[array[4, byte]](v)
-  littleEndian32(result.addr, v.addr)
-
-# XXX: get rid of pointer
-proc fromLE32(v: array[4, byte]): uint32 =
-  var v = v
-  var ret: array[4, byte]
-  littleEndian32(ret.addr, v.addr)
-  result = cast[uint32](ret)
 
 proc leadingZeroBits(hash: MDigest): int =
   ## Number of most significant zero bits before the first one
@@ -287,7 +271,7 @@ proc encode*(self: Payload): Option[Bytes] =
 
   # next, length of payload - little endian (who comes up with this stuff? why
   # can't the world just settle on one endian?)
-  let payloadLenLE = self.payload.len.uint32.toLE
+  let payloadLenLE = self.payload.len.uint32.toBytesLE
 
   # No, I have no love for nim closed ranges - such a mess to remember the extra
   # < or risk off-by-ones when working with lengths..
@@ -386,7 +370,7 @@ proc decode*(data: openarray[byte], dst = none[PrivateKey](),
   for i in 0..<payloadLenLen: payloadLenLE[i] = plain[pos + i]
   pos += payloadLenLen
 
-  let payloadLen = int(payloadLenLE.fromLE32())
+  let payloadLen = int(fromBytesLE(uint32, payloadLenLE))
   if plain.len < pos + payloadLen:
     debug "Missing payload", len = plain.len, pos, payloadLen
     return
@@ -455,7 +439,7 @@ proc minePow*(self: Envelope, seconds: float, bestBitTarget: int = 0): (uint64, 
   var i: uint64
   while epochTime() < mineEnd or bestBit == 0: # At least one round
     var tmp = ctx # copy hash calculated so far - we'll reuse that for each iter
-    tmp.update(i.toBE())
+    tmp.update(i.toBytesBE())
     # XXX:a random nonce here would not leak number of iters
     let hash = tmp.finish()
     let zeroBits = leadingZeroBits(hash)
@@ -476,7 +460,7 @@ proc calcPowHash*(self: Envelope): Hash =
   var ctx: keccak256
   ctx.init()
   ctx.update(bytes)
-  ctx.update(self.nonce.toBE())
+  ctx.update(self.nonce.toBytesBE())
   return ctx.finish()
 
 # Messages ---------------------------------------------------------------------
