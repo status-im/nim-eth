@@ -29,8 +29,8 @@ const
                    "--passL='-fsanitize=fuzzer,address'"
 # Can also test in debug mode obviously, but might be slower
 # Can turn on more logging, in case of libFuzzer it will get very verbose though
-  defaultFlags = "-d:release -d:chronicles_log_level=fatal "# &
-                #  "--hints:off --warnings:off --verbosity:0"
+  defaultFlags = "-d:release -d:chronicles_log_level=fatal " &
+                 "--hints:off --warnings:off --verbosity:0"
 
 type
   Fuzzer* = enum
@@ -42,9 +42,24 @@ type
     clang = aflClang,
     clangFast = aflClangFast
 
+
+proc quote(s: string): string {.noSideEffect.} =
+  ## Copy of quoteShellPosix from os module
+  const safeUnixChars = {'%', '+', '-', '.', '/', '_', ':', '=', '@',
+                          '0'..'9', 'A'..'Z', 'a'..'z'}
+  if s.len == 0:
+    return "''"
+
+  let safe = s.allCharsInSet(safeUnixChars)
+
+  if safe:
+    return s
+  else:
+    return "'" & s.replace("'", "'\"'\"'") & "'"
+
 proc aflCompile*(target: string, c: Compiler) =
   let aflOptions = &"-d:standalone -d:noSignalHandler {$c}"
-  let compileCmd = &"""nim c {defaultFlags} {aflOptions} {target}"""
+  let compileCmd = &"nim c {defaultFlags} {aflOptions} {target.quote()}"
   exec compileCmd
 
 proc aflExec*(target: string, inputDir: string, resultsDir: string,
@@ -57,14 +72,14 @@ proc aflExec*(target: string, inputDir: string, resultsDir: string,
   var fuzzCmd: string
   # if there is an output dir already, continue fuzzing from previous run
   if (not dirExists(resultsDir)) or cleanStart:
-    fuzzCmd = &"""afl-fuzz -i {inputDir} -o {resultsDir} -M fuzzer01 -- ./{target}"""
+    fuzzCmd = &"afl-fuzz -i {inputDir.quote()} -o {resultsDir.quote()} -M fuzzer01 -- ./{target.quote()}"
   else:
-    fuzzCmd = &"""afl-fuzz -i - -o {resultsDir} -M fuzzer01 -- ./{target}"""
+    fuzzCmd = &"afl-fuzz -i - -o {resultsDir.quote()} -M fuzzer01 -- ./{target.quote()}"
   exec fuzzCmd
 
 proc libFuzzerCompile*(target: string) =
   let libFuzzerOptions = &"--noMain {libFuzzerClang}"
-  let compileCmd = &"""nim c {defaultFlags} {libFuzzerOptions} {target}"""
+  let compileCmd = &"nim c {defaultFlags} {libFuzzerOptions} {target.quote()}"
   exec compileCmd
 
 proc libFuzzerExec*(target: string, corpusDir: string) =
@@ -72,7 +87,7 @@ proc libFuzzerExec*(target: string, corpusDir: string) =
     # libFuzzer is OK when starting with empty corpus dir
     mkDir(corpusDir)
 
-  exec &"""./{target} {corpusDir}"""
+  exec &"./{target.quote()} {corpusDir.quote()}"
 
 proc getDir*(path: string): string =
   # TODO: This is not platform friendly at all.
