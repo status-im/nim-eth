@@ -83,13 +83,11 @@ proc runFuzzer*(targetPath: string, fuzzer: Fuzzer) =
   case fuzzer
   of afl:
     aflCompile(targetPath, gcc)
-    aflExec(path & DirSep & target,
-            path & DirSep & "input",
-            path & DirSep & "results")
+    aflExec(path / target, path / "input", path / "results")
 
   of libFuzzer:
     libFuzzerCompile(targetPath)
     # Note: Lets not mix afl input with libFuzzer corpus default. This can have
     # consequences on speed for afl. Better to look into merging afl results &
     # libFuzzer corpus.
-    libFuzzerExec(path & DirSep & target, path & DirSep & "corpus")
+    libFuzzerExec(path / target, path / "corpus")
