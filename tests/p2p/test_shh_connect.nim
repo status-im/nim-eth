@@ -92,10 +92,8 @@ suite "Whisper connections":
 
       node2.protocolState(Whisper).queue.items.len == 4
 
-    var f = all(futures)
-    await f or sleepAsync(waitInterval)
     check:
-      f.finished == true
+      await allFutures(futures).withTimeout(waitInterval)
       node1.protocolState(Whisper).queue.items.len == 4
 
     for filter in filters:
@@ -125,10 +123,7 @@ suite "Whisper connections":
                         payload = payloads[1]) == true
       node2.protocolState(Whisper).queue.items.len == 2
 
-    var f = all(futures)
-    await f or sleepAsync(waitInterval)
-    check:
-      f.finished == true
+      await allFutures(futures).withTimeout(waitInterval)
       node1.protocolState(Whisper).queue.items.len == 2
 
       node1.unsubscribeFilter(filter1) == true
@@ -155,11 +150,8 @@ suite "Whisper connections":
     check:
       node2.postMessage(ttl = safeTTL, topic = topic, payload = payload) == true
 
-    await futures[0] or sleepAsync(waitInterval)
-    await futures[1] or sleepAsync(waitInterval)
-    check:
-      futures[0].finished == true
-      futures[1].finished == false
+      (await futures[0].withTimeout(waitInterval)) == true
+      (await futures[1].withTimeout(waitInterval)) == false
       node1.protocolState(Whisper).queue.items.len == 1
 
       node1.unsubscribeFilter(filter1) == true
@@ -214,9 +206,7 @@ suite "Whisper connections":
                         payload = payload) == true
       node2.protocolState(Whisper).queue.items.len == 1
 
-    await f or sleepAsync(waitInterval)
-    check:
-      f.finished == false
+      (await f.withTimeout(waitInterval)) == false
       node1.protocolState(Whisper).queue.items.len == 0
 
     resetMessageQueues(node1, node2)
@@ -228,9 +218,7 @@ suite "Whisper connections":
                         payload = payload) == true
       node2.protocolState(Whisper).queue.items.len == 1
 
-    await f or sleepAsync(waitInterval)
-    check:
-      f.finished == true
+      await f.withTimeout(waitInterval)
       f.read() == 1
       node1.protocolState(Whisper).queue.items.len == 1
 
@@ -299,9 +287,7 @@ suite "Whisper connections":
                         payload = repeat(byte 4, 10),
                         targetPeer = some(toNodeId(node1.keys.pubkey))) == true
 
-    await f or sleepAsync(waitInterval)
-    check:
-      f.finished == true
+      await f.withTimeout(waitInterval)
       f.read() == 1
       node1.protocolState(Whisper).queue.items.len == 0
       node2.protocolState(Whisper).queue.items.len == 0
