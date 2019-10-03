@@ -813,7 +813,8 @@ p2pProtocol Whisper(version = whisperVersion,
       warn "Handshake not completed yet, discarding bloomFilterExchange"
       return
 
-    peer.state.bloom.bytesCopy(bloom)
+    if bloom.len == bloomSize:
+      peer.state.bloom.bytesCopy(bloom)
 
   nextID 126
 
@@ -999,24 +1000,30 @@ proc filtersToBloom*(node: EthereumNode): Bloom =
 proc setPowRequirement*(node: EthereumNode, powReq: float64) {.async.} =
   ## Sets the PoW requirement for this node, will also send
   ## this new PoW requirement to all connected peers
+  ##
+  ## Failures when sending messages to peers will not be reported.
   # NOTE: do we need a tolerance of old PoW for some time?
   node.protocolState(Whisper).config.powRequirement = powReq
   var futures: seq[Future[void]] = @[]
   for peer in node.peers(Whisper):
     futures.add(peer.powRequirement(cast[uint](powReq)))
 
-  await all(futures)
+  # Exceptions from sendMsg will not be raised
+  await allFutures(futures)
 
 proc setBloomFilter*(node: EthereumNode, bloom: Bloom) {.async.} =
   ## Sets the bloom filter for this node, will also send
   ## this new bloom filter to all connected peers
+  ##
+  ## Failures when sending messages to peers will not be reported.
   # NOTE: do we need a tolerance of old bloom filter for some time?
   node.protocolState(Whisper).config.bloom = bloom
   var futures: seq[Future[void]] = @[]
   for peer in node.peers(Whisper):
     futures.add(peer.bloomFilterExchange(@bloom))
 
-  await all(futures)
+  # Exceptions from sendMsg will not be raised
+  await allFutures(futures)
 
 proc setMaxMessageSize*(node: EthereumNode, size: uint32): bool =
   ## Set the maximum allowed message size
