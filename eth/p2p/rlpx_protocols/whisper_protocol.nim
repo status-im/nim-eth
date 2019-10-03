@@ -1,10 +1,36 @@
+#
+#                 Whisper
+#              (c) Copyright 2018-2019
+#       Status Research & Development GmbH
+#
+#            Licensed under either of
+#  Apache License, version 2.0, (LICENSE-APACHEv2)
+#            MIT license (LICENSE-MIT)
+#
+
 ## Whisper
+## *******
 ##
 ## Whisper is a gossip protocol that synchronizes a set of messages across nodes
 ## with attention given to sender and recipient anonymitiy. Messages are
 ## categorized by a topic and stay alive in the network based on a time-to-live
 ## measured in seconds. Spam prevention is based on proof-of-work, where large
 ## or long-lived messages must spend more work.
+##
+## Example usage
+## ----------
+## First an `EthereumNode` needs to be created, either with all capabilities set
+## or with specifically the Whisper capability set.
+## The latter can be done like this:
+##
+##   .. code-block::nim
+##      var node = newEthereumNode(keypair, address, netId, nil,
+##                                 addAllCapabilities = false)
+##      node.addCapability Whisper
+##
+## Now calls such as ``postMessage`` and ``subscribeFilter`` can be done.
+## However, they only make real sense after ``connectToNetwork`` was started. As
+## else there will be no peers to send and receive messages from.
 
 import
   algorithm, bitops, math, options, sequtils, strutils, tables, times, chronos,
@@ -25,24 +51,29 @@ const
   bloomSize = 512 div 8
   defaultQueueCapacity = 256
   defaultFilterQueueCapacity = 64
-  whisperVersion* = 6
-  whisperVersionStr* = $whisperVersion
-  defaultMinPow* = 0.2'f64
-  defaultMaxMsgSize* = 1024'u32 * 1024'u32 # * 10 # should be no higher than max RLPx size
-  messageInterval* = chronos.milliseconds(300) ## Interval at which messages are send to peers, in ms
-  pruneInterval* = chronos.milliseconds(1000)  ## Interval at which message queue is pruned, in ms
+  whisperVersion* = 6 ## Whisper version.
+  whisperVersionStr* = $whisperVersion ## Whisper version.
+  defaultMinPow* = 0.2'f64 ## The default minimum PoW requirement for this node.
+  defaultMaxMsgSize* = 1024'u32 * 1024'u32 ## The current default and max
+  ## message size. This can never be larger than the maximum RLPx message size.
+  messageInterval* = chronos.milliseconds(300) ## Interval at which messages are
+  ## send to peers, in ms.
+  pruneInterval* = chronos.milliseconds(1000)  ## Interval at which message
+  ## queue is pruned, in ms.
 
 type
   Hash* = MDigest[256]
-  SymKey* = array[256 div 8, byte] ## AES256 key
-  Topic* = array[4, byte]
-  Bloom* = array[bloomSize, byte]  ## XXX: nim-eth-bloom has really quirky API and fixed
-  ## bloom size.
-  ## stint is massive overkill / poor fit - a bloom filter is an array of bits,
-  ## not a number
+  SymKey* = array[256 div 8, byte] ## AES256 key.
+  Topic* = array[4, byte] ## 4 bytes that can be used to filter messages on.
+  Bloom* = array[bloomSize, byte] ## A bloom filter that can be used to identify
+  ## a number of topics that a peer is interested in.
+  # XXX: nim-eth-bloom has really quirky API and fixed
+  # bloom size.
+  # stint is massive overkill / poor fit - a bloom filter is an array of bits,
+  # not a number
 
   Payload* = object
-    ## Payload is what goes in the data field of the Envelope
+    ## Payload is what goes in the data field of the Envelope.
 
     src*: Option[PrivateKey] ## Optional key used for signing message
     dst*: Option[PublicKey] ## Optional key used for asymmetric encryption
@@ -51,6 +82,8 @@ type
     padding*: Option[Bytes] ## Padding - if unset, will automatically pad up to
                             ## nearest maxPadLen-byte boundary
   DecodedPayload* = object
+    ## The decoded payload of a received message.
+
     src*: Option[PublicKey] ## If the message was signed, this is the public key
                             ## of the source
     payload*: Bytes ## Application data / message contents
@@ -59,7 +92,7 @@ type
   Envelope* = object
     ## What goes on the wire in the whisper protocol - a payload and some
     ## book-keeping
-    ## Don't touch field order, there's lots of macro magic that depends on it
+    # Don't touch field order, there's lots of macro magic that depends on it
     expiry*: uint32 ## Unix timestamp when message expires
     ttl*: uint32 ## Time-to-live, seconds - message was created at (expiry - ttl)
     topic*: Topic
@@ -77,6 +110,8 @@ type
     isP2P: bool
 
   ReceivedMessage* = object
+    ## A received message that matched a filter and was possible to decrypt.
+    ## Contains the decoded payload and additional information.
     decoded*: DecodedPayload
     timestamp*: uint32
     ttl*: uint32
@@ -115,7 +150,7 @@ type
     powReq*: float64
     allowP2P*: bool
 
-    bloom: Bloom # cached bloom filter of all topics of filter
+    bloom: Bloom # Cached bloom filter of all topics of filter
     handler: FilterMsgHandler
     queue: seq[ReceivedMessage]
 
@@ -185,6 +220,7 @@ proc bloomFilterMatch(filter, sample: Bloom): bool =
   return true
 
 proc fullBloom*(): Bloom =
+  ## Returns a fully set bloom filter. To be used when allowing all topics.
   # There is no setMem exported in system, assume compiler is smart enough?
   for i in 0..<result.len:
     result[i] = 0xFF
@@ -936,6 +972,7 @@ proc postMessage*(node: EthereumNode, pubKey = none[PublicKey](),
                   targetPeer = none[NodeId]()): bool =
   ## Post a message on the message queue which will be processed at the
   ## next `messageInterval`.
+  ##
   ## NOTE: This call allows a post without encryption. If encryption is
   ## mandatory it should be enforced a layer up
   let payload = encode(Payload(payload: payload, src: src, dst: pubKey,
@@ -979,8 +1016,9 @@ proc subscribeFilter*(node: EthereumNode, filter: Filter,
   ## Initiate a filter for incoming/outgoing messages. Messages can be
   ## retrieved with the `getFilterMessages` call or with a provided
   ## `FilterMsgHandler`.
+  ##
   ## NOTE: This call allows for a filter without decryption. If encryption is
-  ## mandatory it should be enforced a layer up
+  ## mandatory it should be enforced a layer up.
   return node.protocolState(Whisper).filters.subscribeFilter(filter, handler)
 
 proc unsubscribeFilter*(node: EthereumNode, filterId: string): bool =
@@ -990,16 +1028,16 @@ proc unsubscribeFilter*(node: EthereumNode, filterId: string): bool =
 
 proc getFilterMessages*(node: EthereumNode, filterId: string): seq[ReceivedMessage] =
   ## Get all the messages currently in the filter queue. This will reset the
-  ## filter message queue
+  ## filter message queue.
   return node.protocolState(Whisper).filters.getFilterMessages(filterId)
 
 proc filtersToBloom*(node: EthereumNode): Bloom =
-  ## returns the bloom filter of all topics of all subscribed filters
+  ## Returns the bloom filter of all topics of all subscribed filters.
   return node.protocolState(Whisper).filters.toBloom()
 
 proc setPowRequirement*(node: EthereumNode, powReq: float64) {.async.} =
   ## Sets the PoW requirement for this node, will also send
-  ## this new PoW requirement to all connected peers
+  ## this new PoW requirement to all connected peers.
   ##
   ## Failures when sending messages to peers will not be reported.
   # NOTE: do we need a tolerance of old PoW for some time?
@@ -1013,7 +1051,7 @@ proc setPowRequirement*(node: EthereumNode, powReq: float64) {.async.} =
 
 proc setBloomFilter*(node: EthereumNode, bloom: Bloom) {.async.} =
   ## Sets the bloom filter for this node, will also send
-  ## this new bloom filter to all connected peers
+  ## this new bloom filter to all connected peers.
   ##
   ## Failures when sending messages to peers will not be reported.
   # NOTE: do we need a tolerance of old bloom filter for some time?
@@ -1026,7 +1064,8 @@ proc setBloomFilter*(node: EthereumNode, bloom: Bloom) {.async.} =
   await allFutures(futures)
 
 proc setMaxMessageSize*(node: EthereumNode, size: uint32): bool =
-  ## Set the maximum allowed message size
+  ## Set the maximum allowed message size.
+  ## Can not be set higher than ``defaultMaxMsgSize``.
   if size > defaultMaxMsgSize:
     warn "size > defaultMaxMsgSize"
     return false
@@ -1034,25 +1073,28 @@ proc setMaxMessageSize*(node: EthereumNode, size: uint32): bool =
   return true
 
 proc setPeerTrusted*(node: EthereumNode, peerId: NodeId): bool =
-  ## Set a connected peer as trusted
+  ## Set a connected peer as trusted.
   for peer in node.peers(Whisper):
     if peer.remote.id == peerId:
       peer.state(Whisper).trusted = true
       return true
 
 proc setLightNode*(node: EthereumNode, isLightNode: bool) =
-  ## Set this node as a Whisper light node
+  ## Set this node as a Whisper light node.
+  ##
   ## NOTE: Should be run before connection is made with peers as this
-  ## setting is only communicated at peer handshake
+  ## setting is only communicated at peer handshake.
   node.protocolState(Whisper).config.isLightNode = isLightNode
 
 proc configureWhisper*(node: EthereumNode, config: WhisperConfig) =
-  ## Apply a Whisper configuration
+  ## Apply a Whisper configuration.
+  ##
   ## NOTE: Should be run before connection is made with peers as some
-  ## of the settings are only communicated at peer handshake
+  ## of the settings are only communicated at peer handshake.
   node.protocolState(Whisper).config = config
 
 proc resetMessageQueue*(node: EthereumNode) =
-  ## Full reset of the message queue
-  ## NOTE: Not something that should be run in normal circumstances
+  ## Full reset of the message queue.
+  ##
+  ## NOTE: Not something that should be run in normal circumstances.
   node.protocolState(Whisper).queue = initQueue(defaultQueueCapacity)
