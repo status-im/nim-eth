@@ -12,7 +12,7 @@ template fuzz(body) =
   else:
     body
 
-proc readStdin*(): seq[byte] =
+proc readStdin(): seq[byte] =
   # Read input from stdin (fastest for AFL)
   let s = newFileStream(stdin)
   if s.isNil:
@@ -38,6 +38,14 @@ template initImpl(): untyped =
       return 0
 
 template init*(body: untyped) =
+  ## Init block to do any initialisation for the fuzzing test.
+  ##
+  ## For AFL this is currently only cosmetic and will be run each time, before
+  ## the test block.
+  ##
+  ## For libFuzzer this will only be run once. So only put data which is
+  ## stateless or make sure everything gets properply reset for each new run in
+  ## the test block.
   when defined(standalone):
     template initImpl(): untyped = fuzz: `body`
   else:
@@ -50,6 +58,10 @@ template init*(body: untyped) =
         return 0
 
 template test*(body: untyped): untyped =
+  ## Test block to do the actual test that will be fuzzed in a loop.
+  ##
+  ## Within this test block there is access to the payload OpenArray which
+  ## contains the payload provided by the fuzzer.
   mixin initImpl
   initImpl()
   when defined(standalone):
@@ -63,3 +75,20 @@ template test*(body: untyped): untyped =
         makeOpenArray(data, len)
 
       `body`
+
+# var aflClangFast {.importc: "__AFL_HAVE_MANUAL_CONTROL", noDecl.}: int
+
+when defined(clangfast):
+  ## Can be used for deferred instrumentation.
+  ## Should be placed on a suitable location in the code where the delayed
+  ## cloning can take place (e.g. NOT after creation of threads)
+  proc aflInit*() {.importc: "__AFL_INIT", noDecl.}
+  ## Can be used for persistent mode.
+  ## Should be used as value for controlling a loop around a test case.
+  ## Test case should be able to handle repeated inputs. No repeated fork() will
+  ## be done.
+  # TODO: Lets use this in the test block when afl-clang-fast is used?
+  proc aflLoop*(count: cuint): cint {.importc: "__AFL_LOOP", noDecl.}
+else:
+  proc aflInit*() = discard
+  proc aflLoop*(count: cuint): cint = 0

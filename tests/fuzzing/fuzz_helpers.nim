@@ -23,7 +23,8 @@ const
              "--clang.linkerexe=afl-clang"
   aflClangFast = "--cc=clang " &
                  "--clang.exe=afl-clang-fast " &
-                 "--clang.linkerexe=afl-clang-fast"
+                 "--clang.linkerexe=afl-clang-fast " &
+                 "-d:clangfast"
   libFuzzerClang = "--cc=clang " &
                    "--passC='-fsanitize=fuzzer,address' " &
                    "--passL='-fsanitize=fuzzer,address'"
