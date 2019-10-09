@@ -88,7 +88,10 @@ when defined(clangfast):
   ## Test case should be able to handle repeated inputs. No repeated fork() will
   ## be done.
   # TODO: Lets use this in the test block when afl-clang-fast is used?
-  proc aflLoop*(count: cuint): cint {.importc: "__AFL_LOOP", noDecl.}
+  proc aflLoopImpl(count: cuint): cint {.importc: "__AFL_LOOP", noDecl.}
+  template aflLoop*(body: untyped): untyped =
+    while aflLoopImpl(1000) != 0:
+      `body`
 else:
   proc aflInit*() = discard
-  proc aflLoop*(count: cuint): cint = 0
+  template aflLoop*(body: untyped): untyped = `body`
