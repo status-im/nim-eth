@@ -364,6 +364,9 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
   mixin enumerateRlpFields, read
 
   if wrappedInList:
+    if not rlp.isList:
+      raise newException(RlpTypeMismatch,
+                        "List expected, but the source RLP is not a list.")
     var
       payloadOffset = rlp.payloadOffset()
       payloadEnd = rlp.position + payloadOffset + rlp.payloadBytesCount()
