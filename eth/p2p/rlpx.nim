@@ -240,7 +240,10 @@ proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void] =
       "RLPx message with an invalid id " & $msgId &
       " on a connection supporting " & peer.dispatcher.describeProtocols)
 
-  if msgId >= peer.dispatcher.messages.len: invalidIdError()
+  # msgId can be negative as it has int as type and gets decoded from rlp
+  if msgId >= peer.dispatcher.messages.len or msgId < 0: invalidIdError()
+  if peer.dispatcher.messages[msgId].isNil: invalidIdError()
+
   let thunk = peer.dispatcher.messages[msgId].thunk
   if thunk == nil: invalidIdError()
 
