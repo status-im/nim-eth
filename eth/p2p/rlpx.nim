@@ -460,10 +460,14 @@ proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
                                       "Invalid RLPx message body")
 
     elif nextMsgId == 1: # p2p.disconnect
-      let reason = DisconnectionReason nextMsgData.listElem(0).toInt(uint32)
-      await peer.disconnect(reason)
-      trace "disconnect message received in waitSingleMsg", reason, peer
-      raisePeerDisconnected("Unexpected disconnect", reason)
+      if nextMsgData.isList():
+        let reason = DisconnectionReason nextMsgData.listElem(0).toInt(uint32)
+        await peer.disconnect(reason)
+        trace "disconnect message received in waitSingleMsg", reason, peer
+        raisePeerDisconnected("Unexpected disconnect", reason)
+      else:
+        raise newException(RlpTypeMismatch,
+          "List expected, but the source RLP is not a list.")
     else:
       warn "Dropped RLPX message",
            msg = peer.dispatcher.messages[nextMsgId].name
@@ -515,11 +519,17 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     except PeerDisconnected:
       return
 
+    # TODO: is there a reason why we don't just allow `sendDisconnectMsg`
+    # to do its work here, with the usual thunk checks included?
     if msgId == 1: # p2p.disconnect
-      let reason = msgData.listElem(0).toInt(uint32).DisconnectionReason
-      trace "disconnect message received in dispatchMessages", reason, peer
-      await peer.disconnect(reason, false)
-      break
+      if msgData.isList():
+        let reason = msgData.listElem(0).toInt(uint32).DisconnectionReason
+        trace "disconnect message received in dispatchMessages", reason, peer
+        await peer.disconnect(reason, false)
+        break
+      else:
+        debug "disconnect message with invalid rlp list", peer
+        await peer.disconnect(BreachOfProtocol, true)
 
     try:
       await peer.invokeThunk(msgId, msgData)
@@ -784,7 +794,9 @@ p2pProtocol devp2p(version = 0, rlpxName = "p2p"):
              listenPort: uint,
              nodeId: array[RawPublicKeySize, byte])
 
-  proc sendDisconnectMsg(peer: Peer, reason: DisconnectionReason)
+  proc sendDisconnectMsg(peer: Peer, reason: DisconnectionReason) =
+    trace "disconnect message received", reason, peer
+    await peer.disconnect(reason, false)
 
   # Adding an empty RLP list as the spec defines.
   # The parity client specifically checks if there is rlp data.

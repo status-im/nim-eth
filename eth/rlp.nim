@@ -272,6 +272,7 @@ iterator items*(self: var Rlp): var Rlp =
     position = elemEnd
 
 proc listElem*(self: Rlp, i: int): Rlp =
+  doAssert isList()
   let
     payloadOffset = payloadOffset()
 
