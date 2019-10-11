@@ -44,7 +44,7 @@ type
     clangFast = aflClangFast
 
 proc aflCompile*(target: string, c: Compiler) =
-  let aflOptions = &"-d:standalone -d:noSignalHandler {$c}"
+  let aflOptions = &"-d:afl -d:noSignalHandler {$c}"
   let compileCmd = &"nim c {defaultFlags} {aflOptions} {target.quoteShell()}"
   exec compileCmd
 
@@ -66,7 +66,7 @@ proc aflExec*(target: string, inputDir: string, resultsDir: string,
   exec fuzzCmd
 
 proc libFuzzerCompile*(target: string) =
-  let libFuzzerOptions = &"--noMain {libFuzzerClang}"
+  let libFuzzerOptions = &"-d:libFuzzer --noMain {libFuzzerClang}"
   let compileCmd = &"nim c {defaultFlags} {libFuzzerOptions} {target.quoteShell()}"
   exec compileCmd
 

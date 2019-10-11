@@ -92,9 +92,9 @@ nim fuzz.nims libFuzzer testcase.nim
 #### Compiling
 With gcc:
 ```sh
-nim c -d:standalone -d:release -d:chronicles_log_level=fatal -d:noSignalHandler --cc=gcc --gcc.exe=afl-gcc --gcc.linkerexe=afl-gcc testcase.nim
+nim c -d:afl -d:release -d:chronicles_log_level=fatal -d:noSignalHandler --cc=gcc --gcc.exe=afl-gcc --gcc.linkerexe=afl-gcc testcase.nim
 ```
-The `standalone` define is specifically required for the `init` and `test`
+The `afl` define is specifically required for the `init` and `test`
 templates.
 
 You typically want to fuzz in `-d:release` and probably also want to lower down
@@ -108,9 +108,9 @@ nim c build_afl testcase.nim
 With clang:
 ```sh
 # afl-clang
-nim c -d:standalone -d:noSignalHandler --cc=clang --clang.exe=afl-clang --clang.linkerexe=afl-clang ftestcase.nim
+nim c -d:afl -d:noSignalHandler --cc=clang --clang.exe=afl-clang --clang.linkerexe=afl-clang ftestcase.nim
 # afl-clang-fast
-nim c -d:standalone -d:noSignalHandler --cc=clang --clang.exe=afl-clang-fast --clang.linkerexe=afl-clang-fast testcase.nim
+nim c -d:afl -d:noSignalHandler --cc=clang --clang.exe=afl-clang-fast --clang.linkerexe=afl-clang-fast testcase.nim
 ```
 
 #### Starting the Fuzzer
@@ -135,17 +135,26 @@ afl-fuzz -i input -o results -S fuzzer03 -- ./testcase
 # add more if needed
 ```
 
-When compiled with `-d:standalone` the resulting application can also be run
+When compiled with `-d:afl` the resulting application can also be run
 manually by providing it input data, e.g.:
 ```sh
-cat testfile | ./testcase
+./testcase < testfile
 ```
+
+During debugging you might not want the testcase to generate a segmentation
+fault on exceptions. You can do this by rebuilding the test without the `-d:afl`
+flag. Changing to `-d:debug` will also help but might also change the
+behaviour.
 
 ### Manually with libFuzzer
 #### Compiling
 ```sh
-nim c -d:release -d:chronicles_log_level=fatal --noMain --cc=clang --passC="-fsanitize=fuzzer" --passL="-fsanitize=fuzzer" testcase.nim
+nim c -d:libFuzzer -d:release -d:chronicles_log_level=fatal --noMain --cc=clang --passC="-fsanitize=fuzzer" --passL="-fsanitize=fuzzer" testcase.nim
 ```
+
+The `libFuzzer` define is specifically required for the `init` and `test`
+templates.
+
 You typically want to fuzz in `-d:release` and probably also want to lower down
 the logging. But this is not strictly necessary.
 
@@ -180,14 +189,16 @@ The `init` template, when used with **afl**, is only cosmetic. It will be
 run before each test block, compared to libFuzzer, where it will be run only
 once.
 
-In case of using afl with `alf-clang-fast` you can make use of `aflInit()` and
-`aflLoop()` calls.
+In case of using afl with `alf-clang-fast` you can make use of `aflInit()` proc
+and `aflLoop()` template.
 
 `aflInit()` will allow using what is called deferred instrumentation. Basically,
 the forking of the process will only happen after this call, where normally it
 is done right before `main()`.
 
-`aflLoop(cint)` will allow for (experimental) persistant mode. This is more
-comparable with libFuzzer.
+`aflLoop:` will allow for (experimental) persistant mode. It will run the test
+in loop (1000 iterations) with different payloads. This is more comparable with
+libFuzzer.
 
-These calls are enabled with `-d:clangfast`.
+These calls are enabled with `-d:clangfast`, and have to be manually added.
+They are currently not part of the `test` or `init` templates.

@@ -3,7 +3,7 @@ import streams, posix, strutils, chronicles, macros, stew/ranges/ptr_arith
 template fuzz(body) =
   # For code we want to fuzz, SIGSEGV is needed on unwanted exceptions.
   # However, this is only needed when fuzzing with afl.
-  when defined(standalone):
+  when defined(afl):
     try:
       body
     except Exception as e:
@@ -29,7 +29,7 @@ proc NimMain() {.importc: "NimMain".}
 
 # The default init, gets redefined when init template is used.
 template initImpl(): untyped =
-  when defined(standalone):
+  when not defined(libFuzzer):
     discard
   else:
     proc fuzzerInit(): cint {.exportc: "LLVMFuzzerInitialize".} =
@@ -46,7 +46,7 @@ template init*(body: untyped) =
   ## For libFuzzer this will only be run once. So only put data which is
   ## stateless or make sure everything gets properply reset for each new run in
   ## the test block.
-  when defined(standalone):
+  when not defined(libFuzzer):
     template initImpl(): untyped = fuzz: `body`
   else:
     template initImpl() =
@@ -64,7 +64,7 @@ template test*(body: untyped): untyped =
   ## contains the payload provided by the fuzzer.
   mixin initImpl
   initImpl()
-  when defined(standalone):
+  when not defined(libFuzzer):
     var payload {.inject.} = readStdin()
 
     fuzz: `body`
@@ -75,8 +75,6 @@ template test*(body: untyped): untyped =
         makeOpenArray(data, len)
 
       `body`
-
-# var aflClangFast {.importc: "__AFL_HAVE_MANUAL_CONTROL", noDecl.}: int
 
 when defined(clangfast):
   ## Can be used for deferred instrumentation.

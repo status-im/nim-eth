@@ -7,6 +7,7 @@ proc aflSwitches() =
   switch("out", "fuzz-afl")
 
 proc libFuzzerSwitches() =
+  switch("define", "libFuzzer")
   switch("noMain", "")
   switch("cc", "clang")
   switch("passC", "-fsanitize=fuzzer,address")
