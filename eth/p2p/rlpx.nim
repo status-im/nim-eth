@@ -23,7 +23,13 @@ type
 
   ResponderWithoutId*[MsgType] = distinct Peer
 
+  # We need these two types in rlpx/devp2p as no parameters or single parameters
+  # are not getting encoded in an rlp list.
+  # TODO: we could generalize this in the protocol dsl but it would need an
+  # `alwaysList` flag as not every protocol expects lists in these cases.
   EmptyList = object
+  DisconnectionReasonList = object
+    value: DisconnectionReason
 
 const
   devp2pVersion* = 4
@@ -519,18 +525,6 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     except PeerDisconnected:
       return
 
-    # TODO: is there a reason why we don't just allow `sendDisconnectMsg`
-    # to do its work here, with the usual thunk checks included?
-    if msgId == 1: # p2p.disconnect
-      if msgData.isList():
-        let reason = msgData.listElem(0).toInt(uint32).DisconnectionReason
-        trace "disconnect message received in dispatchMessages", reason, peer
-        await peer.disconnect(reason, false)
-        break
-      else:
-        debug "disconnect message with invalid rlp list", peer
-        await peer.disconnect(BreachOfProtocol, true)
-
     try:
       await peer.invokeThunk(msgId, msgData)
     except RlpError:
@@ -794,13 +788,12 @@ p2pProtocol devp2p(version = 0, rlpxName = "p2p"):
              listenPort: uint,
              nodeId: array[RawPublicKeySize, byte])
 
-  proc sendDisconnectMsg(peer: Peer, reason: DisconnectionReason) =
-    trace "disconnect message received", reason, peer
-    await peer.disconnect(reason, false)
+  proc sendDisconnectMsg(peer: Peer, reason: DisconnectionReasonList) =
+    trace "disconnect message received", reason=reason.value, peer
+    await peer.disconnect(reason.value, false)
 
   # Adding an empty RLP list as the spec defines.
   # The parity client specifically checks if there is rlp data.
-  # TODO: can we do this in the macro instead?
   proc ping(peer: Peer, emptyList: EmptyList) =
     discard peer.pong(EmptyList())
 
@@ -845,7 +838,7 @@ proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = fals
       traceAwaitErrors callDisconnectHandlers(peer, reason)
 
     if notifyOtherPeer and not peer.transport.closed:
-      var fut = peer.sendDisconnectMsg(reason)
+      var fut = peer.sendDisconnectMsg(DisconnectionReasonList(value: reason))
       yield fut
       if fut.failed:
         debug "Failed to deliver disconnect message", peer
