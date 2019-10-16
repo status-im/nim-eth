@@ -272,7 +272,15 @@ iterator items*(self: var Rlp): var Rlp =
     position = elemEnd
 
 proc listElem*(self: Rlp, i: int): Rlp =
-  let payload = bytes.slice(position + payloadOffset())
+  doAssert isList()
+  let
+    payloadOffset = payloadOffset()
+
+  # This will only check if there is some data, not if it is correct according
+  # to list length. Could also run here payloadBytesCount() instead.
+  if position + payloadOffset + 1 > bytes.len: eosError()
+
+  let payload = bytes.slice(position + payloadOffset)
   result = rlpFromBytes payload
   var pos = 0
   while pos < i and result.hasData:
@@ -364,6 +372,9 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
   mixin enumerateRlpFields, read
 
   if wrappedInList:
+    if not rlp.isList:
+      raise newException(RlpTypeMismatch,
+                        "List expected, but the source RLP is not a list.")
     var
       payloadOffset = rlp.payloadOffset()
       payloadEnd = rlp.position + payloadOffset + rlp.payloadBytesCount()

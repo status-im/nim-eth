@@ -23,7 +23,13 @@ type
 
   ResponderWithoutId*[MsgType] = distinct Peer
 
+  # We need these two types in rlpx/devp2p as no parameters or single parameters
+  # are not getting encoded in an rlp list.
+  # TODO: we could generalize this in the protocol dsl but it would need an
+  # `alwaysList` flag as not every protocol expects lists in these cases.
   EmptyList = object
+  DisconnectionReasonList = object
+    value: DisconnectionReason
 
 const
   devp2pVersion* = 4
@@ -240,7 +246,10 @@ proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void] =
       "RLPx message with an invalid id " & $msgId &
       " on a connection supporting " & peer.dispatcher.describeProtocols)
 
-  if msgId >= peer.dispatcher.messages.len: invalidIdError()
+  # msgId can be negative as it has int as type and gets decoded from rlp
+  if msgId >= peer.dispatcher.messages.len or msgId < 0: invalidIdError()
+  if peer.dispatcher.messages[msgId].isNil: invalidIdError()
+
   let thunk = peer.dispatcher.messages[msgId].thunk
   if thunk == nil: invalidIdError()
 
@@ -457,10 +466,14 @@ proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
                                       "Invalid RLPx message body")
 
     elif nextMsgId == 1: # p2p.disconnect
-      let reason = DisconnectionReason nextMsgData.listElem(0).toInt(uint32)
-      await peer.disconnect(reason)
-      trace "disconnect message received in waitSingleMsg", reason, peer
-      raisePeerDisconnected("Unexpected disconnect", reason)
+      if nextMsgData.isList():
+        let reason = DisconnectionReason nextMsgData.listElem(0).toInt(uint32)
+        await peer.disconnect(reason)
+        trace "disconnect message received in waitSingleMsg", reason, peer
+        raisePeerDisconnected("Unexpected disconnect", reason)
+      else:
+        raise newException(RlpTypeMismatch,
+          "List expected, but the source RLP is not a list.")
     else:
       warn "Dropped RLPX message",
            msg = peer.dispatcher.messages[nextMsgId].name
@@ -511,12 +524,6 @@ proc dispatchMessages*(peer: Peer) {.async.} =
         return
     except PeerDisconnected:
       return
-
-    if msgId == 1: # p2p.disconnect
-      let reason = msgData.listElem(0).toInt(uint32).DisconnectionReason
-      trace "disconnect message received in dispatchMessages", reason, peer
-      await peer.disconnect(reason, false)
-      break
 
     try:
       await peer.invokeThunk(msgId, msgData)
@@ -781,11 +788,12 @@ p2pProtocol devp2p(version = 0, rlpxName = "p2p"):
              listenPort: uint,
              nodeId: array[RawPublicKeySize, byte])
 
-  proc sendDisconnectMsg(peer: Peer, reason: DisconnectionReason)
+  proc sendDisconnectMsg(peer: Peer, reason: DisconnectionReasonList) =
+    trace "disconnect message received", reason=reason.value, peer
+    await peer.disconnect(reason.value, false)
 
   # Adding an empty RLP list as the spec defines.
   # The parity client specifically checks if there is rlp data.
-  # TODO: can we do this in the macro instead?
   proc ping(peer: Peer, emptyList: EmptyList) =
     discard peer.pong(EmptyList())
 
@@ -830,7 +838,7 @@ proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = fals
       traceAwaitErrors callDisconnectHandlers(peer, reason)
 
     if notifyOtherPeer and not peer.transport.closed:
-      var fut = peer.sendDisconnectMsg(reason)
+      var fut = peer.sendDisconnectMsg(DisconnectionReasonList(value: reason))
       yield fut
       if fut.failed:
         debug "Failed to deliver disconnect message", peer

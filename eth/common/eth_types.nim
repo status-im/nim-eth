@@ -289,11 +289,14 @@ proc append*(rlpWriter: var RlpWriter, t: Transaction, a: EthAddress) {.inline.}
     rlpWriter.append(a)
 
 proc read*(rlp: var Rlp, T: typedesc[HashOrStatus]): T {.inline.} =
-  doAssert(rlp.blobLen() == 32 or rlp.blobLen() == 1)
-  if rlp.blobLen == 1:
-    result = hashOrStatus(rlp.read(uint8) == 1)
+  if rlp.isBlob() and (rlp.blobLen() == 32 or rlp.blobLen() == 1):
+    if rlp.blobLen == 1:
+      result = hashOrStatus(rlp.read(uint8) == 1)
+    else:
+      result = hashOrStatus(rlp.read(Hash256))
   else:
-    result = hashOrStatus(rlp.read(Hash256))
+    raise newException(RlpTypeMismatch,
+      "HashOrStatus expected, but the source RLP is not a blob of right size.")
 
 proc append*(rlpWriter: var RlpWriter, value: HashOrStatus) {.inline.} =
   if value.isHash:
@@ -326,7 +329,10 @@ proc rlpHash*[T](v: T): Hash256 =
 func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
 
 proc notImplemented =
-  doAssert false, "Method not implemented"
+  when defined(afl) or defined(libFuzzer):
+    discard
+  else:
+    doAssert false, "Method not implemented"
 
 template hasData*(b: Blob): bool = b.len > 0
 template hasData*(r: EthResourceRefs): bool = r != nil
