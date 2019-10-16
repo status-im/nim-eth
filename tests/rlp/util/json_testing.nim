@@ -1,5 +1,5 @@
 import
-  json, strutils, eth/rlp
+  json, strutils, unittest, eth/rlp
 
 proc append(output: var RlpWriter, js: JsonNode) =
   case js.kind
@@ -25,52 +25,40 @@ proc `==`(lhs: JsonNode, rhs: string): bool =
 proc runTests*(filename: string) =
   let js = json.parseFile(filename)
 
-  for testname, testdata in js:
-    template testStatus(status: string) =
-      echo status, " ", filename, " :: ", testname
+  suite filename:
+    for testname, testdata in js:
+      test testname:
+        let
+          input = testdata{"in"}
+          output = testdata{"out"}
 
-    let
-      input = testdata{"in"}
-      output = testdata{"out"}
+        if input.isNil or output.isNil or output.kind != JString:
+          skip()
+          continue
 
-    if input.isNil or output.isNil or output.kind != JString:
-      testStatus "IGNORED"
-      continue
+        if input == "VALID":
+          var rlp = rlpFromHex(output.str)
+          discard rlp.inspect
+        elif input == "INVALID":
+          var success = true
+          var inspectOutput = ""
+          expect MalformedRlpError, UnsupportedRlpError, ValueError:
+            var rlp = rlpFromHex(output.str)
+            inspectOutput = rlp.inspect(1)
+            discard rlp.getType
+            while rlp.hasData: discard rlp.toNodes
+            success = false
+          if not success:
+            echo "  ACCEPTED MALFORMED BYTES: ", output.str
+            echo "  INTERPRETATION:\n", inspectOutput
+        else:
+          if input.kind == JString and input.str.len != 0 and input.str[0] == '#':
+            continue
 
-    if input == "VALID":
-      var rlp = rlpFromHex(output.str)
-      discard rlp.inspect
-    elif input == "INVALID":
-      var success = false
-      var inspectOutput = ""
-      try:
-        var rlp = rlpFromHex(output.str)
-        inspectOutput = rlp.inspect(1)
-        discard rlp.getType
-        while rlp.hasData: discard rlp.toNodes
-      except MalformedRlpError, UnsupportedRlpError, ValueError:
-        success = true
-      if not success:
-        testStatus "FAILED"
-        echo "  ACCEPTED MALFORMED BYTES: ", output.str
-        echo "  INTERPRETATION:\n", inspectOutput
-        program_result = 1
-        continue
-    else:
-      if input.kind == JString and input.str.len != 0 and input.str[0] == '#':
-        continue
-
-      var outRlp = initRlpWriter()
-      outRlp.append input
-      let
-        actual = outRlp.finish.hexRepr
-        expected = output.str
-      if actual != expected:
-        testStatus "FAILED"
-        echo "  EXPECTED BYTES: ", expected
-        echo "  ACTUAL   BYTES: ", actual
-        program_result = 1
-        continue
-
-    testStatus "OK"
+          var outRlp = initRlpWriter()
+          outRlp.append input
+          let
+            actual = outRlp.finish.hexRepr
+            expected = output.str
+          check actual == expected
 
