@@ -54,6 +54,7 @@ proc runTests*(filename: string) =
         testStatus "FAILED"
         echo "  ACCEPTED MALFORMED BYTES: ", output.str
         echo "  INTERPRETATION:\n", inspectOutput
+        program_result = 1
         continue
     else:
       if input.kind == JString and input.str.len != 0 and input.str[0] == '#':
@@ -68,6 +69,7 @@ proc runTests*(filename: string) =
         testStatus "FAILED"
         echo "  EXPECTED BYTES: ", expected
         echo "  ACTUAL   BYTES: ", actual
+        program_result = 1
         continue
 
     testStatus "OK"
