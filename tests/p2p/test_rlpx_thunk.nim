@@ -16,6 +16,10 @@ node2.startListening()
 peer = waitFor node1.rlpxConnect(newNode(initENode(node2.keys.pubKey,
                                                    node2.address)))
 
+proc testThunk(payload: openArray[byte]) =
+  var (msgId, msgData) = recvMsgMock(payload)
+  waitFor peer.invokeThunk(msgId.int, msgData)
+
 proc testPayloads(filename: string) =
   let js = json.parseFile(filename)
 
@@ -29,18 +33,22 @@ proc testPayloads(filename: string) =
         if payloadHex.isNil or payloadHex.kind != JString:
           skip()
           continue
-        if error.isNil or error.kind != JString:
-          skip()
-          continue
 
         let payload = hexToSeqByte(payloadHex.str)
-        # TODO: can I convert the error string to an Exception type at runtime?
-        expect CatchableError:
-          try:
-            var (msgId, msgData) = recvMsgMock(payload)
-            waitFor peer.invokeThunk(msgId.int, msgData)
-          except CatchableError as e:
-            check: e.name == error.str
-            raise
+
+        if error.isNil:
+          testThunk(payload)
+        else:
+          if error.kind != JString:
+            skip()
+            continue
+
+          # TODO: can I convert the error string to an Exception type at runtime?
+          expect CatchableError:
+            try:
+              testThunk(payload)
+            except CatchableError as e:
+              check: e.name == error.str
+              raise
 
 testPayloads(sourceDir / "test_rlpx_thunk.json")
