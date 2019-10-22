@@ -429,8 +429,9 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
   var rlp = rlpFromBytes(decryptedBytes.toRange)
 
   try:
-    let msgid = rlp.read(int)
-    return (msgId, rlp)
+    # int32 as this seems more than big enough for the amount of msgIds
+    let msgId = rlp.read(int32)
+    return (msgId.int, rlp)
   except RlpError:
     await peer.disconnectAndRaise(BreachOfProtocol,
                                   "Cannot read RLPx message id")

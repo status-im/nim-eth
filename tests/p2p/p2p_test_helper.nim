@@ -46,5 +46,5 @@ template sourceDir*: string = currentSourcePath.rsplit(DirSep, 1)[0]
 proc recvMsgMock*(msg: openArray[byte]): tuple[msgId: int, msgData: Rlp] =
   var rlp = rlpFromBytes(@msg.toRange)
 
-  let msgid = rlp.read(int)
-  return (msgId, rlp)
+  let msgId = rlp.read(int32)
+  return (msgId.int, rlp)
