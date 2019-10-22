@@ -398,6 +398,11 @@ suite "Ethereum P2P handshake test suite":
         taes[0..^1] == csecInitiator.aesKey[0..^1]
         tmac[0..^1] == csecInitiator.macKey[0..^1]
 
+      var ingressMac = csecResponder.ingressMac
+      ingressMac.update(testE8Value("auth2ack2_ingress_message"))
+      check ingressMac.finish().data.toHex(true) ==
+        testE8Value("auth2ack2_ingress_mac")
+
     test "AUTH/ACK EIP-8 with additional fields test vectors":
       var initiator = newTestHandshake({Initiator})
       var responder = newTestHandshake({Responder})
