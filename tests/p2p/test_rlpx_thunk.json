@@ -9,8 +9,13 @@
     "error": "UnsupportedMessageError",
     "description": "This is a message id not used by devp2p, eth or whisper"
   },
-  "Message id that is negative": {
+  "Message id that is bigger than int32": {
     "payload": "888888888888888888",
+    "error": "RlpTypeMismatch",
+    "description": "This payload will result in too large int for a message id"
+  },
+  "Message id that is negative": {
+    "payload": "8488888888",
     "error": "UnsupportedMessageError",
     "description": "This payload will result in a negative number as message id"
   },
