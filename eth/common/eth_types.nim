@@ -1,5 +1,5 @@
 import
-  endians, options, times,
+  endians, options, times, chronicles,
   stint, nimcrypto, eth/rlp, eth/trie/[trie_defs, db]
 
 export
@@ -329,10 +329,7 @@ proc rlpHash*[T](v: T): Hash256 =
 func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
 
 proc notImplemented =
-  when defined(afl) or defined(libFuzzer):
-    discard
-  else:
-    doAssert false, "Method not implemented"
+  debug "Method not implemented"
 
 template hasData*(b: Blob): bool = b.len > 0
 template hasData*(r: EthResourceRefs): bool = r != nil

@@ -1,5 +1,6 @@
 import
-  unittest, chronos, nimcrypto, eth/[keys, p2p], eth/p2p/[discovery, enode]
+  unittest, chronos, nimcrypto, strutils,
+  eth/[keys, p2p], eth/p2p/[discovery, enode]
 
 var nextPort = 30303
 
@@ -39,3 +40,11 @@ proc packData*(payload: openArray[byte], pk: PrivateKey): seq[byte] =
     signature = @(pk.signMessage(payload).getRaw())
     msgHash = keccak256.digest(signature & payloadSeq)
   result = @(msgHash.data) & signature & payloadSeq
+
+template sourceDir*: string = currentSourcePath.rsplit(DirSep, 1)[0]
+
+proc recvMsgMock*(msg: openArray[byte]): tuple[msgId: int, msgData: Rlp] =
+  var rlp = rlpFromBytes(@msg.toRange)
+
+  let msgid = rlp.read(int)
+  return (msgId, rlp)
