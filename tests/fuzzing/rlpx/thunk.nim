@@ -3,12 +3,6 @@ import
   eth/p2p/rlpx_protocols/[whisper_protocol, eth_protocol],
   ../fuzztest, ../p2p/p2p_test_helper
 
-proc recvMsgMock(msg: openArray[byte]): tuple[msgId: int, msgData: Rlp] =
-  var rlp = rlpFromBytes(@msg.toRange)
-
-  let msgid = rlp.read(int)
-  return (msgId, rlp)
-
 var
   node1: EthereumNode
   node2: EthereumNode

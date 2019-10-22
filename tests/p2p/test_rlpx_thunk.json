@@ -1,0 +1,52 @@
+{
+  "Invalid list when decoding for object": {
+    "payload": "03",
+    "error": "RlpTypeMismatch",
+    "description": "Object parameters are expected to be encoded in an RLP list"
+  },
+  "Message id that is not supported": {
+    "payload": "08",
+    "error": "UnsupportedMessageError",
+    "description": "This is a message id not used by devp2p, eth or whisper"
+  },
+  "Message id that is negative": {
+    "payload": "888888888888888888",
+    "error": "UnsupportedMessageError",
+    "description": "This payload will result in a negative number as message id"
+  },
+  "No Hash nor Status, but empty list": {
+    "payload": "20c1c0",
+    "error": "RlpTypeMismatch",
+    "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
+  },
+  "No Hash nor Status, list instead of blob": {
+    "payload": "20c2c1c0",
+    "error": "RlpTypeMismatch",
+    "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
+  },
+  "No Hash nor Status, blob of 2 bytes": {
+    "payload": "20c4c3820011",
+    "error": "RlpTypeMismatch",
+    "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
+  },
+  "No Hash nor Status, blob of 33 bytes": {
+    "payload": "20e3e2a100112233445566778899aabbccddeeff00112233445566778899aabbcceeddff33",
+    "error": "RlpTypeMismatch",
+    "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
+  },
+  "Listing elements when no data": {
+    "payload": "01e1",
+    "error": "MalformedRlpError",
+    "description": "listElem to error on empty list"
+  },
+  "Listing elements when invalid length": {
+    "payload": "01ffdada",
+    "error": "MalformedRlpError",
+    "description": "listElem to error on invalid size encoding"
+  },
+  "Listing elements when not a list": {
+    "payload": "010a",
+    "error": "RlpTypeMismatch",
+    "description": "listElem to assert on not a list"
+  }
+}
