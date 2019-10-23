@@ -60,7 +60,7 @@ type
     version*: int
     timeouts*: int64
     useRequestIds*: bool
-    useSingeRecordInlining*: bool
+    useSingleRecordInlining*: bool
     rlpxName*: string
     outgoingRequestDecorator*: NimNode
     incomingRequestDecorator*: NimNode
@@ -372,7 +372,7 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
       chooseFieldType(paramType),             # some types such as openarray
       newEmptyNode())                         # are automatically remapped
 
-  if recFields.len == 1 and protocol.useSingeRecordInlining:
+  if recFields.len == 1 and protocol.useSingleRecordInlining:
     # When we have a single parameter, it's treated as the transferred message
     # type. `recName` will be resolved to the message type that's intended
     # for serialization while `strongRecName` will be a distinct type over
@@ -537,7 +537,7 @@ proc writeParamsAsRecord*(params: openarray[NimNode],
                              writer, recordWriterCtx,
                              newLit($param), param)
 
-  # TODO: this doesn't respect the `useSingeRecordInlining` option.
+  # TODO: this doesn't respect the `useSingleRecordInlining` option.
   # Right now, it's not a problem because it's used only in the libp2p back-end
   if params.len > 1:
     result = quote do:
@@ -641,7 +641,7 @@ proc genAwaitUserHandler*(msg: Message, receivedMsg: NimNode,
   var userHandlerCall = newCall(msg.userHandler.name, leadingParams)
 
   var params = toSeq(msg.procDef.typedParams(skip = 1))
-  if params.len == 1 and msg.protocol.useSingeRecordInlining:
+  if params.len == 1 and msg.protocol.useSingleRecordInlining:
     userHandlerCall.add receivedMsg
   else:
     for p in params:
