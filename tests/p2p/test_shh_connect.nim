@@ -325,3 +325,64 @@ suite "Whisper connections":
     let peer = await ln1.rlpxConnect(newNode(initENode(ln2.keys.pubKey,
                                                        ln2.address)))
     check peer.isNil == true
+
+  asyncTest "Test Waku-chan with Waku-san":
+    var wakuChan = setupTestNode(Whisper)
+    var wakuSan = setupTestNode(Whisper)
+
+    let topic1 = [byte 0xDA, 0xDA, 0xDA, 0xAA]
+    let topic2 = [byte 0xD0, 0xD0, 0xD0, 0x00]
+    let wrongTopic = [byte 0x4B, 0x1D, 0x4B, 0x1D]
+
+    wakuChan.protocolState(Whisper).config.wakuMode = WakuChan
+    wakuChan.protocolState(Whisper).config.topics = @[topic1, topic2]
+    wakuSan.protocolState(Whisper).config.wakuMode = WakuSan
+
+    wakuSan.startListening()
+    await wakuChan.peerPool.connectToNode(newNode(initENode(wakuSan.keys.pubKey,
+                                                            wakuSan.address)))
+
+    check:
+      wakuSan.postMessage(ttl = safeTTL, topic = topic1,
+                          payload = repeat(byte 0, 10)) == true
+      wakuSan.postMessage(ttl = safeTTL, topic = topic2,
+                          payload = repeat(byte 0, 10)) == true
+      wakuSan.postMessage(ttl = safeTTL, topic = wrongTopic,
+                          payload = repeat(byte 0, 10)) == true
+      wakuSan.protocolState(Whisper).queue.items.len == 3
+    await sleepAsync(waitInterval)
+    check:
+      wakuChan.protocolState(Whisper).queue.items.len == 2
+
+  asyncTest "Test Waku connections":
+    var n1 = setupTestNode(Whisper)
+    var n2 = setupTestNode(Whisper)
+    var n3 = setupTestNode(Whisper)
+    var n4 = setupTestNode(Whisper)
+    var n5 = setupTestNode(Whisper)
+
+    n1.protocolState(Whisper).config.wakuMode = WakuMode.None
+    n2.protocolState(Whisper).config.wakuMode = WakuChan
+    n3.protocolState(Whisper).config.wakuMode = WakuChan
+    n4.protocolState(Whisper).config.wakuMode = WakuSan
+    n5.protocolState(Whisper).config.wakuMode = WakuSan
+
+    n1.startListening()
+    n3.startListening()
+    n5.startListening()
+
+    let p1 = await n2.rlpxConnect(newNode(initENode(n1.keys.pubKey,
+                                                    n1.address)))
+    let p2 = await n2.rlpxConnect(newNode(initENode(n3.keys.pubKey,
+                                                    n3.address)))
+    check:
+      p1.isNil
+      p2.isNil
+
+    let p3 = await n4.rlpxConnect(newNode(initENode(n1.keys.pubKey,
+                                                    n1.address)))
+    let p4 = await n4.rlpxConnect(newNode(initENode(n5.keys.pubKey,
+                                                    n5.address)))
+    check:
+      p3.isNil == false
+      p4.isNil == false

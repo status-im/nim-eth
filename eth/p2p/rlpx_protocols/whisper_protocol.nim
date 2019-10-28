@@ -161,6 +161,13 @@ type
     bloom*: Bloom
     isLightNode*: bool
     maxMsgSize*: uint32
+    wakuMode*: WakuMode
+    topics*: seq[Topic]
+
+  WakuMode* = enum
+    None, # No Waku mode
+    WakuChan, # Waku client
+    WakuSan # Waku node
 
 # Utilities --------------------------------------------------------------------
 
@@ -533,6 +540,11 @@ proc allowed*(msg: Message, config: WhisperConfig): bool =
     warn "Message does not match node bloom filter"
     return false
 
+  if config.wakuMode == WakuChan:
+    if msg.env.topic notin config.topics:
+      warn "Message topic does not match Waku topic list"
+      return false
+
   return true
 
 # NOTE: Hashing and leading zeroes calculation is now the same between geth,
@@ -725,6 +737,8 @@ type
     bloom*: Bloom
     isLightNode*: bool
     trusted*: bool
+    wakuMode*: WakuMode
+    topics*: seq[Topic]
     received: HashSet[Message]
 
   WhisperNetwork = ref object
@@ -742,6 +756,8 @@ proc initProtocolState*(network: WhisperNetwork, node: EthereumNode) {.gcsafe.} 
   network.config.powRequirement = defaultMinPow
   network.config.isLightNode = false
   network.config.maxMsgSize = defaultMaxMsgSize
+  network.config.wakuMode = None # default no waku mode
+  network.config.topics = @[]
   asyncCheck node.run(network)
 
 p2pProtocol Whisper(version = whisperVersion,
@@ -759,6 +775,8 @@ p2pProtocol Whisper(version = whisperVersion,
                               cast[uint](whisperNet.config.powRequirement),
                               @(whisperNet.config.bloom),
                               whisperNet.config.isLightNode,
+                              whisperNet.config.wakuMode,
+                              whisperNet.config.topics,
                               timeout = chronos.milliseconds(500))
 
     if m.protocolVersion == whisperVersion:
@@ -782,6 +800,18 @@ p2pProtocol Whisper(version = whisperVersion,
       # No sense in connecting two light nodes so we disconnect
       raise newException(UselessPeerError, "Two light nodes connected")
 
+    # When Waku-san connect to all. When None, connect to all, Waku-chan has
+    # to decide to disconnect. When Waku-chan, connect only to Waku-san.
+    whisperPeer.wakuMode = m.wakuMode
+    if whisperNet.config.wakuMode == WakuChan:
+      if whisperPeer.wakuMode == WakuChan:
+        raise newException(UselessPeerError, "Two Waku-chan connected")
+      elif whisperPeer.wakuMode == None:
+        raise newException(UselessPeerError, "Not in Waku mode")
+    if whisperNet.config.wakuMode == WakuSan and
+        whisperPeer.wakuMode == WakuChan:
+      whisperPeer.topics = m.topics
+
     whisperPeer.received.init()
     whisperPeer.trusted = false
     whisperPeer.initialized = true
@@ -796,7 +826,9 @@ p2pProtocol Whisper(version = whisperVersion,
                 protocolVersion: uint,
                 powConverted: uint,
                 bloom: Bytes,
-                isLightNode: bool)
+                isLightNode: bool,
+                wakuMode: WakuMode,
+                topics: seq[Topic])
 
   proc messages(peer: Peer, envelopes: openarray[Envelope]) =
     if not peer.state.initialized:
@@ -865,6 +897,14 @@ p2pProtocol Whisper(version = whisperVersion,
       let msg = Message(env: envelope, isP2P: true)
       peer.networkState.filters.notify(msg)
 
+  proc topicsExchange(peer: Peer, topics: seq[Topic]) =
+    if not peer.state.initialized:
+      warn "Handshake not completed yet, discarding topicsExchange"
+      return
+
+    if peer.state.wakuMode == WakuChan:
+      peer.state.topics = topics
+
   # Following message IDs are not part of EIP-627, but are added and used by
   # the Status application, we ignore them for now.
   nextID 11
@@ -900,6 +940,11 @@ proc processQueue(peer: Peer) =
     if not bloomFilterMatch(whisperPeer.bloom, message.bloom):
       debug "Message does not match peer bloom filter"
       continue
+
+    if whisperNet.config.wakuMode == WakuSan and
+        whisperPeer.wakuMode == WakuChan:
+      if message.env.topic notin whisperPeer.topics:
+        continue
 
     trace "Adding envelope"
     envelopes.add(message.env)
@@ -1059,6 +1104,15 @@ proc setBloomFilter*(node: EthereumNode, bloom: Bloom) {.async.} =
   var futures: seq[Future[void]] = @[]
   for peer in node.peers(Whisper):
     futures.add(peer.bloomFilterExchange(@bloom))
+
+  # Exceptions from sendMsg will not be raised
+  await allFutures(futures)
+
+proc setTopics*(node: EthereumNode, topics: seq[Topic]) {.async.} =
+  node.protocolState(Whisper).config.topics = topics
+  var futures: seq[Future[void]] = @[]
+  for peer in node.peers(Whisper):
+    futures.add(peer.topicsExchange(topics))
 
   # Exceptions from sendMsg will not be raised
   await allFutures(futures)
