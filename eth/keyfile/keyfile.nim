@@ -230,7 +230,7 @@ proc kdfParams(kdfkind: KdfKind, salt: string, workfactor: int,
 proc decodeHex(m: string): seq[byte] =
   if len(m) > 0:
     try:
-      result = fromHex(m)
+      result = utils.fromHex(m)
     except:
       result = newSeq[byte]()
   else:
@@ -240,7 +240,7 @@ proc decodeSalt(m: string): string =
   var sarr: seq[byte]
   if len(m) > 0:
     try:
-      sarr = fromHex(m)
+      sarr = utils.fromHex(m)
       result = newString(len(sarr))
       copyMem(addr result[0], addr sarr[0], len(sarr))
     except:

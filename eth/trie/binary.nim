@@ -130,8 +130,6 @@ proc setAux(self: BinaryTrie, nodeHash: TrieNodeKey, keyPath: TrieBitRange,
   of BRANCH_TYPE: # node is a branch node
     checkBadKeyPath()
     return self.setBranchNode(keyPath, node, value, deleteSubtrie)
-  else:
-    raise newException(Exception, "Invariant: This shouldn't ever happen")
 
 proc set*(self: var BinaryTrie, key, value: distinct BytesContainer) {.inline.} =
   ## Sets the value at the given keyPath from the given node

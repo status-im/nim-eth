@@ -1,7 +1,9 @@
 import
-  unittest, strutils, sequtils, os,
+  unittest, sequtils, os,
   stew/ranges/typedranges, eth/trie/[hexary, db, trie_defs], nimcrypto/utils,
   ./testutils, algorithm, eth/rlp/types as rlpTypes, random
+
+from strutils import split
 
 template put(t: HexaryTrie|SecureHexaryTrie, key, val: string) =
   t.put(key.toBytesRange, val.toBytesRange)

@@ -34,8 +34,6 @@ proc checkIfBranchExistImpl(db: DB; nodeHash: TrieNodeKey; keyPrefix: TrieBitRan
       return checkIfBranchExistImpl(db, node.leftChild, keyPrefix.sliceToEnd(1))
     else:
       return checkIfBranchExistImpl(db, node.rightChild, keyPrefix.sliceToEnd(1))
-  else:
-    raise newException(Exception, "Invariant: unreachable code path")
 
 proc checkIfBranchExist*(db: DB; rootHash: BytesContainer | KeccakHash, keyPrefix: BytesContainer): bool =
   ## Given a key prefix, return whether this prefix is
@@ -75,9 +73,6 @@ proc getBranchImpl(db: DB; nodeHash: TrieNodeKey, keyPath: TrieBitRange, output:
       getBranchImpl(db, node.leftChild, keyPath.sliceToEnd(1), output)
     else:
       getBranchImpl(db, node.rightChild, keyPath.sliceToEnd(1), output)
-
-  else:
-    raise newException(Exception, "Invariant: unreachable code path")
 
 proc getBranch*(db: DB; rootHash: BytesContainer | KeccakHash; key: BytesContainer): seq[BytesRange] =
   ##     Get a long-format Merkle branch
@@ -123,8 +118,6 @@ proc getTrieNodesImpl(db: DB; nodeHash: TrieNodeKey, output: var seq[BytesRange]
     result = getTrieNodesImpl(db, node.rightChild, output)
   of LEAF_TYPE:
     output.add nodeVal
-  else:
-    raise newException(Exception, "Invariant: unreachable code path")
 
 proc getTrieNodes*(db: DB; nodeHash: BytesContainer | KeccakHash): seq[BytesRange] =
   checkValidHashZ(nodeHash)
@@ -161,8 +154,6 @@ proc getWitnessImpl*(db: DB; nodeHash: TrieNodeKey; keyPath: TrieBitRange; outpu
       getWitnessImpl(db, node.leftChild, keyPath.sliceToEnd(1), output)
     else:
       getWitnessImpl(db, node.rightChild, keyPath.sliceToEnd(1), output)
-  else:
-    raise newException(Exception, "Invariant: unreachable code path")
 
 proc getWitness*(db: DB; nodeHash: BytesContainer | KeccakHash; key: BytesContainer): seq[BytesRange] =
   ##  Get all witness given a keyPath prefix.
