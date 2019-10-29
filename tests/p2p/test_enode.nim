@@ -90,7 +90,8 @@ suite "ENode":
   test "isCorrect() tests":
     var node: ENode
     check isCorrect(node) == false
-    node.address.ip.family = IpAddressFamily.IPv4
+    let ip = IpAddress(family:IpAddressFamily.IPv4)
+    node = Enode(address: Address(ip: ip))
     check isCorrect(node) == false
     node.address.tcpPort = Port(25)
     check isCorrect(node) == false

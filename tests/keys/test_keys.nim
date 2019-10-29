@@ -7,9 +7,10 @@
 #    distribution, for details about the copyright.
 #
 
-import unittest, strutils
+import unittest
 import eth/keys
 import nimcrypto/hash, nimcrypto/keccak, nimcrypto/utils
+from strutils import toLowerAscii
 
 proc compare(x: openarray[byte], y: openarray[byte]): bool =
   result = len(x) == len(y)
