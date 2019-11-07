@@ -104,10 +104,9 @@ proc connectToNetwork*(node: EthereumNode,
   if enableDiscovery:
     node.discovery.open()
     await node.discovery.bootstrap()
+    node.peerPool.start()
   else:
     info "Discovery disabled"
-
-  node.peerPool.start()
 
   while node.peerPool.connectedNodes.len == 0:
     trace "Waiting for more peers", peers = node.peerPool.connectedNodes.len
