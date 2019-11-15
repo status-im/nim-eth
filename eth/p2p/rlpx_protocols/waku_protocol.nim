@@ -521,7 +521,7 @@ proc initMessage*(env: Envelope, powCalc = true): Message =
 proc hash*(msg: Message): hashes.Hash = hash(msg.hash.data)
 
 proc allowed*(msg: Message, config: WakuConfig): bool =
-  # Check max msg size, already happens in RLPx but there is a specific waku
+  # Check max msg size, already happens in RLPx but there is a specific wkk
   # max msg size which should always be < RLPx max msg size
   if msg.size > config.maxMsgSize:
     warn "Message size too large", size = msg.size
@@ -747,9 +747,9 @@ proc initProtocolState*(network: WakuNetwork, node: EthereumNode) {.gcsafe.} =
   asyncCheck node.run(network)
 
 p2pProtocol Waku(version = wakuVersion,
-                    rlpxName = "waku",
-                    peerState = WakuPeer,
-                    networkState = WakuNetwork):
+                 rlpxName = "wkk",
+                 peerState = WakuPeer,
+                 networkState = WakuNetwork):
 
   onPeerConnected do (peer: Peer):
     trace "onPeerConnected Waku"
