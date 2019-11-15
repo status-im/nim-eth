@@ -9,7 +9,7 @@
 
 import
   sequtils, options, unittest, tables, chronos, eth/[keys, p2p],
-  eth/p2p/rlpx_protocols/whisper_protocol, eth/p2p/peer_pool,
+  eth/p2p/rlpx_protocols/waku_protocol, eth/p2p/peer_pool,
   ./p2p_test_helper
 
 proc resetMessageQueues(nodes: varargs[EthereumNode]) =
@@ -19,9 +19,9 @@ proc resetMessageQueues(nodes: varargs[EthereumNode]) =
 let safeTTL = 5'u32
 let waitInterval = messageInterval + 150.milliseconds
 
-suite "Whisper connections":
-  var node1 = setupTestNode(Whisper)
-  var node2 = setupTestNode(Whisper)
+suite "Waku connections":
+  var node1 = setupTestNode(Waku)
+  var node2 = setupTestNode(Waku)
   node2.startListening()
   waitFor node1.peerPool.connectToNode(newNode(initENode(node2.keys.pubKey,
                                                          node2.address)))
@@ -90,11 +90,11 @@ suite "Whisper connections":
                         ttl = safeTTL, topic = topic,
                         payload = payloads[3]) == true
 
-      node2.protocolState(Whisper).queue.items.len == 4
+      node2.protocolState(Waku).queue.items.len == 4
 
     check:
       await allFutures(futures).withTimeout(waitInterval)
-      node1.protocolState(Whisper).queue.items.len == 4
+      node1.protocolState(Waku).queue.items.len == 4
 
     for filter in filters:
       check node1.unsubscribeFilter(filter) == true
@@ -121,10 +121,10 @@ suite "Whisper connections":
                         payload = payloads[0]) == true
       node2.postMessage(ttl = safeTTL, topic = topic2,
                         payload = payloads[1]) == true
-      node2.protocolState(Whisper).queue.items.len == 2
+      node2.protocolState(Waku).queue.items.len == 2
 
       await allFutures(futures).withTimeout(waitInterval)
-      node1.protocolState(Whisper).queue.items.len == 2
+      node1.protocolState(Waku).queue.items.len == 2
 
       node1.unsubscribeFilter(filter1) == true
       node1.unsubscribeFilter(filter2) == true
@@ -152,7 +152,7 @@ suite "Whisper connections":
 
       (await futures[0].withTimeout(waitInterval)) == true
       (await futures[1].withTimeout(waitInterval)) == false
-      node1.protocolState(Whisper).queue.items.len == 1
+      node1.protocolState(Waku).queue.items.len == 1
 
       node1.unsubscribeFilter(filter1) == true
       node1.unsubscribeFilter(filter2) == true
@@ -204,10 +204,10 @@ suite "Whisper connections":
     check:
       node2.postMessage(ttl = safeTTL, topic = sendTopic1,
                         payload = payload) == true
-      node2.protocolState(Whisper).queue.items.len == 1
+      node2.protocolState(Waku).queue.items.len == 1
 
       (await f.withTimeout(waitInterval)) == false
-      node1.protocolState(Whisper).queue.items.len == 0
+      node1.protocolState(Waku).queue.items.len == 0
 
     resetMessageQueues(node1, node2)
 
@@ -216,11 +216,11 @@ suite "Whisper connections":
     check:
       node2.postMessage(ttl = safeTTL, topic = sendTopic2,
                         payload = payload) == true
-      node2.protocolState(Whisper).queue.items.len == 1
+      node2.protocolState(Waku).queue.items.len == 1
 
       await f.withTimeout(waitInterval)
       f.read() == 1
-      node1.protocolState(Whisper).queue.items.len == 1
+      node1.protocolState(Waku).queue.items.len == 1
 
       node1.unsubscribeFilter(filter) == true
 
@@ -235,20 +235,20 @@ suite "Whisper connections":
     await node1.setPowRequirement(1_000_000)
     check:
       node2.postMessage(ttl = safeTTL, topic = topic, payload = payload) == true
-      node2.protocolState(Whisper).queue.items.len == 1
+      node2.protocolState(Waku).queue.items.len == 1
     await sleepAsync(waitInterval)
     check:
-      node1.protocolState(Whisper).queue.items.len == 0
+      node1.protocolState(Waku).queue.items.len == 0
 
     resetMessageQueues(node1, node2)
 
     await node1.setPowRequirement(0.0)
     check:
       node2.postMessage(ttl = safeTTL, topic = topic, payload = payload) == true
-      node2.protocolState(Whisper).queue.items.len == 1
+      node2.protocolState(Waku).queue.items.len == 1
     await sleepAsync(waitInterval)
     check:
-      node1.protocolState(Whisper).queue.items.len == 1
+      node1.protocolState(Waku).queue.items.len == 1
 
     resetMessageQueues(node1, node2)
 
@@ -261,14 +261,14 @@ suite "Whisper connections":
     let lowerTTL = 2'u32 # Lower TTL as we need to wait for messages to expire
     for i in countdown(10, 1):
       check node2.postMessage(ttl = lowerTTL, topic = topic, payload = payload) == true
-    check node2.protocolState(Whisper).queue.items.len == 10
+    check node2.protocolState(Waku).queue.items.len == 10
 
     await sleepAsync(waitInterval)
-    check node1.protocolState(Whisper).queue.items.len == 10
+    check node1.protocolState(Waku).queue.items.len == 10
 
     await sleepAsync(milliseconds((lowerTTL+1)*1000))
-    check node1.protocolState(Whisper).queue.items.len == 0
-    check node2.protocolState(Whisper).queue.items.len == 0
+    check node1.protocolState(Waku).queue.items.len == 0
+    check node2.protocolState(Waku).queue.items.len == 0
 
     resetMessageQueues(node1, node2)
 
@@ -289,13 +289,13 @@ suite "Whisper connections":
 
       await f.withTimeout(waitInterval)
       f.read() == 1
-      node1.protocolState(Whisper).queue.items.len == 0
-      node2.protocolState(Whisper).queue.items.len == 0
+      node1.protocolState(Waku).queue.items.len == 0
+      node2.protocolState(Waku).queue.items.len == 0
 
       node1.unsubscribeFilter(filter) == true
 
   asyncTest "Light node posting":
-    var ln1 = setupTestNode(Whisper)
+    var ln1 = setupTestNode(Waku)
     ln1.setLightNode(true)
 
     await ln1.peerPool.connectToNode(newNode(initENode(node2.keys.pubKey,
@@ -307,16 +307,16 @@ suite "Whisper connections":
       # normal post
       ln1.postMessage(ttl = safeTTL, topic = topic,
                       payload = repeat(byte 0, 10)) == false
-      ln1.protocolState(Whisper).queue.items.len == 0
+      ln1.protocolState(Waku).queue.items.len == 0
       # P2P post
       ln1.postMessage(ttl = safeTTL, topic = topic,
                         payload = repeat(byte 0, 10),
                         targetPeer = some(toNodeId(node2.keys.pubkey))) == true
-      ln1.protocolState(Whisper).queue.items.len == 0
+      ln1.protocolState(Waku).queue.items.len == 0
 
   asyncTest "Connect two light nodes":
-    var ln1 = setupTestNode(Whisper)
-    var ln2 = setupTestNode(Whisper)
+    var ln1 = setupTestNode(Waku)
+    var ln2 = setupTestNode(Waku)
 
     ln1.setLightNode(true)
     ln2.setLightNode(true)
