@@ -53,7 +53,8 @@ const
   bloomSize = 512 div 8
   defaultQueueCapacity = 256
   defaultFilterQueueCapacity = 64
-  wakuVersion* = 0 ## Waku version.
+  # XXX: Crashes if version is set to 0, P2P DSL bug or spec concern?
+  wakuVersion* = 1 ## Waku version.
   wakuVersionStr* = $wakuVersion ## Waku version.
   defaultMinPow* = 0.2'f64 ## The default minimum PoW requirement for this node.
   defaultMaxMsgSize* = 1024'u32 * 1024'u32 ## The current default and max
