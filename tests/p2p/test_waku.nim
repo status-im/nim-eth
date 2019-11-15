@@ -11,14 +11,14 @@ import
   sequtils, options, unittest, times, tables,
   nimcrypto/hash,
   eth/[keys, rlp],
-  eth/p2p/rlpx_protocols/whisper_protocol as whisper
+  eth/p2p/rlpx_protocols/waku_protocol as waku
 
-suite "Whisper payload":
+suite "Waku payload":
   test "should roundtrip without keys":
     let payload = Payload(payload: @[byte 0, 1, 2])
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get())
+    let decoded = waku.decode(encoded.get())
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
@@ -28,9 +28,9 @@ suite "Whisper payload":
   test "should roundtrip with symmetric encryption":
     var symKey: SymKey
     let payload = Payload(symKey: some(symKey), payload: @[byte 0, 1, 2])
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get(), symKey = some(symKey))
+    let decoded = waku.decode(encoded.get(), symKey = some(symKey))
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
@@ -41,9 +41,9 @@ suite "Whisper payload":
     let privKey = keys.newPrivateKey()
 
     let payload = Payload(src: some(privKey), payload: @[byte 0, 1, 2])
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get())
+    let decoded = waku.decode(encoded.get())
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
@@ -55,9 +55,9 @@ suite "Whisper payload":
 
     let payload = Payload(dst: some(privKey.getPublicKey()),
       payload: @[byte 0, 1, 2])
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get(), dst = some(privKey))
+    let decoded = waku.decode(encoded.get(), dst = some(privKey))
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
@@ -65,7 +65,7 @@ suite "Whisper payload":
       decoded.get().padding.get().len == 251 # 256 -1 -1 -3
 
   test "should return specified bloom":
-    # Geth test: https://github.com/ethersphere/go-ethereum/blob/d3441ebb563439bac0837d70591f92e2c6080303/whisper/whisperv6/whisper_test.go#L834
+    # Geth test: https://github.com/ethersphere/go-ethereum/blob/d3441ebb563439bac0837d70591f92e2c6080303/waku/wakuv6/waku_test.go#L834
     let top0 = [byte 0, 0, 255, 6]
     var x: Bloom
     x[0] = byte 1
@@ -73,12 +73,12 @@ suite "Whisper payload":
     x[^1] = byte 128
     check @(top0.topicBloom) == @x
 
-suite "Whisper payload padding":
+suite "Waku payload padding":
   test "should do max padding":
     let payload = Payload(payload: repeat(byte 1, 254))
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get())
+    let decoded = waku.decode(encoded.get())
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
@@ -89,9 +89,9 @@ suite "Whisper payload padding":
     let privKey = keys.newPrivateKey()
 
     let payload = Payload(src: some(privKey), payload: repeat(byte 1, 189))
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get())
+    let decoded = waku.decode(encoded.get())
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
@@ -101,9 +101,9 @@ suite "Whisper payload padding":
 
   test "should do min padding":
     let payload = Payload(payload: repeat(byte 1, 253))
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get())
+    let decoded = waku.decode(encoded.get())
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
@@ -114,9 +114,9 @@ suite "Whisper payload padding":
     let privKey = keys.newPrivateKey()
 
     let payload = Payload(src: some(privKey), payload: repeat(byte 1, 188))
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get())
+    let decoded = waku.decode(encoded.get())
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
@@ -127,9 +127,9 @@ suite "Whisper payload padding":
   test "should roundtrip custom padding":
     let payload = Payload(payload: repeat(byte 1, 10),
                           padding: some(repeat(byte 2, 100)))
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get())
+    let decoded = waku.decode(encoded.get())
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
@@ -140,9 +140,9 @@ suite "Whisper payload padding":
     let padding: seq[byte] = @[]
     let payload = Payload(payload: repeat(byte 1, 10),
                           padding: some(padding))
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get())
+    let decoded = waku.decode(encoded.get())
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
@@ -152,9 +152,9 @@ suite "Whisper payload padding":
     let privKey = keys.newPrivateKey()
     let payload = Payload(src: some(privKey), payload: repeat(byte 1, 10),
                           padding: some(repeat(byte 2, 100)))
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get())
+    let decoded = waku.decode(encoded.get())
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
@@ -167,16 +167,16 @@ suite "Whisper payload padding":
     let privKey = keys.newPrivateKey()
     let payload = Payload(src: some(privKey), payload: repeat(byte 1, 10),
                           padding: some(padding))
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
 
-    let decoded = whisper.decode(encoded.get())
+    let decoded = waku.decode(encoded.get())
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
       privKey.getPublicKey() == decoded.get().src.get()
       decoded.get().padding.isNone()
 
-# example from https://github.com/paritytech/parity-ethereum/blob/93e1040d07e385d1219d00af71c46c720b0a1acf/whisper/src/message.rs#L439
+# example from https://github.com/paritytech/parity-ethereum/blob/93e1040d07e385d1219d00af71c46c720b0a1acf/waku/src/message.rs#L439
 let
   env0 = Envelope(
     expiry:100000, ttl: 30, topic: [byte 0, 0, 0, 0],
@@ -185,12 +185,12 @@ let
     expiry:100000, ttl: 30, topic: [byte 0, 0, 0, 0],
     data: repeat(byte 9, 256), nonce: 1010102)
 
-suite "Whisper envelope":
+suite "Waku envelope":
 
   proc hashAndPow(env: Envelope): (string, float64) =
     # This is the current implementation of go-ethereum
     let size = env.toShortRlp().len().uint32
-    # This is our current implementation in `whisper_protocol.nim`
+    # This is our current implementation in `waku_protocol.nim`
     # let size = env.len().uint32
     # This is the EIP-627 specification
     # let size = env.toRlp().len().uint32
@@ -214,7 +214,7 @@ suite "Whisper envelope":
         57896044618658100000000000000000000000000000000000000000000000000000000000000.0
       calcPow(1, 1, Hash.fromHex(testHashes[2])) == 1.0
 
-    # Test values from go-ethereum whisperv6 in envelope_test
+    # Test values from go-ethereum wakuv6 in envelope_test
     var env = Envelope(ttl: 1, data: @[byte 0xde, 0xad, 0xbe, 0xef])
     # PoW calculation with no leading zeroes
     env.nonce = 100000
@@ -228,7 +228,7 @@ suite "Whisper envelope":
   test "should validate and allow envelope according to config":
     let ttl = 1'u32
     let topic = [byte 1, 2, 3, 4]
-    let config = WhisperConfig(powRequirement: 0, bloom: topic.topicBloom(),
+    let config = WakuConfig(powRequirement: 0, bloom: topic.topicBloom(),
                                isLightNode: false, maxMsgSize: defaultMaxMsgSize)
 
     let env = Envelope(expiry:epochTime().uint32 + ttl, ttl: ttl, topic: topic,
@@ -241,7 +241,7 @@ suite "Whisper envelope":
   test "should invalidate envelope due to ttl 0":
     let ttl = 0'u32
     let topic = [byte 1, 2, 3, 4]
-    let config = WhisperConfig(powRequirement: 0, bloom: topic.topicBloom(),
+    let config = WakuConfig(powRequirement: 0, bloom: topic.topicBloom(),
                                isLightNode: false, maxMsgSize: defaultMaxMsgSize)
 
     let env = Envelope(expiry:epochTime().uint32 + ttl, ttl: ttl, topic: topic,
@@ -251,7 +251,7 @@ suite "Whisper envelope":
   test "should invalidate envelope due to expired":
     let ttl = 1'u32
     let topic = [byte 1, 2, 3, 4]
-    let config = WhisperConfig(powRequirement: 0, bloom: topic.topicBloom(),
+    let config = WakuConfig(powRequirement: 0, bloom: topic.topicBloom(),
                                isLightNode: false, maxMsgSize: defaultMaxMsgSize)
 
     let env = Envelope(expiry:epochTime().uint32, ttl: ttl, topic: topic,
@@ -261,7 +261,7 @@ suite "Whisper envelope":
   test "should invalidate envelope due to in the future":
     let ttl = 1'u32
     let topic = [byte 1, 2, 3, 4]
-    let config = WhisperConfig(powRequirement: 0, bloom: topic.topicBloom(),
+    let config = WakuConfig(powRequirement: 0, bloom: topic.topicBloom(),
                                isLightNode: false, maxMsgSize: defaultMaxMsgSize)
 
     # there is currently a 2 second tolerance, hence the + 3
@@ -272,7 +272,7 @@ suite "Whisper envelope":
   test "should not allow envelope due to bloom filter":
     let topic = [byte 1, 2, 3, 4]
     let wrongTopic = [byte 9, 8, 7, 6]
-    let config = WhisperConfig(powRequirement: 0, bloom: wrongTopic.topicBloom(),
+    let config = WakuConfig(powRequirement: 0, bloom: wrongTopic.topicBloom(),
                                isLightNode: false, maxMsgSize: defaultMaxMsgSize)
 
     let env = Envelope(expiry:100000 , ttl: 30, topic: topic,
@@ -282,7 +282,7 @@ suite "Whisper envelope":
     check msg.allowed(config) == false
 
 
-suite "Whisper queue":
+suite "Waku queue":
   test "should throw out lower proof-of-work item when full":
     var queue = initQueue(1)
 
@@ -316,12 +316,12 @@ proc prepFilterTestMsg(pubKey = none[PublicKey](), symKey = none[SymKey](),
                        padding = none[seq[byte]]()): Message =
     let payload = Payload(dst: pubKey, symKey: symKey, src: src,
                           payload: @[byte 0, 1, 2], padding: padding)
-    let encoded = whisper.encode(payload)
+    let encoded = waku.encode(payload)
     let env = Envelope(expiry: 1, ttl: 1, topic: topic, data: encoded.get(),
                        nonce: 0)
     result = initMessage(env)
 
-suite "Whisper filter":
+suite "Waku filter":
   test "should notify filter on message with symmetric encryption":
     var symKey: SymKey
     let topic = [byte 0, 0, 0, 0]
