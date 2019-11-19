@@ -210,7 +210,7 @@ proc registerMsg(protocol: ProtocolInfo,
 
 proc registerProtocol(protocol: ProtocolInfo) =
   # TODO: This can be done at compile-time in the future
-  if protocol.version > 0:
+  if protocol.name != "p2p":
     let pos = lowerBound(gProtocols, protocol)
     gProtocols.insert(protocol, pos)
     for i in 0 ..< gProtocols.len:
@@ -588,12 +588,12 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     ResponderWithId = bindSym "ResponderWithId"
     ResponderWithoutId = bindSym "ResponderWithoutId"
 
-    isSubprotocol = protocol.version > 0
+    isSubprotocol = protocol.rlpxName != "p2p"
 
   if protocol.rlpxName.len == 0: protocol.rlpxName = protocol.name
   # By convention, all Ethereum protocol names were abbreviated to 3 letters,
   # but this informal spec has since been relaxed (e.g. `hive`).
-  doAssert protocol.rlpxName.len > 2 
+  doAssert protocol.rlpxName.len > 2
 
   new result
 
@@ -781,7 +781,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
                    newLit(protocol.version),
                    protocol.peerInit, protocol.netInit)
 
-p2pProtocol devp2p(version = 0, rlpxName = "p2p"):
+p2pProtocol devp2p(version = 5, rlpxName = "p2p"):
   proc hello(peer: Peer,
              version: uint,
              clientId: string,
