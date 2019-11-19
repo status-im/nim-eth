@@ -38,6 +38,8 @@ import
   options, tables, times, chronos, chronicles,
   eth/[keys, async_utils, p2p], whisper/whisper_types
 
+import eth/p2p/rlpx_protocols/whisper_protocol
+
 export
   whisper_types
 
@@ -72,7 +74,7 @@ type
     received: HashSet[Message]
 
   WakuNetwork = ref object
-    queue*: Queue
+    queue*: ref Queue
     filters*: Filters
     config*: WakuConfig
 
@@ -98,7 +100,11 @@ proc run(peer: Peer) {.gcsafe, async.}
 proc run(node: EthereumNode, network: WakuNetwork) {.gcsafe, async.}
 
 proc initProtocolState*(network: WakuNetwork, node: EthereumNode) {.gcsafe.} =
-  network.queue = initQueue(defaultQueueCapacity)
+  if node.protocolState(Whisper).isNil:
+    new(network.queue)
+    network.queue[] = initQueue(defaultQueueCapacity)
+  else:
+    network.queue = node.protocolState(Whisper).queue
   network.filters = initTable[string, Filter]()
   network.config.bloom = fullBloom()
   network.config.powRequirement = defaultMinPow
@@ -195,7 +201,7 @@ p2pProtocol Waku(version = wakuVersion,
 
       # This can still be a duplicate message, but from another peer than
       # the peer who send the message.
-      if peer.networkState.queue.add(msg):
+      if peer.networkState.queue[].add(msg):
         # notify filters of this message
         peer.networkState.filters.notify(msg)
 
@@ -294,7 +300,7 @@ proc run(node: EthereumNode, network: WakuNetwork) {.async.} =
   while true:
     # prune message queue every second
     # TTL unit is in seconds, so this should be sufficient?
-    network.queue.prune()
+    network.queue[].prune()
     # pruning the received sets is not necessary for correct workings
     # but simply from keeping the sets growing indefinitely
     node.pruneReceived()
@@ -317,7 +323,7 @@ proc queueMessage(node: EthereumNode, msg: Message): bool =
     return false
 
   trace "Adding message to queue"
-  if wakuNet.queue.add(msg):
+  if wakuNet.queue[].add(msg):
     # Also notify our own filters of the message we are sending,
     # e.g. msg from local Dapp to Dapp
     wakuNet.filters.notify(msg)
@@ -459,4 +465,4 @@ proc resetMessageQueue*(node: EthereumNode) =
   ## Full reset of the message queue.
   ##
   ## NOTE: Not something that should be run in normal circumstances.
-  node.protocolState(Waku).queue = initQueue(defaultQueueCapacity)
+  node.protocolState(Waku).queue[] = initQueue(defaultQueueCapacity)
