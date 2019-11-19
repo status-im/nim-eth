@@ -70,7 +70,7 @@ type
     received: HashSet[Message]
 
   WhisperNetwork = ref object
-    queue*: Queue
+    queue*: ref Queue
     filters*: Filters
     config*: WhisperConfig
 
@@ -95,7 +95,8 @@ proc run(peer: Peer) {.gcsafe, async.}
 proc run(node: EthereumNode, network: WhisperNetwork) {.gcsafe, async.}
 
 proc initProtocolState*(network: WhisperNetwork, node: EthereumNode) {.gcsafe.} =
-  network.queue = initQueue(defaultQueueCapacity)
+  new(network.queue)
+  network.queue[] = initQueue(defaultQueueCapacity)
   network.filters = initTable[string, Filter]()
   network.config.bloom = fullBloom()
   network.config.powRequirement = defaultMinPow
@@ -192,7 +193,7 @@ p2pProtocol Whisper(version = whisperVersion,
 
       # This can still be a duplicate message, but from another peer than
       # the peer who send the message.
-      if peer.networkState.queue.add(msg):
+      if peer.networkState.queue[].add(msg):
         # notify filters of this message
         peer.networkState.filters.notify(msg)
 
@@ -291,7 +292,7 @@ proc run(node: EthereumNode, network: WhisperNetwork) {.async.} =
   while true:
     # prune message queue every second
     # TTL unit is in seconds, so this should be sufficient?
-    network.queue.prune()
+    network.queue[].prune()
     # pruning the received sets is not necessary for correct workings
     # but simply from keeping the sets growing indefinitely
     node.pruneReceived()
@@ -314,7 +315,7 @@ proc queueMessage(node: EthereumNode, msg: Message): bool =
     return false
 
   trace "Adding message to queue"
-  if whisperNet.queue.add(msg):
+  if whisperNet.queue[].add(msg):
     # Also notify our own filters of the message we are sending,
     # e.g. msg from local Dapp to Dapp
     whisperNet.filters.notify(msg)
@@ -456,4 +457,4 @@ proc resetMessageQueue*(node: EthereumNode) =
   ## Full reset of the message queue.
   ##
   ## NOTE: Not something that should be run in normal circumstances.
-  node.protocolState(Whisper).queue = initQueue(defaultQueueCapacity)
+  node.protocolState(Whisper).queue[] = initQueue(defaultQueueCapacity)
