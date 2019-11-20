@@ -33,7 +33,8 @@ suite "Waku - Whisper bridge tests":
 
   asyncTest "WakuWhisper and Whisper peers connected":
     check:
-      nodeWakuWhisper.peerPool.connectedNodes.len() == 2
+      nodeWhisper.peerPool.connectedNodes.len() == 1
+      nodeWaku.peerPool.connectedNodes.len() == 1
 
   asyncTest "Whisper - Waku communcation via bridge":
     # topic whisper node subscribes to, waku node posts to
