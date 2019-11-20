@@ -266,3 +266,12 @@ suite "ECC/ECDSA/ECDHE tests suite":
       pubkey1.isZeroKey() == true
       seckey2.isZeroKey() == false
       pubkey2.isZeroKey() == false
+
+  test "Compressed public keys":
+    let pubkeyCompressed = "03CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258CD3138"
+    let s = initPublicKey(pubkeyCompressed)
+    check:
+      s.getRaw.toHex == """CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258
+          CD31387574077F301B421BC84DF7266C44E9E6D569FC56BE00812904767BF5CCD1FC7F""".stripSpaces
+
+      s.getRawCompressed.toHex == pubkeyCompressed
