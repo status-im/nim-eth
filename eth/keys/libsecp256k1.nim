@@ -12,6 +12,7 @@ import secp256k1, nimcrypto/sysrand, nimcrypto/utils
 
 const
   KeyLength* = 256 div 8
+  CompressedPubKeyLength* = 33
   RawSignatureSize* = KeyLength * 2 + 1
   RawPublicKeySize* = KeyLength * 2
   InvalidPrivateKey = "Invalid private key!"
@@ -154,16 +155,24 @@ proc recoverPublicKey*(data: openarray[byte],
   ## Unserialize public key from `data`.
   let ctx = getSecpContext()
   let length = len(data)
-  if length < RawPublicKeySize:
+  if length >= RawPublicKeySize:
+    var rawkey: array[RawPublicKeySize + 1, byte]
+    rawkey[0] = 0x04'u8 # mark key with UNCOMPRESSED flag
+    copyMem(addr rawkey[1], unsafeAddr data[0], RawPublicKeySize)
+    if secp256k1_ec_pubkey_parse(ctx, addr pubkey,
+                                cast[ptr cuchar](addr rawkey),
+                                RawPublicKeySize + 1) != 1:
+      return(EthKeysStatus.Error)
+  elif length == CompressedPubKeyLength:
+    # Compressed format
+    if secp256k1_ec_pubkey_parse(ctx, addr pubkey,
+                                cast[ptr cuchar](unsafeAddr data),
+                                length) != 1:
+      return(EthKeysStatus.Error)
+  else:
     setErrorMsg(InvalidPublicKey)
     return(EthKeysStatus.Error)
-  var rawkey: array[RawPublicKeySize + 1, byte]
-  rawkey[0] = 0x04'u8 # mark key with UNCOMPRESSED flag
-  copyMem(addr rawkey[1], unsafeAddr data[0], RawPublicKeySize)
-  if secp256k1_ec_pubkey_parse(ctx, addr pubkey,
-                               cast[ptr cuchar](addr rawkey),
-                               RawPublicKeySize + 1) != 1:
-    return(EthKeysStatus.Error)
+
   result = EthKeysStatus.Success
 
 proc recoverSignature*(data: openarray[byte],
@@ -184,8 +193,6 @@ proc recoverSignature*(data: openarray[byte],
 proc initPublicKey*(hexstr: string): PublicKey =
   ## Create new public key from hexadecimal string representation.
   var o = fromHex(stripSpaces(hexstr))
-  if len(o) < RawPublicKeySize:
-    raise newException(EthKeysException, InvalidPublicKey)
   if recoverPublicKey(o, result) != EthKeysStatus.Success:
     raise newException(EthKeysException, InvalidPublicKey)
 
@@ -217,32 +224,36 @@ proc ecdhAgree*(seckey: PrivateKey, pubkey: PublicKey,
   copyMem(addr secret, addr res[1], KeyLength)
   return(EthKeysStatus.Success)
 
-proc getRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] {.noinit.} =
-  ## Converts public key `pubkey` to serialized form.
-  var key: array[RawPublicKeySize + 1, byte]
-  var length = csize(sizeof(key))
-  let ctx = getSecpContext()
-  if secp256k1_ec_pubkey_serialize(ctx, cast[ptr cuchar](addr key),
-                                   addr length, unsafeAddr pubkey,
-                                   SECP256K1_EC_UNCOMPRESSED) != 1:
-    raiseSecp256k1Error()
-  doAssert(length == RawPublicKeySize + 1)
-  doAssert(key[0] == 0x04'u8)
-  copyMem(addr result[0], addr key[1], RawPublicKeySize)
-
-proc toRaw*(pubkey: PublicKey, data: var openarray[byte]) =
+proc toRaw*(pubkey: PublicKey, data: var openarray[byte], compressed = false) =
   ## Converts public key `pubkey` to serialized form and store it in `data`.
-  var key: array[RawPublicKeySize + 1, byte]
-  doAssert(len(data) >= RawPublicKeySize)
-  var length = csize(sizeof(key))
-  let ctx = getSecpContext()
-  if secp256k1_ec_pubkey_serialize(ctx, cast[ptr cuchar](addr key),
-                                   addr length, unsafeAddr pubkey,
-                                   SECP256K1_EC_UNCOMPRESSED) != 1:
-    raiseSecp256k1Error()
-  doAssert(length == RawPublicKeySize + 1)
-  doAssert(key[0] == 0x04'u8)
-  copyMem(addr data[0], addr key[1], RawPublicKeySize)
+  if compressed:
+    var length = len(data)
+    doAssert(length >= CompressedPubKeyLength)
+    let ctx = getSecpContext()
+    if secp256k1_ec_pubkey_serialize(ctx, cast[ptr cuchar](addr data[0]),
+                                    addr length, unsafeAddr pubkey,
+                                    SECP256K1_EC_COMPRESSED) != 1:
+      raiseSecp256k1Error()
+  else:
+    var key: array[RawPublicKeySize + 1, byte]
+    doAssert(len(data) >= RawPublicKeySize)
+    var length = csize(sizeof(key))
+    let ctx = getSecpContext()
+    if secp256k1_ec_pubkey_serialize(ctx, cast[ptr cuchar](addr key),
+                                    addr length, unsafeAddr pubkey,
+                                    SECP256K1_EC_UNCOMPRESSED) != 1:
+      raiseSecp256k1Error()
+    doAssert(length == RawPublicKeySize + 1)
+    doAssert(key[0] == 0x04'u8)
+    copyMem(addr data[0], addr key[1], RawPublicKeySize)
+
+proc getRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] {.noinit, inline.} =
+  ## Converts public key `pubkey` to serialized form.
+  pubkey.toRaw(result)
+
+proc getRawCompressed*(pubkey: PublicKey): array[CompressedPubKeyLength, byte] {.noinit, inline.} =
+  ## Converts public key `pubkey` to serialized form.
+  pubkey.toRaw(result, true)
 
 proc getRaw*(s: Signature): array[RawSignatureSize, byte] {.noinit.} =
   ## Converts signature `s` to serialized form.
