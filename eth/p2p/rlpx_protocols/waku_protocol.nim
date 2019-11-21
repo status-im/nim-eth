@@ -100,11 +100,8 @@ proc run(peer: Peer) {.gcsafe, async.}
 proc run(node: EthereumNode, network: WakuNetwork) {.gcsafe, async.}
 
 proc initProtocolState*(network: WakuNetwork, node: EthereumNode) {.gcsafe.} =
-  if node.protocolState(Whisper).isNil:
-    new(network.queue)
-    network.queue[] = initQueue(defaultQueueCapacity)
-  else:
-    network.queue = node.protocolState(Whisper).queue
+  new(network.queue)
+  network.queue[] = initQueue(defaultQueueCapacity)
   network.filters = initTable[string, Filter]()
   network.config.bloom = fullBloom()
   network.config.powRequirement = defaultMinPow
@@ -466,3 +463,6 @@ proc resetMessageQueue*(node: EthereumNode) =
   ##
   ## NOTE: Not something that should be run in normal circumstances.
   node.protocolState(Waku).queue[] = initQueue(defaultQueueCapacity)
+
+proc shareMessageQueue*(node: EthereumNode) =
+  node.protocolState(Waku).queue = node.protocolState(Whisper).queue
