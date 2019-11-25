@@ -781,7 +781,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
                    newLit(protocol.version),
                    protocol.peerInit, protocol.netInit)
 
-p2pProtocol devp2p(version = 5, rlpxName = "p2p"):
+p2pProtocol DevP2P(version = 5, rlpxName = "p2p"):
   proc hello(peer: Peer,
              version: uint,
              clientId: string,
@@ -857,7 +857,7 @@ proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = fals
     peer.connectionState = Disconnected
     removePeer(peer.network, peer)
 
-proc validatePubKeyInHello(msg: devp2p.hello, pubKey: PublicKey): bool =
+proc validatePubKeyInHello(msg: DevP2P.hello, pubKey: PublicKey): bool =
   var pk: PublicKey
   recoverPublicKey(msg.nodeId, pk) == EthKeysStatus.Success and pk == pubKey
 
@@ -884,7 +884,7 @@ proc initPeerState*(peer: Peer, capabilities: openarray[Capability]) =
   peer.lastReqId = 0
   peer.initProtocolStates peer.dispatcher.activeProtocols
 
-proc postHelloSteps(peer: Peer, h: devp2p.hello) {.async.} =
+proc postHelloSteps(peer: Peer, h: DevP2P.hello) {.async.} =
   initPeerState(peer, h.capabilities)
 
   # Please note that the ordering of operations here is important!
@@ -1017,13 +1017,13 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
 
     var response = await result.handshakeImpl(
       sendHelloFut,
-      result.waitSingleMsg(devp2p.hello),
+      result.waitSingleMsg(DevP2P.hello),
       10.seconds)
 
     if not validatePubKeyInHello(response, remote.node.pubKey):
       warn "Remote nodeId is not its public key" # XXX: Do we care?
 
-    trace "devp2p handshake completed", peer = remote,
+    trace "DevP2P handshake completed", peer = remote,
       clientId = response.clientId
 
     await postHelloSteps(result, response)
@@ -1108,7 +1108,7 @@ proc rlpxAccept*(node: EthereumNode,
 
     var response = await result.handshakeImpl(
       sendHelloFut,
-      result.waitSingleMsg(devp2p.hello),
+      result.waitSingleMsg(DevP2P.hello),
       10.seconds)
 
     trace "Received Hello", version=response.version, id=response.clientId

@@ -97,12 +97,12 @@ the definition of a RLPx protocol:
 #### RLPx sub-protocols
 
 The sub-protocols are defined with the `p2pProtocol` macro. It will accept
-a 3-letter identifier for the protocol and the current protocol version:
+a short identifier for the protocol and the current protocol version:
 
 Here is how the [DevP2P wire protocol](https://github.com/ethereum/devp2p/blob/master/rlpx.md#p2p-capability) might look like:
 
 ``` nim
-p2pProtocol p2p(version = 0):
+p2pProtocol DevP2P(version = 0, rlpxName = "p2p"):
   proc hello(peer: Peer,
              version: uint,
              clientId: string,
