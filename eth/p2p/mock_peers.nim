@@ -128,7 +128,7 @@ proc addHandshake*(mock: MockConf, msg: auto) =
   msgInfo.protocol = mock.addProtocol(msgInfo.protocol)
   let expectedMsg = ExpectedMsg(msg: msgInfo, response: reply(msg))
 
-  when msg is devp2p.hello:
+  when msg is DevP2P.hello:
     devp2pHandshake = expectedMsg
   else:
     mock.handshakes.add expectedMsg
