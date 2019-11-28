@@ -374,5 +374,42 @@ suite "hexary trie":
 
     check nonPruningTrie.isPruning == false
     check pruningTrie.isPruning == true
-    check nonPruningSecureTRie.isPruning == false
-    check pruningSecureTRie.isPruning == true
+    check nonPruningSecureTrie.isPruning == false
+    check pruningSecureTrie.isPruning == true
+
+  test "multi-roots pruning trie":
+    const
+      numKeyVal = 30
+
+    var
+      memdb = newMemoryDB()
+      pruningTrie = initHexaryTrie(memdb, isPruning = true)
+
+    let
+      keys = randList(BytesRange, randGen(5, 77), randGen(numKeyVal))
+      vals = randList(BytesRange, randGen(1, 57), randGen(numKeyVal))
+      newVals = randList(BytesRange, randGen(1, 63), randGen(numKeyVal))
+
+    var tx1 = memdb.beginTransaction()
+    for i in 0 ..< numKeyVal:
+      pruningTrie.put(keys[i], vals[i])
+    tx1.commit()
+    let rootHash1 = pruningTrie.rootHash
+
+    var tx2 = memdb.beginTransaction()
+    for i in 0 ..< numKeyVal:
+      pruningTrie.put(keys[i], newVals[i])
+    tx2.commit(applyDeletes = false)
+    let rootHash2 = pruningTrie.rootHash
+
+    check rootHash1 != rootHash2
+
+    var trie1 = initHexaryTrie(memdb, rootHash1, isPruning = true)
+    for x in 0 ..< numKeyVal:
+      var branch = trie1.getBranch(keys[x])
+      check isValidBranch(branch, trie1.rootHash, keys[x], vals[x])
+
+    var trie2 = initHexaryTrie(memdb, rootHash2, isPruning = true)
+    for x in 0 ..< numKeyVal:
+      var branch = trie2.getBranch(keys[x])
+      check isValidBranch(branch, trie2.rootHash, keys[x], newVals[x])
