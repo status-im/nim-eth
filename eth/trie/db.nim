@@ -45,6 +45,8 @@ type
     modifications: MemoryLayer
     state: TransactionState
 
+  TransactionID* = distinct DbTransaction
+
 proc put*(db: TrieDatabaseRef, key, val: openarray[byte]) {.gcsafe.}
 proc get*(db: TrieDatabaseRef, key: openarray[byte]): Bytes {.gcsafe.}
 proc del*(db: TrieDatabaseRef, key: openarray[byte]) {.gcsafe.}
@@ -100,9 +102,10 @@ proc newMemoryLayer: MemoryLayer =
   result.records = initTable[Bytes, MemDBRec]()
   result.deleted = initSet[Bytes]()
 
-proc commit(memDb: MemoryLayer, db: TrieDatabaseRef) =
-  for k in memDb.deleted:
-    db.del(k)
+proc commit(memDb: MemoryLayer, db: TrieDatabaseRef, applyDeletes: bool = true) =
+  if applyDeletes:
+    for k in memDb.deleted:
+      db.del(k)
 
   for k, v in memDb.records:
     db.put(k, v.value)
@@ -146,13 +149,13 @@ proc rollback*(t: DbTransaction) =
   t.db.mostInnerTransaction = t.parentTransaction
   t.state = RolledBack
 
-proc commit*(t: DbTransaction) =
+proc commit*(t: DbTransaction, applyDeletes: bool = true) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
   doAssert t.db.mostInnerTransaction == t and t.state == Pending
   t.db.mostInnerTransaction = t.parentTransaction
-  t.modifications.commit(t.db)
+  t.modifications.commit(t.db, applyDeletes)
   t.state = Committed
 
 proc dispose*(t: DbTransaction) {.inline.} =
@@ -233,3 +236,23 @@ proc contains*(db: TrieDatabaseRef, key: openarray[byte]): bool =
   if db.containsProc != nil:
     result = db.containsProc(db.obj, key)
 
+# TransactionID imitate subset of JournalDB behaviour
+# but there is no need to rollback or dispose
+# TransactionID, because it will be handled elsewhere
+# this is useful when we need to jump back to specific point
+# in history where the database still in 'original' state
+# and retrieve data from that point
+proc getTransactionID*(db: TrieDatabaseRef): TransactionID =
+  TransactionID(db.mostInnerTransaction)
+
+proc setTransactionID*(db: TrieDatabaseRef, id: TransactionID) =
+  db.mostInnerTransaction = DbTransaction(id)
+
+template shortTimeReadOnly*(db: TrieDatabaseRef, id: TransactionID, body: untyped) =
+  # hmm, how can we prevent unwanted database modification
+  # inside this block?
+  block:
+    let tmpID = db.getTransactionID()
+    db.setTransactionID(id)
+    body
+    db.setTransactionID(tmpID)
