@@ -198,10 +198,8 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
       syncCtx.endBlockNumber = bestBlockNumber
   except TransportError:
     debug "Transport got closed during obtainBlocksFromPeer"
-  except CatchableError:
-    debug "Exception in getBestBlockNumber()",
-      exc = getCurrentException().name,
-      err = getCurrentExceptionMsg()
+  except CatchableError as e:
+    debug "Exception in getBestBlockNumber()", exc = e.name, err = e.msg
     # no need to exit here, because the context might still have blocks to fetch
     # from this peer
 
@@ -252,13 +250,11 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
           warn "Bodies len != headers.len", bodies = bodies.len, headers = workItem.headers.len
     except TransportError:
       debug "Transport got closed during obtainBlocksFromPeer"
-    except CatchableError:
+    except CatchableError as e:
       # the success case sets `dataReceived`, so we can just fall back to the
       # failure path below. If we signal time-outs with exceptions such
       # failures will be easier to handle.
-      debug "Exception in obtainBlocksFromPeer()",
-            exc = getCurrentException().name,
-            err = getCurrentExceptionMsg()
+      debug "Exception in obtainBlocksFromPeer()", exc = e.name, err = e.msg
 
     var giveUpOnPeer = false
 
@@ -365,10 +361,8 @@ proc onPeerConnected(ctx: SyncContext, peer: Peer) =
           error "startSyncWithPeer failed", msg = f.readError.msg, peer
   except TransportError:
     debug "Transport got closed during startSyncWithPeer"
-  except CatchableError:
-    debug "Exception in startSyncWithPeer()",
-      exc = getCurrentException().name,
-      err = getCurrentExceptionMsg()
+  except CatchableError as e:
+    debug "Exception in startSyncWithPeer()", exc = e.name, err = e.msg
 
 
 proc onPeerDisconnected(ctx: SyncContext, p: Peer) =

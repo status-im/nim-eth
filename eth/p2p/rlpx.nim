@@ -443,11 +443,11 @@ proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type): auto {.inline.} =
   else:
     try:
       return r.read(MsgType)
-    except:
+    except Exception as e:
       debug "Failed rlp.read",
             peer = peer,
             dataType = MsgType.name,
-            exception = getCurrentExceptionMsg()
+            exception = e.msg
             # rlpData = r.inspect
 
       raise
@@ -533,10 +533,9 @@ proc dispatchMessages*(peer: Peer) {.async.} =
         msg = peer.getMsgName(msgId)
       await peer.disconnect(BreachOfProtocol, true)
       return
-    except CatchableError:
+    except CatchableError as e:
       warn "Error while handling RLPx message", peer,
-        msg = peer.getMsgName(msgId),
-        err = getCurrentExceptionMsg()
+        msg = peer.getMsgName(msgId), err = e.msg
 
     # TODO: Hmm, this can be safely moved into the message handler thunk.
     # The documentation will need to be updated, explaning the fact that
@@ -546,12 +545,12 @@ proc dispatchMessages*(peer: Peer) {.async.} =
       let msgInfo = peer.dispatcher.messages[msgId]
       try:
         (msgInfo.nextMsgResolver)(msgData, peer.awaitedMessages[msgId])
-      except:
+      except CatchableError as e:
         # TODO: Handling errors here must be investigated more carefully.
         # They also are supposed to be handled at the call-site where
         # `nextMsg` is used.
         debug "nextMsg resolver failed, ending dispatchMessages loop", peer,
-               err = getCurrentExceptionMsg()
+               err = e.msg
         await peer.disconnect(BreachOfProtocol, true)
         return
       peer.awaitedMessages[msgId] = nil
@@ -1044,12 +1043,11 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     # Some peers report capabilities with names longer than 3 chars. We ignore
     # those for now. Maybe we should allow this though.
     debug "Rlp error in rlpxConnect"
-  except TransportOsError:
-    trace "TransportOsError", err = getCurrentExceptionMsg()
-  except CatchableError:
-    error "Unexpected exception in rlpxConnect", remote,
-          exc = getCurrentException().name,
-          err = getCurrentExceptionMsg()
+  except TransportOsError as e:
+    trace "TransportOsError", err = e.msg
+  except CatchableError as e:
+    error "Unexpected exception in rlpxConnect", remote, exc = e.name,
+      err = e.msg
 
   if not ok:
     if not isNil(result.transport):
@@ -1152,12 +1150,10 @@ proc rlpxAccept*(node: EthereumNode,
     # Some peers report capabilities with names longer than 3 chars. We ignore
     # those for now. Maybe we should allow this though.
     debug "Rlp error in rlpxAccept"
-  except TransportOsError:
-    trace "TransportOsError", err = getCurrentExceptionMsg()
-  except CatchableError:
-    error "Unexpected exception in rlpxAccept",
-          exc = getCurrentException().name,
-          err = getCurrentExceptionMsg()
+  except TransportOsError as e:
+    trace "TransportOsError", err = e.msg
+  except CatchableError as e:
+    error "Unexpected exception in rlpxAccept", exc = e.name, err = e.msg
 
   if not ok:
     if not isNil(result.transport):

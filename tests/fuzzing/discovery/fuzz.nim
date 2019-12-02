@@ -30,5 +30,5 @@ test:
     targetNode.receive(address, msg)
   # These errors are also catched in `processClient` in discovery.nim
   # TODO: move them a layer down in discovery so we can do a cleaner test there?
-  except RlpError, DiscProtocolError:
-    debug "Receive failed", err = getCurrentExceptionMsg()
+  except RlpError, DiscProtocolError as e:
+    debug "Receive failed", err = e.msg

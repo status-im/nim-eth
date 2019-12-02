@@ -173,8 +173,7 @@ proc run(p: PeerPool) {.async.} =
       # Most unexpected errors should be transient, so we log and restart from
       # scratch.
       error "Unexpected PeerPool error, restarting",
-            err = getCurrentExceptionMsg(),
-            stackTrace = e.getStackTrace()
+        err = e.msg, stackTrace = e.getStackTrace()
       dropConnections = true
 
     if dropConnections:

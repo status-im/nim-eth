@@ -71,8 +71,8 @@ proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] 
             externalIP = parseIpAddress(ires.value)
             strategy = NatUpnp
             return some(externalIP)
-          except:
-            error "parseIpAddress() exception", err = getCurrentExceptionMsg()
+          except ValueError as e:
+            error "parseIpAddress() exception", err = e.msg
             return
 
   if natStrategy == NatAny or natStrategy == NatPmp:
@@ -89,8 +89,8 @@ proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] 
           externalIP = parseIpAddress($(nires.value))
           strategy = NatPmp
           return some(externalIP)
-        except:
-          error "parseIpAddress() exception", err = getCurrentExceptionMsg()
+        except ValueError as e:
+          error "parseIpAddress() exception", err = e.msg
           return
 
 proc doPortMapping(tcpPort, udpPort: Port, description: string): Option[(Port, Port)] {.gcsafe.} =

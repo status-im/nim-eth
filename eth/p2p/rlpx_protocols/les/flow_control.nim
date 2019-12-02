@@ -118,9 +118,8 @@ proc loadMessageStats*(network: LesNetwork,
 
       return true
 
-    except RlpError:
-      error "Error while loading LES message stats",
-            err = getCurrentExceptionMsg()
+    except RlpError as e:
+      error "Error while loading LES message stats", err = e.msg
 
   newSeq(network.messageStats, les.messages[^1].id + 1)
   return false
