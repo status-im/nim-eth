@@ -4,5 +4,5 @@ test:
   try:
     var rlp = rlpFromBytes(@payload.toRange)
     discard rlp.inspect()
-  except RlpError:
-    debug "Inspect failed", err = getCurrentExceptionMsg()
+  except RlpError as e:
+    debug "Inspect failed", err = e.msg

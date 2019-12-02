@@ -66,15 +66,13 @@ proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
       # This can except when the future still completes with an error.
       # E.g. the `sendMsg` fails because of an already closed transport or a
       # broken pipe
-      except TransportOsError:
+      except TransportOsError as e:
         # E.g. broken pipe
-        trace "TransportOsError during request", err = getCurrentExceptionMsg()
+        trace "TransportOsError during request", err = e.msg
       except TransportError:
         trace "Transport got closed during request"
-      except:
-        debug "Exception in requestResolver()",
-          exc = getCurrentException().name,
-          err = getCurrentExceptionMsg()
+      except Exception as e:
+        debug "Exception in requestResolver()", exc = e.name, err = e.msg
         raise
 
 proc linkSendFailureToReqFuture[S, R](sendFut: Future[S], resFut: Future[R]) =

@@ -7,7 +7,8 @@ template fuzz(body) =
     try:
       body
     except Exception as e:
-      error "Fuzzer input created exception", exception=e.name, trace=e.repr, msg=e.msg
+      error "Fuzzer input created exception", exception=e.name, trace=e.repr,
+        msg=e.msg
       discard kill(getpid(), SIGSEGV)
   else:
     body

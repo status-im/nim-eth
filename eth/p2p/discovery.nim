@@ -263,10 +263,12 @@ proc processClient(transp: DatagramTransport,
     var buf = transp.getMessage()
     let a = Address(ip: raddr.address, udpPort: raddr.port, tcpPort: raddr.port)
     proto.receive(a, buf)
-  except RlpError, DiscProtocolError:
-    debug "Receive failed", err = getCurrentExceptionMsg()
-  except:
-    debug "Receive failed", err = getCurrentExceptionMsg()
+  except RlpError as e:
+    debug "Receive failed", exc = e.name, err = e.msg
+  except DiscProtocolError as e:
+    debug "Receive failed", exc = e.name, err = e.msg
+  except Exception as e:
+    debug "Receive failed", exc = e.name, err = e.msg
     raise
 
 proc open*(d: DiscoveryProtocol) =
