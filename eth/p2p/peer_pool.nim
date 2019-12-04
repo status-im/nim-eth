@@ -169,7 +169,7 @@ proc run(p: PeerPool) {.async.} =
     var dropConnections = false
     try:
       await p.maybeConnectToMorePeers()
-    except Exception as e:
+    except CatchableError as e:
       # Most unexpected errors should be transient, so we log and restart from
       # scratch.
       error "Unexpected PeerPool error, restarting",

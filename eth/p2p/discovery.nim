@@ -269,7 +269,7 @@ proc processClient(transp: DatagramTransport,
     debug "Receive failed", exc = e.name, err = e.msg
   except Exception as e:
     debug "Receive failed", exc = e.name, err = e.msg
-    raise
+    raise e
 
 proc open*(d: DiscoveryProtocol) =
   # TODO allow binding to specific IP / IPv6 / etc

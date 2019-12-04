@@ -49,6 +49,6 @@ proc testPayloads(filename: string) =
               testThunk(payload)
             except CatchableError as e:
               check: e.name == error.str
-              raise
+              raise e
 
 testPayloads(sourceDir / "test_rlpx_thunk.json")

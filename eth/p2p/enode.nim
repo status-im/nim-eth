@@ -87,7 +87,7 @@ proc initENode*(e: string, node: var ENode): ENodeStatus =
     tport = parseInt(uri.port)
     if tport <= 0 or tport > 65535:
       return IncorrectPort
-  except:
+  except ValueError:
     return IncorrectPort
 
   if len(uri.query) > 0:
@@ -97,7 +97,7 @@ proc initENode*(e: string, node: var ENode): ENodeStatus =
       uport = parseInt(uri.query[9..^1])
       if uport <= 0 or uport > 65535:
         return IncorrectDiscPort
-    except:
+    except ValueError:
       return IncorrectDiscPort
   else:
     uport = tport
@@ -107,12 +107,12 @@ proc initENode*(e: string, node: var ENode): ENodeStatus =
     if recoverPublicKey(cast[seq[byte]](data),
                         node.pubkey) != EthKeysStatus.Success:
       return IncorrectNodeId
-  except:
+  except CatchableError:
     return IncorrectNodeId
 
   try:
     node.address.ip = parseIpAddress(uri.hostname)
-  except:
+  except ValueError:
     zeroMem(addr node.pubkey, KeyLength * 2)
     return IncorrectIP
 
