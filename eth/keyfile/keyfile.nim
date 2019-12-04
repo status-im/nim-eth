@@ -231,7 +231,7 @@ proc decodeHex(m: string): seq[byte] =
   if len(m) > 0:
     try:
       result = utils.fromHex(m)
-    except:
+    except CatchableError:
       result = newSeq[byte]()
   else:
     result = newSeq[byte]()
@@ -243,7 +243,7 @@ proc decodeSalt(m: string): string =
       sarr = utils.fromHex(m)
       result = newString(len(sarr))
       copyMem(addr result[0], addr sarr[0], len(sarr))
-    except:
+    except CatchableError:
       result = ""
   else:
     result = ""
@@ -395,7 +395,7 @@ proc decodeKeyFileJson*(j: JsonNode,
       return res
     try:
       seckey = initPrivateKey(plaintext)
-    except:
+    except CatchableError:
       return IncorrectPrivateKey
     result = Success
   else:
@@ -414,7 +414,7 @@ proc loadKeyFile*(pathname: string,
   try:
     data = parseFile(pathname)
     result = Success
-  except:
+  except CatchableError:
     result = JsonError
   finally:
     stream.close()
@@ -432,7 +432,7 @@ proc saveKeyFile*(pathname: string,
   try:
     f.write($jobject)
     result = Success
-  except:
+  except CatchableError:
     result = OsError
   finally:
     f.close()

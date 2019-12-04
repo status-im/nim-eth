@@ -270,9 +270,9 @@ proc sendMsg*(peer: Peer, data: Bytes) {.gcsafe, async.} =
     if res != len(cipherText):
       # This is ECONNRESET or EPIPE case when remote peer disconnected.
       await peer.disconnect(TcpError)
-  except:
+  except CatchableError as e:
     await peer.disconnect(TcpError)
-    raise
+    raise e
 
 proc send*[Msg](peer: Peer, msg: Msg): Future[void] =
   logSentMsg(peer, msg)
@@ -450,7 +450,7 @@ proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type): auto {.inline.} =
             exception = e.msg
             # rlpData = r.inspect
 
-      raise
+      raise e
 
 proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
   let wantedId = peer.perPeerMsgId(MsgType)

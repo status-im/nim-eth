@@ -73,7 +73,7 @@ proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
         trace "Transport got closed during request"
       except Exception as e:
         debug "Exception in requestResolver()", exc = e.name, err = e.msg
-        raise
+        raise e
 
 proc linkSendFailureToReqFuture[S, R](sendFut: Future[S], resFut: Future[R]) =
   sendFut.addCallback() do (arg: pointer):
