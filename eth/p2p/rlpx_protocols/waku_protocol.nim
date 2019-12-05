@@ -76,6 +76,14 @@ type
     filters*: Filters
     config*: WakuConfig
 
+  MailRequest* = object
+    lower*: uint32 ## Unix timestamp; oldest requested envelope's creation time
+    upper*: uint32 ## Unix timestamp; newest requested envelope's creation time
+    bloom*: Bytes ## Bloom filter to apply on the envelopes
+    limit*: uint32 ## Maximum amount of envelopes to return
+    # TODO: Not sure how cursor is supposed to work. The server is supposed
+    # to also send a P2P request back? Strange. And why is it an array?
+    # cursor*: Option[Bytes]
 
 proc allowed*(msg: Message, config: WakuConfig): bool =
   # Check max msg size, already happens in RLPx but there is a specific waku
@@ -222,11 +230,12 @@ p2pProtocol Waku(version = wakuVersion,
     # such as e.g. Waku Mail Server
     discard
 
-  proc p2pMessage(peer: Peer, envelope: Envelope) =
+  proc p2pMessage(peer: Peer, envelopes: openarray[Envelope]) =
     if peer.state.trusted:
       # when trusted we can bypass any checks on envelope
-      let msg = Message(env: envelope, isP2P: true)
-      peer.networkState.filters.notify(msg)
+      for envelope in envelopes:
+        let msg = Message(env: envelope, isP2P: true)
+        peer.networkState.filters.notify(msg)
 
   # Following message IDs are not part of EIP-627, but are added and used by
   # the Status application, we ignore them for now.
@@ -304,10 +313,17 @@ proc run(node: EthereumNode, network: WakuNetwork) {.async.} =
 
 # Private EthereumNode calls ---------------------------------------------------
 
-proc sendP2PMessage(node: EthereumNode, peerId: NodeId, env: Envelope): bool =
+proc sendP2PMessage(node: EthereumNode, peerId: NodeId,
+    envelopes: openarray[Envelope]): bool =
   for peer in node.peers(Waku):
     if peer.remote.id == peerId:
-      asyncCheck peer.p2pMessage(env)
+      asyncCheck peer.p2pMessage(envelopes)
+      return true
+
+proc sendP2PRequest(node: EthereumNode, peerId: NodeId, env: Envelope): bool =
+  for peer in node.peers(Waku):
+    if peer.remote.id == peerId:
+      asyncCheck peer.p2pRequest(env)
       return true
 
 proc queueMessage(node: EthereumNode, msg: Message): bool =
@@ -347,7 +363,7 @@ proc postMessage*(node: EthereumNode, pubKey = none[PublicKey](),
 
     # Allow lightnode to post only direct p2p messages
     if targetPeer.isSome():
-      return node.sendP2PMessage(targetPeer.get(), env)
+      return node.sendP2PMessage(targetPeer.get(), @[env])
     elif not node.protocolState(Waku).config.isLightNode:
       # non direct p2p message can not have ttl of 0
       if env.ttl == 0:
@@ -463,3 +479,19 @@ proc resetMessageQueue*(node: EthereumNode) =
   ## NOTE: Not something that should be run in normal circumstances.
   node.protocolState(Waku).queue[] = initQueue(defaultQueueCapacity)
 
+proc requestMail*(node: EthereumNode, peerId: NodeId, request: MailRequest,
+    symKey: SymKey): bool =
+  var writer = initRlpWriter()
+  writer.append(request)
+  let payload = writer.finish()
+
+  let data = encode(Payload(payload: payload, symKey: some(symKey)))
+
+  if data.isSome():
+    # TODO: should this envelope be valid in terms of ttl, PoW, etc.?
+    var env = Envelope(expiry:0, ttl: 0, data: data.get(), nonce: 0)
+
+    return node.sendP2PRequest(peerId, env)
+  else:
+    error "Encoding of payload failed"
+    return false
