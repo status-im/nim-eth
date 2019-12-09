@@ -265,10 +265,11 @@ proc processQueue(peer: Peer) =
     envelopes.add(message.env)
     whisperPeer.received.incl(message)
 
-  trace "Sending envelopes", amount=envelopes.len
-  # Ignore failure of sending messages, this could occur when the connection
-  # gets dropped
-  traceAsyncErrors peer.messages(envelopes)
+  if envelopes.len() > 0:
+    trace "Sending envelopes", amount=envelopes.len
+    # Ignore failure of sending messages, this could occur when the connection
+    # gets dropped
+    traceAsyncErrors peer.messages(envelopes)
 
 proc run(peer: Peer) {.async.} =
   while peer.connectionState notin {Disconnecting, Disconnected}:
