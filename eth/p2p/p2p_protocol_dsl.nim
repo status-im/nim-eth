@@ -633,21 +633,23 @@ proc defineThunk*(msg: Message, thunk: NimNode) =
 
   protocol.outRecvProcs.add thunk
 
-proc genAwaitUserHandler*(msg: Message, receivedMsg: NimNode,
-                          leadingParams: varargs[NimNode]): NimNode =
+proc genUserHandlerCall*(msg: Message, receivedMsg: NimNode,
+                         leadingParams: varargs[NimNode]): NimNode =
   if msg.userHandler == nil:
     return newStmtList()
 
-  var userHandlerCall = newCall(msg.userHandler.name, leadingParams)
+  result = newCall(msg.userHandler.name, leadingParams)
 
   var params = toSeq(msg.procDef.typedParams(skip = 1))
   if params.len == 1 and msg.protocol.useSingleRecordInlining:
-    userHandlerCall.add receivedMsg
+    result.add receivedMsg
   else:
     for p in params:
-      userHandlerCall.add newDotExpr(receivedMsg, p[0])
+      result.add newDotExpr(receivedMsg, p[0])
 
-  return newCall("await", userHandlerCall)
+proc genAwaitUserHandler*(msg: Message, receivedMsg: NimNode,
+                          leadingParams: varargs[NimNode]): NimNode =
+  return newCall("await", msg.genUserHandlerCall(receivedMsg, leadingParams))
 
 proc appendAllParams*(node: NimNode, procDef: NimNode, skipFirst = 0): NimNode =
   result = node
