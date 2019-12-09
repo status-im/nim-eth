@@ -1,6 +1,6 @@
 import
   endians, options, times, chronicles,
-  stint, nimcrypto, eth/rlp, eth/trie/[trie_defs, db]
+  stint, nimcrypto/[keccak, hash], eth/rlp, eth/trie/[trie_defs, db]
 
 export
   stint, read, append, KeccakHash

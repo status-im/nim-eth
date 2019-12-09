@@ -1,4 +1,4 @@
-import nimcrypto, hashes, stew/byteutils, eth_types, metrics
+import nimcrypto/hash, hashes, stew/byteutils, eth_types, metrics
 
 export metrics
 

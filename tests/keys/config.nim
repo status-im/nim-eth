@@ -29,7 +29,7 @@
 #     doAssert crypto.ecdsa_recover(msghash, sig) == pubkey
 # """
 
-import nimcrypto
+import nimcrypto/keccak
 
 type
   testKeySig* = object
