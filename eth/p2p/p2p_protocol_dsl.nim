@@ -649,7 +649,8 @@ proc genUserHandlerCall*(msg: Message, receivedMsg: NimNode,
 
 proc genAwaitUserHandler*(msg: Message, receivedMsg: NimNode,
                           leadingParams: varargs[NimNode]): NimNode =
-  return newCall("await", msg.genUserHandlerCall(receivedMsg, leadingParams))
+  result = msg.genUserHandlerCall(receivedMsg, leadingParams)
+  if result.len > 0: result = newCall("await", result)
 
 proc appendAllParams*(node: NimNode, procDef: NimNode, skipFirst = 0): NimNode =
   result = node
