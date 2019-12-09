@@ -10,7 +10,7 @@
 
 ## This module implements ECIES method encryption/decryption.
 
-import eth/keys, nimcrypto
+import eth/keys, nimcrypto/[rijndael, bcmode, hash, hmac, sysrand, sha2, utils]
 
 const
   emptyMac* = array[0, byte]([])

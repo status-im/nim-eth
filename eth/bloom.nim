@@ -1,4 +1,4 @@
-import stint, nimcrypto
+import stint, nimcrypto/[keccak, hash]
 
 type UInt2048 = StUint[2048]
 
