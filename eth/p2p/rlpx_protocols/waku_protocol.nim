@@ -38,8 +38,6 @@ import
   options, tables, times, chronos, chronicles,
   eth/[keys, async_utils, p2p], whisper/whisper_types
 
-import eth/p2p/rlpx_protocols/whisper_protocol
-
 export
   whisper_types
 
@@ -465,5 +463,3 @@ proc resetMessageQueue*(node: EthereumNode) =
   ## NOTE: Not something that should be run in normal circumstances.
   node.protocolState(Waku).queue[] = initQueue(defaultQueueCapacity)
 
-proc shareMessageQueue*(node: EthereumNode) =
-  node.protocolState(Waku).queue = node.protocolState(Whisper).queue
