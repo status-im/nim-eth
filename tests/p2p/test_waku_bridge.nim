@@ -9,10 +9,10 @@
 
 import
   sequtils, unittest, tables, chronos, eth/p2p, eth/p2p/peer_pool,
+  eth/p2p/rlpx_protocols/waku_bridge,
+  eth/p2p/rlpx_protocols/waku_protocol as waku,
+  eth/p2p/rlpx_protocols/whisper_protocol as whisper,
   ./p2p_test_helper
-
-import eth/p2p/rlpx_protocols/waku_protocol as waku
-import eth/p2p/rlpx_protocols/whisper_protocol as whisper
 
 let safeTTL = 5'u32
 let waitInterval = waku.messageInterval + 150.milliseconds
