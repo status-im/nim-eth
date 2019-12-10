@@ -1,6 +1,7 @@
 import
-  unittest, chronos, tables, sequtils, times, eth/p2p, eth/p2p/peer_pool,
-  eth/p2p/rlpx_protocols/waku_protocol, chronicles,
+  unittest, chronos, tables, sequtils, times,
+  eth/[p2p, async_utils], eth/p2p/peer_pool,
+  eth/p2p/rlpx_protocols/[waku_protocol, waku_mail],
   ./p2p_test_helper
 
 suite "Waku Mail Client":
@@ -17,7 +18,7 @@ suite "Waku Mail Client":
     check:
       client.peerPool.connectedNodes.len() == 1
 
-  asyncTest "Test Mail Request":
+  asyncTest "Mail Request and Request Complete":
     let
       topic = [byte 0, 0, 0, 0]
       bloom = toBloom(@[topic])
@@ -28,7 +29,8 @@ suite "Waku Mail Client":
         limit: limit)
 
     var symKey: SymKey
-    check client.requestMail(simpleServerNode.id, request, symKey)
+    check client.setPeerTrusted(simpleServerNode.id)
+    var cursorFut = client.requestMail(simpleServerNode.id, request, symKey, 1)
 
     # Simple mailserver part
     let peer = simpleServer.peerPool.connectedNodes[clientNode]
@@ -46,7 +48,12 @@ suite "Waku Mail Client":
       output.bloom == bloom
       output.limit == limit
 
-  asyncTest "Test Mail Send":
+    var test: P2PRequestCompleteObject
+    await peer.p2pRequestComplete(test)
+
+    check await cursorFut.withTimeout(chronos.milliseconds(100))
+
+  asyncTest "Mail Send":
     let topic = [byte 0x12, 0x34, 0x56, 0x78]
     let payload = repeat(byte 0, 10)
     var f = newFuture[int]()
@@ -69,3 +76,30 @@ suite "Waku Mail Client":
       await f.withTimeout(chronos.milliseconds(100))
 
       client.unsubscribeFilter(filter)
+
+  asyncTest "Multiple Client Request and Complete":
+    var count = 5
+    proc customHandler(peer: Peer, envelope: Envelope)=
+      var envelopes: seq[Envelope]
+      traceAsyncErrors peer.p2pMessage(envelopes)
+
+      var test: P2PRequestCompleteObject
+      count = count - 1
+      if count == 0:
+        test.cursor = @[]
+      else:
+        test.cursor = @[byte count]
+      traceAsyncErrors peer.p2pRequestComplete(test)
+
+    simpleServer.enableMailServer(customHandler)
+    check client.setPeerTrusted(simpleServerNode.id)
+    var request: MailRequest
+    var symKey: SymKey
+    let cursor =
+      await client.requestMail(simpleServerNode.id, request, symKey, 5)
+    require cursor.isSome()
+    check:
+      cursor.get().len == 0
+      count == 0
+
+    # TODO: Also check for received envelopes.

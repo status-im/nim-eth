@@ -36,7 +36,7 @@
 
 import
   options, tables, times, chronos, chronicles,
-  eth/[keys, async_utils, p2p], whisper/whisper_types
+  eth/[keys, async_utils, p2p], whisper/whisper_types, eth/trie/trie_defs
 
 export
   whisper_types
@@ -71,19 +71,22 @@ type
     trusted*: bool
     received: HashSet[Message]
 
+  P2PRequestHandler* = proc(peer: Peer, envelope: Envelope) {.gcsafe.}
+
   WakuNetwork = ref object
     queue*: ref Queue
     filters*: Filters
     config*: WakuConfig
+    p2pRequestHandler*: P2PRequestHandler
 
-  MailRequest* = object
-    lower*: uint32 ## Unix timestamp; oldest requested envelope's creation time
-    upper*: uint32 ## Unix timestamp; newest requested envelope's creation time
-    bloom*: Bytes ## Bloom filter to apply on the envelopes
-    limit*: uint32 ## Maximum amount of envelopes to return
-    # TODO: Not sure how cursor is supposed to work. The server is supposed
-    # to also send a P2P request back? Strange. And why is it an array?
-    # cursor*: Option[Bytes]
+  # TODO: In the current specification this is not wrapped in a regular envelope
+  # as is done for the P2P Request packet. If we could alter this in the spec it
+  # would be a cleaner separation between Waku and Mail server / client and then
+  # this could be moved to waku_mail.nim
+  P2PRequestCompleteObject* = object
+    requestId*: Hash
+    lastEnvelopeHash*: Hash
+    cursor*: Bytes
 
 proc allowed*(msg: Message, config: WakuConfig): bool =
   # Check max msg size, already happens in RLPx but there is a specific waku
@@ -226,9 +229,8 @@ p2pProtocol Waku(version = wakuVersion,
   nextID 126
 
   proc p2pRequest(peer: Peer, envelope: Envelope) =
-    # TODO: here we would have to allow to insert some specific implementation
-    # such as e.g. Waku Mail Server
-    discard
+    if not peer.networkState.p2pRequestHandler.isNil():
+      peer.networkState.p2pRequestHandler(peer, envelope)
 
   proc p2pMessage(peer: Peer, envelopes: openarray[Envelope]) =
     if peer.state.trusted:
@@ -248,7 +250,11 @@ p2pProtocol Waku(version = wakuVersion,
     proc p2pSyncRequest(peer: Peer) = discard
     proc p2pSyncResponse(peer: Peer) = discard
 
-  proc p2pRequestComplete(peer: Peer) = discard
+  proc p2pRequestComplete(peer: Peer, data: P2PRequestCompleteObject) = discard
+    # This is actually rather a requestResponse in combination with p2pRequest
+    # However, we can't use that system due to the unfortunate fact that the
+    # packet IDs are not consecutive, and nextID is not recognized in between
+    # these.
 
 # 'Runner' calls ---------------------------------------------------------------
 
@@ -318,12 +324,6 @@ proc sendP2PMessage(node: EthereumNode, peerId: NodeId,
   for peer in node.peers(Waku):
     if peer.remote.id == peerId:
       asyncCheck peer.p2pMessage(envelopes)
-      return true
-
-proc sendP2PRequest(node: EthereumNode, peerId: NodeId, env: Envelope): bool =
-  for peer in node.peers(Waku):
-    if peer.remote.id == peerId:
-      asyncCheck peer.p2pRequest(env)
       return true
 
 proc queueMessage(node: EthereumNode, msg: Message): bool =
@@ -478,20 +478,3 @@ proc resetMessageQueue*(node: EthereumNode) =
   ##
   ## NOTE: Not something that should be run in normal circumstances.
   node.protocolState(Waku).queue[] = initQueue(defaultQueueCapacity)
-
-proc requestMail*(node: EthereumNode, peerId: NodeId, request: MailRequest,
-    symKey: SymKey): bool =
-  var writer = initRlpWriter()
-  writer.append(request)
-  let payload = writer.finish()
-
-  let data = encode(Payload(payload: payload, symKey: some(symKey)))
-
-  if data.isSome():
-    # TODO: should this envelope be valid in terms of ttl, PoW, etc.?
-    var env = Envelope(expiry:0, ttl: 0, data: data.get(), nonce: 0)
-
-    return node.sendP2PRequest(peerId, env)
-  else:
-    error "Encoding of payload failed"
-    return false

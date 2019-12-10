@@ -162,3 +162,7 @@ proc randomPeerWith*(node: EthereumNode, Protocol: type): Peer =
   if candidates.len > 0:
     return candidates.rand()
 
+proc getPeer*(node: EthereumNode, peerId: NodeId, Protocol: type): Option[Peer] =
+  for peer in node.peers(Protocol):
+    if peer.remote.id == peerId:
+      return some(peer)
