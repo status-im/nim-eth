@@ -54,6 +54,7 @@ proc runP2pTests() =
       "test_shh_connect",
       "test_waku_bridge",
       "test_protocol_handlers",
+      "test_enr",
     ]:
     runTest("tests/p2p/" & filename)
 
