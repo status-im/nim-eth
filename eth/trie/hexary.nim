@@ -270,6 +270,50 @@ iterator pairs*(self: HexaryTrie): (BytesRange, BytesRange) =
     let res = getPairsAux(self.db, stack)
     yield res
 
+iterator replicate*(self: HexaryTrie): (BytesRange, BytesRange) =
+  # this iterator helps 'rebuild' the entire trie without
+  # going through a trie algorithm, but it will pull the entire
+  # low level KV pairs. Thus the target db will only use put operations
+  # without del or contains, can speed up huge trie replication.
+  var
+    localBytes = keyToLocalBytes(self.db, self.root)
+    nodeRlp = rlpFromBytes localBytes
+    path = newRange[byte](0)
+    stack = @[(nodeRlp, initNibbleRange(path))]
+
+  template pushOrYield(elem: untyped) =
+    if elem.isList:
+      stack.add((elem, key))
+    else:
+      let rlpBytes = get(self.db, toOpenArray(elem.expectHash)).toRange
+      let nextLookup = rlpFromBytes(rlpBytes)
+      stack.add((nextLookup, key))
+      yield (elem.toBytes, rlpBytes)
+
+  yield (self.rootHash.toRange, localBytes)
+  while stack.len > 0:
+    let (nodeRlp, path) = stack.pop()
+    if not nodeRlp.hasData or nodeRlp.isEmpty:
+      continue
+
+    case nodeRlp.listLen
+    of 2:
+      let
+        (isLeaf, k) = nodeRlp.extensionNodeKey
+        key = path & k
+        value = nodeRlp.listElem(1)
+      if not isLeaf: pushOrYield(value)
+    of 17:
+      for i in 0 ..< 16:
+        var branch = nodeRlp.listElem(i)
+        if not branch.isEmpty:
+          var key = path.cloneAndReserveNibble()
+          key.replaceLastNibble(i.byte)
+          pushOrYield(branch)
+    else:
+      raise newException(CorruptedTrieError,
+                        "HexaryTrie node with an unexpected number of children")
+
 proc getValues*(self: HexaryTrie): seq[BytesRange] =
   result = @[]
   for v in self.values:

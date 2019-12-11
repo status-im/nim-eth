@@ -413,3 +413,31 @@ suite "hexary trie":
     for x in 0 ..< numKeyVal:
       var branch = trie2.getBranch(keys[x])
       check isValidBranch(branch, trie2.rootHash, keys[x], newVals[x])
+
+  test "replicate iterator":
+    const
+      numKeyVal = 30
+
+    var
+      memdb = newMemoryDB()
+      repdb = newMemoryDB()
+      pruningTrie = initHexaryTrie(memdb, isPruning = true)
+
+    let
+      keys = randList(BytesRange, randGen(5, 77), randGen(numKeyVal))
+      vals = randList(BytesRange, randGen(1, 57), randGen(numKeyVal))
+
+    for i in 0 ..< numKeyVal:
+      pruningTrie.put(keys[i], vals[i])
+
+    let rootHash = pruningTrie.rootHash
+    for k, v in pruningTrie.replicate:
+      repdb.put(k.toOpenArray, v.toOpenArray)
+
+    var trie = initHexaryTrie(repdb, rootHash, isPruning = true)
+    var numPairs = 0
+    for k, v in trie.pairs:
+      check k in keys
+      check v in vals
+      inc numPairs
+    check numPairs == numKeyVal
