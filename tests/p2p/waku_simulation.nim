@@ -114,7 +114,10 @@ else:
 
 if config.watch:
   proc handler(msg: ReceivedMessage) =
+    echo("*** handler")
     echo msg.decoded.payload.repr
+
+  echo("*** listening")
 
   # filter encrypted asym
   discard node.subscribeFilter(newFilter(privateKey = some(encPrivateKey),
@@ -136,21 +139,42 @@ if config.watch:
                                handler)
 
 if config.post:
+  echo("*** posting")
+
   # encrypted asym
-  discard node.postMessage(some(encPublicKey), ttl = 5, topic = topic,
+  discard node.postMessage(some(encPublicKey), ttl = 120, topic = topic,
                            payload = repeat(byte 65, 10))
   poll()
   # # encrypted asym + signed
   discard node.postMessage(some(encPublicKey), src = some(signPrivateKey),
-                           ttl = 5, topic = topic, payload = repeat(byte 66, 10))
+                           ttl = 120, topic = topic, payload = repeat(byte 66, 10))
   poll()
   # # encrypted sym
-  discard node.postMessage(symKey = some(symKey), ttl = 5, topic = topic,
+  discard node.postMessage(symKey = some(symKey), ttl = 120, topic = topic,
                            payload = repeat(byte 67, 10))
   poll()
-  # # encrypted sym + signed
-  discard node.postMessage(symKey = some(symKey), src = some(signPrivateKey),
-                           ttl = 5, topic = topic, payload = repeat(byte 68, 10))
 
+  # encrypted sym + signed
+  discard node.postMessage(symKey = some(symKey), src = some(signPrivateKey),
+                           ttl = 120, topic = topic, payload = repeat(byte 68, 10))
+
+
+var n = 0
 while true:
   poll()
+  n = n + 1;
+
+  # Post every 100 tick
+  if config.post and ((n %% 100) == 0):
+    echo("*** polling ", n)
+    echo("*** posting")
+    discard node.postMessage(symKey = some(symKey), src = some(signPrivateKey),
+                                      ttl = 120, topic = topic, payload = repeat(byte 68, 10))
+
+  if (n == 1000):
+    echo("*** want to quit")
+
+
+# TODO: Get messages to show up
+# TODO: Stop after 10 messages
+# TODO: This should use waku, not whisper
