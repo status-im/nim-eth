@@ -4,6 +4,13 @@ import
   eth/p2p/rlpx_protocols/[waku_protocol, waku_mail],
   ./p2p_test_helper
 
+const
+  transmissionTimeout = chronos.milliseconds(100)
+
+proc waitForConnected(node: EthereumNode) {.async.} =
+  while node.peerPool.connectedNodes.len == 0:
+    await sleepAsync(chronos.milliseconds(1))
+
 suite "Waku Mail Client":
   var client = setupTestNode(Waku)
   var simpleServer = setupTestNode(Waku)
@@ -13,10 +20,13 @@ suite "Waku Mail Client":
     simpleServer.address))
   let clientNode = newNode(initENode(client.keys.pubKey, client.address))
   waitFor client.peerPool.connectToNode(simpleServerNode)
+  require:
+    waitFor simpleServer.waitForConnected().withTimeout(transmissionTimeout)
 
   asyncTest "Two peers connected":
     check:
       client.peerPool.connectedNodes.len() == 1
+      simpleServer.peerPool.connectedNodes.len() == 1
 
   asyncTest "Mail Request and Request Complete":
     let
@@ -35,7 +45,7 @@ suite "Waku Mail Client":
     # Simple mailserver part
     let peer = simpleServer.peerPool.connectedNodes[clientNode]
     var f = peer.nextMsg(Waku.p2pRequest)
-    require await f.withTimeout(chronos.milliseconds(100))
+    require await f.withTimeout(transmissionTimeout)
     let response = f.read()
     let decoded = decode(response.envelope.data, symKey = some(symKey))
     require decoded.isSome()
@@ -51,7 +61,7 @@ suite "Waku Mail Client":
     var test: P2PRequestCompleteObject
     await peer.p2pRequestComplete(test)
 
-    check await cursorFut.withTimeout(chronos.milliseconds(100))
+    check await cursorFut.withTimeout(transmissionTimeout)
 
   asyncTest "Mail Send":
     let topic = [byte 0x12, 0x34, 0x56, 0x78]
@@ -73,7 +83,7 @@ suite "Waku Mail Client":
       simpleServer.postMessage(ttl = 0, topic = topic, payload = payload,
         targetPeer = some(clientNode.id))
 
-      await f.withTimeout(chronos.milliseconds(100))
+      await f.withTimeout(transmissionTimeout)
 
       client.unsubscribeFilter(filter)
 
