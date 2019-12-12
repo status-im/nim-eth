@@ -57,11 +57,23 @@ const
   ## queue is pruned, in ms.
 
 type
+  WakuMode* = enum
+    # TODO: is there a reason to allow such "none" mode? This was originally
+    # put here when it was still supposed to be compatible with Whisper.
+    None, # No Waku mode
+    WakuChan, # Waku client
+    WakuSan # Waku node
+    # TODO: Light mode could also become part of this enum
+    # TODO: With discv5, this could be capabilities also announced at level of
+    # discovery.
+
   WakuConfig* = object
     powRequirement*: float64
     bloom*: Bloom
     isLightNode*: bool
     maxMsgSize*: uint32
+    wakuMode*: WakuMode
+    topics*: seq[Topic]
 
   WakuPeer = ref object
     initialized: bool # when successfully completed the handshake
@@ -69,6 +81,8 @@ type
     bloom*: Bloom
     isLightNode*: bool
     trusted*: bool
+    wakuMode*: WakuMode
+    topics*: seq[Topic]
     received: HashSet[Message]
 
   P2PRequestHandler* = proc(peer: Peer, envelope: Envelope) {.gcsafe.}
@@ -105,6 +119,11 @@ proc allowed*(msg: Message, config: WakuConfig): bool =
     warn "Message does not match node bloom filter"
     return false
 
+  if config.wakuMode == WakuChan:
+    if msg.env.topic notin config.topics:
+      warn "Message topic does not match Waku topic list"
+      return false
+
   return true
 
 proc run(peer: Peer) {.gcsafe, async.}
@@ -118,6 +137,8 @@ proc initProtocolState*(network: WakuNetwork, node: EthereumNode) {.gcsafe.} =
   network.config.powRequirement = defaultMinPow
   network.config.isLightNode = false
   network.config.maxMsgSize = defaultMaxMsgSize
+  network.config.wakuMode = None # default no waku mode
+  network.config.topics = @[]
   asyncCheck node.run(network)
 
 p2pProtocol Waku(version = wakuVersion,
@@ -135,6 +156,8 @@ p2pProtocol Waku(version = wakuVersion,
                               cast[uint](wakuNet.config.powRequirement),
                               @(wakuNet.config.bloom),
                               wakuNet.config.isLightNode,
+                              wakuNet.config.wakuMode,
+                              wakuNet.config.topics,
                               timeout = chronos.milliseconds(500))
 
     if m.protocolVersion == wakuVersion:
@@ -158,6 +181,19 @@ p2pProtocol Waku(version = wakuVersion,
       # No sense in connecting two light nodes so we disconnect
       raise newException(UselessPeerError, "Two light nodes connected")
 
+    # When Waku-san connect to all. When None, connect to all, Waku-chan has
+    # to decide to disconnect. When Waku-chan, connect only to Waku-san.
+    wakuPeer.wakuMode = m.wakuMode
+    if wakuNet.config.wakuMode == WakuChan:
+      if wakuPeer.wakuMode == WakuChan:
+        raise newException(UselessPeerError, "Two Waku-chan connected")
+      elif wakuPeer.wakuMode == None:
+        raise newException(UselessPeerError, "Not in Waku mode")
+    if wakuNet.config.wakuMode == WakuSan and
+        wakuPeer.wakuMode == WakuChan:
+      # TODO: need some maximum check on amount of topics
+      wakuPeer.topics = m.topics
+
     wakuPeer.received.init()
     wakuPeer.trusted = false
     wakuPeer.initialized = true
@@ -172,7 +208,9 @@ p2pProtocol Waku(version = wakuVersion,
                 protocolVersion: uint,
                 powConverted: uint,
                 bloom: Bytes,
-                isLightNode: bool)
+                isLightNode: bool,
+                wakuMode: WakuMode,
+                topics: seq[Topic])
 
   proc messages(peer: Peer, envelopes: openarray[Envelope]) =
     if not peer.state.initialized:
@@ -228,6 +266,14 @@ p2pProtocol Waku(version = wakuVersion,
     if bloom.len == bloomSize:
       peer.state.bloom.bytesCopy(bloom)
 
+  proc topicsExchange(peer: Peer, topics: seq[Topic]) =
+    if not peer.state.initialized:
+      warn "Handshake not completed yet, discarding topicsExchange"
+      return
+
+    if peer.state.wakuMode == WakuChan:
+      peer.state.topics = topics
+
   nextID 126
 
   proc p2pRequest(peer: Peer, envelope: Envelope) =
@@ -282,6 +328,11 @@ proc processQueue(peer: Peer) =
     if not bloomFilterMatch(wakuPeer.bloom, message.bloom):
       debug "Message does not match peer bloom filter"
       continue
+
+    if wakuNet.config.wakuMode == WakuSan and
+        wakuPeer.wakuMode == WakuChan:
+      if message.env.topic notin wakuPeer.topics:
+        continue
 
     trace "Adding envelope"
     envelopes.add(message.env)
@@ -443,6 +494,15 @@ proc setBloomFilter*(node: EthereumNode, bloom: Bloom) {.async.} =
   var futures: seq[Future[void]] = @[]
   for peer in node.peers(Waku):
     futures.add(peer.bloomFilterExchange(@bloom))
+
+  # Exceptions from sendMsg will not be raised
+  await allFutures(futures)
+
+proc setTopics*(node: EthereumNode, topics: seq[Topic]) {.async.} =
+  node.protocolState(Waku).config.topics = topics
+  var futures: seq[Future[void]] = @[]
+  for peer in node.peers(Waku):
+    futures.add(peer.topicsExchange(topics))
 
   # Exceptions from sendMsg will not be raised
   await allFutures(futures)
