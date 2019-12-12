@@ -32,6 +32,9 @@ proc requestMail*(node: EthereumNode, peerId: NodeId, request: MailRequest,
   # TODO: Perhaps don't go the recursive route or could use the actual response
   # proc to implement this (via a handler) and store the necessary data in the
   # WakuPeer object.
+  # TODO: Several requestMail calls in parallel can create issues with handling
+  # the wrong response to a request. Can additionaly check the requestId but
+  # that would only solve it half. Better to use the requestResponse mechanism.
 
   # TODO: move this check out of requestMail?
   let peer = node.getPeer(peerId, Waku)

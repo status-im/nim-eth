@@ -83,6 +83,8 @@ type
   # as is done for the P2P Request packet. If we could alter this in the spec it
   # would be a cleaner separation between Waku and Mail server / client and then
   # this could be moved to waku_mail.nim
+  # Also, the requestId could live at layer lower. And the protocol DSL
+  # currently supports this, if used in a requestResponse block.
   P2PRequestCompleteObject* = object
     requestId*: Hash
     lastEnvelopeHash*: Hash
@@ -251,10 +253,12 @@ p2pProtocol Waku(version = wakuVersion,
     proc p2pSyncResponse(peer: Peer) = discard
 
   proc p2pRequestComplete(peer: Peer, data: P2PRequestCompleteObject) = discard
-    # This is actually rather a requestResponse in combination with p2pRequest
-    # However, we can't use that system due to the unfortunate fact that the
-    # packet IDs are not consecutive, and nextID is not recognized in between
-    # these.
+    # TODO: This is actually rather a requestResponse in combination with
+    # p2pRequest. However, we can't use that system due to the unfortunate fact
+    # that the packet IDs are not consecutive, and nextID is not recognized in
+    # between these. The nextID behaviour could be fixed, however it would be
+    # cleaner if the specification could be changed to have these IDs to be
+    # consecutive.
 
 # 'Runner' calls ---------------------------------------------------------------
 
@@ -363,7 +367,7 @@ proc postMessage*(node: EthereumNode, pubKey = none[PublicKey](),
 
     # Allow lightnode to post only direct p2p messages
     if targetPeer.isSome():
-      return node.sendP2PMessage(targetPeer.get(), @[env])
+      return node.sendP2PMessage(targetPeer.get(), [env])
     elif not node.protocolState(Waku).config.isLightNode:
       # non direct p2p message can not have ttl of 0
       if env.ttl == 0:
