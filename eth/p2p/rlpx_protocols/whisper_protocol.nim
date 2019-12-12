@@ -374,6 +374,7 @@ proc postMessage*(node: EthereumNode, pubKey = none[PublicKey](),
 
 proc subscribeFilter*(node: EthereumNode, filter: Filter,
                       handler:FilterMsgHandler = nil): string =
+  echo("subscribeFilter ", filter)
   ## Initiate a filter for incoming/outgoing messages. Messages can be
   ## retrieved with the `getFilterMessages` call or with a provided
   ## `FilterMsgHandler`.

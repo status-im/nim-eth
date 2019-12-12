@@ -568,7 +568,8 @@ proc newFilter*(src = none[PublicKey](), privateKey = none[PrivateKey](),
   # filter is only used to `or` with existing/other bloom filters. Not to do
   # matching.
   Filter(src: src, privateKey: privateKey, symKey: symKey, topics: topics,
-         powReq: powReq, allowP2P: allowP2P, bloom: toBloom(topics))
+         powReq: powReq, allowP2P: allowP2P, bloom: fullBloom())
+  #powReq: powReq, allowP2P: allowP2P, bloom: toBloom(topics))
 
 proc subscribeFilter*(filters: var Filters, filter: Filter,
                       handler:FilterMsgHandler = nil): string =
