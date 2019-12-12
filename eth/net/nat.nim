@@ -27,7 +27,6 @@ var
   upnp {.threadvar.}: Miniupnp
   npmp {.threadvar.}: NatPmp
   strategy = NatNone
-  externalIP {.threadvar.}: IPAddress
   internalTcpPort: Port
   externalTcpPort: Port
   internalUdpPort: Port
@@ -39,6 +38,8 @@ logScope:
 ## Also does threadvar initialisation.
 ## Must be called before redirectPorts() in each thread.
 proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] =
+  var externalIP: IPAddress
+
   if natStrategy == NatAny or natStrategy == NatUpnp:
     upnp = newMiniupnp()
     upnp.discoverDelay = UPNP_TIMEOUT
@@ -107,8 +108,7 @@ proc doPortMapping(tcpPort, udpPort: Port, description: string): Option[(Port, P
                                     internalHost = upnp.lanAddr,
                                     internalPort = $port,
                                     desc = description,
-                                    leaseDuration = 0,
-                                    externalIP = $externalIP)
+                                    leaseDuration = 0)
       if pmres.isErr:
         error "UPnP port mapping", msg = pmres.error
         return
@@ -161,14 +161,14 @@ proc repeatPortMapping(args: PortMappingArgs) {.thread.} =
 
   # We can't use copies of Miniupnp and NatPmp objects in this thread, because they share
   # C pointers with other instances that have already been garbage collected, so
-  # we use threadvars instead and initialise them again with getExternalIP().
+  # we use threadvars instead and initialise them again with getExternalIP(),
+  # even though we don't need the external IP's value.
   let ipres = getExternalIP(strategy, quiet = true)
   if ipres.isSome:
-    externalIP = ipres.get()
     while true:
       # we're being silly here with this channel polling because we can't
       # select on Nim channels like on Go ones
-      let (dataAvailable, data) = natCloseChan.tryRecv()
+      let (dataAvailable, _) = natCloseChan.tryRecv()
       if dataAvailable:
         return
       else:
