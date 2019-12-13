@@ -101,6 +101,8 @@ proc get*[T: seq[byte] | string | SomeInteger](r: Record, key: string, typ: type
     elif typ is string:
       requireKind(f, kString)
       return f.str
+  else:
+    raise newException(KeyError, "Key not found in ENR: " & key)
 
 proc get*(r: Record, pubKey: var PublicKey): bool =
   var pubkeyField: Field
