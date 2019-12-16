@@ -94,7 +94,7 @@ proc get*[T: seq[byte] | string | SomeInteger](r: Record, key: string, typ: type
   if r.getField(key, f):
     when typ is SomeInteger:
       requireKind(f, kNum)
-      return f.num
+      return typ(f.num)
     elif typ is seq[byte]:
       requireKind(f, kBytes)
       return f.bytes
@@ -223,3 +223,11 @@ proc `$`*(r: Record): string =
     result &= ": "
     result &= $v
   result &= ')'
+
+proc read*(rlp: var Rlp, T: typedesc[Record]): T {.inline.} =
+  if not result.fromBytes(rlp.rawData.toOpenArray):
+    raise newException(ValueError, "Could not deserialize")
+  rlp.skipElem()
+
+proc append*(rlpWriter: var RlpWriter, value: Record) =
+  rlpWriter.appendRawBytes(value.raw.toRange)
