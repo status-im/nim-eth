@@ -1,0 +1,73 @@
+import hashes
+import ../enode, enr, stint
+
+type
+  NodeId* = UInt256
+
+  WhoareyouObj* = object
+    authTag*: array[12, byte]
+    idNonce*: array[32, byte]
+    recordSeq*: uint64
+
+  Whoareyou* = ref WhoareyouObj
+
+  Database* = ref object of RootRef
+
+  PacketKind* = enum
+    ping = 0x01
+    pong = 0x02
+    findnode = 0x03
+    nodes = 0x04
+    regtopic = 0x05
+    ticket = 0x06
+    regconfirmation = 0x07
+    topicquery = 0x08
+
+  RequestId* = array[8, byte]
+
+  PingPacket* = object
+    enrSeq*: uint64
+
+  PongPacket* = object
+    enrSeq*: uint64
+    ip*: seq[byte]
+    port*: uint16
+
+  FindNodePacket* = object
+    distance*: uint32
+
+  NodesPacket* = object
+    total*: uint32
+    enrs*: seq[Record]
+
+  SomePacket* = PingPacket or PongPacket or FindNodePacket or NodesPacket
+
+  Packet* = object
+    reqId*: RequestId
+    case kind*: PacketKind
+    of ping:
+      ping*: PingPacket
+    of pong:
+      pong*: PongPacket
+    of findnode:
+      findNode*: FindNodePacket
+    of nodes:
+      nodes*: NodesPacket
+    else:
+      # TODO: Define the rest
+      discard
+
+template packetKind*(T: typedesc[SomePacket]): PacketKind =
+  when T is PingPacket: ping
+  elif T is PongPacket: pong
+  elif T is FindNodePacket: findNode
+  elif T is NodesPacket: nodes
+
+method storeKeys*(db: Database, id: NodeId, address: int, r, w: array[16, byte]) {.base.} = discard
+method loadKeys*(db: Database, id: NodeId, address: int, r, w: var array[16, byte]): bool {.base.} = discard
+
+proc toBytes*(id: NodeId): array[32, byte] {.inline.} =
+  id.toByteArrayBE()
+
+proc hash*(id: NodeId): Hash {.inline.} =
+  hashData(unsafeAddr id, sizeof(id))

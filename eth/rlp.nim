@@ -13,7 +13,7 @@ export
 type
   Rlp* = object
     bytes: BytesRange
-    position: int
+    position*: int
 
   RlpNodeType* = enum
     rlpBlob
