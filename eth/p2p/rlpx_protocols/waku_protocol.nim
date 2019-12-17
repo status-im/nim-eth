@@ -153,7 +153,7 @@ p2pProtocol Waku(version = wakuVersion,
       wakuPeer = peer.state
 
     let m = await peer.status(wakuVersion,
-                              cast[uint](wakuNet.config.powRequirement),
+                              cast[uint64](wakuNet.config.powRequirement),
                               @(wakuNet.config.bloom),
                               wakuNet.config.isLightNode,
                               wakuNet.config.wakuMode,
@@ -206,7 +206,7 @@ p2pProtocol Waku(version = wakuVersion,
   handshake:
     proc status(peer: Peer,
                 protocolVersion: uint,
-                powConverted: uint,
+                powConverted: uint64,
                 bloom: Bytes,
                 isLightNode: bool,
                 wakuMode: WakuMode,
@@ -251,7 +251,7 @@ p2pProtocol Waku(version = wakuVersion,
         # notify filters of this message
         peer.networkState.filters.notify(msg)
 
-  proc powRequirement(peer: Peer, value: uint) =
+  proc powRequirement(peer: Peer, value: uint64) =
     if not peer.state.initialized:
       warn "Handshake not completed yet, discarding powRequirement"
       return
@@ -479,7 +479,7 @@ proc setPowRequirement*(node: EthereumNode, powReq: float64) {.async.} =
   node.protocolState(Waku).config.powRequirement = powReq
   var futures: seq[Future[void]] = @[]
   for peer in node.peers(Waku):
-    futures.add(peer.powRequirement(cast[uint](powReq)))
+    futures.add(peer.powRequirement(cast[uint64](powReq)))
 
   # Exceptions from sendMsg will not be raised
   await allFutures(futures)

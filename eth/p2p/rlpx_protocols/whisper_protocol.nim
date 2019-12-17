@@ -116,7 +116,7 @@ p2pProtocol Whisper(version = whisperVersion,
       whisperPeer = peer.state
 
     let m = await peer.status(whisperVersion,
-                              cast[uint](whisperNet.config.powRequirement),
+                              cast[uint64](whisperNet.config.powRequirement),
                               @(whisperNet.config.bloom),
                               whisperNet.config.isLightNode,
                               timeout = chronos.milliseconds(500))
@@ -154,7 +154,7 @@ p2pProtocol Whisper(version = whisperVersion,
   handshake:
     proc status(peer: Peer,
                 protocolVersion: uint,
-                powConverted: uint,
+                powConverted: uint64,
                 bloom: Bytes,
                 isLightNode: bool)
 
@@ -197,7 +197,7 @@ p2pProtocol Whisper(version = whisperVersion,
         # notify filters of this message
         peer.networkState.filters.notify(msg)
 
-  proc powRequirement(peer: Peer, value: uint) =
+  proc powRequirement(peer: Peer, value: uint64) =
     if not peer.state.initialized:
       warn "Handshake not completed yet, discarding powRequirement"
       return
@@ -405,7 +405,7 @@ proc setPowRequirement*(node: EthereumNode, powReq: float64) {.async.} =
   node.protocolState(Whisper).config.powRequirement = powReq
   var futures: seq[Future[void]] = @[]
   for peer in node.peers(Whisper):
-    futures.add(peer.powRequirement(cast[uint](powReq)))
+    futures.add(peer.powRequirement(cast[uint64](powReq)))
 
   # Exceptions from sendMsg will not be raised
   await allFutures(futures)
