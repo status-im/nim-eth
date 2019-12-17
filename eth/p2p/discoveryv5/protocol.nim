@@ -267,7 +267,7 @@ proc lookup(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
         if result.len < BUCKET_SIZE:
           result.add(n)
 
-proc lookupRandom(p: Protocol): Future[seq[Node]] =
+proc lookupRandom*(p: Protocol): Future[seq[Node]] =
   var id: NodeId
   discard randomBytes(addr id, sizeof(id))
   p.lookup(id)
@@ -293,6 +293,15 @@ proc open*(d: Protocol) =
   let ta = initTAddress(IPv4_any(), d.localNode.node.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
+proc addNode*(d: Protocol, r: Record) =
+  discard d.routingTable.addNode(newNode(r))
+
+proc addNode*(d: Protocol, enr: EnrUri) =
+  var r: Record
+  let res = r.fromUri(enr)
+  doAssert(res)
+  discard d.routingTable.addNode(newNode(r))
+
 when isMainModule:
   import discovery_db
   import eth/trie/db
@@ -309,12 +318,6 @@ when isMainModule:
       let d = newProtocol(pk, DiscoveryDB.init(newMemoryDB()), Port(12001 + i))
       d.open()
       result.add(d)
-
-  proc addNode(d: Protocol, enr: string) =
-    var r: Record
-    let res = r.fromUri(enr)
-    doAssert(res)
-    discard d.routingTable.addNode(newNode(r))
 
   proc addNode(d: openarray[Protocol], enr: string) =
     for dd in d: dd.addNode(enr)
