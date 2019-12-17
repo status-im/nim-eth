@@ -10,12 +10,17 @@
 
 import
   algorithm, bitops, math, options, strutils, tables, times, chronicles, hashes,
-  stew/[byteutils, endians2],
+  stew/[byteutils, endians2], metrics,
   nimcrypto/[bcmode, hash, keccak, rijndael, sysrand],
   eth/[keys, rlp, p2p], eth/p2p/ecies
 
 logScope:
   topics = "whisper_types"
+
+declarePublicCounter dropped_expired_envelopes,
+  "Dropped envelopes because expired"
+declarePublicCounter dropped_from_future_envelopes,
+  "Dropped envelopes because of future timestamp"
 
 const
   flagsLen = 1 ## payload flags field length, bytes
@@ -400,11 +405,17 @@ proc decode*(data: openarray[byte], dst = none[PrivateKey](),
 # Envelopes --------------------------------------------------------------------
 
 proc valid*(self: Envelope, now = epochTime()): bool =
-  if self.expiry.float64 < now: return false # expired
-  if self.ttl <= 0: return false # this would invalidate pow calculation
+  if self.expiry.float64 < now: # expired
+    dropped_expired_envelopes.inc()
+    return false
+  if self.ttl <= 0: # this would invalidate pow calculation
+    dropped_expired_envelopes.inc()
+    return false
 
   let created = self.expiry - self.ttl
-  if created.float64 > (now + 2.0): return false # created in the future
+  if created.float64 > (now + 2.0): # created in the future
+    dropped_from_future_envelopes.inc()
+    return false
 
   return true
 

@@ -33,7 +33,7 @@
 ## else there will be no peers to send and receive messages from.
 
 import
-  options, tables, times, chronos, chronicles,
+  options, tables, times, chronos, chronicles, metrics,
   eth/[keys, async_utils, p2p], whisper/whisper_types
 
 export
@@ -41,6 +41,19 @@ export
 
 logScope:
   topics = "whisper"
+
+declareCounter valid_envelopes,
+  "Received & posted valid envelopes"
+declareCounter dropped_low_pow_envelopes,
+  "Dropped envelopes because of too low PoW"
+declareCounter dropped_too_large_envelopes,
+  "Dropped envelopes because larger than maximum allowed size"
+declareCounter dropped_bloom_filter_mismatch_envelopes,
+  "Dropped envelopes because not matching with bloom filter"
+declareCounter dropped_benign_duplicate_envelopes,
+  "Dropped benign duplicate envelopes"
+declareCounter dropped_malicious_duplicate_envelopes,
+  "Dropped malicious duplicate envelopes"
 
 const
   defaultQueueCapacity = 256
@@ -78,14 +91,17 @@ proc allowed*(msg: Message, config: WhisperConfig): bool =
   # Check max msg size, already happens in RLPx but there is a specific shh
   # max msg size which should always be < RLPx max msg size
   if msg.size > config.maxMsgSize:
+    dropped_too_large_envelopes.inc()
     warn "Message size too large", size = msg.size
     return false
 
   if msg.pow < config.powRequirement:
+    dropped_low_pow_envelopes.inc()
     warn "Message PoW too low", pow = msg.pow, minPow = config.powRequirement
     return false
 
   if not bloomFilterMatch(config.bloom, msg.bloom):
+    dropped_bloom_filter_mismatch_envelopes.inc()
     warn "Message does not match node bloom filter"
     return false
 
@@ -187,6 +203,7 @@ p2pProtocol Whisper(version = whisperVersion,
       # (see above comment). If we want to seperate these cases (e.g. when peer
       # rating), then we have to add a "peer.state.send" HashSet.
       if peer.state.received.containsOrIncl(msg):
+        dropped_malicious_duplicate_envelopes.inc()
         debug "Peer sending duplicate messages", peer, hash = msg.hash
         # await peer.disconnect(SubprotocolReason)
         continue
@@ -194,8 +211,11 @@ p2pProtocol Whisper(version = whisperVersion,
       # This can still be a duplicate message, but from another peer than
       # the peer who send the message.
       if peer.networkState.queue[].add(msg):
+        valid_envelopes.inc()
         # notify filters of this message
         peer.networkState.filters.notify(msg)
+      else:
+        dropped_benign_duplicate_envelopes.inc()
 
   proc powRequirement(peer: Peer, value: uint64) =
     if not peer.state.initialized:
@@ -317,6 +337,7 @@ proc queueMessage(node: EthereumNode, msg: Message): bool =
 
   trace "Adding message to queue"
   if whisperNet.queue[].add(msg):
+    valid_envelopes.inc()
     # Also notify our own filters of the message we are sending,
     # e.g. msg from local Dapp to Dapp
     whisperNet.filters.notify(msg)
