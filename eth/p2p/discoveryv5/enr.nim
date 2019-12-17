@@ -8,6 +8,8 @@ type
     raw*: seq[byte] # RLP encoded record
     pairs: seq[(string, Field)] # sorted list of all key/value pairs
 
+  EnrUri* = distinct string
+
   FieldKind = enum
     kString,
     kNum,
@@ -196,6 +198,9 @@ proc fromURI*(r: var Record, s: string): bool =
   const prefix = "enr:"
   if s.startsWith(prefix):
     result = r.fromBase64(s[prefix.len .. ^1])
+
+template fromURI*(r: var Record, url: EnrUri): bool =
+  fromURI(r, string(url))
 
 proc toBase64*(r: Record): string =
   result = Base64Url.encode(r.raw)
