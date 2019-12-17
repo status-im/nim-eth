@@ -14,6 +14,11 @@ type
   Database* = ref object of RootRef
 
   PacketKind* = enum
+    # TODO This is needed only to make Nim 1.0.4 happy
+    #      Without it, the `PacketKind` type cannot be used as
+    #      a discriminator in case objects.
+    unused = 0x00
+
     ping = 0x01
     pong = 0x02
     findnode = 0x03
