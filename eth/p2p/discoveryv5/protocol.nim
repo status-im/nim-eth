@@ -1,5 +1,8 @@
-import tables, sets, endians, options, math
-import types, encoding, node, routing_table, eth/[rlp, keys], chronicles, chronos, ../enode, stint, enr, byteutils
+import
+  tables, sets, endians, options, math,
+  stew/byteutils, eth/[rlp, keys], chronicles, chronos, stint,
+  ../enode, types, encoding, node, routing_table, enr
+
 import nimcrypto except toHex
 
 type
