@@ -45,6 +45,8 @@ proc newNode*(r: Record): Node =
 proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.data)
 proc `==`*(a, b: Node): bool = (a.isNil and b.isNil) or (not a.isNil and not b.isNil and a.node.pubkey == b.node.pubkey)
 
+proc address*(n: Node): Address {.inline.} = n.node.address
+
 proc `$`*(n: Node): string =
   if n == nil:
     "Node[local]"

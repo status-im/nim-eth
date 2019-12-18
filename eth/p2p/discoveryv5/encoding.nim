@@ -1,5 +1,5 @@
 import tables
-import types, node, enr, hkdf, eth/[rlp, keys], nimcrypto, stint
+import types, node, enr, hkdf, ../enode, eth/[rlp, keys], nimcrypto, stint
 
 const
   idNoncePrefix = "discovery-id-nonce"
@@ -114,7 +114,7 @@ proc packetTag(destNode, srcNode: NodeID): array[32, byte] =
   let destidHash = sha256.digest(destId)
   result = srcId xor destidHash.data
 
-proc encodeEncrypted*(c: Codec, toNode: Node, toAddr: int, packetData: seq[byte], challenge: Whoareyou): (seq[byte], array[gcmNonceSize, byte]) =
+proc encodeEncrypted*(c: Codec, toNode: Node, packetData: seq[byte], challenge: Whoareyou): (seq[byte], array[gcmNonceSize, byte]) =
   var nonce: array[gcmNonceSize, byte]
   randomBytes(nonce)
   var headEnc: seq[byte]
@@ -127,14 +127,14 @@ proc encodeEncrypted*(c: Codec, toNode: Node, toAddr: int, packetData: seq[byte]
 
     # We might not have the node's keys if the handshake hasn't been performed
     # yet. That's fine, we will be responded with whoareyou.
-    discard c.db.loadKeys(toNode.id, toAddr, readKey, writeKey)
+    discard c.db.loadKeys(toNode.id, toNode.address, readKey, writeKey)
   else:
     var sec: HandshakeSecrets
     headEnc = c.makeAuthHeader(toNode, nonce, sec, challenge)
 
     writeKey = sec.writeKey
 
-    c.db.storeKeys(toNode.id, toAddr, sec.readKey, sec.writeKey)
+    c.db.storeKeys(toNode.id, toNode.address, sec.readKey, sec.writeKey)
 
   var body = packetData
   let tag = packetTag(toNode.id, c.localNode.id)
@@ -201,7 +201,7 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader, challenge: Whoar
   newNode = newNode(authResp.record)
   return true
 
-proc decodeEncrypted*(c: var Codec, fromId: NodeID, fromAddr: int, input: seq[byte], authTag: var array[12, byte], newNode: var Node, packet: var Packet): bool =
+proc decodeEncrypted*(c: var Codec, fromId: NodeID, fromAddr: Address, input: seq[byte], authTag: var array[12, byte], newNode: var Node, packet: var Packet): bool =
   let input = input.toRange
   var r = rlpFromBytes(input[32 .. ^1])
   let authEndPos = r.currentElemEnd
