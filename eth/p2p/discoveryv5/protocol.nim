@@ -92,7 +92,7 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: array
 
 proc sendNodes(d: Protocol, toNode: Node, reqId: RequestId, nodes: openarray[Node]) =
   proc sendNodes(d: Protocol, toNode: Node, packet: NodesPacket, reqId: RequestId) {.nimcall.} =
-    let (data, _) = d.codec.encodeEncrypted(toNode, 12345, encodePacket(packet, reqId), challenge = nil)
+    let (data, _) = d.codec.encodeEncrypted(toNode, encodePacket(packet, reqId), challenge = nil)
     d.send(toNode, data)
 
   const maxNodesPerPacket = 3
@@ -109,7 +109,8 @@ proc sendNodes(d: Protocol, toNode: Node, reqId: RequestId, nodes: openarray[Nod
   if packet.enrs.len != 0:
     d.sendNodes(toNode, packet, reqId)
 
-proc handlePing(d: Protocol, fromNode: Node, a: Address, ping: PingPacket, reqId: RequestId) =
+proc handlePing(d: Protocol, fromNode: Node, ping: PingPacket, reqId: RequestId) =
+  let a = fromNode.address
   var pong: PongPacket
   pong.enrSeq = ping.enrSeq
   pong.ip = case a.ip.family
@@ -117,10 +118,10 @@ proc handlePing(d: Protocol, fromNode: Node, a: Address, ping: PingPacket, reqId
     of IpAddressFamily.IPv6: @(a.ip.address_v6)
   pong.port = a.udpPort.uint16
 
-  let (data, _) = d.codec.encodeEncrypted(fromNode, 12345, encodePacket(pong, reqId), challenge = nil)
+  let (data, _) = d.codec.encodeEncrypted(fromNode, encodePacket(pong, reqId), challenge = nil)
   d.send(fromNode, data)
 
-proc handleFindNode(d: Protocol, fromNode: Node, a: Address, fn: FindNodePacket, reqId: RequestId) =
+proc handleFindNode(d: Protocol, fromNode: Node, fn: FindNodePacket, reqId: RequestId) =
   if fn.distance == 0:
     d.sendNodes(fromNode, reqId, [d.localNode])
   else:
@@ -142,7 +143,7 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe.} =
       if d.pendingRequests.take(whoareyou.authTag, pr):
         let toNode = pr.node
 
-        let (data, _) = d.codec.encodeEncrypted(toNode, 12345, pr.packet, challenge = whoareyou)
+        let (data, _) = d.codec.encodeEncrypted(toNode, pr.packet, challenge = whoareyou)
         d.send(toNode, data)
 
     else:
@@ -155,7 +156,7 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe.} =
       var node: Node
       var packet: Packet
 
-      if d.codec.decodeEncrypted(sender, 12345, msg, authTag, node, packet):
+      if d.codec.decodeEncrypted(sender, a, msg, authTag, node, packet):
         if node.isNil:
           node = d.routingTable.getNode(sender)
         else:
@@ -166,9 +167,9 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe.} =
 
         case packet.kind
         of ping:
-          d.handlePing(node, a, packet.ping, packet.reqId)
+          d.handlePing(node, packet.ping, packet.reqId)
         of findNode:
-          d.handleFindNode(node, a, packet.findNode, packet.reqId)
+          d.handleFindNode(node, packet.findNode, packet.reqId)
         else:
           var waiter: Future[Option[Packet]]
           if d.awaitedPackets.take((node, packet.reqId), waiter):
@@ -212,7 +213,7 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId): Future[seq[Node]]
 proc findNode(d: Protocol, toNode: Node, distance: uint32): Future[seq[Node]] {.async.} =
   let reqId = newRequestId()
   let packet = encodePacket(FindNodePacket(distance: distance), reqId)
-  let (data, nonce) = d.codec.encodeEncrypted(toNode, 12345, packet, challenge = nil)
+  let (data, nonce) = d.codec.encodeEncrypted(toNode, packet, challenge = nil)
   d.pendingRequests[nonce] = PendingRequest(node: toNode, packet: packet)
   d.send(toNode, data)
   result = await d.waitNodes(toNode, reqId)
@@ -323,7 +324,7 @@ when isMainModule:
       result.add(d)
 
   proc addNode(d: openarray[Protocol], enr: string) =
-    for dd in d: dd.addNode(enr)
+    for dd in d: dd.addNode(EnrUri(enr))
 
   proc test() {.async.} =
     block:
