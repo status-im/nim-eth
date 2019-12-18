@@ -1,5 +1,12 @@
+# ENR implemetation according to spec:
+# https://github.com/ethereum/EIPs/blob/master/EIPS/eip-778.md
+
 import strutils, macros, algorithm, options
 import eth/[rlp, keys], nimcrypto, stew/base64
+
+const
+  maxEnrSize = 300
+  minRlpListLen = 4 # for signature, seqId, "id" key, id
 
 type
   Record* = object
@@ -188,9 +195,11 @@ proc verifySignature(r: Record): bool =
       discard
 
 proc fromBytesAux(r: var Record): bool =
+  if r.raw.len > maxEnrSize: return false
+
   var rlp = rlpFromBytes(r.raw.toRange)
   let sz = rlp.listLen
-  if sz < 5 or sz mod 2 != 0:
+  if sz < minRlpListLen or sz mod 2 != 0:
     # Wrong rlp object
     return false
 
@@ -200,18 +209,15 @@ proc fromBytesAux(r: var Record): bool =
   r.sequenceNumber = rlp.read(uint64)
 
   let numPairs = (sz - 2) div 2
-  var
-    id: string
-    pubkeyData: seq[byte]
 
   for i in 0 ..< numPairs:
     let k = rlp.read(string)
     case k
     of "id":
-      id = rlp.read(string)
+      let id = rlp.read(string)
       r.pairs.add((k, Field(kind: kString, str: id)))
     of "secp256k1":
-      pubkeyData = rlp.read(seq[byte])
+      let pubkeyData = rlp.read(seq[byte])
       r.pairs.add((k, Field(kind: kBytes, bytes: pubkeyData)))
     of "tcp", "udp", "tcp6", "udp6", "ip":
       let v = rlp.read(int)
