@@ -1,4 +1,4 @@
-import strutils, macros, algorithm
+import strutils, macros, algorithm, options
 import eth/[rlp, keys], nimcrypto, stew/base64
 
 type
@@ -9,6 +9,16 @@ type
     pairs: seq[(string, Field)] # sorted list of all key/value pairs
 
   EnrUri* = distinct string
+
+  TypedRecord* = object
+    id*: string
+    secp256k1*: Option[array[33, byte]]
+    ip*: Option[array[4, byte]]
+    ip6*: Option[array[16, byte]]
+    tcp*: Option[int]
+    udp*: Option[int]
+    tcp6*: Option[int]
+    udp6*: Option[int]
 
   FieldKind = enum
     kString,
@@ -91,18 +101,28 @@ proc requireKind(f: Field, kind: FieldKind) =
   if f.kind != kind:
     raise newException(ValueError, "Wrong field kind")
 
-proc get*[T: seq[byte] | string | SomeInteger](r: Record, key: string, typ: typedesc[T]): typ =
+proc get*(r: Record, key: string, T: type): T =
   var f: Field
   if r.getField(key, f):
-    when typ is SomeInteger:
+    when T is SomeInteger:
       requireKind(f, kNum)
-      return typ(f.num)
-    elif typ is seq[byte]:
+      return T(f.num)
+    elif T is seq[byte]:
       requireKind(f, kBytes)
       return f.bytes
-    elif typ is string:
+    elif T is string:
       requireKind(f, kString)
       return f.str
+    elif T is array:
+      when type(result[0]) is byte:
+        requireKind(f, kBytes)
+        if f.bytes.len != result.len:
+          raise newException(ValueError, "Invalid byte blob length")
+        copyMem(addr result[0], addr f.bytes[0], result.len)
+      else:
+        {.fatal: "Unsupported output type in enr.get".}
+    else:
+      {.fatal: "Unsupported output type in enr.get".}
   else:
     raise newException(KeyError, "Key not found in ENR: " & key)
 
@@ -110,6 +130,31 @@ proc get*(r: Record, pubKey: var PublicKey): bool =
   var pubkeyField: Field
   if r.getField("secp256k1", pubkeyField) and pubkeyField.kind == kBytes:
     result = recoverPublicKey(pubkeyField.bytes, pubKey) == EthKeysStatus.Success
+
+proc tryGet*(r: Record, key: string, T: type): Option[T] =
+  try:
+    return some r.get(key, T)
+  except CatchableError:
+    discard
+
+func toTypedRecord*(r: Record): Option[TypedRecord] =
+  let id = r.tryGet("id", string)
+  if id.isSome:
+    var tr: TypedRecord
+    tr.id = id.get
+
+    template readField(fieldName: untyped) {.dirty.} =
+      tr.fieldName = tryGet(r, astToStr(fieldName), type(tr.fieldName.get))
+
+    readField secp256k1
+    readField ip
+    readField ip6
+    readField tcp
+    readField tcp6
+    readField udp
+    readField udp6
+
+    return some(tr)
 
 proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]): bool =
   var publicKey: PublicKey
