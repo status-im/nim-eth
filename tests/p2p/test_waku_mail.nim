@@ -58,8 +58,8 @@ suite "Waku Mail Client":
       output.bloom == bloom
       output.limit == limit
 
-    var test: P2PRequestCompleteObject
-    await peer.p2pRequestComplete(test)
+    var dummy: Hash
+    await peer.p2pRequestComplete(dummy, dummy, @[])
 
     check await cursorFut.withTimeout(transmissionTimeout)
 
@@ -93,13 +93,15 @@ suite "Waku Mail Client":
       var envelopes: seq[Envelope]
       traceAsyncErrors peer.p2pMessage(envelopes)
 
-      var test: P2PRequestCompleteObject
+      var cursor: Bytes
       count = count - 1
       if count == 0:
-        test.cursor = @[]
+        cursor = @[]
       else:
-        test.cursor = @[byte count]
-      traceAsyncErrors peer.p2pRequestComplete(test)
+        cursor = @[byte count]
+
+      var dummy: Hash
+      traceAsyncErrors peer.p2pRequestComplete(dummy, dummy, cursor)
 
     simpleServer.enableMailServer(customHandler)
     check client.setPeerTrusted(simpleServerNode.id)

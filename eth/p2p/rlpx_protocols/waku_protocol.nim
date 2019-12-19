@@ -114,17 +114,6 @@ type
     config*: WakuConfig
     p2pRequestHandler*: P2PRequestHandler
 
-  # TODO: In the current specification this is not wrapped in a regular envelope
-  # as is done for the P2P Request packet. If we could alter this in the spec it
-  # would be a cleaner separation between Waku and Mail server / client and then
-  # this could be moved to waku_mail.nim
-  # Also, the requestId could live at layer lower. And the protocol DSL
-  # currently supports this, if used in a requestResponse block.
-  P2PRequestCompleteObject* = object
-    requestId*: Hash
-    lastEnvelopeHash*: Hash
-    cursor*: Bytes
-
   RateLimits* = object
     # TODO: uint or specifically uint32?
     limitIp*: uint
@@ -352,13 +341,21 @@ p2pProtocol Waku(version = wakuVersion,
     proc p2pSyncRequest(peer: Peer) = discard
     proc p2pSyncResponse(peer: Peer) = discard
 
-  proc p2pRequestComplete(peer: Peer, data: P2PRequestCompleteObject) = discard
-    # TODO: This is actually rather a requestResponse in combination with
-    # p2pRequest. However, we can't use that system due to the unfortunate fact
-    # that the packet IDs are not consecutive, and nextID is not recognized in
-    # between these. The nextID behaviour could be fixed, however it would be
-    # cleaner if the specification could be changed to have these IDs to be
-    # consecutive.
+
+  proc p2pRequestComplete(peer: Peer, requestId: Hash, lastEnvelopeHash: Hash,
+    cursor: Bytes) = discard
+    # TODO:
+    # In the current specification the parameters are not wrapped in a regular
+    # envelope as is done for the P2P Request packet. If we could alter this in
+    # the spec it would be a cleaner separation between Waku and Mail server /
+    # client.
+    # Also, if a requestResponse block is used, a reqestId will automatically
+    # be added by the protocol DSL.
+    # However the requestResponse block in combination with p2pRequest cannot be
+    # used due to the unfortunate fact that the packet IDs are not consecutive,
+    # and nextID is not recognized in between these. The nextID behaviour could
+    # be fixed, however it would be cleaner if the specification could be
+    # changed to have these IDs to be consecutive.
 
 # 'Runner' calls ---------------------------------------------------------------
 
