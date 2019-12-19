@@ -19,6 +19,9 @@
 ## measured in seconds. Spam prevention is based on proof-of-work, where large
 ## or long-lived messages must spend more work.
 ##
+## Implementation should be according to Waku specification defined here:
+## https://github.com/vacp2p/specs/blob/master/waku/waku.md
+##
 ## Example usage
 ## ----------
 ## First an `EthereumNode` needs to be created, either with all capabilities set
@@ -70,6 +73,7 @@ const
   ## send to peers, in ms.
   pruneInterval* = chronos.milliseconds(1000)  ## Interval at which message
   ## queue is pruned, in ms.
+  topicInterestMax = 1000
 
 type
   WakuMode* = enum
@@ -87,6 +91,8 @@ type
     bloom*: Bloom
     isLightNode*: bool
     maxMsgSize*: uint32
+    confirmationsEnabled*: bool
+    rateLimits*: RateLimits
     wakuMode*: WakuMode
     topics*: seq[Topic]
 
@@ -118,6 +124,13 @@ type
     requestId*: Hash
     lastEnvelopeHash*: Hash
     cursor*: Bytes
+
+  RateLimits* = object
+    # TODO: uint or specifically uint32?
+    limitIp*: uint
+    limitPeerId*: uint
+    limitTopic*: uint
+
 
 proc allowed*(msg: Message, config: WakuConfig): bool =
   # Check max msg size, already happens in RLPx but there is a specific waku
@@ -155,6 +168,12 @@ proc initProtocolState*(network: WakuNetwork, node: EthereumNode) {.gcsafe.} =
   network.config.bloom = fullBloom()
   network.config.powRequirement = defaultMinPow
   network.config.isLightNode = false
+  # confirmationsEnabled and rateLimits is not yet used but we add it here and
+  # in the status message to be compatible with the Status go implementation.
+  network.config.confirmationsEnabled = false
+  # TODO: Limits of 0 are ignored I hope, this is not clearly written in spec.
+  network.config.rateLimits =
+    RateLimits(limitIp: 0, limitPeerId: 0, limitTopic:0)
   network.config.maxMsgSize = defaultMaxMsgSize
   network.config.wakuMode = None # default no waku mode
   network.config.topics = @[]
@@ -175,6 +194,8 @@ p2pProtocol Waku(version = wakuVersion,
                               cast[uint64](wakuNet.config.powRequirement),
                               @(wakuNet.config.bloom),
                               wakuNet.config.isLightNode,
+                              wakuNet.config.confirmationsEnabled,
+                              wakuNet.config.rateLimits,
                               wakuNet.config.wakuMode,
                               wakuNet.config.topics,
                               timeout = chronos.milliseconds(500))
@@ -228,6 +249,8 @@ p2pProtocol Waku(version = wakuVersion,
                 powConverted: uint64,
                 bloom: Bytes,
                 isLightNode: bool,
+                confirmationsEnabled: bool,
+                rateLimits: RateLimits,
                 wakuMode: WakuMode,
                 topics: seq[Topic])
 
@@ -289,9 +312,17 @@ p2pProtocol Waku(version = wakuVersion,
     if bloom.len == bloomSize:
       peer.state.bloom.bytesCopy(bloom)
 
-  proc topicsExchange(peer: Peer, topics: seq[Topic]) =
+  nextID 20
+
+  proc rateLimits(peer: Peer, rateLimits: RateLimits) = discard
+
+  proc topicInterest(peer: Peer, topics: openarray[Topic]) =
     if not peer.state.initialized:
-      warn "Handshake not completed yet, discarding topicsExchange"
+      warn "Handshake not completed yet, discarding topicInterest"
+      return
+
+    if topics.len > topicInterestMax:
+      error "Too many topics in the topic-interest list"
       return
 
     if peer.state.wakuMode == WakuChan:
@@ -522,14 +553,20 @@ proc setBloomFilter*(node: EthereumNode, bloom: Bloom) {.async.} =
   # Exceptions from sendMsg will not be raised
   await allFutures(futures)
 
-proc setTopics*(node: EthereumNode, topics: seq[Topic]) {.async.} =
+proc setTopics*(node: EthereumNode, topics: seq[Topic]):
+    Future[bool] {.async.} =
+  if topics.len > topicInterestMax:
+    return false
+
   node.protocolState(Waku).config.topics = topics
   var futures: seq[Future[void]] = @[]
   for peer in node.peers(Waku):
-    futures.add(peer.topicsExchange(topics))
+    futures.add(peer.topicInterest(topics))
 
   # Exceptions from sendMsg will not be raised
   await allFutures(futures)
+
+  return true
 
 proc setMaxMessageSize*(node: EthereumNode, size: uint32): bool =
   ## Set the maximum allowed message size.
