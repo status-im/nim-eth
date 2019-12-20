@@ -227,6 +227,7 @@ p2pProtocol Waku(version = wakuVersion,
     wakuPeer.trusted = false
     wakuPeer.initialized = true
 
+    # No timer based queue processing for a light node.
     if not wakuNet.config.isLightNode:
       traceAsyncErrors peer.run()
 
@@ -471,7 +472,7 @@ proc postMessage*(node: EthereumNode, pubKey = none[PublicKey](),
     # Allow lightnode to post only direct p2p messages
     if targetPeer.isSome():
       return node.sendP2PMessage(targetPeer.get(), [env])
-    elif not node.protocolState(Waku).config.isLightNode:
+    else:
       # non direct p2p message can not have ttl of 0
       if env.ttl == 0:
         return false
@@ -490,10 +491,19 @@ proc postMessage*(node: EthereumNode, pubKey = none[PublicKey](),
       if not msg.env.valid():
         return false
 
-      return node.queueMessage(msg)
-    else:
-      warn "Light node not allowed to post messages"
-      return false
+      result = node.queueMessage(msg)
+
+      # Allows light nodes to post via untrusted messages packet.
+      # Queue gets processed immediatly as the node sends only its own messages,
+      # so the privacy ship has already sailed anyhow.
+      # TODO:
+      # - Could be still a concern in terms of efficiency, if multiple messages
+      # need to be send.
+      # - For Waku Mode, the checks in processQueue are rather useless as the
+      # idea is to connect only to 1 node? Also refactor in that case.
+      if node.protocolState(Waku).config.isLightNode:
+        for peer in node.peers(Waku):
+          peer.processQueue()
   else:
     error "Encoding of payload failed"
     return false
