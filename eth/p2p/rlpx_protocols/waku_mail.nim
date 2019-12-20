@@ -64,12 +64,12 @@ proc requestMail*(node: EthereumNode, peerId: NodeId, request: MailRequest,
     # TODO: I guess the idea is to check requestId (Hash) also?
     let requests = requests - 1
     # If there is cursor data, do another request
-    if response.data.cursor.len > 0 and requests > 0:
+    if response.cursor.len > 0 and requests > 0:
       var newRequest = request
-      newRequest.cursor = response.data.cursor
+      newRequest.cursor = response.cursor
       return await requestMail(node, peerId, newRequest, symKey, requests)
     else:
-      return some(response.data.cursor)
+      return some(response.cursor)
   else:
     error "p2pRequestComplete timeout"
     return result
