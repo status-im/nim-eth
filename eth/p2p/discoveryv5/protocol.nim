@@ -1,5 +1,5 @@
 import
-  tables, sets, endians, options, math,
+  std/[tables, sets, endians, options, math, random],
   stew/byteutils, eth/[rlp, keys], chronicles, chronos, stint,
   ../enode, types, encoding, node, routing_table, enr
 
@@ -27,10 +27,10 @@ const
   findnodeResultLimit = 15 # applies in FINDNODE handler
 
 proc whoareyouMagic(toNode: NodeId): array[32, byte] =
-  let srcId = toNode.toByteArrayBE()
-  var data: seq[byte]
-  data.add(srcId)
-  for c in "WHOAREYOU": data.add(byte(c))
+  const prefix = "WHOAREYOU"
+  var data: array[prefix.len + sizeof(toNode), byte]
+  data[0 .. sizeof(toNode) - 1] = toNode.toByteArrayBE()
+  for i, c in prefix: data[sizeof(toNode) + i] = byte(c)
   sha256.digest(data).data
 
 proc newProtocol*(privKey: PrivateKey, db: Database, port: Port): Protocol =
@@ -44,10 +44,9 @@ proc newProtocol*(privKey: PrivateKey, db: Database, port: Port): Protocol =
   result.localNode = newNode(initENode(result.privateKey.getPublicKey(), a))
   result.localNode.record = initRecord(12, result.privateKey, {"udp": int(a.udpPort), "ip": ipAddr})
 
-  let srcId = result.localNode.id.toByteArrayBE()
   result.whoareyouMagic = whoareyouMagic(result.localNode.id)
 
-  result.idHash = sha256.digest(srcId).data
+  result.idHash = sha256.digest(result.localNode.id.toByteArrayBE).data
   result.routingTable.init(result.localNode)
 
   result.codec = Codec(localNode: result.localNode, privKey: result.privateKey, db: result.db)
@@ -178,8 +177,8 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe.} =
             echo "TODO: handle packet: ", packet.kind, " from ", node
 
       else:
-        d.sendWhoareyou(a, sender, authTag)
         echo "Could not decode, respond with whoareyou"
+        d.sendWhoareyou(a, sender, authTag)
 
   except Exception as e:
     echo "Exception: ", e.msg
@@ -292,10 +291,38 @@ proc processClient(transp: DatagramTransport,
     debug "Receive failed", err = getCurrentExceptionMsg()
     raise
 
+proc revalidateNode(p: Protocol, n: Node) {.async.} =
+  let reqId = newRequestId()
+  var ping: PingPacket
+  ping.enrSeq = p.localNode.record.sequenceNumber
+  let (data, nonce) = p.codec.encodeEncrypted(n, encodePacket(ping, reqId), challenge = nil)
+  p.pendingRequests[nonce] = PendingRequest(node: n, packet: data)
+  p.send(n, data)
+
+  let resp = await p.waitPacket(n, reqId)
+  if resp.isSome and resp.get.kind == pong:
+    let pong = resp.get.pong
+    if pong.enrSeq > n.record.sequenceNumber:
+      # TODO: Request new ENR
+      discard
+
+    p.routingTable.setJustSeen(n)
+  else:
+    if false: # TODO: if not bootnode:
+      p.routingTable.removeNode(n)
+
+proc revalidateLoop(p: Protocol) {.async.} =
+  while true:
+    await sleepAsync(rand(10 * 1000).milliseconds)
+    let n = p.routingTable.nodeToRevalidate()
+    if not n.isNil:
+      await p.revalidateNode(n)
+
 proc open*(d: Protocol) =
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(IPv4_any(), d.localNode.node.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
+  asyncCheck d.revalidateLoop() # TODO: This loop has to be terminated on close()
 
 proc addNode*(d: Protocol, r: Record) =
   discard d.routingTable.addNode(newNode(r))
@@ -305,6 +332,11 @@ proc addNode*(d: Protocol, enr: EnrUri) =
   let res = r.fromUri(enr)
   doAssert(res)
   discard d.routingTable.addNode(newNode(r))
+
+proc randomNodes*(k: Protocol, count: int): seq[Node] =
+  k.routingTable.randomNodes(count)
+
+proc nodesDiscovered*(k: Protocol): int {.inline.} = k.routingTable.len
 
 when isMainModule:
   import discovery_db

@@ -1,4 +1,4 @@
-import algorithm, times, sequtils, bitops
+import std/[algorithm, times, sequtils, bitops, random, sets]
 import types, node
 import stint, chronicles
 
@@ -140,7 +140,7 @@ proc splitBucket(r: var RoutingTable, index: int) =
 proc bucketForNode(r: RoutingTable, id: NodeId): KBucket =
   binaryGetBucketForNode(r.buckets, id)
 
-proc removeNode(r: var RoutingTable, n: Node) =
+proc removeNode*(r: var RoutingTable, n: Node) =
   r.bucketForNode(n.id).removeNode(n)
 
 proc addNode*(r: var RoutingTable, n: Node): Node =
@@ -162,12 +162,12 @@ proc addNode*(r: var RoutingTable, n: Node): Node =
     return evictionCandidate
 
 proc getNode*(r: RoutingTable, id: NodeId): Node =
-  let b = binaryGetBucketForNode(r.buckets, id)
+  let b = r.bucketForNode(id)
   for n in b.nodes:
     if n.id == id:
       return n
 
-proc contains(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
+proc contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
 
 proc bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
   sortedByIt(r.buckets, it.distanceTo(id))
@@ -194,5 +194,53 @@ proc idAtDistance(id: NodeId, dist: uint32): NodeId =
 proc neighboursAtDistance*(r: RoutingTable, distance: uint32, k: int = BUCKET_SIZE): seq[Node] =
   r.neighbours(idAtDistance(r.thisNode.id, distance), k)
 
-proc len(r: RoutingTable): int =
+proc len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len
+
+proc moveRight[T](arr: var openarray[T], a, b: int) {.inline.} =
+  ## In `arr` move elements in range [a, b] right by 1.
+  var t: T
+  shallowCopy(t, arr[b + 1])
+  for i in countdown(b, a):
+    shallowCopy(arr[i + 1], arr[i])
+  shallowCopy(arr[a], t)
+
+proc setJustSeen*(r: RoutingTable, n: Node) =
+  # Move `n` to front of its bucket
+  let b = r.bucketForNode(n.id)
+  let idx = b.nodes.find(n)
+  doAssert(idx >= 0)
+  if idx != 0:
+    b.nodes.moveRight(0, idx - 1)
+  b.nodes[0] = n
+  b.lastUpdated = epochTime()
+
+proc nodeToRevalidate*(r: RoutingTable): Node =
+  var buckets = r.buckets
+  shuffle(buckets)
+  # TODO: Should we prioritize less-recently-updated buckets instead?
+  for b in buckets:
+    if b.len > 0:
+      return b.nodes[^1]
+
+proc randomNodes*(r: RoutingTable, count: int): seq[Node] =
+  var count = count
+  let sz = r.len
+  if count > sz:
+    debug  "Looking for peers", requested = count, present = sz
+    count = sz
+
+  result = newSeqOfCap[Node](count)
+  var seen = initHashSet[Node]()
+
+  # This is a rather inneficient way of randomizing nodes from all buckets, but even if we
+  # iterate over all nodes in the routing table, the time it takes would still be
+  # insignificant compared to the time it takes for the network roundtrips when connecting
+  # to nodes.
+  while len(seen) < count:
+    let bucket = sample(r.buckets)
+    if bucket.nodes.len != 0:
+      let node = sample(bucket.nodes)
+      if node notin seen:
+        result.add(node)
+        seen.incl(node)

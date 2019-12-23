@@ -1,4 +1,4 @@
-import tables
+import std/tables
 import types, node, enr, hkdf, ../enode, eth/[rlp, keys], nimcrypto, stint
 
 const
@@ -204,7 +204,6 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader, challenge: Whoar
 proc decodeEncrypted*(c: var Codec, fromId: NodeID, fromAddr: Address, input: seq[byte], authTag: var array[12, byte], newNode: var Node, packet: var Packet): bool =
   let input = input.toRange
   var r = rlpFromBytes(input[32 .. ^1])
-  let authEndPos = r.currentElemEnd
   var auth: AuthHeader
   var readKey: array[16, byte]
   if r.isList:
