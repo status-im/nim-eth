@@ -28,7 +28,7 @@ type
     regconfirmation = 0x07
     topicquery = 0x08
 
-  RequestId* = array[8, byte]
+  RequestId* = uint64
 
   PingPacket* = object
     enrSeq*: uint64

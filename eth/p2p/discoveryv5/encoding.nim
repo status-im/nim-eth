@@ -246,7 +246,8 @@ proc decodeEncrypted*(c: var Codec, fromId: NodeID, fromAddr: Address, input: se
     result = decodePacketBody(body[0], body.toOpenArray(1, body.high), packet)
 
 proc newRequestId*(): RequestId =
-  randomBytes(result)
+  if randomBytes(addr result, sizeof(result)) != sizeof(result):
+    raise newException(Exception, "Could not randomize bytes") # TODO:
 
 proc numFields(T: typedesc): int =
   for k, v in fieldPairs(default(T)): inc result
@@ -265,9 +266,3 @@ proc encodePacket*[T: SomePacket](p: T, reqId: RequestId): seq[byte] =
 
 proc encodePacket*[T: SomePacket](p: T): seq[byte] =
   encodePacket(p, newRequestId())
-
-proc makePingPacket*(enrSeq: uint64): seq[byte] =
-  encodePacket(PingPacket(enrSeq: enrSeq))
-
-proc makeFindnodePacket*(distance: uint32): seq[byte] =
-  encodePacket(FindNodePacket(distance: distance))
