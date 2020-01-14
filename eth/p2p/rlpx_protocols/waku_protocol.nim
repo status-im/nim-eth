@@ -47,19 +47,19 @@ export
 logScope:
   topics = "waku"
 
-declareCounter valid_envelopes,
+declarePublicCounter valid_envelopes,
   "Received & posted valid envelopes"
-declareCounter dropped_low_pow_envelopes,
+declarePublicCounter dropped_low_pow_envelopes,
   "Dropped envelopes because of too low PoW"
-declareCounter dropped_too_large_envelopes,
+declarePublicCounter dropped_too_large_envelopes,
   "Dropped envelopes because larger than maximum allowed size"
-declareCounter dropped_bloom_filter_mismatch_envelopes,
+declarePublicCounter dropped_bloom_filter_mismatch_envelopes,
   "Dropped envelopes because not matching with bloom filter"
-declareCounter dropped_topic_mismatch_envelopes,
+declarePublicCounter dropped_topic_mismatch_envelopes,
   "Dropped envelopes because of not matching topics"
-declareCounter dropped_benign_duplicate_envelopes,
+declarePublicCounter dropped_benign_duplicate_envelopes,
   "Dropped benign duplicate envelopes"
-declareCounter dropped_malicious_duplicate_envelopes,
+declarePublicCounter dropped_malicious_duplicate_envelopes,
   "Dropped malicious duplicate envelopes"
 
 const
