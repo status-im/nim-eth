@@ -273,12 +273,12 @@ proc processQueue(peer: Peer) =
       continue
 
     if message.pow < whisperPeer.powRequirement:
-      debug "Message PoW too low for peer", pow = message.pow,
+      trace "Message PoW too low for peer", pow = message.pow,
                                             powReq = whisperPeer.powRequirement
       continue
 
     if not bloomFilterMatch(whisperPeer.bloom, message.bloom):
-      debug "Message does not match peer bloom filter"
+      trace "Message does not match peer bloom filter"
       continue
 
     trace "Adding envelope"

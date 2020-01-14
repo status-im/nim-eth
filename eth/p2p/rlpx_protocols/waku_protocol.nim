@@ -373,17 +373,18 @@ proc processQueue(peer: Peer) =
       continue
 
     if message.pow < wakuPeer.powRequirement:
-      debug "Message PoW too low for peer", pow = message.pow,
+      trace "Message PoW too low for peer", pow = message.pow,
                                             powReq = wakuPeer.powRequirement
       continue
 
     if not bloomFilterMatch(wakuPeer.bloom, message.bloom):
-      debug "Message does not match peer bloom filter"
+      trace "Message does not match peer bloom filter"
       continue
 
     if wakuNet.config.wakuMode == WakuSan and
         wakuPeer.wakuMode == WakuChan:
       if message.env.topic notin wakuPeer.topics:
+        trace "Message does not match topics list"
         continue
 
     trace "Adding envelope"
