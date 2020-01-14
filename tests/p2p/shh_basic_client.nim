@@ -117,20 +117,20 @@ if config.watch:
     echo msg.decoded.payload.repr
 
   # filter encrypted asym
-  discard node.subscribeFilter(newFilter(privateKey = some(encPrivateKey),
+  discard node.subscribeFilter(initFilter(privateKey = some(encPrivateKey),
                                          topics = @[topic]),
                                handler)
   # filter encrypted asym + signed
-  discard node.subscribeFilter(newFilter(some(signPublicKey),
+  discard node.subscribeFilter(initFilter(some(signPublicKey),
                                          privateKey = some(encPrivateKey),
                                          topics = @[topic]),
                                handler)
   # filter encrypted sym
-  discard node.subscribeFilter(newFilter(symKey = some(symKey),
+  discard node.subscribeFilter(initFilter(symKey = some(symKey),
                                          topics = @[topic]),
                                handler)
   # filter encrypted sym + signed
-  discard node.subscribeFilter(newFilter(some(signPublicKey),
+  discard node.subscribeFilter(initFilter(some(signPublicKey),
                                          symKey = some(symKey),
                                          topics = @[topic]),
                                handler)

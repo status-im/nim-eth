@@ -47,23 +47,23 @@ export
 logScope:
   topics = "waku"
 
-declareCounter valid_envelopes,
+declarePublicCounter valid_envelopes,
   "Received & posted valid envelopes"
-declareCounter dropped_low_pow_envelopes,
+declarePublicCounter dropped_low_pow_envelopes,
   "Dropped envelopes because of too low PoW"
-declareCounter dropped_too_large_envelopes,
+declarePublicCounter dropped_too_large_envelopes,
   "Dropped envelopes because larger than maximum allowed size"
-declareCounter dropped_bloom_filter_mismatch_envelopes,
+declarePublicCounter dropped_bloom_filter_mismatch_envelopes,
   "Dropped envelopes because not matching with bloom filter"
-declareCounter dropped_topic_mismatch_envelopes,
+declarePublicCounter dropped_topic_mismatch_envelopes,
   "Dropped envelopes because of not matching topics"
-declareCounter dropped_benign_duplicate_envelopes,
+declarePublicCounter dropped_benign_duplicate_envelopes,
   "Dropped benign duplicate envelopes"
-declareCounter dropped_malicious_duplicate_envelopes,
+declarePublicCounter dropped_malicious_duplicate_envelopes,
   "Dropped malicious duplicate envelopes"
 
 const
-  defaultQueueCapacity = 256
+  defaultQueueCapacity = 2048
   wakuVersion* = 0 ## Waku version.
   wakuVersionStr* = $wakuVersion ## Waku version.
   defaultMinPow* = 0.2'f64 ## The default minimum PoW requirement for this node.
@@ -373,17 +373,18 @@ proc processQueue(peer: Peer) =
       continue
 
     if message.pow < wakuPeer.powRequirement:
-      debug "Message PoW too low for peer", pow = message.pow,
+      trace "Message PoW too low for peer", pow = message.pow,
                                             powReq = wakuPeer.powRequirement
       continue
 
     if not bloomFilterMatch(wakuPeer.bloom, message.bloom):
-      debug "Message does not match peer bloom filter"
+      trace "Message does not match peer bloom filter"
       continue
 
     if wakuNet.config.wakuMode == WakuSan and
         wakuPeer.wakuMode == WakuChan:
       if message.env.topic notin wakuPeer.topics:
+        trace "Message does not match topics list"
         continue
 
     trace "Adding envelope"

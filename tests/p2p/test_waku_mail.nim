@@ -73,7 +73,7 @@ suite "Waku Mail Client":
       f.complete(1)
 
     let filter = subscribeFilter(client,
-      newFilter(topics = @[topic], allowP2P = true), handler)
+      initFilter(topics = @[topic], allowP2P = true), handler)
 
     check:
       client.setPeerTrusted(simpleServerNode.id)

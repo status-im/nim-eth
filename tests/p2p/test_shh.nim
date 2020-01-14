@@ -182,6 +182,9 @@ let
   env1 = Envelope(
     expiry:100000, ttl: 30, topic: [byte 0, 0, 0, 0],
     data: repeat(byte 9, 256), nonce: 1010102)
+  env2 = Envelope(
+    expiry:100000, ttl: 30, topic: [byte 0, 0, 0, 0],
+    data: repeat(byte 9, 256), nonce: 1010103)
 
 suite "Whisper envelope":
 
@@ -247,6 +250,22 @@ suite "Whisper queue":
 
       queue.items.len() == 2
 
+  test "check if order of queue is by decreasing PoW":
+    var queue = initQueue(3)
+
+    let msg0 = initMessage(env0)
+    let msg1 = initMessage(env1)
+    let msg2 = initMessage(env2)
+
+    discard queue.add(msg0)
+    discard queue.add(msg1)
+    discard queue.add(msg2)
+
+    check:
+      queue.items.len() == 3
+      queue.items[0].pow > queue.items[1].pow and
+        queue.items[1].pow > queue.items[2].pow
+
   test "check field order against expected rlp order":
     check rlp.encode(env0) ==
       rlp.encodeList(env0.expiry, env0.ttl, env0.topic, env0.data, env0.nonce)
@@ -269,7 +288,7 @@ suite "Whisper filter":
     let msg = prepFilterTestMsg(symKey = some(symKey), topic = topic)
 
     var filters = initTable[string, Filter]()
-    let filter = newFilter(symKey = some(symKey), topics = @[topic])
+    let filter = initFilter(symKey = some(symKey), topics = @[topic])
     let filterId = filters.subscribeFilter(filter)
 
     notify(filters, msg)
@@ -287,7 +306,7 @@ suite "Whisper filter":
                                 topic = topic)
 
     var filters = initTable[string, Filter]()
-    let filter = newFilter(privateKey = some(privKey), topics = @[topic])
+    let filter = initFilter(privateKey = some(privKey), topics = @[topic])
     let filterId = filters.subscribeFilter(filter)
 
     notify(filters, msg)
@@ -304,7 +323,7 @@ suite "Whisper filter":
     let msg = prepFilterTestMsg(src = some(privKey), topic = topic)
 
     var filters = initTable[string, Filter]()
-    let filter = newFilter(src = some(privKey.getPublicKey()),
+    let filter = initFilter(src = some(privKey.getPublicKey()),
                            topics = @[topic])
     let filterId = filters.subscribeFilter(filter)
 
@@ -328,9 +347,9 @@ suite "Whisper filter":
     var filters = initTable[string, Filter]()
     let
       filterId1 = filters.subscribeFilter(
-                    newFilter(topics = @[topic], powReq = 0.014492753623188406))
+                    initFilter(topics = @[topic], powReq = 0.014492753623188406))
       filterId2 = filters.subscribeFilter(
-                    newFilter(topics = @[topic], powReq = 0.014492753623188407))
+                    initFilter(topics = @[topic], powReq = 0.014492753623188407))
 
     notify(filters, msg)
 
@@ -347,8 +366,8 @@ suite "Whisper filter":
 
     var filters = initTable[string, Filter]()
     let
-      filterId1 = filters.subscribeFilter(newFilter(topics = @[topic1]))
-      filterId2 = filters.subscribeFilter(newFilter(topics = @[topic2]))
+      filterId1 = filters.subscribeFilter(initFilter(topics = @[topic1]))
+      filterId2 = filters.subscribeFilter(initFilter(topics = @[topic2]))
 
     notify(filters, msg)
 

@@ -54,9 +54,9 @@ suite "Waku - Whisper bridge tests":
       futures[1].complete(1)
 
     var filter1 = whisper.subscribeFilter(nodeWhisper,
-      whisper.newFilter(topics = @[topic1]), handler1)
+      whisper.initFilter(topics = @[topic1]), handler1)
     var filter2 = waku.subscribeFilter(nodeWaku,
-      waku.newFilter(topics = @[topic2]), handler2)
+      waku.initFilter(topics = @[topic2]), handler2)
 
     check:
       # Message should also end up in the Whisper node its queue via the bridge

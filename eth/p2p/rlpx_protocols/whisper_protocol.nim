@@ -42,21 +42,21 @@ export
 logScope:
   topics = "whisper"
 
-declareCounter valid_envelopes,
+declarePublicCounter valid_envelopes,
   "Received & posted valid envelopes"
-declareCounter dropped_low_pow_envelopes,
+declarePublicCounter dropped_low_pow_envelopes,
   "Dropped envelopes because of too low PoW"
-declareCounter dropped_too_large_envelopes,
+declarePublicCounter dropped_too_large_envelopes,
   "Dropped envelopes because larger than maximum allowed size"
-declareCounter dropped_bloom_filter_mismatch_envelopes,
+declarePublicCounter dropped_bloom_filter_mismatch_envelopes,
   "Dropped envelopes because not matching with bloom filter"
-declareCounter dropped_benign_duplicate_envelopes,
+declarePublicCounter dropped_benign_duplicate_envelopes,
   "Dropped benign duplicate envelopes"
-declareCounter dropped_malicious_duplicate_envelopes,
+declarePublicCounter dropped_malicious_duplicate_envelopes,
   "Dropped malicious duplicate envelopes"
 
 const
-  defaultQueueCapacity = 256
+  defaultQueueCapacity = 2048
   whisperVersion* = 6 ## Whisper version.
   whisperVersionStr* = $whisperVersion ## Whisper version.
   defaultMinPow* = 0.2'f64 ## The default minimum PoW requirement for this node.
@@ -273,12 +273,12 @@ proc processQueue(peer: Peer) =
       continue
 
     if message.pow < whisperPeer.powRequirement:
-      debug "Message PoW too low for peer", pow = message.pow,
+      trace "Message PoW too low for peer", pow = message.pow,
                                             powReq = whisperPeer.powRequirement
       continue
 
     if not bloomFilterMatch(whisperPeer.bloom, message.bloom):
-      debug "Message does not match peer bloom filter"
+      trace "Message does not match peer bloom filter"
       continue
 
     trace "Adding envelope"

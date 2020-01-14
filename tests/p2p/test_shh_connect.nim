@@ -59,17 +59,17 @@ suite "Whisper connections":
 
     # Filters
     # filter for encrypted asym
-    filters.add(node1.subscribeFilter(newFilter(privateKey = some(encryptKeyPair.seckey),
+    filters.add(node1.subscribeFilter(initFilter(privateKey = some(encryptKeyPair.seckey),
                                                 topics = @[topic]), handler1))
     # filter for encrypted asym + signed
-    filters.add(node1.subscribeFilter(newFilter(some(signKeyPair.pubkey),
+    filters.add(node1.subscribeFilter(initFilter(some(signKeyPair.pubkey),
                                                 privateKey = some(encryptKeyPair.seckey),
                                                 topics = @[topic]), handler2))
     # filter for encrypted sym
-    filters.add(node1.subscribeFilter(newFilter(symKey = some(symKey),
+    filters.add(node1.subscribeFilter(initFilter(symKey = some(symKey),
                                                 topics = @[topic]), handler3))
     # filter for encrypted sym + signed
-    filters.add(node1.subscribeFilter(newFilter(some(signKeyPair.pubkey),
+    filters.add(node1.subscribeFilter(initFilter(some(signKeyPair.pubkey),
                                                 symKey = some(symKey),
                                                 topics = @[topic]), handler4))
     # Messages
@@ -113,8 +113,8 @@ suite "Whisper connections":
       check msg.decoded.payload == payloads[1]
       futures[1].complete(1)
 
-    var filter1 = node1.subscribeFilter(newFilter(topics = @[topic1]), handler1)
-    var filter2 = node1.subscribeFilter(newFilter(topics = @[topic2]), handler2)
+    var filter1 = node1.subscribeFilter(initFilter(topics = @[topic1]), handler1)
+    var filter2 = node1.subscribeFilter(initFilter(topics = @[topic2]), handler2)
 
     check:
       node2.postMessage(ttl = safeTTL + 1, topic = topic1,
@@ -142,9 +142,9 @@ suite "Whisper connections":
       check msg.decoded.payload == payload
       futures[1].complete(1)
 
-    var filter1 = node1.subscribeFilter(newFilter(topics = @[topic], powReq = 0),
+    var filter1 = node1.subscribeFilter(initFilter(topics = @[topic], powReq = 0),
                                         handler1)
-    var filter2 = node1.subscribeFilter(newFilter(topics = @[topic],
+    var filter2 = node1.subscribeFilter(initFilter(topics = @[topic],
                                         powReq = 1_000_000), handler2)
 
     check:
@@ -163,7 +163,7 @@ suite "Whisper connections":
     let topic = [byte 0, 0, 0, 0]
     let payload = repeat(byte 0, 10)
 
-    var filter = node1.subscribeFilter(newFilter(topics = @[topic]))
+    var filter = node1.subscribeFilter(initFilter(topics = @[topic]))
     for i in countdown(10, 1):
       check node2.postMessage(ttl = safeTTL, topic = topic,
                               payload = payload) == true
@@ -179,7 +179,7 @@ suite "Whisper connections":
   asyncTest "Local filter notify":
     let topic = [byte 0, 0, 0, 0]
 
-    var filter = node1.subscribeFilter(newFilter(topics = @[topic]))
+    var filter = node1.subscribeFilter(initFilter(topics = @[topic]))
     check:
       node1.postMessage(ttl = safeTTL, topic = topic,
                         payload = repeat(byte 4, 10)) == true
@@ -198,7 +198,7 @@ suite "Whisper connections":
     proc handler(msg: ReceivedMessage) =
       check msg.decoded.payload == payload
       f.complete(1)
-    var filter = node1.subscribeFilter(newFilter(topics = filterTopics), handler)
+    var filter = node1.subscribeFilter(initFilter(topics = filterTopics), handler)
     await node1.setBloomFilter(node1.filtersToBloom())
 
     check:
@@ -279,7 +279,7 @@ suite "Whisper connections":
       check msg.decoded.payload == repeat(byte 4, 10)
       f.complete(1)
 
-    var filter = node1.subscribeFilter(newFilter(topics = @[topic],
+    var filter = node1.subscribeFilter(initFilter(topics = @[topic],
                                        allowP2P = true), handler)
     check:
       node1.setPeerTrusted(toNodeId(node2.keys.pubkey)) == true
