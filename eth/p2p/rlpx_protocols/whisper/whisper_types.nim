@@ -473,7 +473,7 @@ proc calcPowHash*(self: Envelope): Hash =
 
 proc cmpPow(a, b: Message): int =
   ## Biggest pow first, lowest at the end (for easy popping)
-  if a.pow > b.pow: 1
+  if a.pow < b.pow: 1
   elif a.pow == b.pow: 0
   else: -1
 

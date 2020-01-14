@@ -182,6 +182,9 @@ let
   env1 = Envelope(
     expiry:100000, ttl: 30, topic: [byte 0, 0, 0, 0],
     data: repeat(byte 9, 256), nonce: 1010102)
+  env2 = Envelope(
+    expiry:100000, ttl: 30, topic: [byte 0, 0, 0, 0],
+    data: repeat(byte 9, 256), nonce: 1010103)
 
 suite "Whisper envelope":
 
@@ -246,6 +249,22 @@ suite "Whisper queue":
       queue.add(initMessage(env1)) == true
 
       queue.items.len() == 2
+
+  test "check if order of queue is by decreasing PoW":
+    var queue = initQueue(3)
+
+    let msg0 = initMessage(env0)
+    let msg1 = initMessage(env1)
+    let msg2 = initMessage(env2)
+
+    discard queue.add(msg0)
+    discard queue.add(msg1)
+    discard queue.add(msg2)
+
+    check:
+      queue.items.len() == 3
+      queue.items[0].pow > queue.items[1].pow and
+        queue.items[1].pow > queue.items[2].pow
 
   test "check field order against expected rlp order":
     check rlp.encode(env0) ==

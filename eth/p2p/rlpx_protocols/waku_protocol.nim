@@ -63,7 +63,7 @@ declarePublicCounter dropped_malicious_duplicate_envelopes,
   "Dropped malicious duplicate envelopes"
 
 const
-  defaultQueueCapacity = 256
+  defaultQueueCapacity = 2048
   wakuVersion* = 0 ## Waku version.
   wakuVersionStr* = $wakuVersion ## Waku version.
   defaultMinPow* = 0.2'f64 ## The default minimum PoW requirement for this node.

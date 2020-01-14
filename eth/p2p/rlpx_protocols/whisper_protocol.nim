@@ -56,7 +56,7 @@ declarePublicCounter dropped_malicious_duplicate_envelopes,
   "Dropped malicious duplicate envelopes"
 
 const
-  defaultQueueCapacity = 256
+  defaultQueueCapacity = 2048
   whisperVersion* = 6 ## Whisper version.
   whisperVersionStr* = $whisperVersion ## Whisper version.
   defaultMinPow* = 0.2'f64 ## The default minimum PoW requirement for this node.
