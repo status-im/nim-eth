@@ -572,7 +572,7 @@ proc add*(self: var Queue, msg: Message): bool =
     return true
 
 # Filters ----------------------------------------------------------------------
-proc newFilter*(src = none[PublicKey](), privateKey = none[PrivateKey](),
+proc initFilter*(src = none[PublicKey](), privateKey = none[PrivateKey](),
                 symKey = none[SymKey](), topics: seq[Topic] = @[],
                 powReq = 0.0, allowP2P = false): Filter =
   # Zero topics will give an empty bloom filter which is fine as this bloom

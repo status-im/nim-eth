@@ -269,7 +269,7 @@ suite "Whisper filter":
     let msg = prepFilterTestMsg(symKey = some(symKey), topic = topic)
 
     var filters = initTable[string, Filter]()
-    let filter = newFilter(symKey = some(symKey), topics = @[topic])
+    let filter = initFilter(symKey = some(symKey), topics = @[topic])
     let filterId = filters.subscribeFilter(filter)
 
     notify(filters, msg)
@@ -287,7 +287,7 @@ suite "Whisper filter":
                                 topic = topic)
 
     var filters = initTable[string, Filter]()
-    let filter = newFilter(privateKey = some(privKey), topics = @[topic])
+    let filter = initFilter(privateKey = some(privKey), topics = @[topic])
     let filterId = filters.subscribeFilter(filter)
 
     notify(filters, msg)
@@ -304,7 +304,7 @@ suite "Whisper filter":
     let msg = prepFilterTestMsg(src = some(privKey), topic = topic)
 
     var filters = initTable[string, Filter]()
-    let filter = newFilter(src = some(privKey.getPublicKey()),
+    let filter = initFilter(src = some(privKey.getPublicKey()),
                            topics = @[topic])
     let filterId = filters.subscribeFilter(filter)
 
@@ -328,9 +328,9 @@ suite "Whisper filter":
     var filters = initTable[string, Filter]()
     let
       filterId1 = filters.subscribeFilter(
-                    newFilter(topics = @[topic], powReq = 0.014492753623188406))
+                    initFilter(topics = @[topic], powReq = 0.014492753623188406))
       filterId2 = filters.subscribeFilter(
-                    newFilter(topics = @[topic], powReq = 0.014492753623188407))
+                    initFilter(topics = @[topic], powReq = 0.014492753623188407))
 
     notify(filters, msg)
 
@@ -347,8 +347,8 @@ suite "Whisper filter":
 
     var filters = initTable[string, Filter]()
     let
-      filterId1 = filters.subscribeFilter(newFilter(topics = @[topic1]))
-      filterId2 = filters.subscribeFilter(newFilter(topics = @[topic2]))
+      filterId1 = filters.subscribeFilter(initFilter(topics = @[topic1]))
+      filterId2 = filters.subscribeFilter(initFilter(topics = @[topic2]))
 
     notify(filters, msg)
 
