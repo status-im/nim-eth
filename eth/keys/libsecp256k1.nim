@@ -135,6 +135,9 @@ proc getPublicKey*(seckey: PrivateKey): PublicKey =
                                 cast[ptr cuchar](unsafeAddr seckey)) != 1:
     raiseSecp256k1Error()
 
+proc toKeyPair*(key: PrivateKey): KeyPair =
+  KeyPair(seckey: key, pubkey: key.getPublicKey())
+
 proc newKeyPair*(): KeyPair =
   ## Generates new private and public key.
   result.seckey = newPrivateKey()
