@@ -17,10 +17,18 @@ import
 logScope:
   topics = "whisper_types"
 
+declarePublicCounter valid_envelopes,
+  "Received & posted valid envelopes"
+declarePublicCounter dropped_benign_duplicate_envelopes,
+  "Dropped benign duplicate envelopes"
 declarePublicCounter dropped_expired_envelopes,
   "Dropped envelopes because expired"
 declarePublicCounter dropped_from_future_envelopes,
   "Dropped envelopes because of future timestamp"
+declarePublicCounter dropped_full_queue_new_envelopes,
+  "New valid envelopes dropped because of full queue"
+declarePublicCounter dropped_full_queue_old_envelopes,
+  "Old valid envelopes dropped because of full queue"
 
 const
   flagsLen = 1 ## payload flags field length, bytes
@@ -549,25 +557,30 @@ proc add*(self: var Queue, msg: Message): bool =
   ## * expired messages
   ## * lowest proof-of-work message - this may be `msg` itself!
 
-  if self.items.len >= self.capacity:
-    self.prune() # Only prune if needed
-
-    if self.items.len >= self.capacity:
-      # Still no room - go by proof-of-work quantity
-      let last = self.items[^1]
-
-      if last.pow > msg.pow or
-        (last.pow == msg.pow and last.env.expiry > msg.env.expiry):
-        # The new message has less pow or will expire earlier - drop it
-        return false
-
-      self.items.del(self.items.len() - 1)
-      self.itemHashes.excl(last.hash)
-
-  # check for duplicate
-  if self.itemHashes.containsOrIncl(msg.hash):
+  # check for duplicate before pruning
+  if self.itemHashes.contains(msg.hash):
+    dropped_benign_duplicate_envelopes.inc()
     return false
   else:
+    valid_envelopes.inc()
+    if self.items.len >= self.capacity:
+      self.prune() # Only prune if needed
+
+      if self.items.len >= self.capacity:
+        # Still no room - go by proof-of-work quantity
+        let last = self.items[^1]
+
+        if last.pow > msg.pow or
+          (last.pow == msg.pow and last.env.expiry > msg.env.expiry):
+          # The new message has less pow or will expire earlier - drop it
+          dropped_full_queue_new_envelopes.inc()
+          return false
+
+        self.items.del(self.items.len() - 1)
+        self.itemHashes.excl(last.hash)
+        dropped_full_queue_old_envelopes.inc()
+
+    self.itemHashes.incl(msg.hash)
     self.items.insert(msg, self.items.lowerBound(msg, cmpPow))
     return true
 
