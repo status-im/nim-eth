@@ -98,7 +98,7 @@ type
     ## room for those with higher pow, even if they haven't expired yet.
     ## Larger messages and those with high time-to-live will require more pow.
     items*: seq[Message] ## Sorted by proof-of-work
-    itemHashes*: HashSet[Message] ## For easy duplication checking
+    itemHashes*: HashSet[Hash] ## For easy duplication checking
     # XXX: itemHashes is added for easy message duplication checking and for
     # easy pruning of the peer received message sets. It does have an impact on
     # adding and pruning of items however.
@@ -486,7 +486,7 @@ proc initMessage*(env: Envelope, powCalc = true): Message =
     result.pow = calcPow(result.env.len.uint32, result.env.ttl, result.hash)
     trace "Message PoW", pow = result.pow.formatFloat(ffScientific)
 
-proc hash*(msg: Message): hashes.Hash = hash(msg.hash.data)
+proc hash*(hash: Hash): hashes.Hash = hashes.hash(hash.data)
 
 # NOTE: Hashing and leading zeroes calculation is now the same between geth,
 # parity and this implementation.
@@ -540,7 +540,7 @@ proc prune*(self: var Queue) {.raises: [].} =
       if pos != i:
         shallowCopy(self.items[pos], self.items[i])
       inc(pos)
-    else: self.itemHashes.excl(self.items[i])
+    else: self.itemHashes.excl(self.items[i].hash)
   setLen(self.items, pos)
 
 proc add*(self: var Queue, msg: Message): bool =
@@ -562,10 +562,10 @@ proc add*(self: var Queue, msg: Message): bool =
         return false
 
       self.items.del(self.items.len() - 1)
-      self.itemHashes.excl(last)
+      self.itemHashes.excl(last.hash)
 
   # check for duplicate
-  if self.itemHashes.containsOrIncl(msg):
+  if self.itemHashes.containsOrIncl(msg.hash):
     return false
   else:
     self.items.insert(msg, self.items.lowerBound(msg, cmpPow))
