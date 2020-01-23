@@ -12,7 +12,6 @@ requires "nim >= 0.19.0",
          "chronos",
          "chronicles",
          "stew",
-         "result",
          "nat_traversal",
          "metrics"
 
