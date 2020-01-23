@@ -47,8 +47,6 @@ export
 logScope:
   topics = "waku"
 
-declarePublicCounter valid_envelopes,
-  "Received & posted valid envelopes"
 declarePublicCounter dropped_low_pow_envelopes,
   "Dropped envelopes because of too low PoW"
 declarePublicCounter dropped_too_large_envelopes,
@@ -57,10 +55,8 @@ declarePublicCounter dropped_bloom_filter_mismatch_envelopes,
   "Dropped envelopes because not matching with bloom filter"
 declarePublicCounter dropped_topic_mismatch_envelopes,
   "Dropped envelopes because of not matching topics"
-declarePublicCounter dropped_benign_duplicate_envelopes,
-  "Dropped benign duplicate envelopes"
-declarePublicCounter dropped_malicious_duplicate_envelopes,
-  "Dropped malicious duplicate envelopes"
+declarePublicCounter dropped_duplicate_envelopes,
+  "Dropped duplicate envelopes"
 
 const
   defaultQueueCapacity = 2048
@@ -272,8 +268,11 @@ p2pProtocol Waku(version = wakuVersion,
       # broadcasting this message. This too is seen here as a duplicate message
       # (see above comment). If we want to seperate these cases (e.g. when peer
       # rating), then we have to add a "peer.state.send" HashSet.
+      # Note: it could also be a race between the arrival of a message send by
+      # this node to a peer and that same message arriving from that peer (after
+      # it was received from another peer) here.
       if peer.state.received.containsOrIncl(msg.hash):
-        dropped_malicious_duplicate_envelopes.inc()
+        dropped_duplicate_envelopes.inc()
         trace "Peer sending duplicate messages", peer, hash = $msg.hash
         # await peer.disconnect(SubprotocolReason)
         continue
@@ -281,11 +280,8 @@ p2pProtocol Waku(version = wakuVersion,
       # This can still be a duplicate message, but from another peer than
       # the peer who send the message.
       if peer.networkState.queue[].add(msg):
-        valid_envelopes.inc()
         # notify filters of this message
         peer.networkState.filters.notify(msg)
-      else:
-        dropped_benign_duplicate_envelopes.inc()
 
   proc powRequirement(peer: Peer, value: uint64) =
     if not peer.state.initialized:
@@ -444,7 +440,6 @@ proc queueMessage(node: EthereumNode, msg: Message): bool =
 
   trace "Adding message to queue", hash = $msg.hash
   if wakuNet.queue[].add(msg):
-    valid_envelopes.inc()
     # Also notify our own filters of the message we are sending,
     # e.g. msg from local Dapp to Dapp
     wakuNet.filters.notify(msg)
