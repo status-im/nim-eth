@@ -80,7 +80,7 @@ type
     bloom*: Bloom
     isLightNode*: bool
     trusted*: bool
-    received: HashSet[Message]
+    received: HashSet[Hash]
 
   WhisperNetwork = ref object
     queue*: ref Queue
@@ -202,9 +202,9 @@ p2pProtocol Whisper(version = whisperVersion,
       # broadcasting this message. This too is seen here as a duplicate message
       # (see above comment). If we want to seperate these cases (e.g. when peer
       # rating), then we have to add a "peer.state.send" HashSet.
-      if peer.state.received.containsOrIncl(msg):
+      if peer.state.received.containsOrIncl(msg.hash):
         dropped_malicious_duplicate_envelopes.inc()
-        debug "Peer sending duplicate messages", peer, hash = msg.hash
+        trace "Peer sending duplicate messages", peer, hash = $msg.hash
         # await peer.disconnect(SubprotocolReason)
         continue
 
@@ -268,8 +268,8 @@ proc processQueue(peer: Peer) =
     whisperNet = peer.networkState(Whisper)
 
   for message in whisperNet.queue.items:
-    if whisperPeer.received.contains(message):
-      # debug "message was already send to peer"
+    if whisperPeer.received.contains(message.hash):
+      # trace "message was already send to peer", hash = $message.hash, peer
       continue
 
     if message.pow < whisperPeer.powRequirement:
@@ -283,7 +283,7 @@ proc processQueue(peer: Peer) =
 
     trace "Adding envelope"
     envelopes.add(message.env)
-    whisperPeer.received.incl(message)
+    whisperPeer.received.incl(message.hash)
 
   if envelopes.len() > 0:
     trace "Sending envelopes", amount=envelopes.len
@@ -335,7 +335,7 @@ proc queueMessage(node: EthereumNode, msg: Message): bool =
   if not msg.allowed(whisperNet.config):
     return false
 
-  trace "Adding message to queue"
+  trace "Adding message to queue", hash = $msg.hash
   if whisperNet.queue[].add(msg):
     valid_envelopes.inc()
     # Also notify our own filters of the message we are sending,

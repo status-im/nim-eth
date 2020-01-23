@@ -104,7 +104,7 @@ type
     trusted*: bool
     wakuMode*: WakuMode
     topics*: seq[Topic]
-    received: HashSet[Message]
+    received: HashSet[Hash]
 
   P2PRequestHandler* = proc(peer: Peer, envelope: Envelope) {.gcsafe.}
 
@@ -272,9 +272,9 @@ p2pProtocol Waku(version = wakuVersion,
       # broadcasting this message. This too is seen here as a duplicate message
       # (see above comment). If we want to seperate these cases (e.g. when peer
       # rating), then we have to add a "peer.state.send" HashSet.
-      if peer.state.received.containsOrIncl(msg):
+      if peer.state.received.containsOrIncl(msg.hash):
         dropped_malicious_duplicate_envelopes.inc()
-        debug "Peer sending duplicate messages", peer, hash = msg.hash
+        trace "Peer sending duplicate messages", peer, hash = $msg.hash
         # await peer.disconnect(SubprotocolReason)
         continue
 
@@ -368,8 +368,8 @@ proc processQueue(peer: Peer) =
     wakuNet = peer.networkState(Waku)
 
   for message in wakuNet.queue.items:
-    if wakuPeer.received.contains(message):
-      # debug "message was already send to peer"
+    if wakuPeer.received.contains(message.hash):
+      # trace "message was already send to peer", hash = $message.hash, peer
       continue
 
     if message.pow < wakuPeer.powRequirement:
@@ -389,7 +389,7 @@ proc processQueue(peer: Peer) =
 
     trace "Adding envelope"
     envelopes.add(message.env)
-    wakuPeer.received.incl(message)
+    wakuPeer.received.incl(message.hash)
 
   if envelopes.len() > 0:
     trace "Sending envelopes", amount=envelopes.len
@@ -442,7 +442,7 @@ proc queueMessage(node: EthereumNode, msg: Message): bool =
   if not msg.allowed(wakuNet.config):
     return false
 
-  trace "Adding message to queue"
+  trace "Adding message to queue", hash = $msg.hash
   if wakuNet.queue[].add(msg):
     valid_envelopes.inc()
     # Also notify our own filters of the message we are sending,
