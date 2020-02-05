@@ -88,10 +88,9 @@ with the `initRlpWriter` proc. This should be followed by one or more calls
 to `append` which is overloaded to accept arbitrary values. Finally, you can
 call `finish` to obtain the final `BytesRange`.
 
-If the end result should by a RLP list of particular length, you can replace
+If the end result should be a RLP list of particular length, you can replace
 the initial call to `initRlpWriter` with `initRlpList(n)`. Calling `finish`
-before writing a sufficient number of elements will then result in a
-`PrematureFinalizationError`.
+before writing the sufficient number of elements will then result in an assertion failure.
 
 As an alternative short-cut, you can also call `encode` on an arbitrary value
 (including sequences and user-defined types) to execute all of the steps at

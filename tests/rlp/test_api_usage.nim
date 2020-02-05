@@ -30,7 +30,7 @@ test "you cannot finish a list without appending enough elements":
   writer.append "foo"
   writer.append "bar"
 
-  expect PrematureFinalizationError:
+  expect Defect:
     let result = writer.finish
 
 proc withNewLines(x: string): string = x & "\n"
