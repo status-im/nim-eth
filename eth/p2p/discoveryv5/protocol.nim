@@ -258,10 +258,13 @@ proc lookup(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
         pendingQueries.add(p.lookupWorker(n, target))
       inc i
 
+    debug "discv5 pending queries", total = pendingQueries.len
+
     if pendingQueries.len == 0:
       break
 
     let idx = await oneIndex(pendingQueries)
+    debug "Got discv5 lookup response", idx
 
     let nodes = pendingQueries[idx].read
     pendingQueries.del(idx)
@@ -337,7 +340,7 @@ proc addNode*(d: Protocol, enr: EnrUri) =
   var r: Record
   let res = r.fromUri(enr)
   doAssert(res)
-  discard d.addNode newNode(r)
+  d.addNode newNode(r)
 
 proc randomNodes*(k: Protocol, count: int): seq[Node] =
   k.routingTable.randomNodes(count)
