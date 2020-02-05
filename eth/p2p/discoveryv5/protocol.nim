@@ -324,14 +324,20 @@ proc open*(d: Protocol) =
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
   asyncCheck d.revalidateLoop() # TODO: This loop has to be terminated on close()
 
-proc addNode*(d: Protocol, r: Record) =
-  discard d.routingTable.addNode(newNode(r))
+proc addNode*(d: Protocol, node: Node) =
+  discard d.routingTable.addNode(node)
+
+template addNode*(d: Protocol, enode: ENode) =
+  addNode d, newNode(enode)
+
+template addNode*(d: Protocol, r: Record) =
+  addNode d, newNode(r)
 
 proc addNode*(d: Protocol, enr: EnrUri) =
   var r: Record
   let res = r.fromUri(enr)
   doAssert(res)
-  discard d.routingTable.addNode(newNode(r))
+  discard d.addNode newNode(r)
 
 proc randomNodes*(k: Protocol, count: int): seq[Node] =
   k.routingTable.randomNodes(count)
