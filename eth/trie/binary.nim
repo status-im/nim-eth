@@ -12,7 +12,7 @@ type
     db: DB
     rootHash: TrieNodeKey
 
-  NodeOverrideError* = object of Exception
+  NodeOverrideError* = object of CatchableError
 
 let
   zeroHash* = zeroBytesRange

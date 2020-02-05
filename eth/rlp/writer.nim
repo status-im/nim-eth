@@ -11,8 +11,6 @@ type
     pendingLists: seq[tuple[remainingItems, outBytes: int]]
     output: Bytes
 
-  PrematureFinalizationError* = object of Exception
-
   IntLike* = concept x, y
     type T = type(x)
 
@@ -256,9 +254,7 @@ proc initRlpList*(listSize: int): RlpWriter =
 
 # TODO: This should return a lent value
 proc finish*(self): Bytes =
-  if pendingLists.len > 0:
-    raise newException(PrematureFinalizationError,
-      "Insufficient number of elements written to a started list")
+  doAssert pendingLists.len == 0, "Insufficient number of elements written to a started list"
   result = output
 
 proc encode*[T](v: T): Bytes =

@@ -21,7 +21,7 @@
 import nimcrypto/utils, endians
 
 type
-  UUIDException = object of Exception
+  UUIDException = object of CatchableError
 
   UUID* = object
     ## Represents UUID object

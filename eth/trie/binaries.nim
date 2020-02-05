@@ -1,6 +1,6 @@
 import
   sequtils,
-  stew/ranges/[ptr_arith, bitranges], eth/rlp/types
+  stew/ranges/[ptr_arith, bitranges], eth/rlp/types, trie_defs
 
 type
   TrieNodeKind* = enum
@@ -22,8 +22,8 @@ type
     of LEAF_TYPE:
       value*: BytesRange
 
-  InvalidNode* = object of Exception
-  ValidationError* = object of Exception
+  InvalidNode* = object of CorruptedTrieDatabase
+  ValidationError* = object of CorruptedTrieDatabase
 
 # ----------------------------------------------
 template sliceToEnd*(r: TrieBitRange, index: int): TrieBitRange =

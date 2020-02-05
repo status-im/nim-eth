@@ -16,7 +16,7 @@ const
   emptyMac* = array[0, byte]([])
 
 type
-  EciesException* = object of Exception
+  EciesException* = object of CatchableError
   EciesStatus* = enum
     Success,        ## Operation was successful
     BufferOverrun,  ## Output buffer size is too small
