@@ -95,7 +95,7 @@ type
     key*: string
     value*: Blob
 
-  HandshakeError* = object of Exception
+  HandshakeError* = object of CatchableError
 
   LesTime* = int # this is in milliseconds
   BufValueInt* = int

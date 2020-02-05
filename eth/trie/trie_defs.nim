@@ -8,6 +8,18 @@ type
   KeccakHash* = MDigest[256]
   BytesContainer* = ByteRange | Bytes | string
 
+  TrieError* = object of CatchableError
+    # A common base type of all Trie errors.
+
+  PersistenceFailure* = object of TrieError
+    # The backing database of the trie was not able to carry out
+    # the storage or retrieval request.
+
+  CorruptedTrieDatabase* = object of Defect
+    # We consider this a Defect, because the software cannot safely
+    # operate if its database has been tampered with. A swift crash
+    # will be a more appropriate response.
+
 # can't be a const: https://github.com/status-im/nim-eth/issues/6
 # we can't initialise it here, but since it's already zeroed memory, we don't need to
 var zeroBytesRange* {.threadvar.}: ByteRange

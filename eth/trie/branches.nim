@@ -4,7 +4,9 @@ import
 
 type
   DB = TrieDatabaseRef
-  InvalidKeyError* = object of Exception
+
+  # TODO: replace the usages of this with regular asserts
+  InvalidKeyError* = object of Defect
 
 template query(db: DB, nodeHash: TrieNodeKey): BytesRange =
   db.get(nodeHash.toOpenArray).toRange

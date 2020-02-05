@@ -34,7 +34,7 @@ type
     pubkey*: PublicKey    ## Node public key
     address*: Address     ## Node address
 
-  ENodeException* = object of Exception
+  ENodeException* = object of CatchableError
 
 proc raiseENodeError(status: ENodeStatus) =
   if status == IncorrectIP:

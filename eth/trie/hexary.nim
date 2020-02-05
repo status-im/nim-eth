@@ -19,10 +19,6 @@ type
 
   TrieNode = Rlp
 
-  TrieError* = object of Exception
-  CorruptedTrieError* = object of TrieError
-  PersistenceFailure* = object of TrieError
-
 template len(key: TrieNodeKey): int =
   key.usedBytes.int
 
@@ -133,7 +129,7 @@ proc getAux(db: DB, nodeRlp: Rlp, path: NibblesRange): BytesRange =
       let nextLookup = branch.getLookup
       return getAux(db, nextLookup, path.slice(1))
   else:
-    raise newException(CorruptedTrieError,
+    raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
 proc get*(self: HexaryTrie; key: BytesRange): BytesRange =
@@ -173,7 +169,7 @@ proc getKeysAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]])
         doAssert(path.len mod 2 == 0)
         return path.getBytes
     else:
-      raise newException(CorruptedTrieError,
+      raise newException(CorruptedTrieDatabase,
                         "HexaryTrie node with an unexpected number of children")
 
 iterator keys*(self: HexaryTrie): BytesRange =
@@ -212,7 +208,7 @@ proc getValuesAux(db: DB, stack: var seq[Rlp]): BytesRange =
       if not lastElem.isEmpty:
         return lastElem.toBytes
     else:
-      raise newException(CorruptedTrieError,
+      raise newException(CorruptedTrieDatabase,
                         "HexaryTrie node with an unexpected number of children")
 
 iterator values*(self: HexaryTrie): BytesRange =
@@ -255,7 +251,7 @@ proc getPairsAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]]
         doAssert(path.len mod 2 == 0)
         return (path.getBytes, lastElem.toBytes)
     else:
-      raise newException(CorruptedTrieError,
+      raise newException(CorruptedTrieDatabase,
                         "HexaryTrie node with an unexpected number of children")
 
 iterator pairs*(self: HexaryTrie): (BytesRange, BytesRange) =
@@ -311,7 +307,7 @@ iterator replicate*(self: HexaryTrie): (BytesRange, BytesRange) =
           key.replaceLastNibble(i.byte)
           pushOrYield(branch)
     else:
-      raise newException(CorruptedTrieError,
+      raise newException(CorruptedTrieDatabase,
                         "HexaryTrie node with an unexpected number of children")
 
 proc getValues*(self: HexaryTrie): seq[BytesRange] =
@@ -350,7 +346,7 @@ proc getBranchAux(db: DB, node: BytesRange, path: NibblesRange, output: var seq[
         output.add nextLookup
         getBranchAux(db, nextLookup, path.slice(1), output)
   else:
-    raise newException(CorruptedTrieError,
+    raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
 proc getBranch*(self: HexaryTrie; key: BytesRange): seq[BytesRange] =

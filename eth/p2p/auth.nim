@@ -79,7 +79,7 @@ type
     egressMac*: keccak256
     ingressMac*: keccak256
 
-  AuthException* = object of Exception
+  AuthException* = object of CatchableError
 
 template toa(a, b, c: untyped): untyped =
   toOpenArray((a), (b), (b) + (c) - 1)

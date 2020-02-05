@@ -1,5 +1,5 @@
 type
-  StorageError* = object of Exception
+  StorageError* = object of CatchableError
 
 template raiseStorageInitError* =
   raise newException(StorageError, "failure to initialize storage")
