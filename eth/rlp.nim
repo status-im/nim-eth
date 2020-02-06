@@ -304,7 +304,11 @@ proc readImpl(rlp: var Rlp, T: type Integer): Integer =
   rlp.skipElem
 
 proc readImpl(rlp: var Rlp, T: type[enum]): T =
-  result = type(result)(rlp.toInt(int))
+  let value = rlp.toInt(int)
+  if value < ord(T.low) or value > ord(T.high):
+    raise newException(RlpTypeMismatch,
+                    "Enum expected, but the source RLP is not in valid range.")
+  result = type(result)(value)
   rlp.skipElem
 
 proc readImpl(rlp: var Rlp, T: type bool): T =

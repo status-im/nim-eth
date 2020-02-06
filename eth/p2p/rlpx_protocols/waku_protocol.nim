@@ -72,16 +72,6 @@ const
   topicInterestMax = 1000
 
 type
-  WakuMode* = enum
-    # TODO: is there a reason to allow such "none" mode? This was originally
-    # put here when it was still supposed to be compatible with Whisper.
-    None, # No Waku mode
-    WakuChan, # Waku client
-    WakuSan # Waku node
-    # TODO: Light mode could also become part of this enum
-    # TODO: With discv5, this could be capabilities also announced at level of
-    # discovery.
-
   WakuConfig* = object
     powRequirement*: float64
     bloom*: Bloom
@@ -89,8 +79,7 @@ type
     maxMsgSize*: uint32
     confirmationsEnabled*: bool
     rateLimits*: RateLimits
-    wakuMode*: WakuMode
-    topics*: seq[Topic]
+    topics*: Option[seq[Topic]]
 
   WakuPeer = ref object
     initialized: bool # when successfully completed the handshake
@@ -98,8 +87,7 @@ type
     bloom*: Bloom
     isLightNode*: bool
     trusted*: bool
-    wakuMode*: WakuMode
-    topics*: seq[Topic]
+    topics*: Option[seq[Topic]]
     received: HashSet[Hash]
 
   P2PRequestHandler* = proc(peer: Peer, envelope: Envelope) {.gcsafe.}
@@ -116,6 +104,89 @@ type
     limitPeerId*: uint
     limitTopic*: uint
 
+  StatusOptions* = object
+    powRequirement*: Option[(float64)]
+    bloomFilter*: Option[Bloom]
+    lightNode*: Option[bool]
+    confirmationsEnabled*: Option[bool]
+    rateLimits*: Option[RateLimits]
+    topicInterest*: Option[seq[Topic]]
+
+  KeyKind* = enum
+    powRequirementKey,
+    bloomFilterKey,
+    lightNodeKey,
+    confirmationsEnabledKey,
+    rateLimitsKey,
+    topicInterestKey
+
+template countSomeFields*(x: StatusOptions): int =
+  var count = 0
+  for f in fields(x):
+    if f.isSome():
+      inc count
+  count
+
+proc append*(rlpWriter: var RlpWriter, value: StatusOptions) =
+  var list = initRlpList(countSomeFields(value))
+  if value.powRequirement.isSome():
+    list.append((powRequirementKey, cast[uint64](value.powRequirement.get())))
+  if value.bloomFilter.isSome():
+    list.append((bloomFilterKey, @(value.bloomFilter.get())))
+  if value.lightNode.isSome():
+    list.append((lightNodeKey, value.lightNode.get()))
+  if value.confirmationsEnabled.isSome():
+    list.append((confirmationsEnabledKey, value.confirmationsEnabled.get()))
+  if value.rateLimits.isSome():
+    list.append((rateLimitsKey, value.rateLimits.get()))
+  if value.topicInterest.isSome():
+    list.append((topicInterestKey, value.topicInterest.get()))
+
+  let bytes = list.finish()
+
+  rlpWriter.append(rlpFromBytes(bytes.toRange))
+
+proc read*(rlp: var Rlp, T: typedesc[StatusOptions]): T =
+  if not rlp.isList():
+    raise newException(RlpTypeMismatch,
+      "List expected, but the source RLP is not a list.")
+
+  let sz = rlp.listLen()
+  rlp.enterList()
+  for i in 0 ..< sz:
+    if not rlp.isList():
+      raise newException(RlpTypeMismatch,
+        "List expected, but the source RLP is not a list.")
+
+    rlp.enterList()
+    var k: KeyKind
+    try:
+      k = rlp.read(KeyKind)
+    except RlpTypeMismatch:
+      # skip unknown keys and their value
+      rlp.skipElem()
+      rlp.skipElem()
+      continue
+
+    case k
+    of powRequirementKey:
+      let pow = rlp.read(uint64)
+      result.powRequirement = some(cast[float64](pow))
+    of bloomFilterKey:
+      let bloom = rlp.read(seq[byte])
+      if bloom.len != bloomSize:
+        raise newException(UselessPeerError, "Bloomfilter size mismatch")
+      var bloomFilter: Bloom
+      bloomFilter.bytesCopy(bloom)
+      result.bloomFilter = some(bloomFilter)
+    of lightNodeKey:
+      result.lightNode = some(rlp.read(bool))
+    of confirmationsEnabledKey:
+      result.confirmationsEnabled = some(rlp.read(bool))
+    of rateLimitsKey:
+      result.rateLimits = some(rlp.read(RateLimits))
+    of topicInterestKey:
+      result.topicInterest = some(rlp.read(seq[Topic]))
 
 proc allowed*(msg: Message, config: WakuConfig): bool =
   # Check max msg size, already happens in RLPx but there is a specific waku
@@ -135,8 +206,8 @@ proc allowed*(msg: Message, config: WakuConfig): bool =
     warn "Message does not match node bloom filter"
     return false
 
-  if config.wakuMode == WakuChan:
-    if msg.env.topic notin config.topics:
+  if config.topics.isSome():
+    if msg.env.topic notin config.topics.get():
       dropped_topic_mismatch_envelopes.inc()
       warn "Message topic does not match Waku topic list"
       return false
@@ -160,8 +231,7 @@ proc initProtocolState*(network: WakuNetwork, node: EthereumNode) {.gcsafe.} =
   network.config.rateLimits =
     RateLimits(limitIp: 0, limitPeerId: 0, limitTopic:0)
   network.config.maxMsgSize = defaultMaxMsgSize
-  network.config.wakuMode = None # default no waku mode
-  network.config.topics = @[]
+  network.config.topics = none(seq[Topic])
   asyncCheck node.run(network)
 
 p2pProtocol Waku(version = wakuVersion,
@@ -175,49 +245,37 @@ p2pProtocol Waku(version = wakuVersion,
       wakuNet = peer.networkState
       wakuPeer = peer.state
 
-    let m = await peer.status(wakuVersion,
-                              cast[uint64](wakuNet.config.powRequirement),
-                              @(wakuNet.config.bloom),
-                              wakuNet.config.isLightNode,
-                              wakuNet.config.confirmationsEnabled,
-                              wakuNet.config.rateLimits,
-                              wakuNet.config.wakuMode,
-                              wakuNet.config.topics,
-                              timeout = chronos.milliseconds(500))
+    let list = StatusOptions(
+      powRequirement: some(wakuNet.config.powRequirement),
+      bloomFilter: some(wakuNet.config.bloom),
+      lightNode: some(wakuNet.config.isLightNode),
+      confirmationsEnabled: some(wakuNet.config.confirmationsEnabled),
+      rateLimits: some(wakuNet.config.rateLimits),
+      topicInterest: wakuNet.config.topics)
+
+    let m = await peer.status(wakuVersion, list,
+      timeout = chronos.milliseconds(5000))
 
     if m.protocolVersion == wakuVersion:
       debug "Waku peer", peer, wakuVersion
     else:
       raise newException(UselessPeerError, "Incompatible Waku version")
 
-    wakuPeer.powRequirement = cast[float64](m.powConverted)
+    wakuPeer.powRequirement = m.list.powRequirement.get(defaultMinPow)
+    wakuPeer.bloom = m.list.bloomFilter.get(fullBloom())
 
-    if m.bloom.len > 0:
-      if m.bloom.len != bloomSize:
-        raise newException(UselessPeerError, "Bloomfilter size mismatch")
-      else:
-        wakuPeer.bloom.bytesCopy(m.bloom)
-    else:
-      # If no bloom filter is send we allow all
-      wakuPeer.bloom = fullBloom()
-
-    wakuPeer.isLightNode = m.isLightNode
+    wakuPeer.isLightNode = m.list.lightNode.get(false)
     if wakuPeer.isLightNode and wakuNet.config.isLightNode:
       # No sense in connecting two light nodes so we disconnect
       raise newException(UselessPeerError, "Two light nodes connected")
 
-    # When Waku-san connect to all. When None, connect to all, Waku-chan has
-    # to decide to disconnect. When Waku-chan, connect only to Waku-san.
-    wakuPeer.wakuMode = m.wakuMode
-    if wakuNet.config.wakuMode == WakuChan:
-      if wakuPeer.wakuMode == WakuChan:
-        raise newException(UselessPeerError, "Two Waku-chan connected")
-      elif wakuPeer.wakuMode == None:
-        raise newException(UselessPeerError, "Not in Waku mode")
-    if wakuNet.config.wakuMode == WakuSan and
-        wakuPeer.wakuMode == WakuChan:
-      # TODO: need some maximum check on amount of topics
-      wakuPeer.topics = m.topics
+    wakuPeer.topics = m.list.topicInterest
+    if wakuPeer.topics.isSome():
+      if wakuPeer.topics.get().len > topicInterestMax:
+        raise newException(UselessPeerError, "Topic-interest is too large")
+      if wakuNet.config.topics.isSome():
+        raise newException(UselessPeerError,
+          "Two Waku nodes with topic-interest connected")
 
     wakuPeer.received.init()
     wakuPeer.trusted = false
@@ -230,15 +288,7 @@ p2pProtocol Waku(version = wakuVersion,
     debug "Waku peer initialized", peer
 
   handshake:
-    proc status(peer: Peer,
-                protocolVersion: uint,
-                powConverted: uint64,
-                bloom: Bytes,
-                isLightNode: bool,
-                confirmationsEnabled: bool,
-                rateLimits: RateLimits,
-                wakuMode: WakuMode,
-                topics: seq[Topic])
+    proc status(peer: Peer, protocolVersion: uint, list: StatusOptions)
 
   proc messages(peer: Peer, envelopes: openarray[Envelope]) =
     if not peer.state.initialized:
@@ -311,8 +361,11 @@ p2pProtocol Waku(version = wakuVersion,
       error "Too many topics in the topic-interest list"
       return
 
-    if peer.state.wakuMode == WakuChan:
-      peer.state.topics = topics
+    # TODO: We currently do not allow changing topic-interest.
+    # If we want the check here should be removed, however this would be no
+    # consistent (with Status packet) way of changing back to no topic-interest.
+    if peer.state.topics.isSome():
+      peer.state.topics = some(topics)
 
   nextID 126
 
@@ -377,9 +430,8 @@ proc processQueue(peer: Peer) =
       trace "Message does not match peer bloom filter"
       continue
 
-    if wakuNet.config.wakuMode == WakuSan and
-        wakuPeer.wakuMode == WakuChan:
-      if message.env.topic notin wakuPeer.topics:
+    if wakuPeer.topics.isSome():
+      if message.env.topic notin wakuPeer.topics.get():
         trace "Message does not match topics list"
         continue
 
@@ -561,7 +613,7 @@ proc setTopics*(node: EthereumNode, topics: seq[Topic]):
   if topics.len > topicInterestMax:
     return false
 
-  node.protocolState(Waku).config.topics = topics
+  node.protocolState(Waku).config.topics = some(topics)
   var futures: seq[Future[void]] = @[]
   for peer in node.peers(Waku):
     futures.add(peer.topicInterest(topics))

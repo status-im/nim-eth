@@ -194,3 +194,19 @@ test "encode/decode floats":
     chk  f
     chk -f
 
+test "invalid enum":
+  type
+    MyEnum = enum
+      foo,
+      bar
+
+  var writer = initRlpWriter()
+  writer.append(2)
+  writer.append(-1)
+  let bytes = writer.finish()
+  var rlp = rlpFromBytes(bytes.toRange)
+  expect RlpTypeMismatch:
+    discard rlp.read(MyEnum)
+  rlp.skipElem()
+  expect RlpTypeMismatch:
+    discard rlp.read(MyEnum)

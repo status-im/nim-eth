@@ -131,7 +131,7 @@ p2pProtocol Whisper(version = whisperVersion,
                               cast[uint64](whisperNet.config.powRequirement),
                               @(whisperNet.config.bloom),
                               whisperNet.config.isLightNode,
-                              timeout = chronos.milliseconds(500))
+                              timeout = chronos.milliseconds(5000))
 
     if m.protocolVersion == whisperVersion:
       debug "Whisper peer", peer, whisperVersion
