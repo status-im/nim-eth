@@ -254,7 +254,7 @@ p2pProtocol Waku(version = wakuVersion,
       topicInterest: wakuNet.config.topics)
 
     let m = await peer.status(wakuVersion, list,
-      timeout = chronos.milliseconds(500))
+      timeout = chronos.milliseconds(5000))
 
     if m.protocolVersion == wakuVersion:
       debug "Waku peer", peer, wakuVersion
