@@ -1,8 +1,10 @@
 # ENR implemetation according to spec:
 # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-778.md
 
-import strutils, macros, algorithm, options
-import eth/[rlp, keys], nimcrypto, stew/base64
+import
+  net, strutils, macros, algorithm, options,
+  nimcrypto, stew/base64,
+  eth/[rlp, keys], ../enode
 
 const
   maxEnrSize = 300
@@ -10,7 +12,7 @@ const
 
 type
   Record* = object
-    sequenceNumber*: uint64
+    seqNum*: uint64
     # signature: seq[byte]
     raw*: seq[byte] # RLP encoded record
     pairs: seq[(string, Field)] # sorted list of all key/value pairs
@@ -37,23 +39,25 @@ type
     of kString:
       str: string
     of kNum:
-      num: int
+      num: BiggestUInt
     of kBytes:
       bytes: seq[byte]
 
 template toField[T](v: T): Field =
   when T is string:
     Field(kind: kString, str: v)
+  elif T is array:
+    Field(kind: kBytes, bytes: @v)
   elif T is seq[byte]:
     Field(kind: kBytes, bytes: v)
-  elif T is SomeInteger:
-    Field(kind: kNum, num: v.int)
+  elif T is SomeUnsignedInt:
+    Field(kind: kNum, num: BiggestUInt(v))
   else:
     {.error: "Unsupported field type".}
 
-proc makeEnrAux(sequenceNumber: uint64, pk: PrivateKey, pairs: openarray[(string, Field)]): Record =
+proc makeEnrAux(seqNum: uint64, pk: PrivateKey, pairs: openarray[(string, Field)]): Record =
   result.pairs = @pairs
-  result.sequenceNumber = sequenceNumber
+  result.seqNum = seqNum
 
   let pubkey = pk.getPublicKey()
 
@@ -64,8 +68,8 @@ proc makeEnrAux(sequenceNumber: uint64, pk: PrivateKey, pairs: openarray[(string
   result.pairs.sort() do(a, b: (string, Field)) -> int:
     cmp(a[0], b[0])
 
-  proc append(w: var RlpWriter, sequenceNumber: uint64, pairs: openarray[(string, Field)]): seq[byte] =
-    w.append(sequenceNumber)
+  proc append(w: var RlpWriter, seqNum: uint64, pairs: openarray[(string, Field)]): seq[byte] =
+    w.append(seqNum)
     for (k, v) in pairs:
       w.append(k)
       case v.kind
@@ -76,7 +80,7 @@ proc makeEnrAux(sequenceNumber: uint64, pk: PrivateKey, pairs: openarray[(string
 
   let toSign = block:
     var w = initRlpList(result.pairs.len * 2 + 1)
-    w.append(sequenceNumber, result.pairs)
+    w.append(seqNum, result.pairs)
 
   var sig: SignatureNR
   if signRawMessage(keccak256.digest(toSign).data, pk, sig) != EthKeysStatus.Success:
@@ -85,15 +89,27 @@ proc makeEnrAux(sequenceNumber: uint64, pk: PrivateKey, pairs: openarray[(string
   result.raw = block:
     var w = initRlpList(result.pairs.len * 2 + 2)
     w.append(sig.getRaw())
-    w.append(sequenceNumber, result.pairs)
+    w.append(seqNum, result.pairs)
 
-macro initRecord*(sequenceNumber: uint64, pk: PrivateKey, pairs: untyped{nkTableConstr}): untyped =
+macro initRecord*(seqNum: uint64, pk: PrivateKey, pairs: untyped{nkTableConstr}): untyped =
   for c in pairs:
     c.expectKind(nnkExprColonExpr)
     c[1] = newCall(bindSym"toField", c[1])
 
   result = quote do:
-    makeEnrAux(`sequenceNumber`, `pk`, `pairs`)
+    makeEnrAux(`seqNum`, `pk`, `pairs`)
+
+proc init*(T: type Record, seqNum: uint64,
+                           pk: PrivateKey,
+                           address: enode.Address): T =
+  let
+    isV6 = address.ip.family == IPv6
+    ipField = if isV6: ("ip6", address.ip.address_v6.toField)
+              else: ("ip", address.ip.address_v4.toField)
+    tcpField = ((if isV6: "tcp6" else: "tcp"), address.udpPort.uint16.toField)
+    udpField = ((if isV6: "udp6" else: "udp"), address.tcpPort.uint16.toField)
+
+  makeEnrAux(seqNum, pk, [ipField, tcpField, udpField])
 
 proc getField(r: Record, name: string, field: var Field): bool =
   # It might be more correct to do binary search,
@@ -176,7 +192,7 @@ proc verifySignature(r: Record): bool =
   var rlp = rlpFromBytes(r.raw.toRange)
   let sz = rlp.listLen
   rlp.enterList()
-  let sigData = rlp.read(seq[byte])
+  let sigData = rlp.read(Bytes)
   let content = block:
     var writer = initRlpList(sz - 1)
     var reader = rlp
@@ -195,7 +211,8 @@ proc verifySignature(r: Record): bool =
       discard
 
 proc fromBytesAux(r: var Record): bool =
-  if r.raw.len > maxEnrSize: return false
+  if r.raw.len > maxEnrSize:
+    return false
 
   var rlp = rlpFromBytes(r.raw.toRange)
   let sz = rlp.listLen
@@ -206,7 +223,7 @@ proc fromBytesAux(r: var Record): bool =
   rlp.enterList()
   rlp.skipElem() # Skip signature
 
-  r.sequenceNumber = rlp.read(uint64)
+  r.seqNum = rlp.read(uint64)
 
   let numPairs = (sz - 2) div 2
 
@@ -219,12 +236,11 @@ proc fromBytesAux(r: var Record): bool =
     of "secp256k1":
       let pubkeyData = rlp.read(seq[byte])
       r.pairs.add((k, Field(kind: kBytes, bytes: pubkeyData)))
-    of "tcp", "udp", "tcp6", "udp6", "ip":
-      let v = rlp.read(int)
+    of "tcp", "udp", "tcp6", "udp6":
+      let v = rlp.read(uint16)
       r.pairs.add((k, Field(kind: kNum, num: v)))
     else:
-      r.pairs.add((k, Field(kind: kBytes, bytes: rlp.rawData.toSeq)))
-      rlp.skipElem
+      r.pairs.add((k, Field(kind: kBytes, bytes: rlp.read(Bytes))))
 
   verifySignature(r)
 

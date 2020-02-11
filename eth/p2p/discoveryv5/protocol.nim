@@ -297,7 +297,7 @@ proc processClient(transp: DatagramTransport,
 proc revalidateNode(p: Protocol, n: Node) {.async.} =
   let reqId = newRequestId()
   var ping: PingPacket
-  ping.enrSeq = p.localNode.record.sequenceNumber
+  ping.enrSeq = p.localNode.record.seqNum
   let (data, nonce) = p.codec.encodeEncrypted(n, encodePacket(ping, reqId), challenge = nil)
   p.pendingRequests[nonce] = PendingRequest(node: n, packet: data)
   p.send(n, data)
@@ -305,7 +305,7 @@ proc revalidateNode(p: Protocol, n: Node) {.async.} =
   let resp = await p.waitPacket(n, reqId)
   if resp.isSome and resp.get.kind == pong:
     let pong = resp.get.pong
-    if pong.enrSeq > n.record.sequenceNumber:
+    if pong.enrSeq > n.record.seqNum:
       # TODO: Request new ENR
       discard
 
