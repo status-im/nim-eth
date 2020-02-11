@@ -115,6 +115,10 @@ template nonCanonicalNumberError =
   raise newException(MalformedRlpError, "Small number encoded in a non-canonical way")
 
 proc payloadBytesCount(self: Rlp): int =
+  type
+    ResType = type result
+    IntType = int32
+
   if not hasData():
     return 0
 
@@ -122,7 +126,7 @@ proc payloadBytesCount(self: Rlp): int =
   if marker < BLOB_START_MARKER:
     return 1
   if marker <= LEN_PREFIXED_BLOB_MARKER:
-    result = int(marker - BLOB_START_MARKER)
+    result = ResType(marker - BLOB_START_MARKER)
     readAheadCheck(result)
     if result == 1:
       if bytes[position + 1] < BLOB_START_MARKER:
@@ -133,6 +137,7 @@ proc payloadBytesCount(self: Rlp): int =
     var
       lengthBytes = int(marker - lenPrefixMarker)
       remainingBytes = self.bytes.len - self.position
+      intVal = 0.IntType
 
     if remainingBytes <= lengthBytes:
       eosError()
@@ -141,21 +146,23 @@ proc payloadBytesCount(self: Rlp): int =
       raise newException(MalformedRlpError, "Number encoded with a leading zero")
 
     # check if the size is not bigger than the max that result can hold
-    if lengthBytes > sizeof(result) or
-      (lengthBytes == sizeof(result) and self.bytes[self.position + 1].int > 127):
+    if lengthBytes > sizeof(intVal) or
+      (lengthBytes == sizeof(intVal) and self.bytes[self.position + 1].int > 127):
       raise newException(UnsupportedRlpError, "Message too large to fit in memory")
 
     for i in 1 .. lengthBytes:
-      result = (result shl 8) or int(self.bytes[self.position + i])
+      intVal = (intVal shl 8) or IntType(self.bytes[self.position + i])
 
     # must be greater than the short-list size list
-    if result < THRESHOLD_LIST_LEN:
+    if intVal < THRESHOLD_LIST_LEN:
       nonCanonicalNumberError()
+
+    result = ResType(intVal)
 
   if marker < LIST_START_MARKER:
     readInt(BLOB_START_MARKER, LEN_PREFIXED_BLOB_MARKER)
   elif marker <= LEN_PREFIXED_LIST_MARKER:
-    result = int(marker - LIST_START_MARKER)
+    result = ResType(marker - LIST_START_MARKER)
   else:
     readInt(LIST_START_MARKER, LEN_PREFIXED_LIST_MARKER)
 
