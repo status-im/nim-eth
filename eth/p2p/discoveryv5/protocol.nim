@@ -35,14 +35,10 @@ proc whoareyouMagic(toNode: NodeId): array[32, byte] =
 
 proc newProtocol*(privKey: PrivateKey, db: Database, port: Port): Protocol =
   result = Protocol(privateKey: privKey, db: db)
-  var a: Address
-  a.ip = parseIpAddress("127.0.0.1")
-  a.udpPort = port
-  var ipAddr: int32
-  bigEndian32(addr ipAddr, addr a.ip.address_v4)
+  let a = Address(ip: parseIpAddress("127.0.0.1"), udpPort: port)
 
   result.localNode = newNode(initENode(result.privateKey.getPublicKey(), a))
-  result.localNode.record = initRecord(12, result.privateKey, {"udp": int(a.udpPort), "ip": ipAddr})
+  result.localNode.record = enr.Record.init(12, result.privateKey, a)
 
   result.whoareyouMagic = whoareyouMagic(result.localNode.id)
 
