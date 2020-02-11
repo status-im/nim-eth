@@ -106,8 +106,8 @@ proc init*(T: type Record, seqNum: uint64,
     isV6 = address.ip.family == IPv6
     ipField = if isV6: ("ip6", address.ip.address_v6.toField)
               else: ("ip", address.ip.address_v4.toField)
-    tcpField = ((if isV6: "tcp6" else: "tcp"), address.udpPort.uint16.toField)
-    udpField = ((if isV6: "udp6" else: "udp"), address.tcpPort.uint16.toField)
+    tcpField = ((if isV6: "tcp6" else: "tcp"), address.tcpPort.uint16.toField)
+    udpField = ((if isV6: "udp6" else: "udp"), address.udpPort.uint16.toField)
 
   makeEnrAux(seqNum, pk, [ipField, tcpField, udpField])
 
