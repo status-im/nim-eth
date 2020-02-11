@@ -81,7 +81,7 @@ proc makeAuthHeader(c: Codec, toNode: Node, nonce: array[gcmNonceSize, byte],
   var resp = AuthResponse(version: 5)
   let ln = c.localNode
 
-  if challenge.recordSeq < ln.record.sequenceNumber:
+  if challenge.recordSeq < ln.record.seqNum:
     resp.record = ln.record
 
   var remotePubkey: PublicKey
