@@ -78,7 +78,7 @@ type
     isLightNode*: bool
     maxMsgSize*: uint32
     confirmationsEnabled*: bool
-    rateLimits*: RateLimits
+    rateLimits*: Option[RateLimits]
     topics*: Option[seq[Topic]]
 
   WakuPeer = ref object
@@ -224,12 +224,10 @@ proc initProtocolState*(network: WakuNetwork, node: EthereumNode) {.gcsafe.} =
   network.config.bloom = fullBloom()
   network.config.powRequirement = defaultMinPow
   network.config.isLightNode = false
-  # confirmationsEnabled and rateLimits is not yet used but we add it here and
-  # in the status message to be compatible with the Status go implementation.
+  # RateLimits and confirmations are not yet implemented so we set confirmations
+  # to false and we don't pass RateLimits at all.
   network.config.confirmationsEnabled = false
-  # TODO: Limits of 0 are ignored I hope, this is not clearly written in spec.
-  network.config.rateLimits =
-    RateLimits(limitIp: 0, limitPeerId: 0, limitTopic:0)
+  network.config.rateLimits = none(RateLimits)
   network.config.maxMsgSize = defaultMaxMsgSize
   network.config.topics = none(seq[Topic])
   asyncCheck node.run(network)
@@ -250,16 +248,21 @@ p2pProtocol Waku(version = wakuVersion,
       bloomFilter: some(wakuNet.config.bloom),
       lightNode: some(wakuNet.config.isLightNode),
       confirmationsEnabled: some(wakuNet.config.confirmationsEnabled),
-      rateLimits: some(wakuNet.config.rateLimits),
+      rateLimits: wakuNet.config.rateLimits,
       topicInterest: wakuNet.config.topics)
 
     let m = await peer.status(wakuVersion, list,
       timeout = chronos.milliseconds(5000))
 
-    if m.protocolVersion == wakuVersion:
-      debug "Waku peer", peer, wakuVersion
-    else:
-      raise newException(UselessPeerError, "Incompatible Waku version")
+    debug "Waku peer", peer, wakuVersion, peerWakuVersion = m.protocolVersion
+    # TODO: Can't do this check yet as current version is 0. Can activate this
+    # code on version 1.
+    # if m.protocolVersion >= wakuVersion:
+    #   # Continue if the version is the same or higher
+    #   debug "Waku peer", peer, wakuVersion, peerWakuVersion = m.protocolVersion
+    # else:
+    #   # This node needs to decide if compatibility remains with lower versions
+    #   raise newException(UselessPeerError, "Incompatible Waku version")
 
     wakuPeer.powRequirement = m.list.powRequirement.get(defaultMinPow)
     wakuPeer.bloom = m.list.bloomFilter.get(fullBloom())
