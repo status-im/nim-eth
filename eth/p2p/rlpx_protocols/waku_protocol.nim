@@ -201,15 +201,15 @@ proc allowed*(msg: Message, config: WakuConfig): bool =
     warn "Message PoW too low", pow = msg.pow, minPow = config.powRequirement
     return false
 
-  if not bloomFilterMatch(config.bloom, msg.bloom):
-    dropped_bloom_filter_mismatch_envelopes.inc()
-    warn "Message does not match node bloom filter"
-    return false
-
   if config.topics.isSome():
     if msg.env.topic notin config.topics.get():
       dropped_topic_mismatch_envelopes.inc()
       warn "Message topic does not match Waku topic list"
+      return false
+  else:
+    if not bloomFilterMatch(config.bloom, msg.bloom):
+      dropped_bloom_filter_mismatch_envelopes.inc()
+      warn "Message does not match node bloom filter"
       return false
 
   return true
@@ -365,8 +365,9 @@ p2pProtocol Waku(version = wakuVersion,
       return
 
     # TODO: We currently do not allow changing topic-interest.
-    # If we want the check here should be removed, however this would be no
-    # consistent (with Status packet) way of changing back to no topic-interest.
+    # We could allow this by also resetting topic-interest on a bloom filter
+    # exchange. But we don't for now and will instead introduce another packet
+    # type in the Waku Specification.
     if peer.state.topics.isSome():
       peer.state.topics = some(topics)
 
@@ -429,13 +430,13 @@ proc processQueue(peer: Peer) =
                                             powReq = wakuPeer.powRequirement
       continue
 
-    if not bloomFilterMatch(wakuPeer.bloom, message.bloom):
-      trace "Message does not match peer bloom filter"
-      continue
-
     if wakuPeer.topics.isSome():
       if message.env.topic notin wakuPeer.topics.get():
         trace "Message does not match topics list"
+        continue
+    else:
+      if not bloomFilterMatch(wakuPeer.bloom, message.bloom):
+        trace "Message does not match peer bloom filter"
         continue
 
     trace "Adding envelope"
@@ -611,9 +612,12 @@ proc setBloomFilter*(node: EthereumNode, bloom: Bloom) {.async.} =
   # Exceptions from sendMsg will not be raised
   await allFutures(futures)
 
-proc setTopics*(node: EthereumNode, topics: seq[Topic]):
+proc setTopicInterest*(node: EthereumNode, topics: seq[Topic]):
     Future[bool] {.async.} =
   if topics.len > topicInterestMax:
+    return false
+
+  if node.protocolState(Waku).config.topics.isNone():
     return false
 
   node.protocolState(Waku).config.topics = some(topics)
