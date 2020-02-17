@@ -1,6 +1,6 @@
-import std/[algorithm, times, sequtils, bitops, random, sets]
-import types, node
-import stint, chronicles
+import
+  std/[algorithm, times, sequtils, bitops, random, sets], stint, chronicles,
+  types, node
 
 type
   RoutingTable* = object

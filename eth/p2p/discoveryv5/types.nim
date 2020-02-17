@@ -1,5 +1,6 @@
-import hashes
-import ../enode, enr, stint
+import
+  hashes, stint,
+  ../enode, enr
 
 type
   NodeId* = UInt256

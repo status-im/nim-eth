@@ -1,5 +1,6 @@
-import std/tables
-import types, node, enr, hkdf, ../enode, eth/[rlp, keys], nimcrypto, stint
+import
+  std/tables, nimcrypto, stint, chronicles,
+  types, node, enr, hkdf, ../enode, eth/[rlp, keys]
 
 const
   idNoncePrefix = "discovery-id-nonce"
@@ -179,13 +180,13 @@ proc decodePacketBody(typ: byte, body: openarray[byte], res: var Packet): bool =
     decode(findNode)
     decode(nodes)
   else:
-    echo "unknown packet: ", typ
+    debug "unknown packet type ", typ
 
   return true
 
 proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader, challenge: Whoareyou, secrets: var HandshakeSecrets, newNode: var Node): bool =
   if head.scheme != authSchemeName:
-    echo "Unknown auth scheme"
+    warn "Unknown auth scheme"
     return false
 
   var ephKey: PublicKey
@@ -207,7 +208,7 @@ proc decodeEncrypted*(c: var Codec, fromId: NodeID, fromAddr: Address, input: se
   var auth: AuthHeader
   var readKey: array[16, byte]
   if r.isList:
-    # Handshake
+    # Handshake - rlp list indicates auth-header
 
     # TODO: Auth failure will result in resending whoareyou. Do we really want this?
     auth = r.read(AuthHeader)
@@ -231,6 +232,7 @@ proc decodeEncrypted*(c: var Codec, fromId: NodeID, fromAddr: Address, input: se
     readKey = sec.readKey
 
   else:
+    # Message packet or random packet - rlp bytes (size 12) indicates auth-tag
     authTag = r.read(array[12, byte])
     auth.auth = authTag
     var writeKey: array[16, byte]
