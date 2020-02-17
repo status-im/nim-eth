@@ -33,9 +33,12 @@ proc whoareyouMagic(toNode: NodeId): array[32, byte] =
   for i, c in prefix: data[sizeof(toNode) + i] = byte(c)
   sha256.digest(data).data
 
-proc newProtocol*(privKey: PrivateKey, db: Database, port: Port): Protocol =
+proc newProtocol*(privKey: PrivateKey,
+                  db: Database,
+                  tcpPort, udpPort: Port): Protocol =
   result = Protocol(privateKey: privKey, db: db)
-  let a = Address(ip: parseIpAddress("127.0.0.1"), udpPort: port)
+  let a = Address(ip: parseIpAddress("127.0.0.1"),
+                  tcpPort: tcpPort, udpPort: udpPort)
 
   result.localNode = newNode(initENode(result.privateKey.getPublicKey(), a))
   result.localNode.record = enr.Record.init(12, result.privateKey, a)
@@ -364,7 +367,8 @@ when isMainModule:
       else:
         pk = newPrivateKey()
 
-      let d = newProtocol(pk, DiscoveryDB.init(newMemoryDB()), Port(12001 + i))
+      let d = newProtocol(pk, DiscoveryDB.init(newMemoryDB()),
+                          Port(12001 + i), Port(12001 + i))
       d.open()
       result.add(d)
 

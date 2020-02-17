@@ -6,7 +6,8 @@ var nextPort = 30303
 
 proc localAddress*(port: int): Address =
   let port = Port(port)
-  result = Address(udpPort: port, tcpPort: port, ip: parseIpAddress("127.0.0.1"))
+  result = Address(udpPort: port, tcpPort: port,
+                   ip: parseIpAddress("127.0.0.1"))
 
 proc startDiscoveryNode*(privKey: PrivateKey, address: Address,
                         bootnodes: seq[ENode]): Future[DiscoveryProtocol] {.async.} =
