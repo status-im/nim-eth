@@ -1,6 +1,6 @@
-import std/net
-import types, ../enode
-import eth/trie/db
+import
+  std/net,
+  eth/trie/db, types, ../enode
 
 type
   DiscoveryDB* = ref object of Database

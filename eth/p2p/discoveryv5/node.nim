@@ -1,6 +1,6 @@
-import std/[net, endians, hashes]
-import nimcrypto, stint
-import types, enr, eth/keys, ../enode
+import
+  std/[net, endians, hashes], nimcrypto, stint, chronicles,
+  types, enr, eth/keys, ../enode
 
 type
   Node* = ref object
@@ -34,7 +34,7 @@ proc newNode*(r: Record): Node =
 
   var pk: PublicKey
   if recoverPublicKey(r.get("secp256k1", seq[byte]), pk) != EthKeysStatus.Success:
-    echo "Could not recover public key"
+    warn "Could not recover public key"
     return
 
   let a = Address(ip: IpAddress(family: IpAddressFamily.IPv4,

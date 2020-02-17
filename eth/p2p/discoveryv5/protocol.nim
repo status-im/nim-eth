@@ -51,7 +51,7 @@ proc start*(p: Protocol) =
   discard
 
 proc send(d: Protocol, a: Address, data: seq[byte]) =
-  # echo "Sending ", data.len, " bytes to ", a
+  # debug "Sending bytes", amount = data.len, to = a
   let ta = initTAddress(a.ip, a.udpPort)
   let f = d.transp.sendTo(ta, data)
   f.callback = proc(data: pointer) {.gcsafe.} =
@@ -123,62 +123,57 @@ proc handleFindNode(d: Protocol, fromNode: Node, fn: FindNodePacket, reqId: Requ
     let distance = min(fn.distance, 256)
     d.sendNodes(fromNode, reqId, d.routingTable.neighboursAtDistance(distance))
 
-proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe.} =
-  ## Can raise `DiscProtocolError` and all of `RlpError`
-  # Note: export only needed for testing
+proc receive(d: Protocol, a: Address, msg: Bytes)
+    {.gcsafe, raises:[RlpError, Exception].} =
+  # TODO: figure out where the general exception comes from and clean it up
   if msg.len < 32:
     return # Invalid msg
 
-  try:
-    # echo "Packet received: ", msg.len
+  # debug "Packet received: ", length = msg.len
 
-    if d.isWhoAreYou(msg):
-      let whoareyou = d.decodeWhoAreYou(msg)
-      var pr: PendingRequest
-      if d.pendingRequests.take(whoareyou.authTag, pr):
-        let toNode = pr.node
+  if d.isWhoAreYou(msg):
+    let whoareyou = d.decodeWhoAreYou(msg)
+    var pr: PendingRequest
+    if d.pendingRequests.take(whoareyou.authTag, pr):
+      let toNode = pr.node
 
-        let (data, _) = d.codec.encodeEncrypted(toNode, pr.packet, challenge = whoareyou)
-        d.send(toNode, data)
+      let (data, _) = d.codec.encodeEncrypted(toNode, pr.packet, challenge = whoareyou)
+      d.send(toNode, data)
+
+  else:
+    var tag: array[32, byte]
+    tag[0 .. ^1] = msg.toOpenArray(0, 31)
+    let senderData = tag xor d.idHash
+    let sender = readUintBE[256](senderData)
+
+    var authTag: array[12, byte]
+    var node: Node
+    var packet: Packet
+
+    if d.codec.decodeEncrypted(sender, a, msg, authTag, node, packet):
+      if node.isNil:
+        node = d.routingTable.getNode(sender)
+      else:
+        debug "Adding new node to routing table"
+        discard d.routingTable.addNode(node)
+
+      doAssert(not node.isNil, "No node in the routing table (internal error?)")
+
+      case packet.kind
+      of ping:
+        d.handlePing(node, packet.ping, packet.reqId)
+      of findNode:
+        d.handleFindNode(node, packet.findNode, packet.reqId)
+      else:
+        var waiter: Future[Option[Packet]]
+        if d.awaitedPackets.take((node, packet.reqId), waiter):
+          waiter.complete(packet.some)
+        else:
+          debug "TODO: handle packet: ", packet = packet.kind, origin = node
 
     else:
-      var tag: array[32, byte]
-      tag[0 .. ^1] = msg.toOpenArray(0, 31)
-      let senderData = tag xor d.idHash
-      let sender = readUintBE[256](senderData)
-
-      var authTag: array[12, byte]
-      var node: Node
-      var packet: Packet
-
-      if d.codec.decodeEncrypted(sender, a, msg, authTag, node, packet):
-        if node.isNil:
-          node = d.routingTable.getNode(sender)
-        else:
-          echo "Adding new node to routing table"
-          discard d.routingTable.addNode(node)
-
-        doAssert(not node.isNil, "No node in the routing table (internal error?)")
-
-        case packet.kind
-        of ping:
-          d.handlePing(node, packet.ping, packet.reqId)
-        of findNode:
-          d.handleFindNode(node, packet.findNode, packet.reqId)
-        else:
-          var waiter: Future[Option[Packet]]
-          if d.awaitedPackets.take((node, packet.reqId), waiter):
-            waiter.complete(packet.some)
-          else:
-            echo "TODO: handle packet: ", packet.kind, " from ", node
-
-      else:
-        echo "Could not decode, respond with whoareyou"
-        d.sendWhoareyou(a, sender, authTag)
-
-  except Exception as e:
-    echo "Exception: ", e.msg
-    echo e.getStackTrace()
+      debug "Could not decode, respond with whoareyou"
+      d.sendWhoareyou(a, sender, authTag)
 
 proc waitPacket(d: Protocol, fromNode: Node, reqId: RequestId): Future[Option[Packet]] =
   result = newFuture[Option[Packet]]("waitPacket")
@@ -229,7 +224,7 @@ proc lookupWorker(p: Protocol, destNode: Node, target: NodeId): Future[seq[Node]
   var i = 0
   while i < lookupRequestLimit and result.len < findNodeResultLimit:
     let r = await p.findNode(destNode, dists[i])
-    # TODO: Handle falures
+    # TODO: Handle failures
     result.add(r)
     inc i
 
@@ -284,11 +279,12 @@ proc processClient(transp: DatagramTransport,
     var buf = transp.getMessage()
     let a = Address(ip: raddr.address, udpPort: raddr.port, tcpPort: raddr.port)
     proto.receive(a, buf)
-  except RlpError:
-    debug "Receive failed", err = getCurrentExceptionMsg()
-  except:
-    debug "Receive failed", err = getCurrentExceptionMsg()
-    raise
+  except RlpError as e:
+    debug "Receive failed", exception = e.name, msg = e.msg
+  # TODO: what else can be raised? Figure this out and be more restrictive?
+  except CatchableError as e:
+    debug "Receive failed", exception = e.name, msg = e.msg,
+      stacktrace = e.getStackTrace()
 
 proc revalidateNode(p: Protocol, n: Node) {.async.} =
   let reqId = newRequestId()
