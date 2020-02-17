@@ -56,6 +56,7 @@ proc runP2pTests() =
       "test_waku_mail",
       "test_protocol_handlers",
       "test_enr",
+      "test_discoveryv5"
     ]:
     runTest("tests/p2p/" & filename)
 

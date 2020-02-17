@@ -8,7 +8,7 @@ import nimcrypto except toHex
 type
   Protocol* = ref object
     transp: DatagramTransport
-    localNode: Node
+    localNode*: Node
     privateKey: PrivateKey
     whoareyouMagic: array[32, byte]
     idHash: array[32, byte]
