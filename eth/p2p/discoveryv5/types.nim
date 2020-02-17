@@ -69,8 +69,9 @@ template packetKind*(T: typedesc[SomePacket]): PacketKind =
   elif T is FindNodePacket: findNode
   elif T is NodesPacket: nodes
 
-method storeKeys*(db: Database, id: NodeId, address: Address, r, w: array[16, byte]) {.base.} = discard
-method loadKeys*(db: Database, id: NodeId, address: Address, r, w: var array[16, byte]): bool {.base.} = discard
+method storeKeys*(db: Database, id: NodeId, address: Address, r, w: array[16, byte]): bool {.base, raises: [Defect].} = discard
+
+method loadKeys*(db: Database, id: NodeId, address: Address, r, w: var array[16, byte]): bool {.base, raises: [Defect].} = discard
 
 proc toBytes*(id: NodeId): array[32, byte] {.inline.} =
   id.toByteArrayBE()

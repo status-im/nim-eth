@@ -21,10 +21,18 @@ type
     contains(DB, KeccakHash) is bool
 
   # XXX: poor's man vtref types
-  PutProc = proc (db: RootRef, key, val: openarray[byte]) {.gcsafe.}
-  GetProc = proc (db: RootRef, key: openarray[byte]): Bytes {.gcsafe.} # Must return empty seq if not found
-  DelProc = proc (db: RootRef, key: openarray[byte]) {.gcsafe.}
-  ContainsProc = proc (db: RootRef, key: openarray[byte]): bool {.gcsafe.}
+  PutProc = proc (db: RootRef, key, val: openarray[byte]) {.
+    gcsafe, raises: [Defect, CatchableError] .}
+
+  GetProc = proc (db: RootRef, key: openarray[byte]): Bytes {.
+    gcsafe, raises: [Defect, CatchableError] .}
+    ## The result will be empty seq if not found
+
+  DelProc = proc (db: RootRef, key: openarray[byte]) {.
+    gcsafe, raises: [Defect, CatchableError] .}
+
+  ContainsProc = proc (db: RootRef, key: openarray[byte]): bool {.
+    gcsafe, raises: [Defect, CatchableError] .}
 
   TrieDatabaseRef* = ref object
     obj: RootRef

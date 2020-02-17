@@ -63,7 +63,7 @@ proc send(d: Protocol, n: Node, data: seq[byte]) =
 
 proc randomBytes(v: var openarray[byte]) =
   if nimcrypto.randomBytes(v) != v.len:
-    raise newException(Exception, "Could not randomize bytes") # TODO:
+    raise newException(RandomSourceDepleted, "Could not randomize bytes") # TODO:
 
 proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =
   for i in 0 .. a.high:
@@ -123,9 +123,18 @@ proc handleFindNode(d: Protocol, fromNode: Node, fn: FindNodePacket, reqId: Requ
     let distance = min(fn.distance, 256)
     d.sendNodes(fromNode, reqId, d.routingTable.neighboursAtDistance(distance))
 
-proc receive(d: Protocol, a: Address, msg: Bytes)
-    {.gcsafe, raises:[RlpError, Exception].} =
-  # TODO: figure out where the general exception comes from and clean it up
+proc receive(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
+  raises: [
+    Defect,
+    # TODO This is now coming from Chronos's callSoon
+    Exception,
+    # TODO All of these should probably be handled here
+    RlpError,
+    IOError,
+    TransportAddressError,
+    EthKeysException,
+    Secp256k1Exception,
+  ].} =
   if msg.len < 32:
     return # Invalid msg
 
@@ -136,9 +145,12 @@ proc receive(d: Protocol, a: Address, msg: Bytes)
     var pr: PendingRequest
     if d.pendingRequests.take(whoareyou.authTag, pr):
       let toNode = pr.node
-
-      let (data, _) = d.codec.encodeEncrypted(toNode, pr.packet, challenge = whoareyou)
-      d.send(toNode, data)
+      try:
+        let (data, _) = d.codec.encodeEncrypted(toNode, pr.packet, challenge = whoareyou)
+        d.send(toNode, data)
+      except RandomSourceDepleted as err:
+        debug "Failed to respond to a who-you-are msg " &
+              "due to randomness source depletion."
 
   else:
     var tag: array[32, byte]
@@ -169,7 +181,7 @@ proc receive(d: Protocol, a: Address, msg: Bytes)
         if d.awaitedPackets.take((node, packet.reqId), waiter):
           waiter.complete(packet.some)
         else:
-          debug "TODO: handle packet: ", packet = packet.kind, origin = node
+          debug "TODO: handle packet: ", packet = packet.kind, origin = $node
 
     else:
       debug "Could not decode, respond with whoareyou"

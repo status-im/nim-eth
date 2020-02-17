@@ -84,7 +84,7 @@ proc makeEnrAux(seqNum: uint64, pk: PrivateKey, pairs: openarray[(string, Field)
 
   var sig: SignatureNR
   if signRawMessage(keccak256.digest(toSign).data, pk, sig) != EthKeysStatus.Success:
-    raise newException(Exception, "Could not sign ENR (internal error)")
+    raise newException(EthKeysException, "Could not sign ENR (internal error)")
 
   result.raw = block:
     var w = initRlpList(result.pairs.len * 2 + 2)
@@ -136,6 +136,10 @@ proc get*(r: Record, key: string, T: type): T =
     elif T is string:
       requireKind(f, kString)
       return f.str
+    elif T is PublicKey:
+      requireKind(f, kBytes)
+      if recoverPublicKey(f.bytes, result) != EthKeysStatus.Success:
+        raise newException(ValueError, "Invalid public key")
     elif T is array:
       when type(result[0]) is byte:
         requireKind(f, kBytes)
@@ -156,11 +160,11 @@ proc get*(r: Record, pubKey: var PublicKey): bool =
 
 proc tryGet*(r: Record, key: string, T: type): Option[T] =
   try:
-    return some r.get(key, T)
+    return some get(r, key, T)
   except CatchableError:
     discard
 
-func toTypedRecord*(r: Record): Option[TypedRecord] =
+proc toTypedRecord*(r: Record): Option[TypedRecord] =
   let id = r.tryGet("id", string)
   if id.isSome:
     var tr: TypedRecord
