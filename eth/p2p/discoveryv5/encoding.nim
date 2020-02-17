@@ -6,7 +6,7 @@ const
   idNoncePrefix = "discovery-id-nonce"
   gcmNonceSize* = 12
   keyAgreementPrefix = "discovery v5 key agreement"
-  authSchemeName = "gcm"
+  authSchemeName* = "gcm"
 
 type
   AuthResponse = object
@@ -25,12 +25,12 @@ type
     readKey: array[16, byte]
     authRespKey: array[16, byte]
 
-  AuthHeader = object
-    auth: array[12, byte]
-    idNonce: array[32, byte]
-    scheme: string
-    ephemeralKey: array[64, byte]
-    response: seq[byte]
+  AuthHeader* = object
+    auth*: array[12, byte]
+    idNonce*: array[32, byte]
+    scheme*: string
+    ephemeralKey*: array[64, byte]
+    response*: seq[byte]
 
 
 const
