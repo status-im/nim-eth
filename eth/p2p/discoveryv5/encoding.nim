@@ -32,13 +32,14 @@ type
     ephemeralKey*: array[64, byte]
     response*: seq[byte]
 
+  RandomSourceDepleted* = object of CatchableError
 
 const
   gcmTagSize = 16
 
 proc randomBytes(v: var openarray[byte]) =
   if nimcrypto.randomBytes(v) != v.len:
-    raise newException(Exception, "Could not randomize bytes") # TODO:
+    raise newException(RandomSourceDepleted, "Could not randomize bytes")
 
 proc idNonceHash(nonce, ephkey: openarray[byte]): array[32, byte] =
   var ctx: sha256
@@ -50,12 +51,12 @@ proc idNonceHash(nonce, ephkey: openarray[byte]): array[32, byte] =
 
 proc signIDNonce(c: Codec, idNonce, ephKey: openarray[byte]): SignatureNR =
   if signRawMessage(idNonceHash(idNonce, ephKey), c.privKey, result) != EthKeysStatus.Success:
-    raise newException(Exception, "Could not sign idNonce")
+    raise newException(EthKeysException, "Could not sign idNonce")
 
 proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey, challenge: Whoareyou, result: var HandshakeSecrets) =
   var eph: SharedSecretFull
   if ecdhAgree(priv, pub, eph) != EthKeysStatus.Success:
-    raise newException(Exception, "ecdhAgree failed")
+    raise newException(EthKeysException, "ecdhAgree failed")
 
   # TODO: Unneeded allocation here
   var info = newSeqOfCap[byte](idNoncePrefix.len + 32 * 2)
@@ -85,16 +86,12 @@ proc makeAuthHeader(c: Codec, toNode: Node, nonce: array[gcmNonceSize, byte],
   if challenge.recordSeq < ln.record.seqNum:
     resp.record = ln.record
 
-  var remotePubkey: PublicKey
-  if not toNode.record.get(remotePubkey):
-    raise newException(Exception, "Could not get public key from remote ENR") # Should not happen!
-
   let ephKey = newPrivateKey()
   let ephPubkey = ephKey.getPublicKey().getRaw
 
   resp.signature = c.signIDNonce(challenge.idNonce, ephPubkey).getRaw
 
-  deriveKeys(ln.id, toNode.id, ephKey, remotePubkey, challenge, handhsakeSecrets)
+  deriveKeys(ln.id, toNode.id, ephKey, toNode.node.pubKey, challenge, handhsakeSecrets)
 
   let respRlp = rlp.encode(resp)
 
@@ -134,8 +131,8 @@ proc encodeEncrypted*(c: Codec, toNode: Node, packetData: seq[byte], challenge: 
     headEnc = c.makeAuthHeader(toNode, nonce, sec, challenge)
 
     writeKey = sec.writeKey
-
-    c.db.storeKeys(toNode.id, toNode.address, sec.readKey, sec.writeKey)
+    # TODO: is it safe to ignore the error here?
+    discard c.db.storeKeys(toNode.id, toNode.address, sec.readKey, sec.writeKey)
 
   var body = packetData
   let tag = packetTag(toNode.id, c.localNode.id)
@@ -228,7 +225,8 @@ proc decodeEncrypted*(c: var Codec, fromId: NodeID, fromAddr: Address, input: se
 
     # Swap keys to match remote
     swap(sec.readKey, sec.writeKey)
-    c.db.storeKeys(fromId, fromAddr, sec.readKey, sec.writeKey)
+    # TODO: is it safe to ignore the error here?
+    discard c.db.storeKeys(fromId, fromAddr, sec.readKey, sec.writeKey)
     readKey = sec.readKey
 
   else:
@@ -249,7 +247,7 @@ proc decodeEncrypted*(c: var Codec, fromId: NodeID, fromAddr: Address, input: se
 
 proc newRequestId*(): RequestId =
   if randomBytes(addr result, sizeof(result)) != sizeof(result):
-    raise newException(Exception, "Could not randomize bytes") # TODO:
+    raise newException(RandomSourceDepleted, "Could not randomize bytes") # TODO:
 
 proc numFields(T: typedesc): int =
   for k, v in fieldPairs(default(T)): inc result

@@ -6,9 +6,9 @@ import
   ./p2p_test_helper
 
 proc startDiscoveryv5Node*(privKey: PrivateKey, address: Address,
-                        bootnodes: seq[Record]): discv5_protocol.Protocol =
+                           bootnodes: seq[Record]): discv5_protocol.Protocol =
   var db = DiscoveryDB.init(newMemoryDB())
-  result = newProtocol(privKey, db, address.udpPort)
+  result = newProtocol(privKey, db, address.tcpPort, address.udpPort)
 
   for node in bootnodes:
     result.addNode(node)
