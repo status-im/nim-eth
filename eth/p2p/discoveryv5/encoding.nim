@@ -49,11 +49,12 @@ proc idNonceHash(nonce, ephkey: openarray[byte]): array[32, byte] =
   ctx.update(ephkey)
   ctx.finish().data
 
-proc signIDNonce(c: Codec, idNonce, ephKey: openarray[byte]): SignatureNR =
+proc signIDNonce*(c: Codec, idNonce, ephKey: openarray[byte]): SignatureNR =
   if signRawMessage(idNonceHash(idNonce, ephKey), c.privKey, result) != EthKeysStatus.Success:
     raise newException(EthKeysException, "Could not sign idNonce")
 
-proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey, challenge: Whoareyou, result: var HandshakeSecrets) =
+proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
+    idNonce: openarray[byte], result: var HandshakeSecrets) =
   var eph: SharedSecretFull
   if ecdhAgree(priv, pub, eph) != EthKeysStatus.Success:
     raise newException(EthKeysException, "ecdhAgree failed")
@@ -68,9 +69,9 @@ proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey, challenge: Who
 
   static: assert(sizeof(result) == 16 * 3)
   var res = cast[ptr UncheckedArray[byte]](addr result)
-  hkdf(sha256, eph.data, challenge.idNonce, info, toOpenArray(res, 0, sizeof(result) - 1))
+  hkdf(sha256, eph.data, idNonce, info, toOpenArray(res, 0, sizeof(result) - 1))
 
-proc encryptGCM(key, nonce, pt, authData: openarray[byte]): seq[byte] =
+proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
   var ectx: GCM[aes128]
   ectx.init(key, nonce, authData)
   result = newSeq[byte](pt.len + gcmTagSize)
@@ -79,7 +80,8 @@ proc encryptGCM(key, nonce, pt, authData: openarray[byte]): seq[byte] =
   ectx.clear()
 
 proc makeAuthHeader(c: Codec, toNode: Node, nonce: array[gcmNonceSize, byte],
-                    handhsakeSecrets: var HandshakeSecrets, challenge: Whoareyou): seq[byte] =
+                    handshakeSecrets: var HandshakeSecrets,
+                    challenge: Whoareyou): seq[byte] =
   var resp = AuthResponse(version: 5)
   let ln = c.localNode
 
@@ -91,15 +93,16 @@ proc makeAuthHeader(c: Codec, toNode: Node, nonce: array[gcmNonceSize, byte],
 
   resp.signature = c.signIDNonce(challenge.idNonce, ephPubkey).getRaw
 
-  deriveKeys(ln.id, toNode.id, ephKey, toNode.node.pubKey, challenge, handhsakeSecrets)
+  deriveKeys(ln.id, toNode.id, ephKey, toNode.node.pubKey, challenge.idNonce,
+    handshakeSecrets)
 
   let respRlp = rlp.encode(resp)
 
   var zeroNonce: array[gcmNonceSize, byte]
-  let respEnc = encryptGCM(handhsakeSecrets.authRespKey, zeroNonce, respRLP, [])
+  let respEnc = encryptGCM(handshakeSecrets.authRespKey, zeroNonce, respRLP, [])
 
-  let header = AuthHeader(auth: nonce, idNonce: challenge.idNonce, scheme: authSchemeName,
-                            ephemeralKey: ephPubkey, response: respEnc)
+  let header = AuthHeader(auth: nonce, idNonce: challenge.idNonce,
+    scheme: authSchemeName, ephemeralKey: ephPubkey, response: respEnc)
   rlp.encode(header)
 
 proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =
@@ -181,7 +184,8 @@ proc decodePacketBody(typ: byte, body: openarray[byte], res: var Packet): bool =
 
   return true
 
-proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader, challenge: Whoareyou, secrets: var HandshakeSecrets, newNode: var Node): bool =
+proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
+    challenge: Whoareyou, secrets: var HandshakeSecrets, newNode: var Node): bool =
   if head.scheme != authSchemeName:
     warn "Unknown auth scheme"
     return false
@@ -190,7 +194,8 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader, challenge: Whoar
   if recoverPublicKey(head.ephemeralKey, ephKey) != EthKeysStatus.Success:
     return false
 
-  deriveKeys(fromId, c.localNode.id, c.privKey, ephKey, challenge, secrets)
+  deriveKeys(fromId, c.localNode.id, c.privKey, ephKey, challenge.idNonce,
+    secrets)
 
   var zeroNonce: array[gcmNonceSize, byte]
   let respData = decryptGCM(secrets.authRespKey, zeroNonce, head.response, [])
