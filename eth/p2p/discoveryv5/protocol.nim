@@ -5,6 +5,9 @@ import
 
 import nimcrypto except toHex
 
+logScope:
+  topics = "discv5"
+
 type
   Protocol* = ref object
     transp: DatagramTransport
@@ -247,12 +250,17 @@ proc lookupWorker(p: Protocol, destNode: Node, target: NodeId): Future[seq[Node]
     discard p.routingTable.addNode(n)
 
 proc lookup(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
-  result = p.routingTable.neighbours(target, 16)
+  ## Perform a lookup for the given target, return the closest n nodes to the
+  ## target. Maximum value for n is `BUCKET_SIZE`.
+  # TODO: Sort the returned nodes on distance
+  result = p.routingTable.neighbours(target, BUCKET_SIZE)
   var asked = initHashSet[NodeId]()
   asked.incl(p.localNode.id)
   var seen = asked
+  for node in result:
+    seen.incl(node.id)
 
-  const alpha = 3
+  const alpha = 3 # Kademlia concurrency factor
 
   var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
 

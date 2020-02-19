@@ -43,6 +43,7 @@ suite "Discovery v5 Tests":
 
     for node in nodes:
       let discovered = await node.lookupRandom()
+      check discovered.len < nodes.len
       debug "Lookup from random id", node=node.localNode, discovered
 
     # Check for each node if the other nodes shows up in the routing table
