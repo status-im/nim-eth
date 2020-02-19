@@ -33,6 +33,7 @@ task test_keyfile, "run keyfile tests":
 proc runKeysTests() =
   for filename in [
       "test_keys",
+      "test_private_public_key_consistency"
     ]:
     runTest("tests/keys/" & filename)
 
