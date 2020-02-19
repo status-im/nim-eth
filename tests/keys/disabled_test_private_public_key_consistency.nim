@@ -15,8 +15,13 @@ import unittest
 suite "Testing private -> public key conversion":
   test "Known private to known public keys (test data from Ethereum eth-keys)":
     for person in [alice, bob, eve]:
-      let privkey = initPrivateKey(person.privkey)
+      let
+        privKey = initPrivateKey(person.privkey)
+        pubKey = privKey.getPublicKey
 
-      let computed_pubkey = $privkey.public_key
+      check:
+        # Compare as strings
+        $pubKey == person.pubkey
 
-      check: computed_pubkey == person.pubkey
+        # Compare as keys
+        pubKey == initPublicKey(person.pubkey)

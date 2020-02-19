@@ -292,6 +292,9 @@ proc getRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] {.noinit, inline.
   ## Converts public key `pubkey` to serialized form.
   pubkey.toRaw(result)
 
+proc `==`*(lhs, rhs: PublicKey): bool =
+  lhs.getRaw == rhs.getRaw
+
 proc getRawCompressed*(pubkey: PublicKey): array[CompressedPubKeyLength, byte] {.noinit, inline.} =
   ## Converts public key `pubkey` to serialized form.
   pubkey.toRaw(result, true)
