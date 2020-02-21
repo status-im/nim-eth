@@ -11,20 +11,20 @@ type
 proc toNodeId*(pk: PublicKey): NodeId =
   readUintBE[256](keccak256.digest(pk.getRaw()).data)
 
-proc newNode*(pk: PublicKey, address: Address): Node =
-  result.new()
-  result.node = initENode(pk, address)
-  result.id = pk.toNodeId()
+proc newNode*(enode: ENode): Node =
+  Node(node: enode,
+       id: enode.pubkey.toNodeId())
+
+proc newNode*(enode: ENode, r: Record): Node =
+  Node(node: enode,
+       id: enode.pubkey.toNodeId(),
+       record: r)
 
 proc newNode*(uriString: string): Node =
-  result.new()
-  result.node = initENode(uriString)
-  result.id = result.node.pubkey.toNodeId()
+  newNode initENode(uriString)
 
-proc newNode*(enode: ENode): Node =
-  result.new()
-  result.node = enode
-  result.id = result.node.pubkey.toNodeId()
+proc newNode*(pk: PublicKey, address: Address): Node =
+  newNode initENode(pk, address)
 
 proc newNode*(r: Record): Node =
   # TODO: Handle IPv6

@@ -36,22 +36,23 @@ proc whoareyouMagic(toNode: NodeId): array[32, byte] =
   for i, c in prefix: data[sizeof(toNode) + i] = byte(c)
   sha256.digest(data).data
 
-proc newProtocol*(privKey: PrivateKey,
-                  db: Database,
-                  tcpPort, udpPort: Port): Protocol =
-  result = Protocol(privateKey: privKey, db: db)
-  let a = Address(ip: parseIpAddress("127.0.0.1"),
-                  tcpPort: tcpPort, udpPort: udpPort)
+proc newProtocol*(privKey: PrivateKey, db: Database,
+                  ip: IpAddress, tcpPort, udpPort: Port): Protocol =
+  let
+    a = Address(ip: ip, tcpPort: tcpPort, udpPort: udpPort)
+    enode = initENode(privKey.getPublicKey(), a)
+    enrRec = enr.Record.init(12, privKey, a)
+    node = newNode(enode, enrRec)
 
-  result.localNode = newNode(initENode(result.privateKey.getPublicKey(), a))
-  result.localNode.record = enr.Record.init(12, result.privateKey, a)
+  result = Protocol(
+    privateKey: privKey,
+    db: db,
+    localNode: node,
+    whoareyouMagic: whoareyouMagic(node.id),
+    idHash: sha256.digest(node.id.toByteArrayBE).data,
+    codec: Codec(localNode: node, privKey: privKey, db: db))
 
-  result.whoareyouMagic = whoareyouMagic(result.localNode.id)
-
-  result.idHash = sha256.digest(result.localNode.id.toByteArrayBE).data
-  result.routingTable.init(result.localNode)
-
-  result.codec = Codec(localNode: result.localNode, privKey: result.privateKey, db: result.db)
+  result.routingTable.init(node)
 
 proc start*(p: Protocol) =
   discard
@@ -376,7 +377,7 @@ when isMainModule:
         pk = newPrivateKey()
 
       let d = newProtocol(pk, DiscoveryDB.init(newMemoryDB()),
-                          Port(12001 + i), Port(12001 + i))
+                          parseIpAddress("127.0.0.1"), Port(12001 + i), Port(12001 + i))
       d.open()
       result.add(d)
 

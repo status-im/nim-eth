@@ -8,7 +8,9 @@ import
 proc startDiscoveryv5Node*(privKey: PrivateKey, address: Address,
                            bootnodes: seq[Record]): discv5_protocol.Protocol =
   var db = DiscoveryDB.init(newMemoryDB())
-  result = newProtocol(privKey, db, address.tcpPort, address.udpPort)
+  result = newProtocol(privKey, db,
+                       parseIpAddress("127.0.0.1"),
+                       address.tcpPort, address.udpPort)
 
   for node in bootnodes:
     result.addNode(node)
