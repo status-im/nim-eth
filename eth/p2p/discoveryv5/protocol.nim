@@ -27,7 +27,8 @@ type
 
 const
   lookupRequestLimit = 15
-  findnodeResultLimit = 15 # applies in FINDNODE handler
+  findNodeResultLimit = 15 # applies in FINDNODE handler
+  findNodeAttempts = 3
 
 proc whoareyouMagic(toNode: NodeId): array[32, byte] =
   const prefix = "WHOAREYOU"
@@ -85,6 +86,7 @@ proc decodeWhoAreYou(d: Protocol, msg: Bytes): Whoareyou =
   result[] = rlp.decode(msg.toRange[32 .. ^1], WhoareyouObj)
 
 proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: array[12, byte]) =
+  trace "sending who are you", to = $toNode, toAddress = $address
   let challenge = Whoareyou(authTag: authTag, recordSeq: 1)
   randomBytes(challenge.idNonce)
   d.codec.handshakes[$toNode] = challenge
@@ -241,7 +243,7 @@ proc lookupDistances(target, dest: NodeId): seq[uint32] =
 proc lookupWorker(p: Protocol, destNode: Node, target: NodeId): Future[seq[Node]] {.async.} =
   let dists = lookupDistances(target, destNode.id)
   var i = 0
-  while i < lookupRequestLimit and result.len < findNodeResultLimit:
+  while i < findNodeAttempts and result.len < findNodeResultLimit:
     let r = await p.findNode(destNode, dists[i])
     # TODO: Handle failures
     result.add(r)

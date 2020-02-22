@@ -46,7 +46,7 @@ type
 const
   BUCKET_SIZE = 16
   BITS_PER_HOP = 8
-  REQUEST_TIMEOUT = chronos.milliseconds(900) # timeout of message round trips
+  REQUEST_TIMEOUT = chronos.milliseconds(5000) # timeout of message round trips
   FIND_CONCURRENCY = 3                  # parallel find node lookups
   ID_SIZE = 256
 

@@ -204,7 +204,13 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
   newNode = newNode(authResp.record)
   return true
 
-proc decodeEncrypted*(c: var Codec, fromId: NodeID, fromAddr: Address, input: seq[byte], authTag: var array[12, byte], newNode: var Node, packet: var Packet): bool =
+proc decodeEncrypted*(c: var Codec,
+                      fromId: NodeID,
+                      fromAddr: Address,
+                      input: seq[byte],
+                      authTag: var array[12, byte],
+                      newNode: var Node,
+                      packet: var Packet): bool =
   let input = input.toRange
   var r = rlpFromBytes(input[32 .. ^1])
   var auth: AuthHeader
@@ -218,13 +224,16 @@ proc decodeEncrypted*(c: var Codec, fromId: NodeID, fromAddr: Address, input: se
 
     let challenge = c.handshakes.getOrDefault($fromId)
     if challenge.isNil:
+      trace "Decoding failed (no challenge)"
       return false
 
     if auth.idNonce != challenge.idNonce:
+      trace "Decoding failed (different nonce)"
       return false
 
     var sec: HandshakeSecrets
     if not c.decodeAuthResp(fromId, auth, challenge, sec, newNode):
+      trace "Decoding failed (bad auth)"
       return false
     c.handshakes.del($fromId)
 
@@ -240,6 +249,7 @@ proc decodeEncrypted*(c: var Codec, fromId: NodeID, fromAddr: Address, input: se
     auth.auth = authTag
     var writeKey: array[16, byte]
     if not c.db.loadKeys(fromId, fromAddr, readKey, writeKey):
+      trace "Decoding failed (no keys)"
       return false
       # doAssert(false, "TODO: HANDLE ME!")
 
