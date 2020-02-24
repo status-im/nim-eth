@@ -567,7 +567,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     read = bindSym("read", brForceOpen)
     checkedRlpRead = bindSym "checkedRlpRead"
     startList = bindSym "startList"
-    safeEnterList = bindSym "safeEnterList"
+    enterList = bindSym "enterList"
     finish = bindSym "finish"
 
     messagePrinter = bindSym "messagePrinter"
@@ -677,7 +677,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
 
     let
       paramCount = paramsToWrite.len
-      readParamsPrelude = if paramCount > 1: newCall(safeEnterList, receivedRlp)
+      readParamsPrelude = if paramCount > 1: newCall(enterList, receivedRlp)
                           else: newStmtList()
 
     when tracingEnabled:

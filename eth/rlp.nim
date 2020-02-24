@@ -243,13 +243,9 @@ proc currentElemEnd*(self: Rlp): int =
     result += payloadOffset() + payloadBytesCount()
 
 proc enterList*(self: var Rlp) =
-  doAssert isList()
-  position += payloadOffset()
-
-proc safeEnterList*(self: var Rlp) =
   if not isList():
     raise newException(RlpTypeMismatch, "List expected, but source RLP is not a list")
-  enterList()
+  position += payloadOffset()
 
 proc skipElem*(rlp: var Rlp) =
   rlp.position = rlp.currentElemEnd

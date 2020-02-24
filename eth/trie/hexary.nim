@@ -384,7 +384,7 @@ proc replaceValue(data: Rlp, key: NibblesRange, value: BytesRange): Bytes =
 
   var r = initRlpList(17)
 
-  # XXX: This can be optmized to a direct bitwise copy of the source RLP
+  # XXX: This can be optimized to a direct bitwise copy of the source RLP
   var iter = data
   iter.enterList()
   for i in 0 ..< 16:
