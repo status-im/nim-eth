@@ -20,15 +20,19 @@ type
     routingTable: RoutingTable
     codec: Codec
     awaitedPackets: Table[(Node, RequestId), Future[Option[Packet]]]
+    lookupLoop: Future[void]
+    revalidateLoop: Future[void]
 
   PendingRequest = object
     node: Node
     packet: seq[byte]
 
 const
-  lookupRequestLimit = 15
+  lookupRequestLimit = 3
   findNodeResultLimit = 15 # applies in FINDNODE handler
-  findNodeAttempts = 3
+  lookupInterval = 60.seconds ## Interval of launching a random lookup to
+  ## populate the routing table. go-ethereum seems to do 3 runs every 30
+  ## minutes. Trinity starts one every minute.
 
 proc whoareyouMagic(toNode: NodeId): array[32, byte] =
   const prefix = "WHOAREYOU"
@@ -54,9 +58,6 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
     codec: Codec(localNode: node, privKey: privKey, db: db))
 
   result.routingTable.init(node)
-
-proc start*(p: Protocol) =
-  discard
 
 proc send(d: Protocol, a: Address, data: seq[byte]) =
   # debug "Sending bytes", amount = data.len, to = a
@@ -243,16 +244,17 @@ proc lookupDistances(target, dest: NodeId): seq[uint32] =
 proc lookupWorker(p: Protocol, destNode: Node, target: NodeId): Future[seq[Node]] {.async.} =
   let dists = lookupDistances(target, destNode.id)
   var i = 0
-  while i < findNodeAttempts and result.len < findNodeResultLimit:
-    let r = await p.findNode(destNode, dists[i])
+  while i < lookupRequestLimit and result.len < findNodeResultLimit:
     # TODO: Handle failures
+    let r = await p.findNode(destNode, dists[i])
+    # TODO: I guess it makes sense to limit here also to `findNodeResultLimit`?
     result.add(r)
     inc i
 
   for n in result:
     discard p.routingTable.addNode(n)
 
-proc lookup(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
+proc lookup*(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # TODO: Sort the returned nodes on distance
@@ -290,7 +292,7 @@ proc lookup(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
         if result.len < BUCKET_SIZE:
           result.add(n)
 
-proc lookupRandom*(p: Protocol): Future[seq[Node]] =
+proc lookupRandom*(p: Protocol): Future[seq[Node]] {.raises:[Defect, Exception].} =
   var id: NodeId
   discard randomBytes(addr id, sizeof(id))
   p.lookup(id)
@@ -312,7 +314,8 @@ proc processClient(transp: DatagramTransport,
     debug "Receive failed", exception = e.name, msg = e.msg,
       stacktrace = e.getStackTrace()
 
-proc revalidateNode(p: Protocol, n: Node) {.async.} =
+proc revalidateNode(p: Protocol, n: Node)
+    {.async, raises:[Defect, Exception].} = # TODO: Exception
   let reqId = newRequestId()
   var ping: PingPacket
   ping.enrSeq = p.localNode.record.seqNum
@@ -333,17 +336,56 @@ proc revalidateNode(p: Protocol, n: Node) {.async.} =
       p.routingTable.removeNode(n)
 
 proc revalidateLoop(p: Protocol) {.async.} =
-  while true:
-    await sleepAsync(rand(10 * 1000).milliseconds)
-    let n = p.routingTable.nodeToRevalidate()
-    if not n.isNil:
-      await p.revalidateNode(n)
+  try:
+    # TODO: We need to handle actual errors still, which might just allow to
+    # continue the loop. However, currently `revalidateNode` raises a general
+    # `Exception` making this rather hard.
+    while true:
+      await sleepAsync(rand(10 * 1000).milliseconds)
+      let n = p.routingTable.nodeToRevalidate()
+      if not n.isNil:
+        await p.revalidateNode(n)
+  except CancelledError:
+    trace "revalidateLoop canceled"
+
+proc lookupLoop(d: Protocol) {.async.} =
+  ## TODO: Same story as for `revalidateLoop`
+  try:
+    while true:
+      let nodes = await d.lookupRandom()
+      trace "Discovered nodes", nodes
+      await sleepAsync(lookupInterval)
+  except CancelledError:
+    trace "lookupLoop canceled"
 
 proc open*(d: Protocol) =
+  debug "Starting discovery node", n = d.localNode
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(IPv4_any(), d.localNode.node.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
-  asyncCheck d.revalidateLoop() # TODO: This loop has to be terminated on close()
+  # Might want to move these to a separate proc if this turns out to be needed.
+  d.lookupLoop = lookupLoop(d)
+  d.revalidateLoop = revalidateLoop(d)
+
+proc close*(d: Protocol) =
+  doAssert(not d.lookupLoop.isNil() or not d.revalidateLoop.isNil())
+  doAssert(not d.transp.closed)
+
+  debug "Closing discovery node", n = d.localNode
+  d.revalidateLoop.cancel()
+  d.lookupLoop.cancel()
+  # TODO: unsure if close can't create issues in the not awaited cancellations
+  # above
+  d.transp.close()
+
+proc closeWait*(d: Protocol) {.async.} =
+  doAssert(not d.lookupLoop.isNil() or not d.revalidateLoop.isNil())
+  doAssert(not d.transp.closed)
+
+  debug "Closing discovery node", n = d.localNode
+  await allFutures([d.revalidateLoop.cancelAndWait(),
+    d.lookupLoop.cancelAndWait()])
+  await d.transp.closeWait()
 
 proc addNode*(d: Protocol, node: Node) =
   discard d.routingTable.addNode(node)

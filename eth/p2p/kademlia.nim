@@ -175,6 +175,7 @@ proc computeSharedPrefixBits(nodes: openarray[Node]): int =
 proc init(r: var RoutingTable, thisNode: Node) {.inline.} =
   r.thisNode = thisNode
   r.buckets = @[newKBucket(0.u256, high(Uint256))]
+  randomize() # for later `randomNodes` selection
 
 proc splitBucket(r: var RoutingTable, index: int) =
   let bucket = r.buckets[index]
