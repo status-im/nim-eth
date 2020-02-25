@@ -44,6 +44,119 @@ suite "Waku connections":
       p2.isNil == false
       p3.isNil == false
 
+  asyncTest "Waku set-topic-interest":
+    var
+      wakuTopicNode = setupTestNode(Waku)
+      wakuNode = setupTestNode(Waku)
+
+    let
+      topic1 = [byte 0xDA, 0xDA, 0xDA, 0xAA]
+      topic2 = [byte 0xD0, 0xD0, 0xD0, 0x00]
+      wrongTopic = [byte 0x4B, 0x1D, 0x4B, 0x1D]
+
+    # Set one topic so we are not considered a full node
+    wakuTopicNode.protocolState(Waku).config.topics = some(@[topic1])
+
+    wakuNode.startListening()
+    await wakuTopicNode.peerPool.connectToNode(newNode(
+      initENode(wakuNode.keys.pubKey, wakuNode.address)))
+
+    # Update topic interest
+    check:
+      await setTopicInterest(wakuTopicNode, @[topic1, topic2])
+
+    let payload = repeat(byte 0, 10)
+    check:
+      wakuNode.postMessage(ttl = safeTTL, topic = topic1, payload = payload)
+      wakuNode.postMessage(ttl = safeTTL, topic = topic2, payload = payload)
+      wakuNode.postMessage(ttl = safeTTL, topic = wrongTopic, payload = payload)
+      wakuNode.protocolState(Waku).queue.items.len == 3
+    await sleepAsync(waitInterval)
+    check:
+      wakuTopicNode.protocolState(Waku).queue.items.len == 2
+
+  asyncTest "Waku set-minimum-pow":
+    var
+      wakuPowNode = setupTestNode(Waku)
+      wakuNode = setupTestNode(Waku)
+
+    wakuNode.startListening()
+    await wakuPowNode.peerPool.connectToNode(newNode(
+      initENode(wakuNode.keys.pubKey, wakuNode.address)))
+
+    # Update minimum pow
+    await setPowRequirement(wakuPowNode, 1.0)
+    await sleepAsync(waitInterval)
+
+    check:
+      wakuNode.peerPool.len == 1
+
+    # check powRequirement is updated
+    for peer in wakuNode.peerPool.peers:
+      check:
+        peer.state(Waku).powRequirement == 1.0
+
+  asyncTest "Waku set-light-node":
+    var
+      wakuLightNode = setupTestNode(Waku)
+      wakuNode = setupTestNode(Waku)
+
+    wakuNode.startListening()
+    await wakuLightNode.peerPool.connectToNode(newNode(
+      initENode(wakuNode.keys.pubKey, wakuNode.address)))
+
+    # Update minimum pow
+    await setLightNode(wakuLightNode, true)
+    await sleepAsync(waitInterval)
+
+    check:
+      wakuNode.peerPool.len == 1
+
+    # check lightNode is updated
+    for peer in wakuNode.peerPool.peers:
+      check:
+        peer.state(Waku).isLightNode
+
+  asyncTest "Waku set-bloom-filter":
+    var
+      wakuBloomNode = setupTestNode(Waku)
+      wakuNode = setupTestNode(Waku)
+      bloom = fullBloom()
+      topics = @[[byte 0xDA, 0xDA, 0xDA, 0xAA]]
+
+    # Set topic interest
+    discard await wakuBloomNode.setTopicInterest(topics)
+
+    wakuBloomNode.startListening()
+    await wakuNode.peerPool.connectToNode(newNode(
+      initENode(wakuBloomNode.keys.pubKey, wakuBloomNode.address)))
+
+    # Sanity check
+    check:
+      wakuNode.peerPool.len == 1
+
+    # check bloom filter is updated
+    for peer in wakuNode.peerPool.peers:
+      check:
+        peer.state(Waku).bloom == bloom
+        peer.state(Waku).topics == some(topics)
+
+    # disable one bit in the bloom filter
+    bloom[0] = 0x0
+
+    # and set it
+    await setBloomFilter(wakuBloomNode, bloom)
+    await sleepAsync(waitInterval)
+
+    # check bloom filter is updated
+    check:
+      wakuNode.peerPool.len == 1
+
+    for peer in wakuNode.peerPool.peers:
+      check:
+        peer.state(Waku).bloom == bloom
+        peer.state(Waku).topics == none(seq[Topic])
+
   asyncTest "Waku topic-interest":
     var
       wakuTopicNode = setupTestNode(Waku)
@@ -82,7 +195,7 @@ suite "Waku connections":
 
     # It was checked that the topics don't trigger false positives on the bloom.
     wakuTopicNode.protocolState(Waku).config.topics = some(@[topic1, topic2])
-    wakuTopicNode.protocolState(Waku).config.bloom = toBloom([bloomTopic])
+    wakuTopicNode.protocolState(Waku).config.bloom = some(toBloom([bloomTopic]))
 
     wakuNode.startListening()
     await wakuTopicNode.peerPool.connectToNode(newNode(
@@ -100,7 +213,7 @@ suite "Waku connections":
 
   asyncTest "Light node posting":
     var ln = setupTestNode(Waku)
-    ln.setLightNode(true)
+    await ln.setLightNode(true)
     var fn = setupTestNode(Waku)
     fn.startListening()
     await ln.peerPool.connectToNode(newNode(initENode(fn.keys.pubKey,
