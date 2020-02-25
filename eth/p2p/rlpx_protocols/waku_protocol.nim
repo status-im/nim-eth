@@ -69,7 +69,7 @@ const
   ## send to peers, in ms.
   pruneInterval* = chronos.milliseconds(1000)  ## Interval at which message
   ## queue is pruned, in ms.
-  topicInterestMax = 1000
+  topicInterestMax = 10000
 
 type
   WakuConfig* = object
