@@ -34,6 +34,11 @@ type
 
   RandomSourceDepleted* = object of CatchableError
 
+  DecodeStatus* = enum
+    Success,
+    HandshakeError,
+    PacketError
+
 const
   gcmTagSize = 16
 
@@ -221,7 +226,7 @@ proc decodeEncrypted*(c: var Codec,
                       input: seq[byte],
                       authTag: var array[12, byte],
                       newNode: var Node,
-                      packet: var Packet): bool =
+                      packet: var Packet): DecodeStatus =
   let input = input.toRange
   var r = rlpFromBytes(input[32 .. ^1])
   var auth: AuthHeader
@@ -230,24 +235,22 @@ proc decodeEncrypted*(c: var Codec,
 
   if r.isList:
     # Handshake - rlp list indicates auth-header
-
-    # TODO: Auth failure will result in resending whoareyou. Do we really want this?
     auth = r.read(AuthHeader)
     authTag = auth.auth
 
     let challenge = c.handshakes.getOrDefault($fromId)
     if challenge.isNil:
       trace "Decoding failed (no challenge)"
-      return false
+      return HandshakeError
 
     if auth.idNonce != challenge.idNonce:
       trace "Decoding failed (different nonce)"
-      return false
+      return HandshakeError
 
     var sec: HandshakeSecrets
     if not c.decodeAuthResp(fromId, auth, challenge, sec, newNode):
       trace "Decoding failed (bad auth)"
-      return false
+      return HandshakeError
     c.handshakes.del($fromId)
 
     # Swap keys to match remote
@@ -263,20 +266,23 @@ proc decodeEncrypted*(c: var Codec,
     var writeKey: array[16, byte]
     if not c.db.loadKeys(fromId, fromAddr, readKey, writeKey):
       trace "Decoding failed (no keys)"
-      return false
+      return PacketError
       # doAssert(false, "TODO: HANDLE ME!")
 
   let headSize = 32 + r.position
   let bodyEnc = input[headSize .. ^1]
 
-  let body = decryptGCM(readKey, auth.auth, bodyEnc.toOpenArray, input[0 .. 31].toOpenArray)
+  let body = decryptGCM(readKey, auth.auth, bodyEnc.toOpenArray,
+    input[0 .. 31].toOpenArray)
   if body.len > 1:
     let status = decodePacketBody(body[0], body.toOpenArray(1, body.high), packet)
     if status == decodingSuccessful:
-      return true
+      return Success
     else:
       debug "Failed to decode discovery packet", reason = status
-      return false
+      return PacketError
+  else:
+    return PacketError
 
 proc newRequestId*(): RequestId =
   if randomBytes(addr result, sizeof(result)) != sizeof(result):

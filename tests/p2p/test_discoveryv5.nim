@@ -56,7 +56,7 @@ suite "Discovery v5 Tests":
 
   asyncTest "Lookup targets":
     const
-      nodeCount = 5
+      nodeCount = 17
 
     let
       bootNodeKey = newPrivateKey()
@@ -68,10 +68,6 @@ suite "Discovery v5 Tests":
     for i in 1 ..< nodeCount:
       nodes.add(initDiscoveryNode(newPrivateKey(), localAddress(20301 + i),
         @[bootNode.localNode.record]))
-
-    # Make sure all random lookups ran once (not guaranteed with the loops)
-    for node in nodes:
-      let discovered = await node.lookupRandom()
 
     for i in 0..<nodeCount-1:
       let target = nodes[i]

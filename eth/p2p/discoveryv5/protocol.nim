@@ -90,6 +90,10 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: array
   trace "sending who are you", to = $toNode, toAddress = $address
   let challenge = Whoareyou(authTag: authTag, recordSeq: 1)
   randomBytes(challenge.idNonce)
+  # In case a handshake is already going on for this node, this will overwrite
+  # that one and an incoming response will fail.
+  # TODO: What is the better approach, overwrite or keep the first one until
+  # purged due to timeout (or keep both by using toNode + idNonce as key)?
   d.codec.handshakes[$toNode] = challenge
   var data = @(whoareyouMagic(toNode))
   data.add(rlp.encode(challenge[]))
@@ -151,6 +155,7 @@ proc receive(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
   # debug "Packet received: ", length = msg.len
 
   if d.isWhoAreYou(msg):
+    trace "Received whoareyou", localNode = d.localNode, address = a
     let whoareyou = d.decodeWhoAreYou(msg)
     var pr: PendingRequest
     if d.pendingRequests.take(whoareyou.authTag, pr):
@@ -171,12 +176,12 @@ proc receive(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
     var authTag: array[12, byte]
     var node: Node
     var packet: Packet
-
-    if d.codec.decodeEncrypted(sender, a, msg, authTag, node, packet):
+    let decoded = d.codec.decodeEncrypted(sender, a, msg, authTag, node, packet)
+    if decoded == DecodeStatus.Success:
       if node.isNil:
         node = d.routingTable.getNode(sender)
       else:
-        debug "Adding new node to routing table"
+        debug "Adding new node to routing table", node, localNode = d.localNode
         discard d.routingTable.addNode(node)
 
       doAssert(not node.isNil, "No node in the routing table (internal error?)")
@@ -192,10 +197,11 @@ proc receive(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
           waiter.complete(packet.some)
         else:
           debug "TODO: handle packet: ", packet = packet.kind, origin = $node
-
-    else:
-      debug "Could not decode, respond with whoareyou"
+    elif decoded == DecodeStatus.PacketError:
+      debug "Could not decode packet, respond with whoareyou",
+        localNode = d.localNode, address = a
       d.sendWhoareyou(a, sender, authTag)
+      # No Whoareyou in case it is a Handshake Failure
 
 proc waitPacket(d: Protocol, fromNode: Node, reqId: RequestId): Future[Option[Packet]] =
   result = newFuture[Option[Packet]]("waitPacket")
@@ -277,13 +283,13 @@ proc lookup*(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
         pendingQueries.add(p.lookupWorker(n, target))
       inc i
 
-    debug "discv5 pending queries", total = pendingQueries.len
+    trace "discv5 pending queries", total = pendingQueries.len
 
     if pendingQueries.len == 0:
       break
 
     let idx = await oneIndex(pendingQueries)
-    debug "Got discv5 lookup response", idx
+    trace "Got discv5 lookup response", idx
 
     let nodes = pendingQueries[idx].read
     pendingQueries.del(idx)
