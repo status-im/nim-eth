@@ -18,7 +18,7 @@ type
     pendingRequests: Table[array[12, byte], PendingRequest]
     db: Database
     routingTable: RoutingTable
-    codec: Codec
+    codec*: Codec
     awaitedPackets: Table[(Node, RequestId), Future[Option[Packet]]]
     lookupLoop: Future[void]
     revalidateLoop: Future[void]
@@ -33,6 +33,10 @@ const
   lookupInterval = 60.seconds ## Interval of launching a random lookup to
   ## populate the routing table. go-ethereum seems to do 3 runs every 30
   ## minutes. Trinity starts one every minute.
+  handshakeTimeout* = 2.seconds ## timeout for the reply on the
+  ## whoareyou message
+  responseTimeout* = 2.seconds ## timeout for the response of a request-response
+  ## call
 
 proc whoareyouMagic(toNode: NodeId): array[32, byte] =
   const prefix = "WHOAREYOU"
@@ -70,10 +74,6 @@ proc send(d: Protocol, a: Address, data: seq[byte]) =
 proc send(d: Protocol, n: Node, data: seq[byte]) =
   d.send(n.node.address, data)
 
-proc randomBytes(v: var openarray[byte]) =
-  if nimcrypto.randomBytes(v) != v.len:
-    raise newException(RandomSourceDepleted, "Could not randomize bytes") # TODO:
-
 proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =
   for i in 0 .. a.high:
     result[i] = a[i] xor b[i]
@@ -89,15 +89,22 @@ proc decodeWhoAreYou(d: Protocol, msg: Bytes): Whoareyou =
 proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: array[12, byte]) =
   trace "sending who are you", to = $toNode, toAddress = $address
   let challenge = Whoareyou(authTag: authTag, recordSeq: 1)
-  randomBytes(challenge.idNonce)
-  # In case a handshake is already going on for this node, this will overwrite
-  # that one and an incoming response will fail.
-  # TODO: What is the better approach, overwrite or keep the first one until
-  # purged due to timeout (or keep both by using toNode + idNonce as key)?
-  d.codec.handshakes[$toNode] = challenge
-  var data = @(whoareyouMagic(toNode))
-  data.add(rlp.encode(challenge[]))
-  d.send(address, data)
+  encoding.randomBytes(challenge.idNonce)
+  # If there is already a handshake going on for this nodeid then we drop this
+  # new one. Handshake will get cleaned up after `handshakeTimeout`.
+  # If instead overwriting the handshake would be allowed, the handshake timeout
+  # will need to be canceled each time.
+  # TODO: could also clean up handshakes in a seperate call, e.g. triggered in
+  # a loop.
+  if not d.codec.handshakes.hasKeyOrPut($toNode, challenge):
+    sleepAsync(handshakeTimeout).addCallback() do(data: pointer):
+      # TODO: should we still provide cancellation in case handshake completes
+      # correctly?
+      d.codec.handshakes.del($toNode)
+
+    var data = @(whoareyouMagic(toNode))
+    data.add(rlp.encode(challenge[]))
+    d.send(address, data)
 
 proc sendNodes(d: Protocol, toNode: Node, reqId: RequestId, nodes: openarray[Node]) =
   proc sendNodes(d: Protocol, toNode: Node, packet: NodesPacket, reqId: RequestId) {.nimcall.} =
@@ -137,7 +144,7 @@ proc handleFindNode(d: Protocol, fromNode: Node, fn: FindNodePacket, reqId: Requ
     let distance = min(fn.distance, 256)
     d.sendNodes(fromNode, reqId, d.routingTable.neighboursAtDistance(distance))
 
-proc receive(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
+proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
   raises: [
     Defect,
     # TODO This is now coming from Chronos's callSoon
@@ -201,13 +208,13 @@ proc receive(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
       debug "Could not decode packet, respond with whoareyou",
         localNode = d.localNode, address = a
       d.sendWhoareyou(a, sender, authTag)
-      # No Whoareyou in case it is a Handshake Failure
+    # No Whoareyou in case it is a Handshake Failure
 
 proc waitPacket(d: Protocol, fromNode: Node, reqId: RequestId): Future[Option[Packet]] =
   result = newFuture[Option[Packet]]("waitPacket")
   let res = result
   let key = (fromNode, reqId)
-  sleepAsync(1000).addCallback() do(data: pointer):
+  sleepAsync(responseTimeout).addCallback() do(data: pointer):
     d.awaitedPackets.del(key)
     if not res.finished:
       res.complete(none(Packet))
@@ -298,9 +305,11 @@ proc lookup*(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
         if result.len < BUCKET_SIZE:
           result.add(n)
 
-proc lookupRandom*(p: Protocol): Future[seq[Node]] {.raises:[Defect, Exception].} =
+proc lookupRandom*(p: Protocol): Future[seq[Node]]
+    {.raises:[RandomSourceDepleted, Defect, Exception].} =
   var id: NodeId
-  discard randomBytes(addr id, sizeof(id))
+  if randomBytes(addr id, sizeof(id)) != sizeof(id):
+    raise newException(RandomSourceDepleted, "Could not randomize bytes")
   p.lookup(id)
 
 proc processClient(transp: DatagramTransport,

@@ -1,7 +1,7 @@
 import
-  random, unittest, chronos, sequtils, chronicles,
-  eth/keys, eth/p2p/enode, eth/trie/db,
-  eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table],
+  random, unittest, chronos, sequtils, chronicles, tables,
+  eth/[keys, rlp], eth/p2p/enode, eth/trie/db,
+  eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./p2p_test_helper
 
@@ -25,8 +25,7 @@ suite "Discovery v5 Tests":
   asyncTest "Random nodes":
     let
       bootNodeKey = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")
-      bootNodeAddr = localAddress(20301)
-      bootNode = initDiscoveryNode(bootNodeKey, bootNodeAddr, @[])
+      bootNode = initDiscoveryNode(bootNodeKey, localAddress(20301), @[])
 
     let nodeKeys = [
         initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618"),
@@ -58,10 +57,7 @@ suite "Discovery v5 Tests":
     const
       nodeCount = 17
 
-    let
-      bootNodeKey = newPrivateKey()
-      bootNodeAddr = localAddress(20301)
-      bootNode = initDiscoveryNode(bootNodeKey, bootNodeAddr, @[])
+    let bootNode = initDiscoveryNode(newPrivateKey(), localAddress(20301), @[])
 
     var nodes = newSeqOfCap[discv5_protocol.Protocol](nodeCount)
     nodes.add(bootNode)
@@ -78,3 +74,38 @@ suite "Discovery v5 Tests":
 
     for node in nodes:
       await node.closeWait()
+
+  asyncTest "Handshakes":
+    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
+
+    # Creating a random packet with different nodeid each time
+    proc randomPacket(): seq[byte] =
+      var
+        tag: array[32, byte]
+        authTag: array[12, byte]
+        msg: array[44, byte]
+
+      randomBytes(tag)
+      randomBytes(authTag)
+      randomBytes(msg)
+      result.add(tag)
+      result.add(rlp.encode(authTag))
+      result.add(msg)
+
+    let a = localAddress(20303)
+    for i in 0 ..< 5:
+      node.receive(a, randomPacket())
+
+    check node.codec.handshakes.len == 5
+    await sleepAsync(handshakeTimeout)
+    # Checking handshake cleanup
+    check node.codec.handshakes.len == 0
+
+    let packet = randomPacket()
+    for i in 0 ..< 5:
+      node.receive(a, packet)
+
+    # Checking handshake duplicates
+    check node.codec.handshakes.len == 1
+
+    await node.closeWait()

@@ -42,7 +42,7 @@ type
 const
   gcmTagSize = 16
 
-proc randomBytes(v: var openarray[byte]) =
+proc randomBytes*(v: var openarray[byte]) =
   if nimcrypto.randomBytes(v) != v.len:
     raise newException(RandomSourceDepleted, "Could not randomize bytes")
 
@@ -286,7 +286,7 @@ proc decodeEncrypted*(c: var Codec,
 
 proc newRequestId*(): RequestId =
   if randomBytes(addr result, sizeof(result)) != sizeof(result):
-    raise newException(RandomSourceDepleted, "Could not randomize bytes") # TODO:
+    raise newException(RandomSourceDepleted, "Could not randomize bytes")
 
 proc numFields(T: typedesc): int =
   for k, v in fieldPairs(default(T)): inc result
