@@ -100,11 +100,13 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthT
   # will need to be canceled each time.
   # TODO: could also clean up handshakes in a seperate call, e.g. triggered in
   # a loop.
-  if not d.codec.handshakes.hasKeyOrPut($toNode, challenge):
+  # Use toNode + address to make it more difficult for an attacker to occupy
+  # the handshake of another node.
+  if not d.codec.handshakes.hasKeyOrPut($toNode & $address, challenge):
     sleepAsync(handshakeTimeout).addCallback() do(data: pointer):
       # TODO: should we still provide cancellation in case handshake completes
       # correctly?
-      d.codec.handshakes.del($toNode)
+      d.codec.handshakes.del($toNode & $address)
 
     var data = @(whoareyouMagic(toNode))
     data.add(rlp.encode(challenge[]))

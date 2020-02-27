@@ -25,7 +25,7 @@ type
     localNode*: Node
     privKey*: PrivateKey
     db*: Database
-    handshakes*: Table[string, Whoareyou] # TODO: Implement hash for NodeID
+    handshakes*: Table[string, Whoareyou] # TODO: Implement type & hash for NodeID + address
 
   HandshakeSecrets = object
     writeKey: AesKey
@@ -247,7 +247,7 @@ proc decodeEncrypted*(c: var Codec,
     auth = r.read(AuthHeader)
     authTag = auth.auth
 
-    let challenge = c.handshakes.getOrDefault($fromId)
+    let challenge = c.handshakes.getOrDefault($fromId & $fromAddr)
     if challenge.isNil:
       trace "Decoding failed (no challenge)"
       return HandshakeError
@@ -260,7 +260,7 @@ proc decodeEncrypted*(c: var Codec,
     if not c.decodeAuthResp(fromId, auth, challenge, sec, newNode):
       trace "Decoding failed (bad auth)"
       return HandshakeError
-    c.handshakes.del($fromId)
+    c.handshakes.del($fromId & $fromAddr)
 
     # Swap keys to match remote
     swap(sec.readKey, sec.writeKey)
