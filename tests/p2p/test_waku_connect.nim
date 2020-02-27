@@ -15,6 +15,18 @@ import
 const
   safeTTL = 5'u32
   waitInterval = messageInterval + 150.milliseconds
+  conditionTimeoutMs = 3000
+
+# check on a condition until true or return a future containing false
+# if timeout expires first
+proc eventually(timeout: int, condition: proc(): bool): Future[bool] =
+  let wrappedCondition = proc(): Future[bool] {.async.} =
+    let f = newFuture[bool]()
+    while not condition():
+      await sleepAsync(100.milliseconds)
+    f.complete(true)
+    return await f
+  return withTimeout(wrappedCondition(), timeout)
 
 # TODO: Just repeat all the test_shh_connect tests here that are applicable or
 # have some commonly shared test code for both protocols.
@@ -141,21 +153,27 @@ suite "Waku connections":
         peer.state(Waku).bloom == bloom
         peer.state(Waku).topics == some(topics)
 
+    let hasBloomNodeConnectedCondition = proc(): bool = wakuBloomNode.peerPool.len == 1
+    # wait for the peer to be connected on the other side
+    let hasBloomNodeConnected = await eventually(conditionTimeoutMs, hasBloomNodeConnectedCondition)
+    # check bloom filter is updated
+    check:
+      hasBloomNodeConnected
+
     # disable one bit in the bloom filter
     bloom[0] = 0x0
 
     # and set it
     await setBloomFilter(wakuBloomNode, bloom)
-    await sleepAsync(waitInterval)
 
+    let bloomFilterUpdatedCondition = proc(): bool =
+      for peer in wakuNode.peerPool.peers:
+        return peer.state(Waku).bloom == bloom and peer.state(Waku).topics == none(seq[Topic])
+
+    let bloomFilterUpdated = await eventually(conditionTimeoutMs, bloomFilterUpdatedCondition)
     # check bloom filter is updated
     check:
-      wakuNode.peerPool.len == 1
-
-    for peer in wakuNode.peerPool.peers:
-      check:
-        peer.state(Waku).bloom == bloom
-        peer.state(Waku).topics == none(seq[Topic])
+      bloomFilterUpdated
 
   asyncTest "Waku topic-interest":
     var
@@ -179,9 +197,10 @@ suite "Waku connections":
       wakuNode.postMessage(ttl = safeTTL, topic = topic2, payload = payload)
       wakuNode.postMessage(ttl = safeTTL, topic = wrongTopic, payload = payload)
       wakuNode.protocolState(Waku).queue.items.len == 3
-    await sleepAsync(waitInterval)
+
+    let response = await eventually(conditionTimeoutMs, proc (): bool = wakuTopicNode.protocolState(Waku).queue.items.len == 2)
     check:
-      wakuTopicNode.protocolState(Waku).queue.items.len == 2
+      response
 
   asyncTest "Waku topic-interest versus bloom filter":
     var
