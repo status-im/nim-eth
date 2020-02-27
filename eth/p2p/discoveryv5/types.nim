@@ -2,12 +2,18 @@ import
   hashes, stint,
   ../enode, enr
 
+const
+  authTagSize* = 12
+  idNonceSize* = 32
+
 type
   NodeId* = UInt256
+  AuthTag* = array[authTagSize, byte]
+  IdNonce* = array[idNonceSize, byte]
 
   WhoareyouObj* = object
-    authTag*: array[12, byte]
-    idNonce*: array[32, byte]
+    authTag*: AuthTag
+    idNonce*: IdNonce
     recordSeq*: uint64
 
   Whoareyou* = ref WhoareyouObj

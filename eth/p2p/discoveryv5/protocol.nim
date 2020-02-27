@@ -8,14 +8,29 @@ import nimcrypto except toHex
 logScope:
   topics = "discv5"
 
+const
+  alpha = 3 ## Kademlia concurrency factor
+  lookupRequestLimit = 3
+  findNodeResultLimit = 15 # applies in FINDNODE handler
+  maxNodesPerPacket = 3
+  lookupInterval = 60.seconds ## Interval of launching a random lookup to
+  ## populate the routing table. go-ethereum seems to do 3 runs every 30
+  ## minutes. Trinity starts one every minute.
+  handshakeTimeout* = 2.seconds ## timeout for the reply on the
+  ## whoareyou message
+  responseTimeout* = 2.seconds ## timeout for the response of a request-response
+  ## call
+  magicSize = 32 ## size of the magic which is the start of the whoareyou
+  ## message
+
 type
   Protocol* = ref object
     transp: DatagramTransport
     localNode*: Node
     privateKey: PrivateKey
-    whoareyouMagic: array[32, byte]
+    whoareyouMagic: array[magicSize, byte]
     idHash: array[32, byte]
-    pendingRequests: Table[array[12, byte], PendingRequest]
+    pendingRequests: Table[AuthTag, PendingRequest]
     db: Database
     routingTable: RoutingTable
     codec*: Codec
@@ -27,18 +42,7 @@ type
     node: Node
     packet: seq[byte]
 
-const
-  lookupRequestLimit = 3
-  findNodeResultLimit = 15 # applies in FINDNODE handler
-  lookupInterval = 60.seconds ## Interval of launching a random lookup to
-  ## populate the routing table. go-ethereum seems to do 3 runs every 30
-  ## minutes. Trinity starts one every minute.
-  handshakeTimeout* = 2.seconds ## timeout for the reply on the
-  ## whoareyou message
-  responseTimeout* = 2.seconds ## timeout for the response of a request-response
-  ## call
-
-proc whoareyouMagic(toNode: NodeId): array[32, byte] =
+proc whoareyouMagic(toNode: NodeId): array[magicSize, byte] =
   const prefix = "WHOAREYOU"
   var data: array[prefix.len + sizeof(toNode), byte]
   data[0 .. sizeof(toNode) - 1] = toNode.toByteArrayBE()
@@ -80,13 +84,13 @@ proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =
 
 proc isWhoAreYou(d: Protocol, msg: Bytes): bool =
   if msg.len > d.whoareyouMagic.len:
-    result = d.whoareyouMagic == msg.toOpenArray(0, 31)
+    result = d.whoareyouMagic == msg.toOpenArray(0, magicSize - 1)
 
 proc decodeWhoAreYou(d: Protocol, msg: Bytes): Whoareyou =
   result = Whoareyou()
-  result[] = rlp.decode(msg.toRange[32 .. ^1], WhoareyouObj)
+  result[] = rlp.decode(msg.toRange[magicSize .. ^1], WhoareyouObj)
 
-proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: array[12, byte]) =
+proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthTag) =
   trace "sending who are you", to = $toNode, toAddress = $address
   let challenge = Whoareyou(authTag: authTag, recordSeq: 1)
   encoding.randomBytes(challenge.idNonce)
@@ -110,8 +114,6 @@ proc sendNodes(d: Protocol, toNode: Node, reqId: RequestId, nodes: openarray[Nod
   proc sendNodes(d: Protocol, toNode: Node, packet: NodesPacket, reqId: RequestId) {.nimcall.} =
     let (data, _) = d.codec.encodeEncrypted(toNode, encodePacket(packet, reqId), challenge = nil)
     d.send(toNode, data)
-
-  const maxNodesPerPacket = 3
 
   var packet: NodesPacket
   packet.total = ceil(nodes.len / maxNodesPerPacket).uint32
@@ -156,7 +158,7 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
     EthKeysException,
     Secp256k1Exception,
   ].} =
-  if msg.len < 32:
+  if msg.len < tagSize: # or magicSize, can be either
     return # Invalid msg
 
   # debug "Packet received: ", length = msg.len
@@ -175,12 +177,12 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
               "due to randomness source depletion."
 
   else:
-    var tag: array[32, byte]
-    tag[0 .. ^1] = msg.toOpenArray(0, 31)
+    var tag: array[tagSize, byte]
+    tag[0 .. ^1] = msg.toOpenArray(0, tagSize - 1)
     let senderData = tag xor d.idHash
     let sender = readUintBE[256](senderData)
 
-    var authTag: array[12, byte]
+    var authTag: AuthTag
     var node: Node
     var packet: Packet
     let decoded = d.codec.decodeEncrypted(sender, a, msg, authTag, node, packet)
@@ -277,8 +279,6 @@ proc lookup*(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
   var seen = asked
   for node in result:
     seen.incl(node.id)
-
-  const alpha = 3 # Kademlia concurrency factor
 
   var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
 
