@@ -21,6 +21,18 @@ proc nodeIdInNodes(id: NodeId, nodes: openarray[Node]): bool =
   for n in nodes:
     if id == n.id: return true
 
+# Creating a random packet with specific nodeid each time
+proc randomPacket(tag: PacketTag): seq[byte] =
+  var
+    authTag: AuthTag
+    msg: array[44, byte]
+
+  randomBytes(authTag)
+  randomBytes(msg)
+  result.add(tag)
+  result.add(rlp.encode(authTag))
+  result.add(msg)
+
 suite "Discovery v5 Tests":
   asyncTest "Random nodes":
     let
@@ -75,37 +87,49 @@ suite "Discovery v5 Tests":
     for node in nodes:
       await node.closeWait()
 
-  asyncTest "Handshakes":
+  asyncTest "Handshake cleanup":
     let node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
-
-    # Creating a random packet with different nodeid each time
-    proc randomPacket(): seq[byte] =
-      var
-        tag: array[32, byte]
-        authTag: array[12, byte]
-        msg: array[44, byte]
-
-      randomBytes(tag)
-      randomBytes(authTag)
-      randomBytes(msg)
-      result.add(tag)
-      result.add(rlp.encode(authTag))
-      result.add(msg)
-
+    var tag: PacketTag
     let a = localAddress(20303)
-    for i in 0 ..< 5:
-      node.receive(a, randomPacket())
 
+    for i in 0 ..< 5:
+      randomBytes(tag)
+      node.receive(a, randomPacket(tag))
+
+    # Checking different nodeIds but same address
     check node.codec.handshakes.len == 5
+    # TODO: Could get rid of the sleep by storing the timeout future of the
+    # handshake
     await sleepAsync(handshakeTimeout)
     # Checking handshake cleanup
     check node.codec.handshakes.len == 0
 
-    let packet = randomPacket()
+    await node.closeWait()
+
+  asyncTest "Handshake different address":
+    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
+    var tag: PacketTag
+
     for i in 0 ..< 5:
-      node.receive(a, packet)
+      let a = localAddress(20303 + i)
+      node.receive(a, randomPacket(tag))
+
+    check node.codec.handshakes.len == 5
+
+    await node.closeWait()
+
+  asyncTest "Handshake duplicates":
+    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
+    var tag: PacketTag
+    let a = localAddress(20303)
+
+    for i in 0 ..< 5:
+      node.receive(a, randomPacket(tag))
 
     # Checking handshake duplicates
     check node.codec.handshakes.len == 1
+
+    # TODO: add check that gets the Whoareyou value and checks if its authTag
+    # is that of the first packet.
 
     await node.closeWait()

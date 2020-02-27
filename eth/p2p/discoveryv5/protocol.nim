@@ -102,11 +102,13 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthT
   # a loop.
   # Use toNode + address to make it more difficult for an attacker to occupy
   # the handshake of another node.
-  if not d.codec.handshakes.hasKeyOrPut($toNode & $address, challenge):
+
+  let key = HandShakeKey(nodeId: toNode, address: $address)
+  if not d.codec.handshakes.hasKeyOrPut(key, challenge):
     sleepAsync(handshakeTimeout).addCallback() do(data: pointer):
       # TODO: should we still provide cancellation in case handshake completes
       # correctly?
-      d.codec.handshakes.del($toNode & $address)
+      d.codec.handshakes.del(key)
 
     var data = @(whoareyouMagic(toNode))
     data.add(rlp.encode(challenge[]))

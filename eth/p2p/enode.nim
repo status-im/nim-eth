@@ -160,3 +160,8 @@ proc `$`*(n: ENode): string =
     result.add("?")
     result.add("discport=")
     result.add($int(n.address.udpPort))
+
+proc `$`*(a: Address): string =
+  result.add($a.ip)
+  result.add(":" & $a.udpPort)
+  result.add(":" & $a.tcpPort)

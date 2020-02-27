@@ -8,13 +8,12 @@ const
   authSchemeName* = "gcm"
   gcmNonceSize* = 12
   gcmTagSize = 16
-  aesKeySize* = 128 div 8
   tagSize* = 32 ## size of the tag where each message (except whoareyou) starts
   ## with
 
 type
-  AesKey = array[aesKeySize, byte]
-  PacketTag = array[tagSize, byte]
+
+  PacketTag* = array[tagSize, byte]
 
   AuthResponse = object
     version: int
@@ -25,7 +24,7 @@ type
     localNode*: Node
     privKey*: PrivateKey
     db*: Database
-    handshakes*: Table[string, Whoareyou] # TODO: Implement type & hash for NodeID + address
+    handshakes*: Table[HandShakeKey, Whoareyou]
 
   HandshakeSecrets = object
     writeKey: AesKey
@@ -247,7 +246,8 @@ proc decodeEncrypted*(c: var Codec,
     auth = r.read(AuthHeader)
     authTag = auth.auth
 
-    let challenge = c.handshakes.getOrDefault($fromId & $fromAddr)
+    let key = HandShakeKey(nodeId: fromId, address: $fromAddr)
+    let challenge = c.handshakes.getOrDefault(key)
     if challenge.isNil:
       trace "Decoding failed (no challenge)"
       return HandshakeError
@@ -260,7 +260,7 @@ proc decodeEncrypted*(c: var Codec,
     if not c.decodeAuthResp(fromId, auth, challenge, sec, newNode):
       trace "Decoding failed (bad auth)"
       return HandshakeError
-    c.handshakes.del($fromId & $fromAddr)
+    c.handshakes.del(key)
 
     # Swap keys to match remote
     swap(sec.readKey, sec.writeKey)
@@ -272,7 +272,7 @@ proc decodeEncrypted*(c: var Codec,
     # Message packet or random packet - rlp bytes (size 12) indicates auth-tag
     authTag = r.read(AuthTag)
     auth.auth = authTag
-    var writeKey: array[aesKeySize, byte]
+    var writeKey: AesKey
     if not c.db.loadKeys(fromId, fromAddr, readKey, writeKey):
       trace "Decoding failed (no keys)"
       return PacketError

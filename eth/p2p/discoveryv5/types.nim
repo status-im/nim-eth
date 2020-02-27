@@ -5,11 +5,17 @@ import
 const
   authTagSize* = 12
   idNonceSize* = 32
+  aesKeySize* = 128 div 8
 
 type
   NodeId* = UInt256
   AuthTag* = array[authTagSize, byte]
   IdNonce* = array[idNonceSize, byte]
+  AesKey* = array[aesKeySize, byte]
+
+  HandshakeKey* = object
+    nodeId*: NodeId
+    address*: string # TODO: Replace with Address, need hash
 
   WhoareyouObj* = object
     authTag*: AuthTag
@@ -75,12 +81,23 @@ template packetKind*(T: typedesc[SomePacket]): PacketKind =
   elif T is FindNodePacket: findNode
   elif T is NodesPacket: nodes
 
-method storeKeys*(db: Database, id: NodeId, address: Address, r, w: array[16, byte]): bool {.base, raises: [Defect].} = discard
+method storeKeys*(db: Database, id: NodeId, address: Address, r, w: AesKey):
+    bool {.base, raises: [Defect].} = discard
 
-method loadKeys*(db: Database, id: NodeId, address: Address, r, w: var array[16, byte]): bool {.base, raises: [Defect].} = discard
+method loadKeys*(db: Database, id: NodeId, address: Address, r, w: var AesKey):
+    bool {.base, raises: [Defect].} = discard
 
 proc toBytes*(id: NodeId): array[32, byte] {.inline.} =
   id.toByteArrayBE()
 
 proc hash*(id: NodeId): Hash {.inline.} =
-  hashData(unsafeAddr id, sizeof(id))
+  result = hashData(unsafeAddr id, sizeof(id))
+
+# TODO: To make this work I think we also need to implement `==` due to case
+# fields in object
+proc hash*(address: Address): Hash {.inline.} =
+  hashData(unsafeAddr address, sizeof(address))
+
+proc hash*(key: HandshakeKey): Hash =
+  result = key.nodeId.hash !& key.address.hash
+  result = !$result
