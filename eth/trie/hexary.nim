@@ -386,7 +386,8 @@ proc replaceValue(data: Rlp, key: NibblesRange, value: BytesRange): Bytes =
 
   # XXX: This can be optimized to a direct bitwise copy of the source RLP
   var iter = data
-  iter.enterList()
+  # We already know that we are working with a list
+  discard iter.enterList()
   for i in 0 ..< 16:
     r.append iter
     iter.skipElem
@@ -511,7 +512,8 @@ proc deleteAt(self: var HexaryTrie;
       else:
         var rlpRes = initRlpList(17)
         var iter = origRlp
-        iter.enterList
+        # We already know that we are working with a list
+        discard iter.enterList
         for i in 0 ..< 16:
           rlpRes.append iter
           iter.skipElem

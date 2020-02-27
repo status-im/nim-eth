@@ -242,10 +242,16 @@ proc currentElemEnd*(self: Rlp): int =
   elif isBlob() or isList():
     result += payloadOffset() + payloadBytesCount()
 
-proc enterList*(self: var Rlp) =
+proc enterList*(self: var Rlp): bool =
   if not isList():
-    raise newException(RlpTypeMismatch, "List expected, but source RLP is not a list")
+    return false
+
   position += payloadOffset()
+  return true
+
+proc tryEnterList*(self: var Rlp) =
+  if not enterList():
+    raise newException(RlpTypeMismatch, "List expected, but source RLP is not a list")
 
 proc skipElem*(rlp: var Rlp) =
   rlp.position = rlp.currentElemEnd

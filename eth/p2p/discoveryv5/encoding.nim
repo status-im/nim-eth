@@ -158,31 +158,42 @@ proc decryptGCM(key: array[16, byte], nonce, ct, authData: openarray[byte]): seq
     result = @[]
   dctx.clear()
 
-proc decodePacketBody(typ: byte, body: openarray[byte], res: var Packet): bool =
-  if typ >= PacketKind.low.byte and typ <= PacketKind.high.byte:
-    let kind = cast[PacketKind](typ)
-    res = Packet(kind: kind)
-    var rlp = rlpFromBytes(@body.toRange)
-    rlp.enterList()
+type
+  DecodePacketResult = enum
+    decodingSuccessful
+    invalidPacketPayload
+    invalidPacketType
+    unsupportedPacketType
+
+proc decodePacketBody(typ: byte,
+                      body: openarray[byte],
+                      res: var Packet): DecodePacketResult =
+  if typ < PacketKind.low.byte or typ > PacketKind.high.byte:
+    return invalidPacketType
+
+  let kind = cast[PacketKind](typ)
+  res = Packet(kind: kind)
+  var rlp = rlpFromBytes(@body.toRange)
+  if rlp.enterList:
     res.reqId = rlp.read(RequestId)
 
     proc decode[T](rlp: var Rlp, v: var T) {.inline, nimcall.} =
       for k, v in v.fieldPairs:
         v = rlp.read(typeof(v))
 
-    template decode(k: untyped) =
-      if k == kind:
-        decode(rlp, res.k)
-        result = true
+    case kind
+    of unused: return invalidPacketPayload
+    of ping: rlp.decode(res.ping)
+    of pong: rlp.decode(res.pong)
+    of findNode: rlp.decode(res.findNode)
+    of nodes: rlp.decode(res.nodes)
+    of regtopic, ticket, regconfirmation, topicquery:
+      # TODO Implement these packet types
+      return unsupportedPacketType
 
-    decode(ping)
-    decode(pong)
-    decode(findNode)
-    decode(nodes)
+    return decodingSuccessful
   else:
-    debug "unknown packet type ", typ
-
-  return true
+    return invalidPacketPayload
 
 proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
     challenge: Whoareyou, secrets: var HandshakeSecrets, newNode: var Node): bool =
@@ -215,6 +226,8 @@ proc decodeEncrypted*(c: var Codec,
   var r = rlpFromBytes(input[32 .. ^1])
   var auth: AuthHeader
   var readKey: array[16, byte]
+  logScope: sender = $fromAddr
+
   if r.isList:
     # Handshake - rlp list indicates auth-header
 
@@ -258,7 +271,12 @@ proc decodeEncrypted*(c: var Codec,
 
   let body = decryptGCM(readKey, auth.auth, bodyEnc.toOpenArray, input[0 .. 31].toOpenArray)
   if body.len > 1:
-    result = decodePacketBody(body[0], body.toOpenArray(1, body.high), packet)
+    let status = decodePacketBody(body[0], body.toOpenArray(1, body.high), packet)
+    if status == decodingSuccessful:
+      return true
+    else:
+      debug "Failed to decode discovery packet", reason = status
+      return false
 
 proc newRequestId*(): RequestId =
   if randomBytes(addr result, sizeof(result)) != sizeof(result):

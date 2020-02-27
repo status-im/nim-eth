@@ -104,16 +104,18 @@ proc loadMessageStats*(network: LesNetwork,
 
     try:
       var statsRlp = rlpFromBytes(stats.toRange)
-      statsRlp.enterList
+      if not statsRlp.enterList:
+        notice "Found a corrupted LES stats record"
+        break readFromDB
 
       let version = statsRlp.read(int)
       if version != lesStatsVer:
-        notice "Found outdated LES stats record"
+        notice "Found an outdated LES stats record"
         break readFromDB
 
       statsRlp >> network.messageStats
       if network.messageStats.len <= les.messages[^1].id:
-        notice "Found incomplete LES stats record"
+        notice "Found an incomplete LES stats record"
         break readFromDB
 
       return true

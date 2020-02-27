@@ -195,7 +195,8 @@ proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]):
 proc verifySignature(r: Record): bool =
   var rlp = rlpFromBytes(r.raw.toRange)
   let sz = rlp.listLen
-  rlp.enterList()
+  if not rlp.enterList:
+    return false
   let sigData = rlp.read(Bytes)
   let content = block:
     var writer = initRlpList(sz - 1)
@@ -219,12 +220,16 @@ proc fromBytesAux(r: var Record): bool =
     return false
 
   var rlp = rlpFromBytes(r.raw.toRange)
+  if not rlp.isList:
+    return false
+
   let sz = rlp.listLen
   if sz < minRlpListLen or sz mod 2 != 0:
     # Wrong rlp object
     return false
 
-  rlp.enterList()
+  # We already know we are working with a list
+  discard rlp.enterList()
   rlp.skipElem() # Skip signature
 
   r.seqNum = rlp.read(uint64)
