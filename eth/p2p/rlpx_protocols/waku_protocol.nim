@@ -147,10 +147,18 @@ proc append*(rlpWriter: var RlpWriter, value: StatusOptions) =
   rlpWriter.append(rlpFromBytes(bytes.toRange))
 
 proc read*(rlp: var Rlp, T: typedesc[StatusOptions]): T =
+  if not rlp.isList():
+    raise newException(RlpTypeMismatch,
+      "List expected, but the source RLP is not a list.")
+
   let sz = rlp.listLen()
-  rlp.enterList()
+  # We already know that we are working with a list
+  discard rlp.enterList()
   for i in 0 ..< sz:
-    rlp.enterList()
+    if not rlp.enterList():
+      raise newException(RlpTypeMismatch,
+        "List expected, but the source RLP is not a list.")
+
     var k: KeyKind
     try:
       k = rlp.read(KeyKind)
