@@ -229,7 +229,7 @@ proc fromBytesAux(r: var Record): bool =
     return false
 
   # We already know we are working with a list
-  discard rlp.enterList()
+  doAssert rlp.enterList()
   rlp.skipElem() # Skip signature
 
   r.seqNum = rlp.read(uint64)

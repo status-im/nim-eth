@@ -153,11 +153,9 @@ proc read*(rlp: var Rlp, T: typedesc[StatusOptions]): T =
 
   let sz = rlp.listLen()
   # We already know that we are working with a list
-  discard rlp.enterList()
+  doAssert rlp.enterList()
   for i in 0 ..< sz:
-    if not rlp.enterList():
-      raise newException(RlpTypeMismatch,
-        "List expected, but the source RLP is not a list.")
+    rlp.tryEnterList()
 
     var k: KeyKind
     try:
