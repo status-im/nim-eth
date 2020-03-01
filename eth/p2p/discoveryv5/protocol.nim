@@ -363,6 +363,8 @@ proc revalidateLoop(p: Protocol) {.async.} =
       await sleepAsync(rand(10 * 1000).milliseconds)
       let n = p.routingTable.nodeToRevalidate()
       if not n.isNil:
+        # TODO: Should we do these in parallel and/or async to be certain of how
+        # often nodes are revalidated?
         await p.revalidateNode(n)
   except CancelledError:
     trace "revalidateLoop canceled"

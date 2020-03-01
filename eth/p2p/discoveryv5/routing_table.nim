@@ -239,6 +239,7 @@ proc randomNodes*(r: RoutingTable, count: int): seq[Node] =
   # insignificant compared to the time it takes for the network roundtrips when connecting
   # to nodes.
   while len(seen) < count:
+    # TODO: Is it important to get a better random source for these sample calls?
     let bucket = sample(r.buckets)
     if bucket.nodes.len != 0:
       let node = sample(bucket.nodes)
