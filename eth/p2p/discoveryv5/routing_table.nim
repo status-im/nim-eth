@@ -62,13 +62,13 @@ proc add(k: KBucket, n: Node): Node =
   k.lastUpdated = epochTime()
   let nodeIdx = k.nodes.find(n)
   if nodeIdx != -1:
-      k.nodes.delete(nodeIdx)
-      k.nodes.add(n)
+    k.nodes.delete(nodeIdx)
+    k.nodes.add(n)
   elif k.len < BUCKET_SIZE:
-      k.nodes.add(n)
+    k.nodes.add(n)
   else:
-      k.replacementCache.add(n)
-      return k.head
+    k.replacementCache.add(n)
+    return k.head
   return nil
 
 proc removeNode(k: KBucket, n: Node) =
@@ -130,6 +130,7 @@ proc computeSharedPrefixBits(nodes: openarray[Node]): int =
 proc init*(r: var RoutingTable, thisNode: Node) {.inline.} =
   r.thisNode = thisNode
   r.buckets = @[newKBucket(0.u256, high(Uint256))]
+  randomize() # for later `randomNodes` selection
 
 proc splitBucket(r: var RoutingTable, index: int) =
   let bucket = r.buckets[index]
@@ -180,10 +181,10 @@ proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
   result = newSeqOfCap[Node](k * 2)
   for bucket in r.bucketsByDistanceTo(id):
     for n in bucket.nodesByDistanceTo(id):
-      if n.id != id:
-        result.add(n)
-        if result.len == k * 2:
-          break
+      result.add(n)
+      if result.len == k * 2:
+        break
+
   result = sortedByIt(result, it.distanceTo(id))
   if result.len > k:
     result.setLen(k)
@@ -215,7 +216,7 @@ proc setJustSeen*(r: RoutingTable, n: Node) =
   b.nodes[0] = n
   b.lastUpdated = epochTime()
 
-proc nodeToRevalidate*(r: RoutingTable): Node =
+proc nodeToRevalidate*(r: RoutingTable): Node {.raises:[].} =
   var buckets = r.buckets
   shuffle(buckets)
   # TODO: Should we prioritize less-recently-updated buckets instead?
@@ -238,6 +239,7 @@ proc randomNodes*(r: RoutingTable, count: int): seq[Node] =
   # insignificant compared to the time it takes for the network roundtrips when connecting
   # to nodes.
   while len(seen) < count:
+    # TODO: Is it important to get a better random source for these sample calls?
     let bucket = sample(r.buckets)
     if bucket.nodes.len != 0:
       let node = sample(bucket.nodes)

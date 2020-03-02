@@ -27,7 +27,8 @@ proc makeKey(id: NodeId, address: Address): array[keySize, byte] =
     copyMem(addr result[sizeof(id) + 1], unsafeAddr address.ip.address_v6, sizeof(address.ip.address_v6))
   copyMem(addr result[sizeof(id) + 1 + sizeof(address.ip.address_v6)], unsafeAddr address.udpPort, sizeof(address.udpPort))
 
-method storeKeys*(db: DiscoveryDB, id: NodeId, address: Address, r, w: array[16, byte]): bool {.raises: [Defect].} =
+method storeKeys*(db: DiscoveryDB, id: NodeId, address: Address, r, w: AesKey):
+    bool {.raises: [Defect].} =
   try:
     var value: array[sizeof(r) + sizeof(w), byte]
     value[0 .. 15] = r
@@ -37,7 +38,8 @@ method storeKeys*(db: DiscoveryDB, id: NodeId, address: Address, r, w: array[16,
   except CatchableError:
     return false
 
-method loadKeys*(db: DiscoveryDB, id: NodeId, address: Address, r, w: var array[16, byte]): bool {.raises: [Defect].} =
+method loadKeys*(db: DiscoveryDB, id: NodeId, address: Address, r, w: var AesKey):
+    bool {.raises: [Defect].} =
   try:
     let res = db.backend.get(makeKey(id, address))
     if res.len != sizeof(r) + sizeof(w):

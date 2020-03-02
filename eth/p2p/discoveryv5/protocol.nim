@@ -1,36 +1,48 @@
 import
   std/[tables, sets, endians, options, math, random],
-  stew/byteutils, eth/[rlp, keys], chronicles, chronos, stint,
-  ../enode, types, encoding, node, routing_table, enr
+  json_serialization/std/net, stew/byteutils, chronicles, chronos, stint,
+  eth/[rlp, keys], ../enode, types, encoding, node, routing_table, enr
 
 import nimcrypto except toHex
 
 logScope:
   topics = "discv5"
 
+const
+  alpha = 3 ## Kademlia concurrency factor
+  lookupRequestLimit = 3
+  findNodeResultLimit = 15 # applies in FINDNODE handler
+  maxNodesPerPacket = 3
+  lookupInterval = 60.seconds ## Interval of launching a random lookup to
+  ## populate the routing table. go-ethereum seems to do 3 runs every 30
+  ## minutes. Trinity starts one every minute.
+  handshakeTimeout* = 2.seconds ## timeout for the reply on the
+  ## whoareyou message
+  responseTimeout* = 2.seconds ## timeout for the response of a request-response
+  ## call
+  magicSize = 32 ## size of the magic which is the start of the whoareyou
+  ## message
+
 type
   Protocol* = ref object
     transp: DatagramTransport
     localNode*: Node
     privateKey: PrivateKey
-    whoareyouMagic: array[32, byte]
+    whoareyouMagic: array[magicSize, byte]
     idHash: array[32, byte]
-    pendingRequests: Table[array[12, byte], PendingRequest]
+    pendingRequests: Table[AuthTag, PendingRequest]
     db: Database
     routingTable: RoutingTable
-    codec: Codec
+    codec*: Codec
     awaitedPackets: Table[(Node, RequestId), Future[Option[Packet]]]
+    lookupLoop: Future[void]
+    revalidateLoop: Future[void]
 
   PendingRequest = object
     node: Node
     packet: seq[byte]
 
-const
-  lookupRequestLimit = 15
-  findNodeResultLimit = 15 # applies in FINDNODE handler
-  findNodeAttempts = 3
-
-proc whoareyouMagic(toNode: NodeId): array[32, byte] =
+proc whoareyouMagic(toNode: NodeId): array[magicSize, byte] =
   const prefix = "WHOAREYOU"
   var data: array[prefix.len + sizeof(toNode), byte]
   data[0 .. sizeof(toNode) - 1] = toNode.toByteArrayBE()
@@ -55,9 +67,6 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
 
   result.routingTable.init(node)
 
-proc start*(p: Protocol) =
-  discard
-
 proc send(d: Protocol, a: Address, data: seq[byte]) =
   # debug "Sending bytes", amount = data.len, to = a
   let ta = initTAddress(a.ip, a.udpPort)
@@ -69,37 +78,46 @@ proc send(d: Protocol, a: Address, data: seq[byte]) =
 proc send(d: Protocol, n: Node, data: seq[byte]) =
   d.send(n.node.address, data)
 
-proc randomBytes(v: var openarray[byte]) =
-  if nimcrypto.randomBytes(v) != v.len:
-    raise newException(RandomSourceDepleted, "Could not randomize bytes") # TODO:
-
 proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =
   for i in 0 .. a.high:
     result[i] = a[i] xor b[i]
 
 proc isWhoAreYou(d: Protocol, msg: Bytes): bool =
   if msg.len > d.whoareyouMagic.len:
-    result = d.whoareyouMagic == msg.toOpenArray(0, 31)
+    result = d.whoareyouMagic == msg.toOpenArray(0, magicSize - 1)
 
 proc decodeWhoAreYou(d: Protocol, msg: Bytes): Whoareyou =
   result = Whoareyou()
-  result[] = rlp.decode(msg.toRange[32 .. ^1], WhoareyouObj)
+  result[] = rlp.decode(msg.toRange[magicSize .. ^1], WhoareyouObj)
 
-proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: array[12, byte]) =
+proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthTag) =
   trace "sending who are you", to = $toNode, toAddress = $address
   let challenge = Whoareyou(authTag: authTag, recordSeq: 1)
-  randomBytes(challenge.idNonce)
-  d.codec.handshakes[$toNode] = challenge
-  var data = @(whoareyouMagic(toNode))
-  data.add(rlp.encode(challenge[]))
-  d.send(address, data)
+  encoding.randomBytes(challenge.idNonce)
+  # If there is already a handshake going on for this nodeid then we drop this
+  # new one. Handshake will get cleaned up after `handshakeTimeout`.
+  # If instead overwriting the handshake would be allowed, the handshake timeout
+  # will need to be canceled each time.
+  # TODO: could also clean up handshakes in a seperate call, e.g. triggered in
+  # a loop.
+  # Use toNode + address to make it more difficult for an attacker to occupy
+  # the handshake of another node.
+
+  let key = HandShakeKey(nodeId: toNode, address: $address)
+  if not d.codec.handshakes.hasKeyOrPut(key, challenge):
+    sleepAsync(handshakeTimeout).addCallback() do(data: pointer):
+      # TODO: should we still provide cancellation in case handshake completes
+      # correctly?
+      d.codec.handshakes.del(key)
+
+    var data = @(whoareyouMagic(toNode))
+    data.add(rlp.encode(challenge[]))
+    d.send(address, data)
 
 proc sendNodes(d: Protocol, toNode: Node, reqId: RequestId, nodes: openarray[Node]) =
   proc sendNodes(d: Protocol, toNode: Node, packet: NodesPacket, reqId: RequestId) {.nimcall.} =
     let (data, _) = d.codec.encodeEncrypted(toNode, encodePacket(packet, reqId), challenge = nil)
     d.send(toNode, data)
-
-  const maxNodesPerPacket = 3
 
   var packet: NodesPacket
   packet.total = ceil(nodes.len / maxNodesPerPacket).uint32
@@ -132,7 +150,7 @@ proc handleFindNode(d: Protocol, fromNode: Node, fn: FindNodePacket, reqId: Requ
     let distance = min(fn.distance, 256)
     d.sendNodes(fromNode, reqId, d.routingTable.neighboursAtDistance(distance))
 
-proc receive(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
+proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
   raises: [
     Defect,
     # TODO This is now coming from Chronos's callSoon
@@ -144,12 +162,13 @@ proc receive(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
     EthKeysException,
     Secp256k1Exception,
   ].} =
-  if msg.len < 32:
+  if msg.len < tagSize: # or magicSize, can be either
     return # Invalid msg
 
   # debug "Packet received: ", length = msg.len
 
   if d.isWhoAreYou(msg):
+    trace "Received whoareyou", localNode = $d.localNode, address = a
     let whoareyou = d.decodeWhoAreYou(msg)
     var pr: PendingRequest
     if d.pendingRequests.take(whoareyou.authTag, pr):
@@ -162,20 +181,20 @@ proc receive(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
               "due to randomness source depletion."
 
   else:
-    var tag: array[32, byte]
-    tag[0 .. ^1] = msg.toOpenArray(0, 31)
+    var tag: array[tagSize, byte]
+    tag[0 .. ^1] = msg.toOpenArray(0, tagSize - 1)
     let senderData = tag xor d.idHash
     let sender = readUintBE[256](senderData)
 
-    var authTag: array[12, byte]
+    var authTag: AuthTag
     var node: Node
     var packet: Packet
-
-    if d.codec.decodeEncrypted(sender, a, msg, authTag, node, packet):
+    let decoded = d.codec.decodeEncrypted(sender, a, msg, authTag, node, packet)
+    if decoded == DecodeStatus.Success:
       if node.isNil:
         node = d.routingTable.getNode(sender)
       else:
-        debug "Adding new node to routing table"
+        debug "Adding new node to routing table", node = $node, localNode = $d.localNode
         discard d.routingTable.addNode(node)
 
       doAssert(not node.isNil, "No node in the routing table (internal error?)")
@@ -191,16 +210,17 @@ proc receive(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
           waiter.complete(packet.some)
         else:
           debug "TODO: handle packet: ", packet = packet.kind, origin = $node
-
-    else:
-      debug "Could not decode, respond with whoareyou"
+    elif decoded == DecodeStatus.PacketError:
+      debug "Could not decode packet, respond with whoareyou",
+        localNode = $d.localNode, address = a
       d.sendWhoareyou(a, sender, authTag)
+    # No Whoareyou in case it is a Handshake Failure
 
 proc waitPacket(d: Protocol, fromNode: Node, reqId: RequestId): Future[Option[Packet]] =
   result = newFuture[Option[Packet]]("waitPacket")
   let res = result
   let key = (fromNode, reqId)
-  sleepAsync(1000).addCallback() do(data: pointer):
+  sleepAsync(responseTimeout).addCallback() do(data: pointer):
     d.awaitedPackets.del(key)
     if not res.finished:
       res.complete(none(Packet))
@@ -243,16 +263,17 @@ proc lookupDistances(target, dest: NodeId): seq[uint32] =
 proc lookupWorker(p: Protocol, destNode: Node, target: NodeId): Future[seq[Node]] {.async.} =
   let dists = lookupDistances(target, destNode.id)
   var i = 0
-  while i < findNodeAttempts and result.len < findNodeResultLimit:
-    let r = await p.findNode(destNode, dists[i])
+  while i < lookupRequestLimit and result.len < findNodeResultLimit:
     # TODO: Handle failures
+    let r = await p.findNode(destNode, dists[i])
+    # TODO: I guess it makes sense to limit here also to `findNodeResultLimit`?
     result.add(r)
     inc i
 
   for n in result:
     discard p.routingTable.addNode(n)
 
-proc lookup(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
+proc lookup*(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # TODO: Sort the returned nodes on distance
@@ -262,8 +283,6 @@ proc lookup(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
   var seen = asked
   for node in result:
     seen.incl(node.id)
-
-  const alpha = 3 # Kademlia concurrency factor
 
   var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
 
@@ -275,13 +294,13 @@ proc lookup(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
         pendingQueries.add(p.lookupWorker(n, target))
       inc i
 
-    debug "discv5 pending queries", total = pendingQueries.len
+    trace "discv5 pending queries", total = pendingQueries.len
 
     if pendingQueries.len == 0:
       break
 
     let idx = await oneIndex(pendingQueries)
-    debug "Got discv5 lookup response", idx
+    trace "Got discv5 lookup response", idx
 
     let nodes = pendingQueries[idx].read
     pendingQueries.del(idx)
@@ -290,9 +309,11 @@ proc lookup(p: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
         if result.len < BUCKET_SIZE:
           result.add(n)
 
-proc lookupRandom*(p: Protocol): Future[seq[Node]] =
+proc lookupRandom*(p: Protocol): Future[seq[Node]]
+    {.raises:[RandomSourceDepleted, Defect, Exception].} =
   var id: NodeId
-  discard randomBytes(addr id, sizeof(id))
+  if randomBytes(addr id, sizeof(id)) != sizeof(id):
+    raise newException(RandomSourceDepleted, "Could not randomize bytes")
   p.lookup(id)
 
 proc processClient(transp: DatagramTransport,
@@ -312,7 +333,8 @@ proc processClient(transp: DatagramTransport,
     debug "Receive failed", exception = e.name, msg = e.msg,
       stacktrace = e.getStackTrace()
 
-proc revalidateNode(p: Protocol, n: Node) {.async.} =
+proc revalidateNode(p: Protocol, n: Node)
+    {.async, raises:[Defect, Exception].} = # TODO: Exception
   let reqId = newRequestId()
   var ping: PingPacket
   ping.enrSeq = p.localNode.record.seqNum
@@ -333,17 +355,58 @@ proc revalidateNode(p: Protocol, n: Node) {.async.} =
       p.routingTable.removeNode(n)
 
 proc revalidateLoop(p: Protocol) {.async.} =
-  while true:
-    await sleepAsync(rand(10 * 1000).milliseconds)
-    let n = p.routingTable.nodeToRevalidate()
-    if not n.isNil:
-      await p.revalidateNode(n)
+  try:
+    # TODO: We need to handle actual errors still, which might just allow to
+    # continue the loop. However, currently `revalidateNode` raises a general
+    # `Exception` making this rather hard.
+    while true:
+      await sleepAsync(rand(10 * 1000).milliseconds)
+      let n = p.routingTable.nodeToRevalidate()
+      if not n.isNil:
+        # TODO: Should we do these in parallel and/or async to be certain of how
+        # often nodes are revalidated?
+        await p.revalidateNode(n)
+  except CancelledError:
+    trace "revalidateLoop canceled"
+
+proc lookupLoop(d: Protocol) {.async.} =
+  ## TODO: Same story as for `revalidateLoop`
+  try:
+    while true:
+      let nodes = await d.lookupRandom()
+      trace "Discovered nodes", nodes = $nodes
+      await sleepAsync(lookupInterval)
+  except CancelledError:
+    trace "lookupLoop canceled"
 
 proc open*(d: Protocol) =
+  debug "Starting discovery node", node = $d.localNode
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(IPv4_any(), d.localNode.node.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
-  asyncCheck d.revalidateLoop() # TODO: This loop has to be terminated on close()
+  # Might want to move these to a separate proc if this turns out to be needed.
+  d.lookupLoop = lookupLoop(d)
+  d.revalidateLoop = revalidateLoop(d)
+
+proc close*(d: Protocol) =
+  doAssert(not d.lookupLoop.isNil() or not d.revalidateLoop.isNil())
+  doAssert(not d.transp.closed)
+
+  debug "Closing discovery node", node = $d.localNode
+  d.revalidateLoop.cancel()
+  d.lookupLoop.cancel()
+  # TODO: unsure if close can't create issues in the not awaited cancellations
+  # above
+  d.transp.close()
+
+proc closeWait*(d: Protocol) {.async.} =
+  doAssert(not d.lookupLoop.isNil() or not d.revalidateLoop.isNil())
+  doAssert(not d.transp.closed)
+
+  debug "Closing discovery node", node = $d.localNode
+  await allFutures([d.revalidateLoop.cancelAndWait(),
+    d.lookupLoop.cancelAndWait()])
+  await d.transp.closeWait()
 
 proc addNode*(d: Protocol, node: Node) =
   discard d.routingTable.addNode(node)

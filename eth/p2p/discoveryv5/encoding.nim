@@ -4,11 +4,17 @@ import
 
 const
   idNoncePrefix = "discovery-id-nonce"
-  gcmNonceSize* = 12
   keyAgreementPrefix = "discovery v5 key agreement"
   authSchemeName* = "gcm"
+  gcmNonceSize* = 12
+  gcmTagSize = 16
+  tagSize* = 32 ## size of the tag where each message (except whoareyou) starts
+  ## with
 
 type
+
+  PacketTag* = array[tagSize, byte]
+
   AuthResponse = object
     version: int
     signature: array[64, byte]
@@ -18,26 +24,28 @@ type
     localNode*: Node
     privKey*: PrivateKey
     db*: Database
-    handshakes*: Table[string, Whoareyou] # TODO: Implement hash for NodeID
+    handshakes*: Table[HandShakeKey, Whoareyou]
 
   HandshakeSecrets = object
-    writeKey: array[16, byte]
-    readKey: array[16, byte]
-    authRespKey: array[16, byte]
+    writeKey: AesKey
+    readKey: AesKey
+    authRespKey: AesKey
 
   AuthHeader* = object
-    auth*: array[12, byte]
-    idNonce*: array[32, byte]
+    auth*: AuthTag
+    idNonce*: IdNonce
     scheme*: string
     ephemeralKey*: array[64, byte]
     response*: seq[byte]
 
   RandomSourceDepleted* = object of CatchableError
 
-const
-  gcmTagSize = 16
+  DecodeStatus* = enum
+    Success,
+    HandshakeError,
+    PacketError
 
-proc randomBytes(v: var openarray[byte]) =
+proc randomBytes*(v: var openarray[byte]) =
   if nimcrypto.randomBytes(v) != v.len:
     raise newException(RandomSourceDepleted, "Could not randomize bytes")
 
@@ -67,7 +75,7 @@ proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
 
   # echo "EPH: ", eph.data.toHex, " idNonce: ", challenge.idNonce.toHex, "info: ", info.toHex
 
-  static: assert(sizeof(result) == 16 * 3)
+  static: assert(sizeof(result) == aesKeySize * 3)
   var res = cast[ptr UncheckedArray[byte]](addr result)
   hkdf(sha256, eph.data, idNonce, info, toOpenArray(res, 0, sizeof(result) - 1))
 
@@ -109,22 +117,26 @@ proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =
   for i in 0 .. a.high:
     result[i] = a[i] xor b[i]
 
-proc packetTag(destNode, srcNode: NodeID): array[32, byte] =
+proc packetTag(destNode, srcNode: NodeID): PacketTag =
   let destId = destNode.toByteArrayBE()
   let srcId = srcNode.toByteArrayBE()
   let destidHash = sha256.digest(destId)
   result = srcId xor destidHash.data
 
-proc encodeEncrypted*(c: Codec, toNode: Node, packetData: seq[byte], challenge: Whoareyou): (seq[byte], array[gcmNonceSize, byte]) =
+proc encodeEncrypted*(c: Codec,
+                      toNode: Node,
+                      packetData: seq[byte],
+                      challenge: Whoareyou):
+                      (seq[byte], array[gcmNonceSize, byte]) =
   var nonce: array[gcmNonceSize, byte]
   randomBytes(nonce)
   var headEnc: seq[byte]
 
-  var writeKey: array[16, byte]
+  var writeKey: AesKey
 
   if challenge.isNil:
     headEnc = rlp.encode(nonce)
-    var readKey: array[16, byte]
+    var readKey: AesKey
 
     # We might not have the node's keys if the handshake hasn't been performed
     # yet. That's fine, we will be responded with whoareyou.
@@ -147,7 +159,7 @@ proc encodeEncrypted*(c: Codec, toNode: Node, packetData: seq[byte], challenge: 
   headBuf.add(encryptGCM(writeKey, nonce, body, tag))
   return (headBuf, nonce)
 
-proc decryptGCM(key: array[16, byte], nonce, ct, authData: openarray[byte]): seq[byte] =
+proc decryptGCM(key: AesKey, nonce, ct, authData: openarray[byte]): seq[byte] =
   var dctx: GCM[aes128]
   dctx.init(key, nonce, authData)
   result = newSeq[byte](ct.len - gcmTagSize)
@@ -219,36 +231,36 @@ proc decodeEncrypted*(c: var Codec,
                       fromId: NodeID,
                       fromAddr: Address,
                       input: seq[byte],
-                      authTag: var array[12, byte],
+                      authTag: var AuthTag,
                       newNode: var Node,
-                      packet: var Packet): bool =
+                      packet: var Packet): DecodeStatus =
   let input = input.toRange
-  var r = rlpFromBytes(input[32 .. ^1])
+  var r = rlpFromBytes(input[tagSize .. ^1])
   var auth: AuthHeader
-  var readKey: array[16, byte]
+
+  var readKey: AesKey
   logScope: sender = $fromAddr
 
   if r.isList:
     # Handshake - rlp list indicates auth-header
-
-    # TODO: Auth failure will result in resending whoareyou. Do we really want this?
     auth = r.read(AuthHeader)
     authTag = auth.auth
 
-    let challenge = c.handshakes.getOrDefault($fromId)
+    let key = HandShakeKey(nodeId: fromId, address: $fromAddr)
+    let challenge = c.handshakes.getOrDefault(key)
     if challenge.isNil:
       trace "Decoding failed (no challenge)"
-      return false
+      return HandshakeError
 
     if auth.idNonce != challenge.idNonce:
       trace "Decoding failed (different nonce)"
-      return false
+      return HandshakeError
 
     var sec: HandshakeSecrets
     if not c.decodeAuthResp(fromId, auth, challenge, sec, newNode):
       trace "Decoding failed (bad auth)"
-      return false
-    c.handshakes.del($fromId)
+      return HandshakeError
+    c.handshakes.del(key)
 
     # Swap keys to match remote
     swap(sec.readKey, sec.writeKey)
@@ -258,29 +270,32 @@ proc decodeEncrypted*(c: var Codec,
 
   else:
     # Message packet or random packet - rlp bytes (size 12) indicates auth-tag
-    authTag = r.read(array[12, byte])
+    authTag = r.read(AuthTag)
     auth.auth = authTag
-    var writeKey: array[16, byte]
+    var writeKey: AesKey
     if not c.db.loadKeys(fromId, fromAddr, readKey, writeKey):
       trace "Decoding failed (no keys)"
-      return false
+      return PacketError
       # doAssert(false, "TODO: HANDLE ME!")
 
-  let headSize = 32 + r.position
+  let headSize = tagSize + r.position
   let bodyEnc = input[headSize .. ^1]
 
-  let body = decryptGCM(readKey, auth.auth, bodyEnc.toOpenArray, input[0 .. 31].toOpenArray)
+  let body = decryptGCM(readKey, auth.auth, bodyEnc.toOpenArray,
+    input[0 .. tagSize - 1].toOpenArray)
   if body.len > 1:
     let status = decodePacketBody(body[0], body.toOpenArray(1, body.high), packet)
     if status == decodingSuccessful:
-      return true
+      return Success
     else:
       debug "Failed to decode discovery packet", reason = status
-      return false
+      return PacketError
+  else:
+    return PacketError
 
 proc newRequestId*(): RequestId =
   if randomBytes(addr result, sizeof(result)) != sizeof(result):
-    raise newException(RandomSourceDepleted, "Could not randomize bytes") # TODO:
+    raise newException(RandomSourceDepleted, "Could not randomize bytes")
 
 proc numFields(T: typedesc): int =
   for k, v in fieldPairs(default(T)): inc result

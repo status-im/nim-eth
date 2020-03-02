@@ -19,8 +19,8 @@ suite "Discovery v5 Packet Encodings":
       randomPacketRlp = "0x01010101010101010101010101010101010101010101010101010101010101018c0202020202020202020202020404040404040404040404040404040404040404040404040404040404040404040404040404040404040404"
 
     var data: seq[byte]
-    data.add(hexToByteArray[32](tag))
-    data.add(rlp.encode(hexToByteArray[12](authTag)))
+    data.add(hexToByteArray[tagSize](tag))
+    data.add(rlp.encode(hexToByteArray[authTagSize](authTag)))
     data.add(hexToSeqByte(randomData))
 
     check data == hexToSeqByte(randomPacketRlp)
@@ -35,8 +35,8 @@ suite "Discovery v5 Packet Encodings":
       # expected output
       whoareyouPacketRlp = "0x0101010101010101010101010101010101010101010101010101010101010101ef8c020202020202020202020202a0030303030303030303030303030303030303030303030303030303030303030301"
 
-    let challenge = Whoareyou(authTag: hexToByteArray[12](token),
-      idNonce: hexToByteArray[32](idNonce),
+    let challenge = Whoareyou(authTag: hexToByteArray[authTagSize](token),
+      idNonce: hexToByteArray[idNonceSize](idNonce),
       recordSeq: enrSeq)
     var data = hexToSeqByte(magic)
     data.add(rlp.encode(challenge[]))
@@ -55,8 +55,8 @@ suite "Discovery v5 Packet Encodings":
       # expected output
       authMessageRlp = "0x93a7400fa0d6a694ebc24d5cf570f65d04215b6ac00757875e3f3a5f42107903f8cc8c27b5af763c446acd2749fe8ea0e551b1c44264ab92bc0b3c9b26293e1ba4fed9128f3c3645301e8e119f179c658367636db840b35608c01ee67edff2cffa424b219940a81cf2fb9b66068b1cf96862a17d353e22524fbdcdebc609f85cbd58ebe7a872b01e24a3829b97dd5875e8ffbc4eea81b856570fbf23885c674867ab00320294a41732891457969a0f14d11c995668858b2ad731aa7836888020e2ccc6e0e5776d0d4bc4439161798565a4159aa8620992fb51dcb275c4f755c8b8030c82918898f1ac387f606852a5d12a2d94b8ccb3ba55558229867dc13bfa3648"
 
-    let authHeader = AuthHeader(auth: hexToByteArray[12](authTag),
-      idNonce: hexToByteArray[32](idNonce),
+    let authHeader = AuthHeader(auth: hexToByteArray[authTagSize](authTag),
+      idNonce: hexToByteArray[idNonceSize](idNonce),
       scheme: authSchemeName,
       ephemeralKey: hexToByteArray[64](ephemeralPubkey),
       response: hexToSeqByte(authRespCiphertext))
@@ -78,8 +78,8 @@ suite "Discovery v5 Packet Encodings":
       messageRlp = "0x93a7400fa0d6a694ebc24d5cf570f65d04215b6ac00757875e3f3a5f421079038c27b5af763c446acd2749fe8ea5d12a2d94b8ccb3ba55558229867dc13bfa3648"
 
     var data: seq[byte]
-    data.add(hexToByteArray[32](tag))
-    data.add(rlp.encode(hexToByteArray[12](authTag)))
+    data.add(hexToByteArray[tagSize](tag))
+    data.add(rlp.encode(hexToByteArray[authTagSize](authTag)))
     data.add(hexToSeqByte(randomData))
 
     check data == hexToSeqByte(messageRlp)
@@ -168,7 +168,7 @@ suite "Discovery v5 Cryptographic Primitives":
 
     let
       c = Codec(privKey: initPrivateKey(localSecretKey))
-      signature = signIDNonce(c, hexToByteArray[32](idNonce),
+      signature = signIDNonce(c, hexToByteArray[idNonceSize](idNonce),
         hexToByteArray[64](ephemeralKey))
     check signature.getRaw() == hexToByteArray[64](idNonceSig)
 
@@ -182,10 +182,10 @@ suite "Discovery v5 Cryptographic Primitives":
       # expected output
       messageCiphertext = "0xa5d12a2d94b8ccb3ba55558229867dc13bfa3648"
 
-    let encrypted = encryptGCM(hexToByteArray[16](encryptionKey),
-                               hexToByteArray[12](nonce),
+    let encrypted = encryptGCM(hexToByteArray[aesKeySize](encryptionKey),
+                               hexToByteArray[authTagSize](nonce),
                                hexToSeqByte(pt),
-                               hexToByteArray[32](ad))
+                               hexToByteArray[tagSize](ad))
     check encrypted == hexToSeqByte(messageCiphertext)
 
   test "Authentication Header and Encrypted Message Generation":

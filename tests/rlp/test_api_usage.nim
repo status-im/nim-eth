@@ -102,7 +102,7 @@ test "encode and decode lists":
   var list = rlpFromBytes encodeList(rlp.listELem(1), rlp.listELem(0)).toRange
 
   # test that iteration with enterList/skipElem works as expected
-  discard list.enterList # We alreay know that we are working with a list
+  doAssert list.enterList # We already know that we are working with a list
   check list.toString == "Lorem ipsum dolor sit amet"
   list.skipElem
 
