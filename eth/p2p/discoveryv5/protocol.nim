@@ -1,7 +1,7 @@
 import
   std/[tables, sets, endians, options, math, random],
-  stew/byteutils, eth/[rlp, keys], chronicles, chronos, stint,
-  ../enode, types, encoding, node, routing_table, enr
+  json_serialization/std/net, stew/byteutils, chronicles, chronos, stint,
+  eth/[rlp, keys], ../enode, types, encoding, node, routing_table, enr
 
 import nimcrypto except toHex
 
@@ -168,7 +168,7 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
   # debug "Packet received: ", length = msg.len
 
   if d.isWhoAreYou(msg):
-    trace "Received whoareyou", localNode = d.localNode, address = a
+    trace "Received whoareyou", localNode = $d.localNode, address = a
     let whoareyou = d.decodeWhoAreYou(msg)
     var pr: PendingRequest
     if d.pendingRequests.take(whoareyou.authTag, pr):
@@ -194,7 +194,7 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
       if node.isNil:
         node = d.routingTable.getNode(sender)
       else:
-        debug "Adding new node to routing table", node, localNode = d.localNode
+        debug "Adding new node to routing table", node = $node, localNode = $d.localNode
         discard d.routingTable.addNode(node)
 
       doAssert(not node.isNil, "No node in the routing table (internal error?)")
@@ -212,7 +212,7 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
           debug "TODO: handle packet: ", packet = packet.kind, origin = $node
     elif decoded == DecodeStatus.PacketError:
       debug "Could not decode packet, respond with whoareyou",
-        localNode = d.localNode, address = a
+        localNode = $d.localNode, address = a
       d.sendWhoareyou(a, sender, authTag)
     # No Whoareyou in case it is a Handshake Failure
 
@@ -374,13 +374,13 @@ proc lookupLoop(d: Protocol) {.async.} =
   try:
     while true:
       let nodes = await d.lookupRandom()
-      trace "Discovered nodes", nodes
+      trace "Discovered nodes", nodes = $nodes
       await sleepAsync(lookupInterval)
   except CancelledError:
     trace "lookupLoop canceled"
 
 proc open*(d: Protocol) =
-  debug "Starting discovery node", n = d.localNode
+  debug "Starting discovery node", node = $d.localNode
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(IPv4_any(), d.localNode.node.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
@@ -392,7 +392,7 @@ proc close*(d: Protocol) =
   doAssert(not d.lookupLoop.isNil() or not d.revalidateLoop.isNil())
   doAssert(not d.transp.closed)
 
-  debug "Closing discovery node", n = d.localNode
+  debug "Closing discovery node", node = $d.localNode
   d.revalidateLoop.cancel()
   d.lookupLoop.cancel()
   # TODO: unsure if close can't create issues in the not awaited cancellations
@@ -403,7 +403,7 @@ proc closeWait*(d: Protocol) {.async.} =
   doAssert(not d.lookupLoop.isNil() or not d.revalidateLoop.isNil())
   doAssert(not d.transp.closed)
 
-  debug "Closing discovery node", n = d.localNode
+  debug "Closing discovery node", node = $d.localNode
   await allFutures([d.revalidateLoop.cancelAndWait(),
     d.lookupLoop.cancelAndWait()])
   await d.transp.closeWait()
