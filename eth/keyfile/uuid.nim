@@ -16,9 +16,7 @@
 ## - ``FreeBSD``, ``OpenBSD``, ``NetBSD``,
 ##   ``DragonflyBSD`` - using `uuid_create()`.
 
-{.deadCodeElim:on.}
-
-import nimcrypto/utils, endians
+import nimcrypto/utils, stew/endians2
 
 type
   UUIDException = object of CatchableError
@@ -38,9 +36,14 @@ proc uuidFromString*(s: string): UUID =
     if s[i] notin {'A'..'F', '0'..'9', 'a'..'f', '-'}:
       raiseInvalidUuid()
   var d = fromHex(stripSpaces(s))
-  bigEndian32(addr result.data[0], addr d[0])
-  bigEndian16(addr result.data[4], addr d[4])
-  bigEndian16(addr result.data[6], addr d[6])
+  var
+    a = uint32.fromBytesBE(d.toOpenArray(0, 3))
+    b = uint16.fromBytesBE(d.toOpenArray(4, 5))
+    c = uint16.fromBytesBE(d.toOpenArray(6, 7))
+
+  copyMem(addr result.data[0], addr a, 4)
+  copyMem(addr result.data[4], addr b, 2)
+  copyMem(addr result.data[6], addr c, 2)
   copyMem(addr result.data[8], addr d[8], 8)
 
 proc uuidToString*(u: UUID, lowercase: bool = false): string =
@@ -49,9 +52,14 @@ proc uuidToString*(u: UUID, lowercase: bool = false): string =
   ## of output string.
   result = newStringOfCap(38)
   var d: array[8, byte]
-  bigEndian32(addr d[0], unsafeAddr u.data[0])
-  bigEndian16(addr d[4], unsafeAddr u.data[4])
-  bigEndian16(addr d[6], unsafeAddr u.data[6])
+  var
+    a = uint32.fromBytesBE(u.data.toOpenArray(0, 3))
+    b = uint16.fromBytesBE(u.data.toOpenArray(4, 5))
+    c = uint16.fromBytesBE(u.data.toOpenArray(6, 7))
+  copyMem(addr d[0], addr a, 4)
+  copyMem(addr d[4], addr b, 2)
+  copyMem(addr d[6], addr c, 2)
+
   result.add(toHex(toOpenArray(d, 0, 3), lowercase))
   result.add("-")
   result.add(toHex(toOpenArray(d, 4, 5), lowercase))

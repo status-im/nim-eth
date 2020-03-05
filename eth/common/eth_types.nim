@@ -1,5 +1,5 @@
 import
-  endians, options, times, chronicles,
+  stew/endians2, options, times, chronicles,
   stint, nimcrypto/[keccak, hash], eth/rlp, eth/trie/[trie_defs, db]
 
 export
@@ -202,11 +202,11 @@ else:
   template u256*(n: BlockNumber): UInt256 =
     n
 
-proc toBlockNonce*(n: uint64): BlockNonce =
-  bigEndian64(addr result[0], unsafeAddr n)
+func toBlockNonce*(n: uint64): BlockNonce =
+  n.toBytesBE()
 
-proc toUint*(n: BlockNonce): uint64 =
-  bigEndian64(addr result, unsafeAddr n[0])
+func toUint*(n: BlockNonce): uint64 =
+  uint64.fromBytesBE(n)
 
 proc newAccount*(nonce: AccountNonce = 0, balance: UInt256 = 0.u256): Account =
   result.nonce = nonce

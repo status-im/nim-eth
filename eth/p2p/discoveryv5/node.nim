@@ -1,5 +1,5 @@
 import
-  std/[net, endians, hashes], nimcrypto, stint, chronicles,
+  std/[net, hashes], nimcrypto, stint, chronicles,
   types, enr, eth/keys, ../enode
 
 type

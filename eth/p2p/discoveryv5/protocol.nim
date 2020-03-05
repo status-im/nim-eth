@@ -1,6 +1,7 @@
 import
-  std/[tables, sets, endians, options, math, random],
-  json_serialization/std/net, stew/byteutils, chronicles, chronos, stint,
+  std/[tables, sets, options, math, random],
+  json_serialization/std/net,
+  stew/[byteutils, endians2], chronicles, chronos, stint,
   eth/[rlp, keys], ../enode, types, encoding, node, routing_table, enr
 
 import nimcrypto except toHex

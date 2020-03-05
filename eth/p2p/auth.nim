@@ -10,9 +10,9 @@
 
 ## This module implements Ethereum authentication
 
-import endians
 import eth/[keys, rlp], nimcrypto
 import ecies
+import stew/[byteutils, endians2]
 
 const
   SupportedRlpxVersion* = 4
@@ -192,7 +192,8 @@ proc authMessageEIP8(h: var Handshake,
     copyMem(addr buffer[0], addr payload[0], len(payload))
     if len(output) < fullsize:
       return(BufferOverrun)
-    bigEndian16(addr output, addr wosize)
+    let wosizeBE = uint16(wosize).toBytesBE()
+    output[0..<2] = wosizeBE
     if eciesEncrypt(toa(buffer, 0, len(payload) + int(padsize)),
                     toa(output, 2, wosize), pubkey,
                     toa(output, 0, 2)) != EciesStatus.Success:
@@ -264,7 +265,7 @@ proc ackMessageEIP8(h: var Handshake,
   if encrypt:
     if len(output) < fullsize:
       return(BufferOverrun)
-    bigEndian16(addr output, addr wosize)
+    output[0..<2] = uint16(wosize).toBytesBE()
     if eciesEncrypt(toa(buffer, 0, len(payload) + int(padsize)),
                     toa(output, 2, wosize), h.remoteHPubkey,
                     toa(output, 0, 2)) != EciesStatus.Success:
@@ -342,9 +343,8 @@ proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthStatus =
     pubkey: PublicKey
     nonce: Nonce
     secret: SharedSecret
-    size: uint16
 
-  bigEndian16(addr size, unsafeAddr m[0])
+  let size = uint16.fromBytesBE(m)
   h.expectedLength = int(size) + 2
   if h.expectedLength > len(m):
     return(IncompleteError)
@@ -389,8 +389,8 @@ proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthStatus =
 
 proc decodeAckMessageEip8*(h: var Handshake, m: openarray[byte]): AuthStatus =
   ## Decodes EIP-8 AckMessage.
-  var size: uint16
-  bigEndian16(addr size, unsafeAddr m[0])
+  let size = uint16.fromBytesBE(m)
+
   h.expectedLength = 2 + int(size)
   if h.expectedLength > len(m):
     return(IncompleteError)
