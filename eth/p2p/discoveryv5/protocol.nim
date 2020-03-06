@@ -333,15 +333,19 @@ proc processClient(transp: DatagramTransport,
     debug "Receive failed", exception = e.name, msg = e.msg,
       stacktrace = e.getStackTrace()
 
+proc ping(p: Protocol, toNode: Node): RequestId =
+  let
+    reqId = newRequestId()
+    ping = PingPacket(enrSeq: p.localNode.record.seqNum)
+    packet = encodePacket(ping, reqId)
+    (data, nonce) = p.codec.encodeEncrypted(toNode, packet, challenge = nil)
+  p.pendingRequests[nonce] = PendingRequest(node: toNode, packet: packet)
+  p.send(toNode, data)
+  return reqId
+
 proc revalidateNode(p: Protocol, n: Node)
     {.async, raises:[Defect, Exception].} = # TODO: Exception
-  let reqId = newRequestId()
-  var ping: PingPacket
-  ping.enrSeq = p.localNode.record.seqNum
-  let packet = encodePacket(ping, reqId)
-  let (data, nonce) = p.codec.encodeEncrypted(n, packet, challenge = nil)
-  p.pendingRequests[nonce] = PendingRequest(node: n, packet: packet)
-  p.send(n, data)
+  let reqId = p.ping(n)
 
   let resp = await p.waitPacket(n, reqId)
   if resp.isSome and resp.get.kind == pong:
