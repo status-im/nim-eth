@@ -338,8 +338,9 @@ proc revalidateNode(p: Protocol, n: Node)
   let reqId = newRequestId()
   var ping: PingPacket
   ping.enrSeq = p.localNode.record.seqNum
-  let (data, nonce) = p.codec.encodeEncrypted(n, encodePacket(ping, reqId), challenge = nil)
-  p.pendingRequests[nonce] = PendingRequest(node: n, packet: data)
+  let packet = encodePacket(ping, reqId)
+  let (data, nonce) = p.codec.encodeEncrypted(n, packet, challenge = nil)
+  p.pendingRequests[nonce] = PendingRequest(node: n, packet: packet)
   p.send(n, data)
 
   let resp = await p.waitPacket(n, reqId)
