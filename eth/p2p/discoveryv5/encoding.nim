@@ -235,6 +235,11 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
     return false
 
   let authResp = rlp.decode(respData.get(), AuthResponse)
+  # TODO:
+  # 1. Should allow for not having an ENR included, solved for now by sending
+  # whoareyou with always recordSeq of 0
+  # 2. Should verify ENR and check for correct id in case an ENR is included
+  # 3. Should verify id nonce signature
 
   newNode = newNode(authResp.record)
   return true
