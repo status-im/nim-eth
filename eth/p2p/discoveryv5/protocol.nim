@@ -211,11 +211,17 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
           waiter.complete(packet.some)
         else:
           debug "TODO: handle packet: ", packet = packet.kind, origin = $node
-    elif decoded == DecodeStatus.PacketError:
-      debug "Could not decode packet, respond with whoareyou",
+    elif decoded == DecodeStatus.DecryptError:
+      debug "Could not decrypt packet, respond with whoareyou",
         localNode = $d.localNode, address = a
+      # only sendingWhoareyou in case it is a decryption failure
       d.sendWhoareyou(a, sender, authTag)
-    # No Whoareyou in case it is a Handshake Failure
+    elif decoded == DecodeStatus.PacketError:
+      # Still adding the node in case there is a packet error (could be
+      # unsupported packet)
+      if not node.isNil:
+        debug "Adding new node to routing table", node = $node, localNode = $d.localNode
+        discard d.routingTable.addNode(node)
 
 proc waitPacket(d: Protocol, fromNode: Node, reqId: RequestId): Future[Option[Packet]] =
   result = newFuture[Option[Packet]]("waitPacket")
