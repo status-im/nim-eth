@@ -1,5 +1,5 @@
 import
-  std/tables, nimcrypto, stint, chronicles,
+  std/[tables, options], nimcrypto, stint, chronicles,
   types, node, enr, hkdf, ../enode, eth/[rlp, keys]
 
 const
@@ -7,7 +7,7 @@ const
   keyAgreementPrefix = "discovery v5 key agreement"
   authSchemeName* = "gcm"
   gcmNonceSize* = 12
-  gcmTagSize = 16
+  gcmTagSize* = 16
   tagSize* = 32 ## size of the tag where each message (except whoareyou) starts
   ## with
 
@@ -43,7 +43,8 @@ type
   DecodeStatus* = enum
     Success,
     HandshakeError,
-    PacketError
+    PacketError,
+    DecryptError
 
 proc randomBytes*(v: var openarray[byte]) =
   if nimcrypto.randomBytes(v) != v.len:
@@ -159,16 +160,24 @@ proc encodeEncrypted*(c: Codec,
   headBuf.add(encryptGCM(writeKey, nonce, body, tag))
   return (headBuf, nonce)
 
-proc decryptGCM(key: AesKey, nonce, ct, authData: openarray[byte]): seq[byte] =
+proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
+    Option[seq[byte]] =
+  if ct.len <= gcmTagSize:
+    debug "cipher is missing tag", len = ct.len
+    return
+
   var dctx: GCM[aes128]
   dctx.init(key, nonce, authData)
-  result = newSeq[byte](ct.len - gcmTagSize)
+  var res = newSeq[byte](ct.len - gcmTagSize)
   var tag: array[gcmTagSize, byte]
-  dctx.decrypt(ct.toOpenArray(0, ct.high - gcmTagSize), result)
+  dctx.decrypt(ct.toOpenArray(0, ct.high - gcmTagSize), res)
   dctx.getTag(tag)
-  if tag != ct.toOpenArray(ct.len - gcmTagSize, ct.high):
-    result = @[]
   dctx.clear()
+
+  if tag != ct.toOpenArray(ct.len - gcmTagSize, ct.high):
+    return
+
+  return some(res)
 
 type
   DecodePacketResult = enum
@@ -222,7 +231,15 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
 
   var zeroNonce: array[gcmNonceSize, byte]
   let respData = decryptGCM(secrets.authRespKey, zeroNonce, head.response, [])
-  let authResp = rlp.decode(respData, AuthResponse)
+  if respData.isNone():
+    return false
+
+  let authResp = rlp.decode(respData.get(), AuthResponse)
+  # TODO:
+  # 1. Should allow for not having an ENR included, solved for now by sending
+  # whoareyou with always recordSeq of 0
+  # 2. Should verify ENR and check for correct id in case an ENR is included
+  # 3. Should verify id nonce signature
 
   newNode = newNode(authResp.record)
   return true
@@ -275,7 +292,7 @@ proc decodeEncrypted*(c: var Codec,
     var writeKey: AesKey
     if not c.db.loadKeys(fromId, fromAddr, readKey, writeKey):
       trace "Decoding failed (no keys)"
-      return PacketError
+      return DecryptError
       # doAssert(false, "TODO: HANDLE ME!")
 
   let headSize = tagSize + r.position
@@ -283,8 +300,14 @@ proc decodeEncrypted*(c: var Codec,
 
   let body = decryptGCM(readKey, auth.auth, bodyEnc.toOpenArray,
     input[0 .. tagSize - 1].toOpenArray)
-  if body.len > 1:
-    let status = decodePacketBody(body[0], body.toOpenArray(1, body.high), packet)
+  if body.isNone():
+    discard c.db.deleteKeys(fromId, fromAddr)
+    return DecryptError
+
+  let packetData = body.get()
+  if packetData.len > 1:
+    let status = decodePacketBody(packetData[0],
+      packetData.toOpenArray(1, packetData.high), packet)
     if status == decodingSuccessful:
       return Success
     else:

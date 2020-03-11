@@ -93,7 +93,7 @@ proc decodeWhoAreYou(d: Protocol, msg: Bytes): Whoareyou =
 
 proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthTag) =
   trace "sending who are you", to = $toNode, toAddress = $address
-  let challenge = Whoareyou(authTag: authTag, recordSeq: 1)
+  let challenge = Whoareyou(authTag: authTag, recordSeq: 0)
   encoding.randomBytes(challenge.idNonce)
   # If there is already a handshake going on for this nodeid then we drop this
   # new one. Handshake will get cleaned up after `handshakeTimeout`.
@@ -211,11 +211,17 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
           waiter.complete(packet.some)
         else:
           debug "TODO: handle packet: ", packet = packet.kind, origin = $node
-    elif decoded == DecodeStatus.PacketError:
-      debug "Could not decode packet, respond with whoareyou",
+    elif decoded == DecodeStatus.DecryptError:
+      debug "Could not decrypt packet, respond with whoareyou",
         localNode = $d.localNode, address = a
+      # only sendingWhoareyou in case it is a decryption failure
       d.sendWhoareyou(a, sender, authTag)
-    # No Whoareyou in case it is a Handshake Failure
+    elif decoded == DecodeStatus.PacketError:
+      # Still adding the node in case there is a packet error (could be
+      # unsupported packet)
+      if not node.isNil:
+        debug "Adding new node to routing table", node = $node, localNode = $d.localNode
+        discard d.routingTable.addNode(node)
 
 proc waitPacket(d: Protocol, fromNode: Node, reqId: RequestId): Future[Option[Packet]] =
   result = newFuture[Option[Packet]]("waitPacket")
@@ -356,6 +362,7 @@ proc revalidateNode(p: Protocol, n: Node)
       discard
 
     p.routingTable.setJustSeen(n)
+    trace "Revalidated node", node = $n
   else:
     if false: # TODO: if not bootnode:
       p.routingTable.removeNode(n)
@@ -386,7 +393,8 @@ proc lookupLoop(d: Protocol) {.async.} =
     trace "lookupLoop canceled"
 
 proc open*(d: Protocol) =
-  debug "Starting discovery node", node = $d.localNode
+  debug "Starting discovery node", node = $d.localNode,
+    uri = toURI(d.localNode.record)
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(IPv4_any(), d.localNode.node.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)

@@ -87,6 +87,9 @@ method storeKeys*(db: Database, id: NodeId, address: Address, r, w: AesKey):
 method loadKeys*(db: Database, id: NodeId, address: Address, r, w: var AesKey):
     bool {.base, raises: [Defect].} = discard
 
+method deleteKeys*(db: Database, id: NodeId, address: Address):
+    bool {.raises: [Defect].} = discard
+
 proc toBytes*(id: NodeId): array[32, byte] {.inline.} =
   id.toByteArrayBE()
 

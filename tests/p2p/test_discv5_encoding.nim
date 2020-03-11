@@ -1,5 +1,5 @@
 import
-  unittest, stew/byteutils, stint,
+  unittest, options, sequtils, stew/byteutils, stint,
   eth/[rlp, keys] , eth/p2p/discoveryv5/[types, encoding, enr]
 
 # According to test vectors:
@@ -141,16 +141,16 @@ suite "Discovery v5 Cryptographic Primitives":
       eph.data == hexToSeqByte(sharedSecret)
 
   test "Key Derivation":
-    const
-      # input
-      secretKey = "0x02a77e3aa0c144ae7c0a3af73692b7d6e5b7a2fdc0eda16e8d5e6cb0d08e88dd04"
-      nodeIdA = "0xa448f24c6d18e575453db13171562b71999873db5b286df957af199ec94617f7"
-      nodeIdB = "0x885bba8dfeddd49855459df852ad5b63d13a3fae593f3f9fa7e317fd43651409"
-      idNonce = "0x0101010101010101010101010101010101010101010101010101010101010101"
-      # expected output
-      initiatorKey = "0x238d8b50e4363cf603a48c6cc3542967"
-      recipientKey = "0xbebc0183484f7e7ca2ac32e3d72c8891"
-      authRespKey = "0xe987ad9e414d5b4f9bfe4ff1e52f2fae"
+    # const
+    #   # input
+    #   secretKey = "0x02a77e3aa0c144ae7c0a3af73692b7d6e5b7a2fdc0eda16e8d5e6cb0d08e88dd04"
+    #   nodeIdA = "0xa448f24c6d18e575453db13171562b71999873db5b286df957af199ec94617f7"
+    #   nodeIdB = "0x885bba8dfeddd49855459df852ad5b63d13a3fae593f3f9fa7e317fd43651409"
+    #   idNonce = "0x0101010101010101010101010101010101010101010101010101010101010101"
+    #   # expected output
+    #   initiatorKey = "0x238d8b50e4363cf603a48c6cc3542967"
+    #   recipientKey = "0xbebc0183484f7e7ca2ac32e3d72c8891"
+    #   authRespKey = "0xe987ad9e414d5b4f9bfe4ff1e52f2fae"
 
     # Code doesn't allow to start from shared `secretKey`, but only from the
     # public and private key. Would require pulling `ecdhAgree` out of
@@ -194,3 +194,38 @@ suite "Discovery v5 Cryptographic Primitives":
     # The encryption of the auth-resp-pt uses one of these keys, as does the
     # encryption of the message itself. So the whole test depends on this.
     skip()
+
+suite "Discovery v5 Additional":
+  test "Encryption/Decryption":
+    let
+      encryptionKey = hexToByteArray[aesKeySize]("0x9f2d77db7004bf8a1a85107ac686990b")
+      nonce = hexToByteArray[authTagSize]("0x27b5af763c446acd2749fe8e")
+      ad = hexToByteArray[tagSize]("0x93a7400fa0d6a694ebc24d5cf570f65d04215b6ac00757875e3f3a5f42107903")
+      pt = hexToSeqByte("0xa1")
+
+    let ct = encryptGCM(encryptionKey, nonce, pt, ad)
+    let decrypted = decryptGCM(encryptionKey, nonce, ct, ad)
+
+    check decrypted.get() == pt
+
+  test "Decryption":
+    let
+      encryptionKey = hexToByteArray[aesKeySize]("0x9f2d77db7004bf8a1a85107ac686990b")
+      nonce = hexToByteArray[authTagSize]("0x27b5af763c446acd2749fe8e")
+      ad = hexToByteArray[tagSize]("0x93a7400fa0d6a694ebc24d5cf570f65d04215b6ac00757875e3f3a5f42107903")
+      pt = hexToSeqByte("0x01c20101")
+      ct = hexToSeqByte("0xa5d12a2d94b8ccb3ba55558229867dc13bfa3648")
+
+    # valid case
+    check decryptGCM(encryptionKey, nonce, ct, ad).get() == pt
+
+    # invalid tag/data sizes
+    var invalidCipher: seq[byte] = @[]
+    check decryptGCM(encryptionKey, nonce, invalidCipher, ad).isNone()
+
+    invalidCipher = repeat(byte(4), gcmTagSize)
+    check decryptGCM(encryptionKey, nonce, invalidCipher, ad).isNone()
+
+    # invalid tag/data itself
+    invalidCipher = repeat(byte(4), gcmTagSize + 1)
+    check decryptGCM(encryptionKey, nonce, invalidCipher, ad).isNone()

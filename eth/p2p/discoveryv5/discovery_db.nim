@@ -50,3 +50,10 @@ method loadKeys*(db: DiscoveryDB, id: NodeId, address: Address, r, w: var AesKey
   except CatchableError:
     return false
 
+method deleteKeys*(db: DiscoveryDB, id: NodeId, address: Address):
+    bool {.raises: [Defect].} =
+  try:
+    db.backend.del(makeKey(id, address))
+    return true
+  except CatchableError:
+    return false
