@@ -24,7 +24,7 @@ proc newEthereumNode*(keys: KeyPair,
 `keys`:
   A pair of public and private keys used to authenticate the node
   on the network and to determine its node ID.
-  See the [eth_keys](https://github.com/status-im/nim-eth-keys)
+  See the [keys](./keys.md)
   library for utilities that will help you generate and manage
   such keys.
 
