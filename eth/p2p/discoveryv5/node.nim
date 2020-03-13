@@ -44,6 +44,10 @@ proc newNode*(r: Record): Node =
   result = newNode(initENode(pk, a))
   result.record = r
 
+proc newNodes*(records: openarray[Record]): seq[Node] =
+  for record in records:
+    result.add(newNode(record))
+
 proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.data)
 proc `==`*(a, b: Node): bool = (a.isNil and b.isNil) or (not a.isNil and not b.isNil and a.node.pubkey == b.node.pubkey)
 

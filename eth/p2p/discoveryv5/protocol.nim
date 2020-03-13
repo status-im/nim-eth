@@ -38,10 +38,31 @@ type
     awaitedPackets: Table[(Node, RequestId), Future[Option[Packet]]]
     lookupLoop: Future[void]
     revalidateLoop: Future[void]
+    bootstrapNodes: seq[Node]
 
   PendingRequest = object
     node: Node
     packet: seq[byte]
+
+proc addNode*(d: Protocol, node: Node) =
+  discard d.routingTable.addNode(node)
+
+template addNode*(d: Protocol, enode: ENode) =
+  addNode d, newNode(enode)
+
+template addNode*(d: Protocol, r: Record) =
+  addNode d, newNode(r)
+
+proc addNode*(d: Protocol, enr: EnrUri) =
+  var r: Record
+  let res = r.fromUri(enr)
+  doAssert(res)
+  d.addNode newNode(r)
+
+proc randomNodes*(k: Protocol, count: int): seq[Node] =
+  k.routingTable.randomNodes(count)
+
+proc nodesDiscovered*(k: Protocol): int {.inline.} = k.routingTable.len
 
 proc whoareyouMagic(toNode: NodeId): array[magicSize, byte] =
   const prefix = "WHOAREYOU"
@@ -51,7 +72,8 @@ proc whoareyouMagic(toNode: NodeId): array[magicSize, byte] =
   sha256.digest(data).data
 
 proc newProtocol*(privKey: PrivateKey, db: Database,
-                  ip: IpAddress, tcpPort, udpPort: Port): Protocol =
+                  ip: IpAddress, tcpPort, udpPort: Port,
+                  bootstrapRecords: openarray[Record] = []): Protocol =
   let
     a = Address(ip: ip, tcpPort: tcpPort, udpPort: udpPort)
     enode = initENode(privKey.getPublicKey(), a)
@@ -64,7 +86,8 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
     localNode: node,
     whoareyouMagic: whoareyouMagic(node.id),
     idHash: sha256.digest(node.id.toByteArrayBE).data,
-    codec: Codec(localNode: node, privKey: privKey, db: db))
+    codec: Codec(localNode: node, privKey: privKey, db: db),
+    bootstrapNodes: newNodes(bootstrapRecords))
 
   result.routingTable.init(node)
 
@@ -355,6 +378,7 @@ proc ping(p: Protocol, toNode: Node): RequestId =
 
 proc revalidateNode(p: Protocol, n: Node)
     {.async, raises:[Defect, Exception].} = # TODO: Exception
+  trace "Ping to revalidate node", node = $n
   let reqId = p.ping(n)
 
   let resp = await p.waitPacket(n, reqId)
@@ -367,8 +391,15 @@ proc revalidateNode(p: Protocol, n: Node)
     p.routingTable.setJustSeen(n)
     trace "Revalidated node", node = $n
   else:
-    if false: # TODO: if not bootnode:
+    # For now we never remove bootstrap nodes. It might make sense to actually
+    # do so and to retry them only in case we drop to a really low amount of
+    # peers in the DHT
+    if n notin p.bootstrapNodes:
+      trace "Revalidation of node failed, removing node", node = $n
       p.routingTable.removeNode(n)
+      # TODO: Do we delete the shared secrets here?
+      # And if so, the current way they are stored, we might not have the key
+      # (specifically if the ENR does not have the correct address)
 
 proc revalidateLoop(p: Protocol) {.async.} =
   try:
@@ -389,8 +420,12 @@ proc lookupLoop(d: Protocol) {.async.} =
   ## TODO: Same story as for `revalidateLoop`
   try:
     while true:
-      let nodes = await d.lookupRandom()
-      trace "Discovered nodes", nodes = $nodes
+      # lookup self (neighbour nodes)
+      var nodes = await d.lookup(d.localNode.id)
+      trace "Discovered nodes in self lookup", nodes = $nodes
+
+      nodes = await d.lookupRandom()
+      trace "Discovered nodes in random lookup", nodes = $nodes
       await sleepAsync(lookupInterval)
   except CancelledError:
     trace "lookupLoop canceled"
@@ -401,6 +436,10 @@ proc open*(d: Protocol) =
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(IPv4_any(), d.localNode.node.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
+
+  for node in d.bootstrapNodes:
+    d.addNode(node)
+
   # Might want to move these to a separate proc if this turns out to be needed.
   d.lookupLoop = lookupLoop(d)
   d.revalidateLoop = revalidateLoop(d)
@@ -424,26 +463,6 @@ proc closeWait*(d: Protocol) {.async.} =
   await allFutures([d.revalidateLoop.cancelAndWait(),
     d.lookupLoop.cancelAndWait()])
   await d.transp.closeWait()
-
-proc addNode*(d: Protocol, node: Node) =
-  discard d.routingTable.addNode(node)
-
-template addNode*(d: Protocol, enode: ENode) =
-  addNode d, newNode(enode)
-
-template addNode*(d: Protocol, r: Record) =
-  addNode d, newNode(r)
-
-proc addNode*(d: Protocol, enr: EnrUri) =
-  var r: Record
-  let res = r.fromUri(enr)
-  doAssert(res)
-  d.addNode newNode(r)
-
-proc randomNodes*(k: Protocol, count: int): seq[Node] =
-  k.routingTable.randomNodes(count)
-
-proc nodesDiscovered*(k: Protocol): int {.inline.} = k.routingTable.len
 
 when isMainModule:
   import discovery_db
