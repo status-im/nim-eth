@@ -6,14 +6,13 @@ import
   ./p2p_test_helper
 
 proc initDiscoveryNode*(privKey: PrivateKey, address: Address,
-                           bootnodes: seq[Record]): discv5_protocol.Protocol =
+                        bootstrapRecords: seq[Record]):
+                        discv5_protocol.Protocol =
   var db = DiscoveryDB.init(newMemoryDB())
   result = newProtocol(privKey, db,
                        parseIpAddress("127.0.0.1"),
-                       address.tcpPort, address.udpPort)
-
-  for node in bootnodes:
-    result.addNode(node)
+                       address.tcpPort, address.udpPort,
+                       bootstrapRecords)
 
   result.open()
 

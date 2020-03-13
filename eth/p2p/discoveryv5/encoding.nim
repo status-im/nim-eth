@@ -241,6 +241,9 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
   # 2. Should verify ENR and check for correct id in case an ENR is included
   # 3. Should verify id nonce signature
 
+  # More TODO:
+  # This will also not work if ENR does not contain an IP address or if the
+  # IP address is out of date and doesn't match current UDP end point
   newNode = newNode(authResp.record)
   return true
 
