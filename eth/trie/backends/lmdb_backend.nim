@@ -13,6 +13,12 @@ const
   MDB_RDONLY   = 0x20000
   MDB_NOTFOUND = -30798
 
+# TODO This implementation has several issues on restricted platforms, possibly
+#      due to mmap restrictions - see:
+#      https://github.com/status-im/nim-beacon-chain/issues/732
+#      https://github.com/status-im/nim-beacon-chain/issues/688
+# It also has other issues, including exception safety:
+#      https://github.com/status-im/nim-beacon-chain/pull/809
 when defined(cpu64):
   const LMDB_MAP_SIZE = 1024'u64 * 1024'u64 * 1024'u64 * 10'u64  # 10TB enough?
 else:
