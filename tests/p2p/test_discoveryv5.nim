@@ -1,5 +1,5 @@
 import
-  random, unittest, chronos, sequtils, chronicles, tables,
+  random, unittest, chronos, sequtils, chronicles, tables, stint,
   eth/[keys, rlp], eth/p2p/enode, eth/trie/db,
   eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
@@ -132,3 +132,38 @@ suite "Discovery v5 Tests":
     # is that of the first packet.
 
     await node.closeWait()
+
+  test "Distance check":
+    const
+      targetId = "0x0000"
+      testValues = [
+        ("0x0001", 1'u32),
+        ("0x0002", 2'u32),
+        ("0x0003", 2'u32),
+        ("0x0004", 3'u32),
+        ("0x0008", 4'u32),
+        ("0x00ff", 8'u32),
+        ("0x0100", 9'u32),
+        ("0xf000", 16'u32)
+      ]
+
+    for (id, d) in testValues:
+      check logDist(parse(targetId, UInt256, 16), parse(id, UInt256, 16)) == d
+
+  test "Distance check with keys":
+    const
+      targetKey = "5d485bdcbe9bc89314a10ae9231e429d33853e3a8fa2af39f5f827370a2e4185e344ace5d16237491dad41f278f1d3785210d29ace76cd627b9147ee340b1125"
+      testValues = [
+        ("29738ba0c1a4397d6a65f292eee07f02df8e58d41594ba2be3cf84ce0fc58169", 251'u32),
+        ("1c9b1cafbec00848d2c174b858219914b42a7d5c9359b1ca03fd650e8239ae94", 252'u32),
+        ("2d0511ae9bf590166597eeab86b6f27b1ab761761eaea8965487b162f8703847", 253'u32),
+        ("dec742079ec00ff4ec1284d7905bc3de2366f67a0769431fd16f80fd68c58a7c", 254'u32),
+        ("da8645f90826e57228d9ea72aff84500060ad111a5d62e4af831ed8e4b5acfb8", 255'u32),
+        ("8c5b422155d33ea8e9d46f71d1ad3e7b24cb40051413ffa1a81cff613d243ba9", 256'u32)
+      ]
+
+    let targetId = toNodeId(initPublicKey(targetKey))
+
+    for (key, d) in testValues:
+      let id = toNodeId(initPrivateKey(key).getPublicKey())
+      check logDist(targetId, id) == d
