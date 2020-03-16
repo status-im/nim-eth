@@ -19,17 +19,19 @@ const
   ID_SIZE = 256
 
 proc distanceTo(n: Node, id: NodeId): UInt256 = n.id xor id
+
 proc logDist*(a, b: NodeId): uint32 =
   let a = a.toBytes
   let b = b.toBytes
   var lz = 0
-  for i in 0 ..< a.len:
+  for i in countdown(a.len - 1, 0):
     let x = a[i] xor b[i]
     if x == 0:
-      result += 8
+      lz += 8
     else:
-      result += bitops.countLeadingZeroBits(x).uint8
-  uint32(a.len * 8 - lz)
+      lz += bitops.countLeadingZeroBits(x)
+      break
+  return uint32(a.len * 8 - lz)
 
 proc newKBucket(istart, iend: NodeId): KBucket =
   result.new()
