@@ -17,15 +17,25 @@ Ethereum-related utilities written in Nim. Includes things like Bloom filters, p
 - [trie](doc/trie.md)
 - [bloom](doc/bloom.md)
 
-## Building & Testing
+## Prerequisites
 
-### Prerequisites
+- Nim & Nimble
+- RocksDB, SQLite, LMDB (required for the trie backend tests)
 
-Nimble is installed.
-
+## Building & Testing 
 ```
+# Install required modules
 nimble install
+# Run full test suite
 nimble test
+```
+
+You can also run specific parts of the test suite, e.g.:
+```
+# Test p2p functionality
+nimble test_p2p
+# Test rlp functionality
+nimble test_rlp
 ```
 
 ## License
