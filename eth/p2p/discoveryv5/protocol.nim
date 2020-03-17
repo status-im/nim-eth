@@ -68,6 +68,9 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
 
   result.routingTable.init(node)
 
+func privKey*(p: Protocol): lent PrivateKey =
+  p.privateKey
+
 proc send(d: Protocol, a: Address, data: seq[byte]) =
   # debug "Sending bytes", amount = data.len, to = a
   let ta = initTAddress(a.ip, a.udpPort)

@@ -1,7 +1,7 @@
 import
   chronos, chronicles
 
-proc catchOrQuit(error: Exception) =
+proc catchOrQuit*(error: Exception) =
   if error of CatchableError:
     trace "Async operation ended with a recoverable error", err = error.msg
   else:
