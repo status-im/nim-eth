@@ -2,9 +2,8 @@ const tracingEnabled = defined(p2pdump)
 
 when tracingEnabled:
   import
-    macros, typetraits,
-    serialization, json_serialization/writer,
-    chronicles, chronicles_tail/configuration
+    typetraits,
+    json_serialization, chronicles #, chronicles_tail/configuration
 
   export
     # XXX: Nim visibility rules get in the way here.
@@ -17,21 +16,25 @@ when tracingEnabled:
     # TODO: File this as an issue
 
   logStream p2pMessages[json[file(p2p_messages.json,truncate)]]
-  p2pMessages.useTailPlugin "p2p_tracing_ctail_plugin.nim"
+  # p2pMessages.useTailPlugin "p2p_tracing_ctail_plugin.nim"
 
   template logRecord(eventName: static[string], args: varargs[untyped]) =
     p2pMessages.log LogLevel.NONE, eventName, topics = "p2pdump", args
 
-  proc initTracing(baseProtocol: ProtocolInfo,
-                   userProtocols: seq[ProtocolInfo]) =
+  proc initTracing*(baseProtocol: ProtocolInfo,
+                    userProtocols: seq[ProtocolInfo]) =
     once:
-      var w = init StringJsonWriter
+      var s = init OutputStream
+      var w = JsonWriter.init(s)
 
       proc addProtocol(p: ProtocolInfo) =
         w.writeFieldName p.name
         w.beginRecord()
+        var i = 0
         for msg in p.messages:
-          w.writeField $msg.id, msg.name
+          let msgId = i # msg.id
+          w.writeField $msgId, msg.name
+          inc i
         w.endRecordField()
 
       w.beginRecord()
@@ -40,55 +43,62 @@ when tracingEnabled:
         addProtocol userProtocol
       w.endRecord()
 
-      logRecord "p2p_protocols", data = JsonString(w.getOutput)
+      logRecord "p2p_protocols", data = JsonString(s.getOutput(string))
 
-  proc logMsgEventImpl(eventName: static[string],
+  proc logMsgEventImpl*(eventName: static[string],
                        peer: Peer,
                        protocol: ProtocolInfo,
                        msgName: string,
                        json: string) =
     # this is kept as a separate proc to reduce the code bloat
-    logRecord eventName, port = int(peer.network.address.tcpPort),
-                         peer = $peer.remote,
+    logRecord eventName, peer = $peer.remote,
                          protocol = protocol.name,
                          msg = msgName,
                          data = JsonString(json)
 
-  proc logMsgEvent[Msg](eventName: static[string], peer: Peer, msg: Msg) =
-    mixin msgProtocol, protocolInfo, msgId
+  template logMsgEventImpl*(eventName: static[string],
+                            responder: Responder,
+                            protocol: ProtocolInfo,
+                            msgName: string,
+                            json: string) =
+    logMsgEventImpl(eventName, UntypedResponder(responder).peer,
+                    protocol, msgName, json)
 
+  proc logMsgEvent[Msg](eventName: static[string], peer: Peer, msg: Msg) =
+    mixin msgProtocol, protocolInfo, msgId, RecType
+    type R = RecType(Msg)
     logMsgEventImpl(eventName, peer,
                     Msg.msgProtocol.protocolInfo,
                     Msg.type.name,
-                    StringJsonWriter.encode(msg))
+                    Json.encode(R msg))
 
-  template logSentMsg(peer: Peer, msg: auto) =
+  template logSentMsg*(peer: Peer, msg: auto) =
     logMsgEvent("outgoing_msg", peer, msg)
 
-  template logReceivedMsg(peer: Peer, msg: auto) =
+  template logReceivedMsg*(peer: Peer, msg: auto) =
     logMsgEvent("incoming_msg", peer, msg)
 
-  template logConnectedPeer(p: Peer) =
+  template logConnectedPeer*(p: Peer) =
     logRecord "peer_connected",
               port = int(p.network.address.tcpPort),
               peer = $p.remote
 
-  template logAcceptedPeer(p: Peer) =
+  template logAcceptedPeer*(p: Peer) =
     logRecord "peer_accepted",
               port = int(p.network.address.tcpPort),
               peer = $p.remote
 
-  template logDisconnectedPeer(p: Peer) =
+  template logDisconnectedPeer*(p: Peer) =
     logRecord "peer_disconnected",
               port = int(p.network.address.tcpPort),
               peer = $p.remote
 
 else:
-  template initTracing(baseProtocol: ProtocolInfo,
+  template initTracing*(baseProtocol: ProtocolInfo,
                        userProtocols: seq[ProtocolInfo])= discard
-  template logSentMsg(peer: Peer, msg: auto) = discard
-  template logReceivedMsg(peer: Peer, msg: auto) = discard
-  template logConnectedPeer(peer: Peer) = discard
-  template logAcceptedPeer(peer: Peer) = discard
-  template logDisconnectedPeer(peer: Peer) = discard
+  template logSentMsg*(peer: Peer, msg: auto) = discard
+  template logReceivedMsg*(peer: Peer, msg: auto) = discard
+  template logConnectedPeer*(peer: Peer) = discard
+  template logAcceptedPeer*(peer: Peer) = discard
+  template logDisconnectedPeer*(peer: Peer) = discard
 

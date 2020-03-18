@@ -135,6 +135,7 @@ let
   Option                {.compileTime.} = ident "Option"
   Future                {.compileTime.} = ident "Future"
   Void                  {.compileTime.} = ident "void"
+  writeField            {.compileTime.} = ident "writeField"
 
 template Opt(T): auto = newTree(nnkBracketExpr, Option, T)
 template Fut(T): auto = newTree(nnkBracketExpr, Future, T)
@@ -153,19 +154,24 @@ when tracingEnabled:
                         fields: openarray[NimNode]): NimNode =
     ## This generates the tracing code inserted in the message sending procs
     ## `fields` contains all the params that were serialized in the message
-    var tracer = ident("tracer")
+    let
+      tracer = ident "tracer"
+      tracerStream = ident "tracerStream"
+      logMsgEventImpl = ident "logMsgEventImpl"
 
     result = quote do:
-      var `tracer` = init StringJsonWriter
+      var `tracerStream` = init OutputStream
+      var `tracer` = JsonWriter.init(`tracerStream`)
       beginRecord(`tracer`)
 
     for f in fields:
-      result.add newCall(bindSym"writeField", tracer, newLit($f), f)
+      result.add newCall(writeField, tracer, newLit($f), f)
 
     result.add quote do:
       endRecord(`tracer`)
-      logMsgEventImpl("outgoing_msg", `peer`,
-                      `protocolInfo`, `msgName`, getOutput(`tracer`))
+      `logMsgEventImpl`("outgoing_msg", `peer`,
+                        `protocolInfo`, `msgName`,
+                        getOutput(`tracerStream`, string))
 
 proc createPeerState[Peer, ProtocolState](peer: Peer): RootRef =
   var res = new ProtocolState
@@ -528,7 +534,6 @@ proc writeParamsAsRecord*(params: openarray[NimNode],
                           outputStream, Format, RecordType: NimNode): NimNode =
   var
     appendParams = newStmtList()
-    writeField = ident "writeField"
     recordWriterCtx = ident "recordWriterCtx"
     writer = ident "writer"
 
@@ -584,11 +589,13 @@ proc useStandardBody*(sendProc: SendProc,
 
     sendCall = sendCallGenerator(recipient, msgBytes)
 
-    tracing = when tracingEnabled: logSentMsgFields(recipient,
-                                                    newLit(msg.protocol.name),
-                                                    $msg.ident,
-                                                    sendProc.msgParams)
-              else: newStmtList()
+    tracing = when not tracingEnabled:
+                newStmtList()
+              else:
+                logSentMsgFields(recipient,
+                                 msg.protocol.protocolInfoVar,
+                                 $msg.ident,
+                                 sendProc.msgParams)
 
   sendProc.setBody quote do:
     mixin init, WriterType, beginRecord, endRecord, getOutput
