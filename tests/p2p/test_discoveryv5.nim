@@ -69,12 +69,14 @@ suite "Discovery v5 Tests":
       nodeCount = 17
 
     let bootNode = initDiscoveryNode(newPrivateKey(), localAddress(20301), @[])
+    bootNode.start()
 
     var nodes = newSeqOfCap[discv5_protocol.Protocol](nodeCount)
     nodes.add(bootNode)
     for i in 1 ..< nodeCount:
       nodes.add(initDiscoveryNode(newPrivateKey(), localAddress(20301 + i),
         @[bootNode.localNode.record]))
+      nodes[i].start()
 
     for i in 0..<nodeCount-1:
       let target = nodes[i]

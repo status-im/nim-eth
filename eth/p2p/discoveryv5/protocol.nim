@@ -451,28 +451,32 @@ proc open*(d: Protocol) =
   for node in d.bootstrapNodes:
     d.addNode(node)
 
+proc start*(d: Protocol) =
   # Might want to move these to a separate proc if this turns out to be needed.
   d.lookupLoop = lookupLoop(d)
   d.revalidateLoop = revalidateLoop(d)
 
 proc close*(d: Protocol) =
-  doAssert(not d.lookupLoop.isNil() or not d.revalidateLoop.isNil())
   doAssert(not d.transp.closed)
 
   debug "Closing discovery node", node = $d.localNode
-  d.revalidateLoop.cancel()
-  d.lookupLoop.cancel()
+  if not d.revalidateLoop.isNil:
+    d.revalidateLoop.cancel()
+  if not d.lookupLoop.isNil:
+    d.lookupLoop.cancel()
   # TODO: unsure if close can't create issues in the not awaited cancellations
   # above
   d.transp.close()
 
 proc closeWait*(d: Protocol) {.async.} =
-  doAssert(not d.lookupLoop.isNil() or not d.revalidateLoop.isNil())
   doAssert(not d.transp.closed)
 
   debug "Closing discovery node", node = $d.localNode
-  await allFutures([d.revalidateLoop.cancelAndWait(),
-    d.lookupLoop.cancelAndWait()])
+  if not d.revalidateLoop.isNil:
+    await d.revalidateLoop.cancelAndWait()
+  if not d.lookupLoop.isNil:
+    await d.lookupLoop.cancelAndWait()
+
   await d.transp.closeWait()
 
 when isMainModule:
