@@ -53,6 +53,8 @@ proc `==`*(a, b: Node): bool = (a.isNil and b.isNil) or (not a.isNil and not b.i
 
 proc address*(n: Node): Address {.inline.} = n.node.address
 
+proc updateEndpoint*(n: Node, a: Address) {.inline.} = n.node.address = a
+
 proc `$`*(n: Node): string =
   if n == nil:
     "Node[local]"
