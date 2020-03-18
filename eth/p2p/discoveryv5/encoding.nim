@@ -88,7 +88,7 @@ proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
   ectx.getTag(result.toOpenArray(pt.len, result.high))
   ectx.clear()
 
-proc makeAuthHeader(c: Codec, toNode: Node, nonce: array[gcmNonceSize, byte],
+proc makeAuthHeader(c: Codec, toId: NodeID, nonce: array[gcmNonceSize, byte],
                     handshakeSecrets: var HandshakeSecrets,
                     challenge: Whoareyou): seq[byte] =
   var resp = AuthResponse(version: 5)
@@ -102,7 +102,7 @@ proc makeAuthHeader(c: Codec, toNode: Node, nonce: array[gcmNonceSize, byte],
 
   resp.signature = c.signIDNonce(challenge.idNonce, ephPubkey).getRaw
 
-  deriveKeys(ln.id, toNode.id, ephKey, toNode.node.pubKey, challenge.idNonce,
+  deriveKeys(ln.id, toId, ephKey, challenge.pubKey, challenge.idNonce,
     handshakeSecrets)
 
   let respRlp = rlp.encode(resp)
@@ -125,7 +125,8 @@ proc packetTag(destNode, srcNode: NodeID): PacketTag =
   result = srcId xor destidHash.data
 
 proc encodeEncrypted*(c: Codec,
-                      toNode: Node,
+                      toId: NodeID,
+                      toAddr: Address,
                       packetData: seq[byte],
                       challenge: Whoareyou):
                       (seq[byte], array[gcmNonceSize, byte]) =
@@ -141,17 +142,17 @@ proc encodeEncrypted*(c: Codec,
 
     # We might not have the node's keys if the handshake hasn't been performed
     # yet. That's fine, we will be responded with whoareyou.
-    discard c.db.loadKeys(toNode.id, toNode.address, readKey, writeKey)
+    discard c.db.loadKeys(toId, toAddr, readKey, writeKey)
   else:
     var sec: HandshakeSecrets
-    headEnc = c.makeAuthHeader(toNode, nonce, sec, challenge)
+    headEnc = c.makeAuthHeader(toId, nonce, sec, challenge)
 
     writeKey = sec.writeKey
     # TODO: is it safe to ignore the error here?
-    discard c.db.storeKeys(toNode.id, toNode.address, sec.readKey, sec.writeKey)
+    discard c.db.storeKeys(toId, toAddr, sec.readKey, sec.writeKey)
 
   var body = packetData
-  let tag = packetTag(toNode.id, c.localNode.id)
+  let tag = packetTag(toId, c.localNode.id)
 
   var headBuf = newSeqOfCap[byte](tag.len + headEnc.len)
   headBuf.add(tag)
