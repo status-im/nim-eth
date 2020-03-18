@@ -282,6 +282,11 @@ proc decodeEncrypted*(c: var Codec,
       return HandshakeError
     c.handshakes.del(key)
 
+    # For an incoming handshake, we are not sure the address in the ENR is there
+    # and if it is the real external IP, so we use the one we know from the
+    # UDP packet.
+    updateEndpoint(newNode, fromAddr)
+
     # Swap keys to match remote
     swap(sec.readKey, sec.writeKey)
     # TODO: is it safe to ignore the error here?

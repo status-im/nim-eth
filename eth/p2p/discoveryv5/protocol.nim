@@ -397,9 +397,11 @@ proc revalidateNode(p: Protocol, n: Node)
     if n notin p.bootstrapNodes:
       trace "Revalidation of node failed, removing node", node = $n
       p.routingTable.removeNode(n)
-      # TODO: Do we delete the shared secrets here?
-      # And if so, the current way they are stored, we might not have the key
-      # (specifically if the ENR does not have the correct address)
+      # Remove shared secrets when removing the node from routing table.
+      # This might be to direct, so we could keep these longer. But better
+      # would be to simply not remove the nodes immediatly but only after x
+      # amount of failures.
+      discard p.codec.db.deleteKeys(n.id, n.address)
 
 proc revalidateLoop(p: Protocol) {.async.} =
   try:
