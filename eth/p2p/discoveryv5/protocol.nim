@@ -35,7 +35,7 @@ type
     db: Database
     routingTable: RoutingTable
     codec*: Codec
-    awaitedPackets: Table[(Node, RequestId), Future[Option[Packet]]]
+    awaitedPackets: Table[(NodeId, RequestId), Future[Option[Packet]]]
     lookupLoop: Future[void]
     revalidateLoop: Future[void]
     bootstrapNodes: seq[Node]
@@ -141,10 +141,13 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthT
     data.add(rlp.encode(challenge[]))
     d.send(address, data)
 
-proc sendNodes(d: Protocol, toNode: Node, reqId: RequestId, nodes: openarray[Node]) =
-  proc sendNodes(d: Protocol, toNode: Node, packet: NodesPacket, reqId: RequestId) {.nimcall.} =
-    let (data, _) = d.codec.encodeEncrypted(toNode, encodePacket(packet, reqId), challenge = nil)
-    d.send(toNode, data)
+proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
+    nodes: openarray[Node]) =
+  proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address,
+      packet: NodesPacket, reqId: RequestId) {.nimcall.} =
+    let (data, _) = d.codec.encodeEncrypted(toId, toAddr,
+      encodePacket(packet, reqId), challenge = nil)
+    d.send(toAddr, data)
 
   var packet: NodesPacket
   packet.total = ceil(nodes.len / maxNodesPerPacket).uint32
@@ -152,14 +155,15 @@ proc sendNodes(d: Protocol, toNode: Node, reqId: RequestId, nodes: openarray[Nod
   for i in 0 ..< nodes.len:
     packet.enrs.add(nodes[i].record)
     if packet.enrs.len == 3:
-      d.sendNodes(toNode, packet, reqId)
+      d.sendNodes(toId, toAddr, packet, reqId)
       packet.enrs.setLen(0)
 
   if packet.enrs.len != 0:
-    d.sendNodes(toNode, packet, reqId)
+    d.sendNodes(toId, toAddr, packet, reqId)
 
-proc handlePing(d: Protocol, fromNode: Node, ping: PingPacket, reqId: RequestId) =
-  let a = fromNode.address
+proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
+    ping: PingPacket, reqId: RequestId) =
+  let a = fromAddr
   var pong: PongPacket
   pong.enrSeq = ping.enrSeq
   pong.ip = case a.ip.family
@@ -167,15 +171,18 @@ proc handlePing(d: Protocol, fromNode: Node, ping: PingPacket, reqId: RequestId)
     of IpAddressFamily.IPv6: @(a.ip.address_v6)
   pong.port = a.udpPort.uint16
 
-  let (data, _) = d.codec.encodeEncrypted(fromNode, encodePacket(pong, reqId), challenge = nil)
-  d.send(fromNode, data)
+  let (data, _) = d.codec.encodeEncrypted(fromId, fromAddr,
+    encodePacket(pong, reqId), challenge = nil)
+  d.send(fromAddr, data)
 
-proc handleFindNode(d: Protocol, fromNode: Node, fn: FindNodePacket, reqId: RequestId) =
+proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
+    fn: FindNodePacket, reqId: RequestId) =
   if fn.distance == 0:
-    d.sendNodes(fromNode, reqId, [d.localNode])
+    d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
   else:
     let distance = min(fn.distance, 256)
-    d.sendNodes(fromNode, reqId, d.routingTable.neighboursAtDistance(distance))
+    d.sendNodes(fromId, fromAddr, reqId,
+      d.routingTable.neighboursAtDistance(distance))
 
 proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
   raises: [
@@ -200,8 +207,10 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
     var pr: PendingRequest
     if d.pendingRequests.take(whoareyou.authTag, pr):
       let toNode = pr.node
+      whoareyou.pubKey = toNode.node.pubkey # TODO: Yeah, rather ugly this.
       try:
-        let (data, _) = d.codec.encodeEncrypted(toNode, pr.packet, challenge = whoareyou)
+        let (data, _) = d.codec.encodeEncrypted(toNode.id, toNode.address,
+          pr.packet, challenge = whoareyou)
         d.send(toNode, data)
       except RandomSourceDepleted as err:
         debug "Failed to respond to a who-you-are msg " &
@@ -224,16 +233,14 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
         debug "Adding new node to routing table", node = $node, localNode = $d.localNode
         discard d.routingTable.addNode(node)
 
-      doAssert(not node.isNil, "No node in the routing table (internal error?)")
-
       case packet.kind
       of ping:
-        d.handlePing(node, packet.ping, packet.reqId)
+        d.handlePing(sender, a, packet.ping, packet.reqId)
       of findNode:
-        d.handleFindNode(node, packet.findNode, packet.reqId)
+        d.handleFindNode(sender, a, packet.findNode, packet.reqId)
       else:
         var waiter: Future[Option[Packet]]
-        if d.awaitedPackets.take((node, packet.reqId), waiter):
+        if d.awaitedPackets.take((sender, packet.reqId), waiter):
           waiter.complete(packet.some)
         else:
           debug "TODO: handle packet: ", packet = packet.kind, origin = $node
@@ -252,7 +259,7 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
 proc waitPacket(d: Protocol, fromNode: Node, reqId: RequestId): Future[Option[Packet]] =
   result = newFuture[Option[Packet]]("waitPacket")
   let res = result
-  let key = (fromNode, reqId)
+  let key = (fromNode.id, reqId)
   sleepAsync(responseTimeout).addCallback() do(data: pointer):
     d.awaitedPackets.del(key)
     if not res.finished:
@@ -277,7 +284,8 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId): Future[seq[Node]]
 proc findNode(d: Protocol, toNode: Node, distance: uint32): Future[seq[Node]] {.async.} =
   let reqId = newRequestId()
   let packet = encodePacket(FindNodePacket(distance: distance), reqId)
-  let (data, nonce) = d.codec.encodeEncrypted(toNode, packet, challenge = nil)
+  let (data, nonce) = d.codec.encodeEncrypted(toNode.id, toNode.address, packet,
+    challenge = nil)
   d.pendingRequests[nonce] = PendingRequest(node: toNode, packet: packet)
   d.send(toNode, data)
   result = await d.waitNodes(toNode, reqId)
@@ -371,7 +379,8 @@ proc ping(p: Protocol, toNode: Node): RequestId =
     reqId = newRequestId()
     ping = PingPacket(enrSeq: p.localNode.record.seqNum)
     packet = encodePacket(ping, reqId)
-    (data, nonce) = p.codec.encodeEncrypted(toNode, packet, challenge = nil)
+    (data, nonce) = p.codec.encodeEncrypted(toNode.id, toNode.address, packet,
+      challenge = nil)
   p.pendingRequests[nonce] = PendingRequest(node: toNode, packet: packet)
   p.send(toNode, data)
   return reqId

@@ -1,6 +1,6 @@
 import
   hashes, stint,
-  ../enode, enr
+  eth/[keys, rlp], ../enode, enr
 
 const
   authTagSize* = 12
@@ -21,6 +21,7 @@ type
     authTag*: AuthTag
     idNonce*: IdNonce
     recordSeq*: uint64
+    pubKey* {.rlpIgnore.}: PublicKey
 
   Whoareyou* = ref WhoareyouObj
 
