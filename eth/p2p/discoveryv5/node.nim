@@ -28,18 +28,22 @@ proc newNode*(pk: PublicKey, address: Address): Node =
 
 proc newNode*(r: Record): Node =
   # TODO: Handle IPv6
-  let
-    ipBytes = r.get("ip", array[4, byte])
-    udpPort = r.get("udp", uint16)
+  var a: Address
+  try:
+    let
+      ipBytes = r.get("ip", array[4, byte])
+      udpPort = r.get("udp", uint16)
+
+    a = Address(ip: IpAddress(family: IpAddressFamily.IPv4,
+                              address_v4: ipBytes),
+                udpPort: Port udpPort)
+  except KeyError:
+    discard
 
   var pk: PublicKey
   if recoverPublicKey(r.get("secp256k1", seq[byte]), pk) != EthKeysStatus.Success:
     warn "Could not recover public key"
     return
-
-  let a = Address(ip: IpAddress(family: IpAddressFamily.IPv4,
-                                address_v4: ipBytes),
-                  udpPort: Port udpPort)
 
   result = newNode(initENode(pk, a))
   result.record = r

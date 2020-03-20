@@ -35,19 +35,35 @@ suite "ENR":
       keys = newKeyPair()
       ip = parseIpAddress("10.20.30.40")
       enodeAddress = Address(ip: ip, tcpPort: Port 9000, udpPort: Port 9000)
-      enr = Record.init(100, keys.seckey, enodeAddress)
-      typedEnr = get enr.toTypedRecord
+      enr = Record.init(100, keys.seckey, some(enodeAddress))
+      typedEnr = get enr.toTypedRecord()
 
     check:
-      typedEnr.secp256k1.isSome
-      typedEnr.secp256k1.get == keys.pubkey.getRawCompressed
+      typedEnr.secp256k1.isSome()
+      typedEnr.secp256k1.get == keys.pubkey.getRawCompressed()
 
-      typedEnr.ip.isSome
-      typedEnr.ip.get == [byte 10, 20, 30, 40]
+      typedEnr.ip.isSome()
+      typedEnr.ip.get() == [byte 10, 20, 30, 40]
 
-      typedEnr.tcp.isSome
-      typedEnr.tcp.get == 9000
+      typedEnr.tcp.isSome()
+      typedEnr.tcp.get() == 9000
 
-      typedEnr.udp.isSome
-      typedEnr.udp.get == 9000
+      typedEnr.udp.isSome()
+      typedEnr.udp.get() == 9000
 
+  test "ENR without address":
+    let
+      keys = newKeyPair()
+      enr = Record.init(100, keys.seckey, none(Address))
+      typedEnr = get enr.toTypedRecord()
+
+    check:
+      typedEnr.secp256k1.isSome()
+      typedEnr.secp256k1.get() == keys.pubkey.getRawCompressed()
+
+      typedEnr.ip.isNone()
+      typedEnr.tcp.isNone()
+      typedEnr.udp.isNone()
+      typedEnr.ip6.isNone()
+      typedEnr.tcp6.isNone()
+      typedEnr.udp6.isNone()
