@@ -59,10 +59,16 @@ proc addNode*(d: Protocol, enr: EnrUri) =
   doAssert(res)
   d.addNode newNode(r)
 
-proc randomNodes*(k: Protocol, count: int): seq[Node] =
-  k.routingTable.randomNodes(count)
+proc getNode*(d: Protocol, id: NodeId): Node =
+  d.routingTable.getNode(id)
 
-proc nodesDiscovered*(k: Protocol): int {.inline.} = k.routingTable.len
+proc randomNodes*(d: Protocol, count: int): seq[Node] =
+  d.routingTable.randomNodes(count)
+
+proc neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
+  d.routingTable.neighbours(id, k)
+
+proc nodesDiscovered*(d: Protocol): int {.inline.} = d.routingTable.len
 
 proc whoareyouMagic(toNode: NodeId): array[magicSize, byte] =
   const prefix = "WHOAREYOU"
@@ -77,7 +83,7 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
   let
     a = Address(ip: ip, tcpPort: tcpPort, udpPort: udpPort)
     enode = initENode(privKey.getPublicKey(), a)
-    enrRec = enr.Record.init(12, privKey, a)
+    enrRec = enr.Record.init(12, privKey, some(a))
     node = newNode(enode, enrRec)
 
   result = Protocol(
@@ -281,7 +287,7 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId): Future[seq[Node]]
       else:
         break
 
-proc findNode(d: Protocol, toNode: Node, distance: uint32): Future[seq[Node]] {.async.} =
+proc findNode*(d: Protocol, toNode: Node, distance: uint32): Future[seq[Node]] {.async.} =
   let reqId = newRequestId()
   let packet = encodePacket(FindNodePacket(distance: distance), reqId)
   let (data, nonce) = d.codec.encodeEncrypted(toNode.id, toNode.address, packet,

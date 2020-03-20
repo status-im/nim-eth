@@ -1,5 +1,5 @@
 import
-  random, unittest, chronos, sequtils, chronicles, tables, stint,
+  random, unittest, chronos, sequtils, chronicles, tables, stint, options,
   eth/[keys, rlp], eth/p2p/enode, eth/trie/db,
   eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
@@ -31,6 +31,10 @@ proc randomPacket(tag: PacketTag): seq[byte] =
   result.add(tag)
   result.add(rlp.encode(authTag))
   result.add(msg)
+
+proc generateNode(privKey = newPrivateKey()): Node =
+  let enr = enr.Record.init(1, privKey, none(Address))
+  result = newNode(enr)
 
 suite "Discovery v5 Tests":
   asyncTest "Random nodes":
@@ -87,6 +91,47 @@ suite "Discovery v5 Tests":
 
     for node in nodes:
       await node.closeWait()
+
+  asyncTest "FindNode with test table":
+
+    let mainNode = initDiscoveryNode(newPrivateKey(), localAddress(20301), @[])
+
+    # Generate 1000 random nodes and add to our main node's routing table
+    for i in 0..<1000:
+      mainNode.addNode(generateNode())
+
+    let
+      neighbours = mainNode.neighbours(mainNode.localNode.id)
+      closest = neighbours[0]
+      closestDistance = logDist(closest.id, mainNode.localNode.id)
+
+    debug "Closest neighbour", closestDistance, id=closest.id.toHex()
+
+    let
+      testNode = initDiscoveryNode(newPrivateKey(), localAddress(20302),
+        @[mainNode.localNode.record])
+      discovered = await discv5_protocol.findNode(testNode, mainNode.localNode,
+        closestDistance)
+
+    check closest in discovered
+
+    await mainNode.closeWait()
+    await testNode.closeWait()
+
+  asyncTest "GetNode":
+    # TODO: This could be tested in just a routing table only context
+    let
+      node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
+      targetNode = generateNode()
+
+    node.addNode(targetNode)
+
+    for i in 0..<1000:
+      node.addNode(generateNode())
+
+    check node.getNode(targetNode.id) == targetNode
+
+    await node.closeWait()
 
   asyncTest "Handshake cleanup":
     let node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
