@@ -35,6 +35,13 @@ template asyncTest*(name, body: untyped) =
     proc scenario {.async.} = body
     waitFor scenario()
 
+template procSuite*(name, body: untyped) =
+  proc suitePayload =
+    suite name:
+      body
+
+  suitePayload()
+
 proc packData*(payload: openArray[byte], pk: PrivateKey): seq[byte] =
   let
     payloadSeq = @payload

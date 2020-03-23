@@ -11,7 +11,7 @@ proc waitForConnected(node: EthereumNode) {.async.} =
   while node.peerPool.connectedNodes.len == 0:
     await sleepAsync(chronos.milliseconds(1))
 
-suite "Waku Mail Client":
+procSuite "Waku Mail Client":
   var client = setupTestNode(Waku)
   var simpleServer = setupTestNode(Waku)
 

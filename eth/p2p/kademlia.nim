@@ -236,12 +236,9 @@ proc newKademliaProtocol*[Wire](thisNode: Node,
   result.new()
   result.thisNode = thisNode
   result.wire = wire
-  result.pongFutures = initTable[seq[byte], Future[bool]]()
-  result.pingFutures = initTable[Node, Future[bool]]()
-  result.neighboursCallbacks = initTable[Node, proc(n: seq[Node])]()
   result.routing.init(thisNode)
 
-proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async.}
+proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async, gcsafe.}
 
 proc updateRoutingTable(k: KademliaProtocol, n: Node) {.gcsafe.} =
   ## Update the routing table entry for the given node.

@@ -48,7 +48,7 @@ suite "Discovery v5 Tests":
     for i in 0 ..< nodeKeys.len: nodeAddrs.add(localAddress(20302 + i))
 
     var nodes = zip(nodeKeys, nodeAddrs).mapIt(
-      initDiscoveryNode(it.a, it.b, @[bootNode.localNode.record]))
+      initDiscoveryNode(it[0], it[1], @[bootNode.localNode.record]))
     nodes.add(bootNode)
 
     for node in nodes:
