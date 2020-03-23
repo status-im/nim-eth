@@ -34,7 +34,7 @@ proc test() {.async.} =
       for i in 0 ..< nodeKeys.len: nodeAddrs.add(localAddress(20302 + i))
 
       var nodes = await all(zip(nodeKeys, nodeAddrs).mapIt(
-        startDiscoveryNode(it.a, it.b, @[bootENode]))
+        startDiscoveryNode(it[0], it[1], @[bootENode]))
       )
       nodes.add(bootNode)
 

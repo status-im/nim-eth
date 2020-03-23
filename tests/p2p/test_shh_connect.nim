@@ -19,7 +19,7 @@ proc resetMessageQueues(nodes: varargs[EthereumNode]) =
 let safeTTL = 5'u32
 let waitInterval = messageInterval + 150.milliseconds
 
-suite "Whisper connections":
+procSuite "Whisper connections":
   var node1 = setupTestNode(Whisper)
   var node2 = setupTestNode(Whisper)
   node2.startListening()

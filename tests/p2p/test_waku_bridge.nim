@@ -17,7 +17,7 @@ import
 let safeTTL = 5'u32
 let waitInterval = waku.messageInterval + 150.milliseconds
 
-suite "Waku - Whisper bridge tests":
+procSuite "Waku - Whisper bridge tests":
   # Waku Whisper node has both capabilities, listens to Whisper and Waku and
   # relays traffic between the two.
   var

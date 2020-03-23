@@ -19,7 +19,7 @@ const
 
 # check on a condition until true or return a future containing false
 # if timeout expires first
-proc eventually(timeout: int, condition: proc(): bool): Future[bool] =
+proc eventually(timeout: int, condition: proc(): bool {.gcsafe.}): Future[bool] =
   let wrappedCondition = proc(): Future[bool] {.async.} =
     let f = newFuture[bool]()
     while not condition():

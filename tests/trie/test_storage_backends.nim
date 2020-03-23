@@ -53,7 +53,7 @@ template backendTests(DB) =
         keyA notin db
         keyB in db
 
-      check db.get(keyA) == @[]
+      check db.get(keyA).len == 0
 
       check db.get(keyB) == value1
       db.del(keyA)
