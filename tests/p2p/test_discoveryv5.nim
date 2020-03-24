@@ -133,6 +133,30 @@ suite "Discovery v5 Tests":
 
     await node.closeWait()
 
+  asyncTest "Node deletion":
+    let
+      bootnode = initDiscoveryNode(newPrivateKey(), localAddress(20301), @[])
+      node1 = initDiscoveryNode(newPrivateKey(), localAddress(20302),
+        @[bootnode.localNode.record])
+      node2 = initDiscoveryNode(newPrivateKey(), localAddress(20303),
+        @[bootnode.localNode.record])
+      pong1 = await discv5_protocol.ping(node1, bootnode.localNode)
+      pong2 = await discv5_protocol.ping(node1, node2.localNode)
+
+    check pong1.isSome() and pong2.isSome()
+
+    await bootnode.closeWait()
+    await node2.closeWait()
+
+    await node1.revalidateNode(bootnode.localNode)
+    await node1.revalidateNode(node2.localNode)
+
+    check node1.getNode(bootnode.localNode.id) == bootnode.localNode
+    check node1.getNode(node2.localNode.id) == nil
+
+    await node1.closeWait()
+
+
   asyncTest "Handshake cleanup":
     let node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
     var tag: PacketTag

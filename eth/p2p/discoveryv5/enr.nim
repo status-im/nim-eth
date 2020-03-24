@@ -309,6 +309,8 @@ proc `$`*(r: Record): string =
     result &= $v
   result &= ')'
 
+proc `==`*(a, b: Record): bool = a.raw == b.raw
+
 proc read*(rlp: var Rlp, T: typedesc[Record]): T {.inline.} =
   if not result.fromBytes(rlp.rawData.toOpenArray):
     raise newException(ValueError, "Could not deserialize")
