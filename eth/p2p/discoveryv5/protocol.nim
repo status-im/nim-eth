@@ -38,7 +38,7 @@ type
     awaitedPackets: Table[(NodeId, RequestId), Future[Option[Packet]]]
     lookupLoop: Future[void]
     revalidateLoop: Future[void]
-    bootstrapNodes: seq[Node]
+    bootstrapRecords*: seq[Record]
 
   PendingRequest = object
     node: Node
@@ -304,7 +304,7 @@ proc sendPing(d: Protocol, toNode: Node): RequestId =
   d.send(toNode, data)
   return reqId
 
-proc ping(d: Protocol, toNode: Node): Future[Option[PongPacket]] {.async.} =
+proc ping*(d: Protocol, toNode: Node): Future[Option[PongPacket]] {.async.} =
   let reqId = d.sendPing(toNode)
   let resp = await d.waitPacket(toNode, reqId)
 
@@ -392,7 +392,7 @@ proc lookupRandom*(d: Protocol): Future[seq[Node]]
     raise newException(RandomSourceDepleted, "Could not randomize bytes")
   d.lookup(id)
 
-proc revalidateNode(d: Protocol, n: Node)
+proc revalidateNode*(d: Protocol, n: Node)
     {.async, raises:[Defect, Exception].} = # TODO: Exception
   trace "Ping to revalidate node", node = $n
   let pong = await d.ping(n)
@@ -408,8 +408,8 @@ proc revalidateNode(d: Protocol, n: Node)
     # For now we never remove bootstrap nodes. It might make sense to actually
     # do so and to retry them only in case we drop to a really low amount of
     # peers in the DHT
-    if n notin d.bootstrapNodes:
-      trace "Revalidation of node failed, removing node", node = $n
+    if n.record notin d.bootstrapRecords:
+      trace "Revalidation of node failed, removing node", record = n.record
       d.routingTable.removeNode(n)
       # Remove shared secrets when removing the node from routing table.
       # This might be to direct, so we could keep these longer. But better
@@ -462,19 +462,20 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
     whoareyouMagic: whoareyouMagic(node.id),
     idHash: sha256.digest(node.id.toByteArrayBE).data,
     codec: Codec(localNode: node, privKey: privKey, db: db),
-    bootstrapNodes: newNodes(bootstrapRecords))
+    bootstrapRecords: @bootstrapRecords)
 
   result.routingTable.init(node)
 
 proc open*(d: Protocol) =
-  debug "Starting discovery node", node = $d.localNode,
+  info "Starting discovery node", node = $d.localNode,
     uri = toURI(d.localNode.record)
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(IPv4_any(), d.localNode.node.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
-  for node in d.bootstrapNodes:
-    d.addNode(node)
+  for record in d.bootstrapRecords:
+    debug "Adding bootstrap node", uri = toURI(record)
+    d.addNode(record)
 
 proc start*(d: Protocol) =
   # Might want to move these to a separate proc if this turns out to be needed.
