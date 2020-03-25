@@ -3,13 +3,13 @@
 ### Introduction
 
 A Nim implementation of the Recursive Length Prefix encoding (RLP) as specified
-in the Ethereum's [Yellow Papper](https://ethereum.github.io/yellowpaper/paper.pdf)
+in the Ethereum's [Yellow Paper](https://ethereum.github.io/yellowpaper/paper.pdf)
 and [Wiki](https://github.com/ethereum/wiki/wiki/RLP).
 
 
 ### Reading RLP data
 
-The `Rlp` type provided by this library represents a cursor over a RLP-encoded
+The `Rlp` type provided by this library represents a cursor over an RLP-encoded
 byte stream. Before instantiating such a cursor, you must convert your
 input data a `BytesRange` value provided by the [nim-ranges][RNG] library,
 which represents an immutable and thus cheap-to-copy sub-range view over an
@@ -55,7 +55,7 @@ that is too large), the library will raise an `UnsupportedRlpError` exception.
 ### DOM API
 
 Calling `Rlp.toNodes` at any position within the stream will return a tree
-of `RlpNode` objects representing the collection of values begging at that
+of `RlpNode` objects representing the collection of values starting at that
 position:
 
 ``` nim
@@ -137,5 +137,5 @@ achieve this.
 ### Contributing / Testing
 
 To test the correctness of any modifications to the library, please execute
-`nimble test` at the root of the repo.
+`nimble test_rlp` at the root of the repo.
 
