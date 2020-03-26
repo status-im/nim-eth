@@ -40,7 +40,10 @@ proc newNode*(r: Record): Node =
   except KeyError:
     discard
 
-  let pk = r.toNodeID()
+  var pk: PublicKey
+  if recoverPublicKey(r.get("secp256k1", seq[byte]), pk) != EthKeysStatus.Success:
+    warn "Could not recover public key"
+    return
 
   result = newNode(initENode(pk, a))
   result.record = r
