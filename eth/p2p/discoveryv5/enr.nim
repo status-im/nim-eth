@@ -43,7 +43,7 @@ type
     of kBytes:
       bytes: seq[byte]
 
-  ToNodeIDError = Exception
+  ToNodeIDError = object of CatchableError
 
 template toField[T](v: T): Field =
   when T is string:
