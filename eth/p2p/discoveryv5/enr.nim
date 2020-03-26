@@ -285,6 +285,14 @@ template fromURI*(r: var Record, url: EnrUri): bool =
 proc toBase64*(r: Record): string =
   result = Base64Url.encode(r.raw)
 
+proc toNodeID*(r: Record): NodeId =
+  var pk: PublicKey
+  if recoverPublicKey(r.get("secp256k1", seq[byte]), pk) != EthKeysStatus.Success:
+    warn "Could not recover public key"
+    return
+
+  result = readUintBE[256](keccak256.digest(pk.getRaw()).data)
+
 proc toURI*(r: Record): string = "enr:" & r.toBase64
 
 proc `$`(f: Field): string =
