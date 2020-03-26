@@ -43,6 +43,8 @@ type
     of kBytes:
       bytes: seq[byte]
 
+  ToNodeIDError = Exception
+
 template toField[T](v: T): Field =
   when T is string:
     Field(kind: kString, str: v)
@@ -289,7 +291,7 @@ proc toNodeID*(r: Record): NodeId =
   var pk: PublicKey
   if recoverPublicKey(r.get("secp256k1", seq[byte]), pk) != EthKeysStatus.Success:
     warn "Could not recover public key"
-    return
+    raise ToNodeIDError
 
   result = readUintBE[256](keccak256.digest(pk.getRaw()).data)
 
