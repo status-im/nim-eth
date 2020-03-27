@@ -43,7 +43,7 @@ type
     of kBytes:
       bytes: seq[byte]
 
-  ToNodeIDError = object of CatchableError
+  ToNodeIDError* = object of CatchableError
 
 template toField[T](v: T): Field =
   when T is string:
@@ -291,7 +291,7 @@ proc toNodeID*(r: Record): NodeId =
   var pk: PublicKey
   if recoverPublicKey(r.get("secp256k1", seq[byte]), pk) != EthKeysStatus.Success:
     warn "Could not recover public key"
-    raise ToNodeIDError
+    raise newException(ToNodeIDError, "Could not recover public key")
 
   result = readUintBE[256](keccak256.digest(pk.getRaw()).data)
 
