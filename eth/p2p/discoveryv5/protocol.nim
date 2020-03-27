@@ -259,6 +259,23 @@ proc processClient(transp: DatagramTransport,
     debug "Receive failed", exception = e.name, msg = e.msg,
       stacktrace = e.getStackTrace()
 
+proc validIp(sender, address: IpAddress): bool =
+  let
+    s = initTAddress(sender, Port(0))
+    a = initTAddress(address, Port(0))
+  if a.isAnyLocal():
+    return false
+  if a.isMulticast():
+    return false
+  if a.isLoopback() and not s.isLoopback():
+    return false
+  if a.isSiteLocal() and not s.isSiteLocal():
+    return false
+  # TODO: Also check for special reserved ip addresses:
+  # https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
+  # https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
+  return true
+
 # TODO: This could be improved to do the clean-up immediatily in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
 # somewhere
@@ -323,7 +340,11 @@ proc sendFindNode(d: Protocol, toNode: Node, distance: uint32): RequestId =
 
 proc findNode*(d: Protocol, toNode: Node, distance: uint32): Future[seq[Node]] {.async.} =
   let reqId = sendFindNode(d, toNode, distance)
-  result = await d.waitNodes(toNode, reqId)
+  let nodes = await d.waitNodes(toNode, reqId)
+
+  for n in nodes:
+    if validIp(toNode.address.ip, n.address.ip):
+      result.add(n)
 
 proc lookupDistances(target, dest: NodeId): seq[uint32] =
   let td = logDist(target, dest)
@@ -416,6 +437,8 @@ proc revalidateNode*(d: Protocol, n: Node)
       # would be to simply not remove the nodes immediatly but only after x
       # amount of failures.
       discard d.codec.db.deleteKeys(n.id, n.address)
+    else:
+      debug "Revalidation of bootstrap node failed", enr = toURI(n.record)
 
 proc revalidateLoop(d: Protocol) {.async.} =
   try:

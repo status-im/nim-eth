@@ -32,8 +32,8 @@ proc randomPacket(tag: PacketTag): seq[byte] =
   result.add(rlp.encode(authTag))
   result.add(msg)
 
-proc generateNode(privKey = newPrivateKey()): Node =
-  let enr = enr.Record.init(1, privKey, none(Address))
+proc generateNode(privKey = newPrivateKey(), port: int): Node =
+  let enr = enr.Record.init(1, privKey, some(localAddress(port)))
   result = newNode(enr)
 
 suite "Discovery v5 Tests":
@@ -98,7 +98,7 @@ suite "Discovery v5 Tests":
 
     # Generate 1000 random nodes and add to our main node's routing table
     for i in 0..<1000:
-      mainNode.addNode(generateNode())
+      mainNode.addNode(generateNode(port = 20302 + i))
 
     let
       neighbours = mainNode.neighbours(mainNode.localNode.id)
@@ -122,12 +122,12 @@ suite "Discovery v5 Tests":
     # TODO: This could be tested in just a routing table only context
     let
       node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
-      targetNode = generateNode()
+      targetNode = generateNode(port = 20303)
 
     node.addNode(targetNode)
 
     for i in 0..<1000:
-      node.addNode(generateNode())
+      node.addNode(generateNode(port = 20303 + i))
 
     check node.getNode(targetNode.id) == targetNode
 
