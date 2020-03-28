@@ -3,7 +3,7 @@
 
 import
   net, strutils, macros, algorithm, options,
-  nimcrypto, stew/base64, chronicles,
+  nimcrypto, stew/base64,
   eth/[rlp, keys], ../enode, ../kademlia
 
 const
@@ -290,7 +290,6 @@ proc toBase64*(r: Record): string =
 proc toNodeID*(r: Record): NodeId =
   var pk: PublicKey
   if recoverPublicKey(r.get("secp256k1", seq[byte]), pk) != EthKeysStatus.Success:
-    warn "Could not recover public key"
     raise newException(ToNodeIDError, "Could not recover public key")
 
   result = readUintBE[256](keccak256.digest(pk.getRaw()).data)
