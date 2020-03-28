@@ -4,7 +4,7 @@
 import
   net, strutils, macros, algorithm, options,
   nimcrypto, stew/base64,
-  eth/[rlp, keys], ../enode
+  eth/[rlp, keys], ../enode, ../kademlia
 
 const
   maxEnrSize = 300
