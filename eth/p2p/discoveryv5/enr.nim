@@ -3,7 +3,7 @@
 
 import
   net, strutils, macros, algorithm, options,
-  nimcrypto, stew/base64,
+  nimcrypto, stew/base64, chronicles,
   eth/[rlp, keys], ../enode, ../kademlia
 
 const
