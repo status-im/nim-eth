@@ -1,16 +1,16 @@
 import
-  random, unittest, chronos, sequtils, chronicles, tables, stint, options,
+  unittest, chronos, sequtils, chronicles, tables, stint,
   eth/[keys, rlp], eth/p2p/enode, eth/trie/db,
   eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./p2p_test_helper
 
 proc initDiscoveryNode*(privKey: PrivateKey, address: Address,
-                        bootstrapRecords: seq[Record]):
+                        bootstrapRecords: openarray[Record] = []):
                         discv5_protocol.Protocol =
   var db = DiscoveryDB.init(newMemoryDB())
   result = newProtocol(privKey, db,
-                       parseIpAddress("127.0.0.1"),
+                       some(parseIpAddress("127.0.0.1")),
                        address.tcpPort, address.udpPort,
                        bootstrapRecords)
 
@@ -33,14 +33,16 @@ proc randomPacket(tag: PacketTag): seq[byte] =
   result.add(msg)
 
 proc generateNode(privKey = newPrivateKey(), port: int): Node =
-  let enr = enr.Record.init(1, privKey, some(localAddress(port)))
+  let port = Port(port)
+  let enr = enr.Record.init(1, privKey, some(parseIpAddress("127.0.0.1")),
+    port, port)
   result = newNode(enr)
 
 suite "Discovery v5 Tests":
   asyncTest "Random nodes":
     let
       bootNodeKey = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")
-      bootNode = initDiscoveryNode(bootNodeKey, localAddress(20301), @[])
+      bootNode = initDiscoveryNode(bootNodeKey, localAddress(20301))
 
     let nodeKeys = [
         initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618"),
@@ -72,7 +74,7 @@ suite "Discovery v5 Tests":
     const
       nodeCount = 17
 
-    let bootNode = initDiscoveryNode(newPrivateKey(), localAddress(20301), @[])
+    let bootNode = initDiscoveryNode(newPrivateKey(), localAddress(20301))
     bootNode.start()
 
     var nodes = newSeqOfCap[discv5_protocol.Protocol](nodeCount)
@@ -94,7 +96,7 @@ suite "Discovery v5 Tests":
 
   asyncTest "FindNode with test table":
 
-    let mainNode = initDiscoveryNode(newPrivateKey(), localAddress(20301), @[])
+    let mainNode = initDiscoveryNode(newPrivateKey(), localAddress(20301))
 
     # Generate 1000 random nodes and add to our main node's routing table
     for i in 0..<1000:
@@ -121,7 +123,7 @@ suite "Discovery v5 Tests":
   asyncTest "GetNode":
     # TODO: This could be tested in just a routing table only context
     let
-      node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
+      node = initDiscoveryNode(newPrivateKey(), localAddress(20302))
       targetNode = generateNode(port = 20303)
 
     node.addNode(targetNode)
@@ -135,7 +137,7 @@ suite "Discovery v5 Tests":
 
   asyncTest "Node deletion":
     let
-      bootnode = initDiscoveryNode(newPrivateKey(), localAddress(20301), @[])
+      bootnode = initDiscoveryNode(newPrivateKey(), localAddress(20301))
       node1 = initDiscoveryNode(newPrivateKey(), localAddress(20302),
         @[bootnode.localNode.record])
       node2 = initDiscoveryNode(newPrivateKey(), localAddress(20303),
@@ -158,7 +160,7 @@ suite "Discovery v5 Tests":
 
 
   asyncTest "Handshake cleanup":
-    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
+    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302))
     var tag: PacketTag
     let a = localAddress(20303)
 
@@ -177,7 +179,7 @@ suite "Discovery v5 Tests":
     await node.closeWait()
 
   asyncTest "Handshake different address":
-    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
+    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302))
     var tag: PacketTag
 
     for i in 0 ..< 5:
@@ -189,7 +191,7 @@ suite "Discovery v5 Tests":
     await node.closeWait()
 
   asyncTest "Handshake duplicates":
-    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302), @[])
+    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302))
     var tag: PacketTag
     let a = localAddress(20303)
 

@@ -6,6 +6,8 @@ import
 
 import nimcrypto except toHex
 
+export options
+
 logScope:
   topics = "discv5"
 
@@ -470,12 +472,13 @@ proc lookupLoop(d: Protocol) {.async.} =
     trace "lookupLoop canceled"
 
 proc newProtocol*(privKey: PrivateKey, db: Database,
-                  ip: IpAddress, tcpPort, udpPort: Port,
+                  externalIp: Option[IpAddress], tcpPort, udpPort: Port,
                   bootstrapRecords: openarray[Record] = []): Protocol =
   let
-    a = Address(ip: ip, tcpPort: tcpPort, udpPort: udpPort)
+    a = Address(ip: externalIp.get(IPv4_any()),
+                tcpPort: tcpPort, udpPort: udpPort)
     enode = initENode(privKey.getPublicKey(), a)
-    enrRec = enr.Record.init(12, privKey, some(a))
+    enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort)
     node = newNode(enode, enrRec)
 
   result = Protocol(

@@ -39,7 +39,8 @@ proc newNode*(r: Record): Node =
                 udpPort: Port udpPort)
   except KeyError:
     # TODO: This will result in a 0.0.0.0 address. Might introduce more bugs.
-    # Lets fail when creating a node just form a record without IP?
+    # Maybe we shouldn't allow the creation of Node from Record without IP.
+    # Will need some refactor though.
     discard
 
   var pk: PublicKey
