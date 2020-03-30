@@ -2,7 +2,7 @@
 # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-778.md
 
 import
-  net, strutils, macros, algorithm, options,
+  net, stint, strutils, macros, algorithm, options,
   nimcrypto, stew/base64,
   eth/[rlp, keys], ../enode, ../kademlia
 
