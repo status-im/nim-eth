@@ -218,8 +218,11 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
       if node.isNil:
         node = d.routingTable.getNode(sender)
       else:
-        debug "Adding new node to routing table", node = $node, localNode = $d.localNode
-        discard d.routingTable.addNode(node)
+        # Not filling table with nodes without correct IP in the ENR
+        if a.ip == node.address.ip:
+          debug "Adding new node to routing table", node = $node,
+            localNode = $d.localNode
+          discard d.routingTable.addNode(node)
 
       case packet.kind
       of ping:
@@ -241,8 +244,10 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
       # Still adding the node in case there is a packet error (could be
       # unsupported packet)
       if not node.isNil:
-        debug "Adding new node to routing table", node = $node, localNode = $d.localNode
-        discard d.routingTable.addNode(node)
+        if a.ip == node.address.ip:
+          debug "Adding new node to routing table", node = $node,
+            localNode = $d.localNode
+          discard d.routingTable.addNode(node)
 
 proc processClient(transp: DatagramTransport,
                    raddr: TransportAddress): Future[void] {.async, gcsafe.} =
