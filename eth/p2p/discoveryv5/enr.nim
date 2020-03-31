@@ -101,19 +101,23 @@ macro initRecord*(seqNum: uint64, pk: PrivateKey, pairs: untyped{nkTableConstr})
 
 proc init*(T: type Record, seqNum: uint64,
                            pk: PrivateKey,
-                           address: Option[enode.Address]): T =
-  if address.isSome():
+                           ip: Option[IpAddress],
+                           tcpPort, udpPort: Port): T =
+  if ip.isSome():
     let
-      a = address.get()
-      isV6 = a.ip.family == IPv6
-      ipField = if isV6: ("ip6", a.ip.address_v6.toField)
-                else: ("ip", a.ip.address_v4.toField)
-      tcpField = ((if isV6: "tcp6" else: "tcp"), a.tcpPort.uint16.toField)
-      udpField = ((if isV6: "udp6" else: "udp"), a.udpPort.uint16.toField)
+      ipExt = ip.get()
+      isV6 = ipExt.family == IPv6
+      ipField = if isV6: ("ip6", ipExt.address_v6.toField)
+                else: ("ip", ipExt.address_v4.toField)
+      tcpField = ((if isV6: "tcp6" else: "tcp"), tcpPort.uint16.toField)
+      udpField = ((if isV6: "udp6" else: "udp"), udpPort.uint16.toField)
 
     makeEnrAux(seqNum, pk, [ipField, tcpField, udpField])
   else:
-    makeEnrAux(seqNum, pk, [])
+    let
+      tcpField = ("tcp", tcpPort.uint16.toField)
+      udpField = ("udp", udpPort.uint16.toField)
+    makeEnrAux(seqNum, pk, [tcpField, udpField])
 
 proc getField(r: Record, name: string, field: var Field): bool =
   # It might be more correct to do binary search,

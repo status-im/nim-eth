@@ -34,8 +34,7 @@ suite "ENR":
     let
       keys = newKeyPair()
       ip = parseIpAddress("10.20.30.40")
-      enodeAddress = Address(ip: ip, tcpPort: Port 9000, udpPort: Port 9000)
-      enr = Record.init(100, keys.seckey, some(enodeAddress))
+      enr = Record.init(100, keys.seckey, some(ip), Port(9000), Port(9000))
       typedEnr = get enr.toTypedRecord()
 
     check:
@@ -54,7 +53,7 @@ suite "ENR":
   test "ENR without address":
     let
       keys = newKeyPair()
-      enr = Record.init(100, keys.seckey, none(Address))
+      enr = Record.init(100, keys.seckey, none(IpAddress), Port(9000), Port(9000))
       typedEnr = get enr.toTypedRecord()
 
     check:
@@ -62,8 +61,12 @@ suite "ENR":
       typedEnr.secp256k1.get() == keys.pubkey.getRawCompressed()
 
       typedEnr.ip.isNone()
-      typedEnr.tcp.isNone()
-      typedEnr.udp.isNone()
+      typedEnr.tcp.isSome()
+      typedEnr.tcp.get() == 9000
+
+      typedEnr.udp.isSome()
+      typedEnr.udp.get() == 9000
+
       typedEnr.ip6.isNone()
       typedEnr.tcp6.isNone()
       typedEnr.udp6.isNone()
