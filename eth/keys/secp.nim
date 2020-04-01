@@ -315,7 +315,7 @@ proc toRaw*(sig: SkRecoverableSignature): array[SkRawRecoverableSignatureSize, b
 
 proc random*(T: type SkKeyPair): SkResult[T] =
   ## Generates new random key pair.
-  let seckey = ?SkSecretKey.random()
+  let seckey = ? SkSecretKey.random()
   ok(T(
     seckey: seckey,
     pubkey: seckey.toPublicKey().expect("random key should always be valid")
