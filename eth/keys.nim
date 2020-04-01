@@ -72,9 +72,9 @@ proc fromHex*(T: type PublicKey, data: string): SkResult[PublicKey] =
   except CatchableError:
     err("keys: cannot parse eth public key")
 
-proc random*(t: type KeyPair): KeyPair =
-  let tmp = SkKeypair.random()
-  KeyPair(seckey: PrivateKey(tmp.seckey), pubkey: PublicKey(tmp.pubkey))
+proc random*(t: type KeyPair): SkResult[KeyPair] =
+  let tmp = ?SkKeypair.random()
+  ok(KeyPair(seckey: PrivateKey(tmp.seckey), pubkey: PublicKey(tmp.pubkey)))
 
 proc toRaw*(pubkey: PublicKey): array[64, byte] =
   let tmp = SkPublicKey(pubkey).toRaw()
@@ -153,7 +153,9 @@ func `$`*(seckey: PrivateKey): string =
 
 proc `==`*(lhs, rhs: PublicKey): bool {.borrow.}
 
-proc random*(T: type PrivateKey): PrivateKey = PrivateKey(SkSecretKey.random())
+proc random*(T: type PrivateKey): SkResult[PrivateKey] =
+  SkSecretKey.random().mapConvert(PrivateKey)
+
 proc toRaw*(key: PrivateKey): array[SkRawSecretKeySize, byte] {.borrow.}
 
 # Backwards compat - the functions in here are deprecated and should be moved
@@ -195,10 +197,16 @@ proc isZeroKey*(pubkey: PublicKey): bool {.deprecated.} =
       result = false
 
 proc newPrivateKey*(): PrivateKey {.deprecated: "random".} =
-  PrivateKey.random()
+  let key = PrivateKey.random()
+  if key.isErr:
+    raise newException(Secp256k1Exception, $key.error)
+  key[]
 
 proc newKeyPair*(): KeyPair {.deprecated: "random".} =
-  KeyPair.random()
+  let kp = KeyPair.random()
+  if kp.isErr:
+    raise newException(Secp256k1Exception, $kp.error)
+  kp[]
 
 proc getPublicKey*(seckey: PrivateKey): PublicKey {.deprecated: "toPublicKey".} =
   let key = seckey.toPublicKey()

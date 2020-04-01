@@ -136,12 +136,15 @@ func getContext(): ptr secp256k1_context =
       secpContext = newSkContext()
     secpContext.context
 
-proc random*(T: type SkSecretKey): T =
+proc random*(T: type SkSecretKey): SkResult[T] =
   ## Generates new random private key.
   let ctx = getContext()
-  while randomBytes(result.data) == SkRawSecretKeySize:
-    if secp256k1_ec_seckey_verify(ctx, result.data.ptr0) == 1:
-      break
+  var sk: T
+  while randomBytes(sk.data) == SkRawSecretKeySize:
+    if secp256k1_ec_seckey_verify(ctx, sk.data.ptr0) == 1:
+      return ok(sk)
+
+  return err("secp: cannot get random bytes for key")
 
 proc fromRaw*(T: type SkSecretKey, data: openArray[byte]): SkResult[T] =
   ## Load a valid private key, as created by `toRaw`
@@ -310,13 +313,13 @@ proc toRaw*(sig: SkRecoverableSignature): array[SkRawRecoverableSignatureSize, b
       getContext(), result.ptr0, addr recid, unsafeAddr sig)
   result[64] = byte(recid)
 
-proc random*(T: type SkKeyPair): T =
+proc random*(T: type SkKeyPair): SkResult[T] =
   ## Generates new random key pair.
-  let seckey = SkSecretKey.random()
-  T(
+  let seckey = ?SkSecretKey.random()
+  ok(T(
     seckey: seckey,
     pubkey: seckey.toPublicKey().expect("random key should always be valid")
-  )
+  ))
 
 proc `==`*(lhs, rhs: SkSecretKey): bool =
   ## Compare Secp256k1 `private key` objects for equality.
