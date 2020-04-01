@@ -29,7 +29,7 @@ export result
 # * Exception-free
 
 const
-  SkRawPrivateKeySize* = 32 # 256 div 8
+  SkRawSecretKeySize* = 32 # 256 div 8
     ## Size of private key in octets (bytes)
   SkRawSignatureSize* = 64
     ## Compact serialized non-recoverable signature
@@ -48,22 +48,22 @@ const
   SkMessageSize* = 32
     ## Size of message that can be signed
 
-  SkKeyLength* = 32
+  SkEdchSecretSize* = 32
     ## ECDH-agreed key size
-  SkRawKeyLength* = 33
+  SkEcdhRawSecretSize* = 33
     ## ECDH-agreed raw key size
 
 type
   SkPublicKey* = secp256k1_pubkey
     ## Representation of public key.
 
-  SkPrivateKey* = object
+  SkSecretKey* = object
     ## Representation of secret key.
-    data*: array[SkRawPrivateKeySize, byte]
+    data*: array[SkRawSecretKeySize, byte]
 
   SkKeyPair* = object
     ## Representation of private/public keys pair.
-    seckey*: SkPrivateKey
+    seckey*: SkSecretKey
     pubkey*: SkPublicKey
 
   SkSignature* = secp256k1_ecdsa_signature
@@ -80,14 +80,14 @@ type
     ## Message that can be signed or verified
     data*: array[SkMessageSize, byte]
 
-  SkEcdhKey* = object
+  SkEcdhSecret* = object
     ## Representation of ECDH shared secret
-    data*: array[SkKeyLength, byte]
+    data*: array[SkEdchSecretSize, byte]
 
-  SkEcdhRawKey* = object
+  SkEcdhRawSecret* = object
     ## Representation of ECDH shared secret, with leading `y` byte
     # (`y` is 0x02 when pubkey.y is even or 0x03 when odd)
-    data*: array[SkRawKeyLength, byte]
+    data*: array[SkEcdhRawSecretSize, byte]
 
   SkResult*[T] = result.Result[T, cstring]
 
@@ -136,24 +136,24 @@ func getContext(): ptr secp256k1_context =
       secpContext = newSkContext()
     secpContext.context
 
-proc random*(T: type SkPrivateKey): T =
+proc random*(T: type SkSecretKey): T =
   ## Generates new random private key.
   let ctx = getContext()
-  while randomBytes(result.data) == SkRawPrivateKeySize:
+  while randomBytes(result.data) == SkRawSecretKeySize:
     if secp256k1_ec_seckey_verify(ctx, result.data.ptr0) == 1:
       break
 
-proc fromRaw*(T: type SkPrivateKey, data: openArray[byte]): SkResult[T] =
+proc fromRaw*(T: type SkSecretKey, data: openArray[byte]): SkResult[T] =
   ## Load a valid private key, as created by `toRaw`
-  if len(data) < SkRawPrivateKeySize:
-    return err(&"secp: raw private key should be {SkRawPrivateKeySize} bytes")
+  if len(data) < SkRawSecretKeySize:
+    return err(&"secp: raw private key should be {SkRawSecretKeySize} bytes")
 
   if secp256k1_ec_seckey_verify(getContext(), data.ptr0) != 1:
     return err("secp: invalid private key")
 
-  ok(T(data: toArray(32, data.toOpenArray(0, SkRawPrivateKeySize - 1))))
+  ok(T(data: toArray(32, data.toOpenArray(0, SkRawSecretKeySize - 1))))
 
-proc fromHex*(T: type SkPrivateKey, data: string): SkResult[SkPrivateKey] =
+proc fromHex*(T: type SkSecretKey, data: string): SkResult[SkSecretKey] =
   ## Initialize Secp256k1 `private key` ``key`` from hexadecimal string
   ## representation ``data``.
   try:
@@ -162,11 +162,11 @@ proc fromHex*(T: type SkPrivateKey, data: string): SkResult[SkPrivateKey] =
   except CatchableError:
     err("secp: cannot parse private key")
 
-proc toRaw*(seckey: SkPrivateKey): array[SkRawPrivateKeySize, byte] =
+proc toRaw*(seckey: SkSecretKey): array[SkRawSecretKeySize, byte] =
   ## Serialize Secp256k1 `private key` ``key`` to raw binary form
   seckey.data
 
-proc toPublicKey*(key: SkPrivateKey): SkResult[SkPublicKey] =
+proc toPublicKey*(key: SkSecretKey): SkResult[SkPublicKey] =
   ## Calculate and return Secp256k1 `public key` from `private key` ``key``.
   var pubkey: SkPublicKey
   if secp256k1_ec_pubkey_create(getContext(), addr pubkey, key.data.ptr0) != 1:
@@ -312,13 +312,13 @@ proc toRaw*(sig: SkRecoverableSignature): array[SkRawRecoverableSignatureSize, b
 
 proc random*(T: type SkKeyPair): T =
   ## Generates new random key pair.
-  let seckey = SkPrivateKey.random()
+  let seckey = SkSecretKey.random()
   T(
     seckey: seckey,
     pubkey: seckey.toPublicKey().expect("random key should always be valid")
   )
 
-proc `==`*(lhs, rhs: SkPrivateKey): bool =
+proc `==`*(lhs, rhs: SkSecretKey): bool =
   ## Compare Secp256k1 `private key` objects for equality.
   lhs.data == rhs.data
 
@@ -334,15 +334,15 @@ proc `==`*(lhs, rhs: SkRecoverableSignature): bool =
   ## Compare Secp256k1 `recoverable signature` objects for equality.
   lhs.toRaw() == rhs.toRaw()
 
-proc `==`*(lhs, rhs: SkEcdhKey): bool =
+proc `==`*(lhs, rhs: SkEcdhSecret): bool =
   ## Compare Secp256k1 `ECDH key` objects for equality.
   lhs.data == rhs.data
 
-proc `==`*(lhs, rhs: SkEcdhRawKey): bool =
+proc `==`*(lhs, rhs: SkEcdhRawSecret): bool =
   ## Compare Secp256k1 `ECDH raw key` objects for equality.
   lhs.data == rhs.data
 
-proc sign*(key: SkPrivateKey, msg: SkMessage): SkResult[SkSignature] =
+proc sign*(key: SkSecretKey, msg: SkMessage): SkResult[SkSignature] =
   ## Sign message `msg` using private key `key` and return signature object.
   var sig: SkSignature
   if secp256k1_ecdsa_sign(
@@ -351,7 +351,7 @@ proc sign*(key: SkPrivateKey, msg: SkMessage): SkResult[SkSignature] =
 
   ok(sig)
 
-proc signRecoverable*(key: SkPrivateKey, msg: SkMessage): SkResult[SkRecoverableSignature] =
+proc signRecoverable*(key: SkSecretKey, msg: SkMessage): SkResult[SkRecoverableSignature] =
   ## Sign message `msg` using private key `key` and return signature object.
   var sig: SkRecoverableSignature
   if secp256k1_ecdsa_sign_recoverable(
@@ -372,44 +372,47 @@ proc recover*(sig: SkRecoverableSignature, msg: SkMessage): SkResult[SkPublicKey
 
   ok(pubkey)
 
-proc ecdh*(seckey: SkPrivateKey, pubkey: SkPublicKey): SkResult[SkEcdhKey] =
+proc ecdh*(seckey: SkSecretKey, pubkey: SkPublicKey): SkResult[SkEcdhSecret] =
   ## Calculate ECDH shared secret.
-  var secret: SkEcdhKey
+  var secret: SkEcdhSecret
   if secp256k1_ecdh(
       getContext(), secret.data.ptr0, unsafeAddr pubkey, seckey.data.ptr0) != 1:
     return err("secp: cannot compute ECDH secret")
 
   ok(secret)
 
-proc ecdhRaw*(seckey: SkPrivateKey, pubkey: SkPublicKey): SkResult[SkEcdhRawKey] =
+proc ecdhRaw*(seckey: SkSecretKey, pubkey: SkPublicKey): SkResult[SkEcdhRawSecret] =
   ## Calculate ECDH shared secret.
-  var secret: SkEcdhRawKey
+  var secret: SkEcdhRawSecret
   if secp256k1_ecdh_raw(
       getContext(), secret.data.ptr0, unsafeAddr pubkey, seckey.data.ptr0) != 1:
     return err("Cannot compute raw ECDH secret")
 
   ok(secret)
 
-proc clear*(key: var SkPrivateKey) {.inline.} =
+proc clear*(v: var SkSecretKey) {.inline.} =
   ## Wipe and clear memory of Secp256k1 `private key`.
-  burnMem(key.data)
+  burnMem(v.data)
 
-proc clear*(key: var SkPublicKey) {.inline.} =
+proc clear*(v: var SkPublicKey) {.inline.} =
   ## Wipe and clear memory of Secp256k1 `public key`.
-  burnMem(addr key, SkRawPrivateKeySize * 2)
+  burnMem(v.data)
 
-proc clear*(sig: var SkSignature) {.inline.} =
+proc clear*(v: var SkSignature) {.inline.} =
   ## Wipe and clear memory of Secp256k1 `signature`.
-  # Internal memory representation size of signature object is 64 bytes.
-  burnMem(addr sig, SkRawPrivateKeySize * 2)
+  burnMem(v.data)
 
-proc clear*(pair: var SkKeyPair) {.inline.} =
+proc clear*(v: var SkRecoverableSignature) {.inline.} =
+  ## Wipe and clear memory of Secp256k1 `signature`.
+  burnMem(v.data)
+
+proc clear*(v: var SkKeyPair) {.inline.} =
   ## Wipe and clear memory of Secp256k1 `key pair`.
-  pair.seckey.clear()
-  pair.pubkey.clear()
+  v.seckey.clear()
+  v.pubkey.clear()
 
-proc clear*(key: var SkEcdhKey) =
-  burnMem(key.data)
+proc clear*(v: var SkEcdhSecret) =
+  burnMem(v.data)
 
-proc clear*(key: var SkEcdhRawKey) =
-  burnMem(key.data)
+proc clear*(v: var SkEcdhRawSecret) =
+  burnMem(v.data)

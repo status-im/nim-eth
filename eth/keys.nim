@@ -18,8 +18,15 @@ import
 
 export secp, result
 
+const
+  KeyLength* = SkEcdhRawSecretSize - 1
+    ## Shared secret key length without format marker
+  RawPublicKeySize* = SkRawPublicKeySize - 1
+    ## Size of uncompressed public key without format marker (0x04)
+  RawSignatureSize* = SkRawRecoverableSignatureSize
+
 type
-  PrivateKey* = distinct SkPrivateKey
+  PrivateKey* = distinct SkSecretKey
 
   PublicKey* = distinct SkPublicKey
     ## Public key that's serialized to raw format without 0x04 marker
@@ -28,29 +35,22 @@ type
   SignatureNR* = distinct SkSignature
     ## ...but ENR uses non-recoverable signatures!
 
-  SharedSecretFull* = SkEcdhRawKey
+  SharedSecretFull* = SkEcdhRawSecret
   SharedSecret* = object
-    data*: array[sizeof(SharedSecretFull) - 1, byte]
+    data*: array[KeyLength, byte]
 
   KeyPair* = object
     seckey*: PrivateKey
     pubkey*: PublicKey
 
-const
-  KeyLength* = 32
-    ## Shared secret key length
-  RawPublicKeySize* = 64
-    ## Size of uncompressed public key without format marker (0x04)
-  RawSignatureSize* = 65
-
 proc toPublicKey*(seckey: PrivateKey): SkResult[PublicKey] =
-  SkPrivateKey(seckey).toPublicKey().mapConvert(PublicKey)
+  SkSecretKey(seckey).toPublicKey().mapConvert(PublicKey)
 
 proc fromRaw*(T: type PrivateKey, data: openArray[byte]): SkResult[PrivateKey] =
-  SkPrivateKey.fromRaw(data).mapConvert(PrivateKey)
+  SkSecretKey.fromRaw(data).mapConvert(PrivateKey)
 
 proc fromHex*(T: type PrivateKey, data: string): SkResult[PrivateKey] =
-  SkPrivateKey.fromHex(data).mapConvert(PrivateKey)
+  SkSecretKey.fromHex(data).mapConvert(PrivateKey)
 
 proc fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
   if data.len() == SkRawCompressedPubKeySize:
@@ -75,38 +75,6 @@ proc fromHex*(T: type PublicKey, data: string): SkResult[PublicKey] =
 proc random*(t: type KeyPair): KeyPair =
   let tmp = SkKeypair.random()
   KeyPair(seckey: PrivateKey(tmp.seckey), pubkey: PublicKey(tmp.pubkey))
-
-proc verifyMessage*(data: openarray[byte], hash: MDigest[256]): bool =
-  ## Verify binary data blob `data` has properly signed hash `hash`.
-  let signature = SkRecoverableSignature.fromRaw(data)
-
-  signature.isOk() and recover(signature[], SkMessage(data: hash.data)).isOk()
-
-proc verifyMessage*(data: openarray[byte], message: openarray[byte]): SkResult[void] =
-  ## Verify binary data blob `data` has properly signed message `message`.
-  let signature = ?SkRecoverableSignature.fromRaw(data)
-
-  let hash = keccak256.digest(message)
-  if (let r = recover(signature, SkMessage(data: hash.data)); r.isErr()):
-    return err(r.error)
-
-  ok()
-
-proc recoverKeyFromMessage*(data: openarray[byte],
-                            hash: MDigest[256]): SkResult[PublicKey] =
-  ## Recover public key from signed binary blob `data` using 256bit hash `hash`.
-  let signature = ?SkRecoverableSignature.fromRaw(data)
-
-  recover(signature, SkMessage(data: hash.data)).mapConvert(PublicKey)
-
-proc recoverKeyFromMessage*(data: openarray[byte],
-                            message: openArray[byte]): SkResult[PublicKey] =
-  ## Recover public key from signed binary blob `data` using `message`.
-  let hash = keccak256.digest(message)
-  recoverKeyFromMessage(data, hash)
-
-proc recover*(signature: Signature, msg: SkMessage): SkResult[PublicKey] =
-  recover(SkRecoverableSignature(signature), msg).mapConvert(PublicKey)
 
 proc toRaw*(pubkey: PublicKey): array[64, byte] =
   let tmp = SkPublicKey(pubkey).toRaw()
@@ -181,17 +149,12 @@ func `$`*(sig: Signature): string =
 
 func `$`*(seckey: PrivateKey): string =
   ## Convert private key to hexadecimal string representation
-  toHex(SkPrivateKey(seckey).toRaw())
-
-proc ecdhAgree*(seckey: PrivateKey, pubkey: PublicKey): SkResult[SharedSecret] =
-  ecdhRaw(
-    SkPrivateKey(seckey), SkPublicKey(pubkey)).map proc(v: auto): SharedSecret =
-    copyMem(addr result.data[0], unsafeAddr(v.data[1]), sizeof(result))
+  toHex(SkSecretKey(seckey).toRaw())
 
 proc `==`*(lhs, rhs: PublicKey): bool {.borrow.}
 
-proc random*(T: type PrivateKey): PrivateKey = PrivateKey(SkPrivateKey.random())
-proc toRaw*(key: PrivateKey): array[SkRawPrivateKeySize, byte] {.borrow.}
+proc random*(T: type PrivateKey): PrivateKey = PrivateKey(SkSecretKey.random())
+proc toRaw*(key: PrivateKey): array[SkRawSecretKeySize, byte] {.borrow.}
 
 # Backwards compat - the functions in here are deprecated and should be moved
 # reimplemented using functions that return Result instead!
@@ -206,15 +169,30 @@ type
     Success
     Error
 
+template data*(pubkey: PublicKey): auto =
+  SkPublicKey(pubkey).data
+
+template data*(seckey: PrivateKey): auto =
+  SkSecretKey(seckey).data
+
+template data*(sig: Signature): auto =
+  SkRecoverableSignature(sig).data
+
 proc isZeroKey*(seckey: PrivateKey): bool {.deprecated.} =
   ## Check if private key `seckey` contains only 0 bytes.
   # TODO this is a weird check - better would be to check if the key is valid!
-  SkPrivateKey(seckey).data.allIt(it == 0)
+  result = true
+  for i in seckey.data: # constant time, loop all bytes always
+    if i != byte(0):
+      result = false
 
 proc isZeroKey*(pubkey: PublicKey): bool {.deprecated.} =
   ## Check if public key `pubkey` contains only 0 bytes.
   # TODO this is a weird check - better would be to check if the key is valid!
-  SkPublicKey(pubkey).data.allIt(it == 0)
+  result = true
+  for i in pubkey.data: # constant time, loop all bytes always
+    if i != byte(0):
+      result = false
 
 proc newPrivateKey*(): PrivateKey {.deprecated: "random".} =
   PrivateKey.random()
@@ -231,7 +209,10 @@ proc getPublicKey*(seckey: PrivateKey): PublicKey {.deprecated: "toPublicKey".} 
 proc ecdhAgree*(
     seckey: PrivateKey, pubkey: PublicKey,
     s: var SharedSecret): EthKeysStatus {.deprecated.} =
-  let v = ecdhAgree(seckey, pubkey)
+  let v = ecdhRaw(
+    SkSecretKey(seckey), SkPublicKey(pubkey)).map proc(v: auto): SharedSecret =
+    copyMem(addr result.data[0], unsafeAddr(v.data[1]), sizeof(result))
+
   if v.isOk():
     s = v[]
     return Success
@@ -261,7 +242,7 @@ proc signRawMessage*(data: openarray[byte], seckey: PrivateKey,
   if len(data) != SkMessageSize:
     return Error
   let sig = signRecoverable(
-    SkPrivateKey(seckey), SkMessage(data: toArray(32, data.toOpenArray(0, 31))))
+    SkSecretKey(seckey), SkMessage(data: toArray(32, data.toOpenArray(0, 31))))
   if sig.isOk():
     signature = Signature(sig[])
     return Success
@@ -276,7 +257,7 @@ proc signRawMessage*(data: openarray[byte], seckey: PrivateKey,
   if length != KeyLength:
     return(EthKeysStatus.Error)
   let sig = sign(
-    SkPrivateKey(seckey), SkMessage(data: toArray(32, data.toOpenArray(0, 31))))
+    SkSecretKey(seckey), SkMessage(data: toArray(32, data.toOpenArray(0, 31))))
   if sig.isOk():
     signature = SignatureNR(sig[])
     return Success
@@ -299,15 +280,6 @@ proc getRaw*(
     deprecated: "toRaw".} =
   ## Converts signature `s` to serialized form.
   SkRecoverableSignature(s).toRaw()
-
-template data*(pubkey: PublicKey): auto =
-  SkPublicKey(pubkey).data
-
-template data*(seckey: PrivateKey): auto =
-  SkPrivateKey(seckey).data
-
-template data*(sig: Signature): auto =
-  SkRecoverableSignature(sig).data
 
 proc recoverSignatureKey*(data: openarray[byte],
                           msg: openarray[byte],
@@ -366,7 +338,8 @@ proc initSignature*(hexstr: string): Signature =
 proc recoverKeyFromSignature*(signature: Signature,
                               hash: MDigest[256]): PublicKey {.deprecated.} =
   ## Recover public key from signature `signature` using `message`.
-  let key = recover(signature, SkMessage(data: hash.data))
+  let key = recover(
+    SkRecoverableSignature(signature), SkMessage(data: hash.data))
   if key.isOk():
     return PublicKey(key[])
   raise newException(EthKeysException, $key.error)
@@ -406,7 +379,7 @@ proc verifySignatureRaw*(
 proc ecdhAgree*(
     seckey: PrivateKey, pubkey: PublicKey,
     s: var SharedSecretFull): EthKeysStatus {.deprecated.} =
-  let v = ecdhRaw(SkPrivateKey(seckey), SkPublicKey(pubkey))
+  let v = ecdhRaw(SkSecretKey(seckey), SkPublicKey(pubkey))
   if v.isOk():
     s = SharedSecretFull(v[])
     return Success

@@ -70,12 +70,6 @@ suite "ECC/ECDSA/ECDHE tests suite":
       check:
         $signature == $expectSignature
 
-  test "test_signing_from_private_key_obj":
-    var s = initPrivateKey(pkbytes)
-    var signature = s.signMessage(message)
-    var mhash = keccak256.digest(message)
-    check verifyMessage(signature.data, mhash) == true
-
   test "test_recover_from_signature_obj":
     var s = initPrivateKey(pkbytes)
     var mhash = keccak256.digest(message)
