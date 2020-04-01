@@ -44,17 +44,17 @@ const
   RawSignatureSize* = 65
 
 proc toPublicKey*(seckey: PrivateKey): SkResult[PublicKey] =
-  SkPrivateKey(seckey).toPublicKey().mapCast(PublicKey)
+  SkPrivateKey(seckey).toPublicKey().mapConvert(PublicKey)
 
 proc fromRaw*(T: type PrivateKey, data: openArray[byte]): SkResult[PrivateKey] =
-  SkPrivateKey.fromRaw(data).mapCast(PrivateKey)
+  SkPrivateKey.fromRaw(data).mapConvert(PrivateKey)
 
 proc fromHex*(T: type PrivateKey, data: string): SkResult[PrivateKey] =
-  SkPrivateKey.fromHex(data).mapCast(PrivateKey)
+  SkPrivateKey.fromHex(data).mapConvert(PrivateKey)
 
 proc fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
   if data.len() == SkRawCompressedPubKeySize:
-    return SkPublicKey.fromRaw(data).mapCast(PublicKey)
+    return SkPublicKey.fromRaw(data).mapConvert(PublicKey)
 
   if len(data) < SkRawPublicKeySize - 1:
     return err(&"keys: raw eth public key should be {SkRawPublicKeySize - 1} bytes")
@@ -63,7 +63,7 @@ proc fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
   d[0] = 0x04'u8
   copyMem(addr d[1], unsafeAddr data[0], 64)
 
-  SkPublicKey.fromRaw(d).mapCast(PublicKey)
+  SkPublicKey.fromRaw(d).mapConvert(PublicKey)
 
 proc fromHex*(T: type PublicKey, data: string): SkResult[PublicKey] =
   try:
@@ -97,7 +97,7 @@ proc recoverKeyFromMessage*(data: openarray[byte],
   ## Recover public key from signed binary blob `data` using 256bit hash `hash`.
   let signature = ?SkRecoverableSignature.fromRaw(data)
 
-  recover(signature, SkMessage(data: hash.data)).mapCast(PublicKey)
+  recover(signature, SkMessage(data: hash.data)).mapConvert(PublicKey)
 
 proc recoverKeyFromMessage*(data: openarray[byte],
                             message: openArray[byte]): SkResult[PublicKey] =
@@ -106,7 +106,7 @@ proc recoverKeyFromMessage*(data: openarray[byte],
   recoverKeyFromMessage(data, hash)
 
 proc recover*(signature: Signature, msg: SkMessage): SkResult[PublicKey] =
-  recover(SkRecoverableSignature(signature), msg).mapCast(PublicKey)
+  recover(SkRecoverableSignature(signature), msg).mapConvert(PublicKey)
 
 proc toRaw*(pubkey: PublicKey): array[64, byte] =
   let tmp = SkPublicKey(pubkey).toRaw()
