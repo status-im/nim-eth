@@ -8,7 +8,6 @@
 ##
 
 import
-  strformat,
   secp256k1,
   stew/[byteutils, objects, result],
   nimcrypto/[hash, sysrand]
@@ -16,6 +15,8 @@ import
 from nimcrypto/utils import burnMem
 
 export result
+
+{.push raises: [Defect].}
 
 # Implementation notes
 #
@@ -151,7 +152,7 @@ proc random*(T: type SkSecretKey): SkResult[T] =
 proc fromRaw*(T: type SkSecretKey, data: openArray[byte]): SkResult[T] =
   ## Load a valid private key, as created by `toRaw`
   if len(data) < SkRawSecretKeySize:
-    return err(&"secp: raw private key should be {SkRawSecretKeySize} bytes")
+    return err("secp: raw private key should be 32 bytes")
 
   if secp256k1_ec_seckey_verify(getContext(), data.ptr0) != 1:
     return err("secp: invalid private key")
@@ -183,7 +184,7 @@ proc fromRaw*(T: type SkPublicKey, data: openArray[byte]): SkResult[T] =
   ## Initialize Secp256k1 `public key` ``key`` from raw binary
   ## representation ``data``, which may be compressed, uncompressed or hybrid
   if len(data) < 1:
-    return err(&"secp: public key must be {SkRawCompressedPubKeySize} or {SkRawPublicKeySize} bytes")
+    return err("secp: public key must be 33 or 65 bytes")
 
   var length: int
   if data[0] == 0x02'u8 or data[0] == 0x03'u8:
@@ -228,7 +229,7 @@ proc toRawCompressed*(key: SkPublicKey): array[SkRawCompressedPubKeySize, byte] 
 proc fromRaw*(T: type SkSignature, data: openArray[byte]): SkResult[T] =
   ## Load compact signature from data
   if data.len() < SkRawSignatureSize:
-    return err(&"secp: signature must be {SkRawSignatureSize} bytes")
+    return err("secp: signature must be 64 bytes")
 
   var sig: SkSignature
   if secp256k1_ecdsa_signature_parse_compact(
@@ -288,7 +289,7 @@ proc toDer*(sig: SkSignature): seq[byte] =
 
 proc fromRaw*(T: type SkRecoverableSignature, data: openArray[byte]): SkResult[T] =
   if data.len() < SkRawRecoverableSignatureSize:
-    return err(&"secp: recoverable signature must be {SkRawRecoverableSignatureSize} bytes")
+    return err("secp: recoverable signature must be 65 bytes")
 
   let recid = cint(data[64])
   var sig: SkRecoverableSignature
