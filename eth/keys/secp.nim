@@ -7,6 +7,8 @@
 ## those terms.
 ##
 
+{.push raises: [Defect].}
+
 import
   strformat,
   secp256k1,
@@ -16,8 +18,6 @@ import
 from nimcrypto/utils import burnMem
 
 export result
-
-{.push raises: [Defect].}
 
 # Implementation notes
 #
@@ -103,11 +103,15 @@ var secpContext {.threadvar.}: SkContext
   ## Thread local variable which holds current context
 
 proc illegalCallback(message: cstring, data: pointer) {.cdecl.} =
-  # This should never happen because we check all parameters before passing
-  # them to secp
-  echo message
-  echo getStackTrace()
-  quit 1
+  # This is called for example when an invalid key is used - we'll simply
+  # ignore and rely on the return value
+  # TODO it would be nice if a "constructor" could be used such that no invalid
+  #      keys can ever be created - this would remove the need for this kludge -
+  #      rust-secp256k1 for example operates under this principle. the
+  #      alternative would be to pre-validate keys before every function call
+  #      but that seems expensive given that libsecp itself already does this
+  #      check
+  discard
 
 proc errorCallback(message: cstring, data: pointer) {.cdecl.} =
   # Internal panic - should never happen
@@ -140,6 +144,13 @@ func getContext(): ptr secp256k1_context =
       secpContext = newSkContext()
     secpContext.context
 
+proc fromHex*(T: type seq[byte], s: string): SkResult[T] =
+  # TODO move this to some common location and return a general error?
+  try:
+    ok(hexToSeqByte(s))
+  except CatchableError:
+    err("secp: cannot parse hex string")
+
 proc random*(T: type SkSecretKey): SkResult[T] =
   ## Generates new random private key.
   let ctx = getContext()
@@ -160,18 +171,17 @@ proc fromRaw*(T: type SkSecretKey, data: openArray[byte]): SkResult[T] =
 
   ok(T(data: toArray(32, data.toOpenArray(0, SkRawSecretKeySize - 1))))
 
-proc fromHex*(T: type SkSecretKey, data: string): SkResult[SkSecretKey] =
+proc fromHex*(T: type SkSecretKey, data: string): SkResult[T] =
   ## Initialize Secp256k1 `private key` ``key`` from hexadecimal string
   ## representation ``data``.
-  try:
-    # TODO strip string?
-    T.fromRaw(hexToSeqByte(data))
-  except CatchableError:
-    err("secp: cannot parse private key")
+  T.fromRaw(? seq[byte].fromHex(data))
 
 proc toRaw*(seckey: SkSecretKey): array[SkRawSecretKeySize, byte] =
   ## Serialize Secp256k1 `private key` ``key`` to raw binary form
   seckey.data
+
+proc toHex*(seckey: SkSecretKey): string =
+  toHex(toRaw(seckey))
 
 proc toPublicKey*(key: SkSecretKey): SkResult[SkPublicKey] =
   ## Calculate and return Secp256k1 `public key` from `private key` ``key``.
@@ -180,6 +190,9 @@ proc toPublicKey*(key: SkSecretKey): SkResult[SkPublicKey] =
     return err("secp: cannot create pubkey, private key invalid?")
 
   ok(pubkey)
+
+proc verify*(seckey: SkSecretKey): bool =
+  secp256k1_ec_seckey_verify(getContext(), seckey.data.ptr0) == 1
 
 proc fromRaw*(T: type SkPublicKey, data: openArray[byte]): SkResult[T] =
   ## Initialize Secp256k1 `public key` ``key`` from raw binary
@@ -206,11 +219,7 @@ proc fromRaw*(T: type SkPublicKey, data: openArray[byte]): SkResult[T] =
 proc fromHex*(T: type SkPublicKey, data: string): SkResult[T] =
   ## Initialize Secp256k1 `public key` ``key`` from hexadecimal string
   ## representation ``data``.
-  try:
-    # TODO strip string?
-    T.fromRaw(hexToSeqByte(data))
-  except CatchableError:
-    err("secp: cannot parse public key")
+  T.fromRaw(? seq[byte].fromHex(data))
 
 proc toRaw*(pubkey: SkPublicKey): array[SkRawPublicKeySize, byte] =
   ## Serialize Secp256k1 `public key` ``key`` to raw uncompressed form
@@ -220,13 +229,19 @@ proc toRaw*(pubkey: SkPublicKey): array[SkRawPublicKeySize, byte] =
     getContext(), result.ptr0, addr length, unsafeAddr pubkey,
     SECP256K1_EC_UNCOMPRESSED)
 
-proc toRawCompressed*(key: SkPublicKey): array[SkRawCompressedPubKeySize, byte] =
+proc toHex*(pubkey: SkPublicKey): string =
+  toHex(toRaw(pubkey))
+
+proc toRawCompressed*(pubkey: SkPublicKey): array[SkRawCompressedPubKeySize, byte] =
   ## Serialize Secp256k1 `public key` ``key`` to raw compressed form
   var length = csize(len(result))
   # Can't fail, per documentation
   discard secp256k1_ec_pubkey_serialize(
-    getContext(), result.ptr0, addr length, unsafeAddr key,
+    getContext(), result.ptr0, addr length, unsafeAddr pubkey,
     SECP256K1_EC_COMPRESSED)
+
+proc toHexCompressed*(pubkey: SkPublicKey): string =
+  toHex(toRawCompressed(pubkey))
 
 proc fromRaw*(T: type SkSignature, data: openArray[byte]): SkResult[T] =
   ## Load compact signature from data
@@ -256,11 +271,7 @@ proc fromDer*(T: type SkSignature, data: openarray[byte]): SkResult[T] =
 proc fromHex*(T: type SkSignature, data: string): SkResult[T] =
   ## Initialize Secp256k1 `signature` ``sig`` from hexadecimal string
   ## representation ``data``.
-  try:
-    # TODO strip string?
-    T.fromRaw(hexToSeqByte(data))
-  except CatchableError:
-    err("secp: cannot parse signature")
+  T.fromRaw(? seq[byte].fromHex(data))
 
 proc toRaw*(sig: SkSignature): array[SkRawSignatureSize, byte] =
   ## Serialize signature to compact binary form
@@ -289,6 +300,9 @@ proc toDer*(sig: SkSignature): seq[byte] =
   let length = toDer(sig, result)
   result.setLen(length)
 
+proc toHex*(sig: SkSignature): string =
+  toHex(toRaw(sig))
+
 proc fromRaw*(T: type SkRecoverableSignature, data: openArray[byte]): SkResult[T] =
   if data.len() < SkRawRecoverableSignatureSize:
     return err(
@@ -305,11 +319,7 @@ proc fromRaw*(T: type SkRecoverableSignature, data: openArray[byte]): SkResult[T
 proc fromHex*(T: type SkRecoverableSignature, data: string): SkResult[T] =
   ## Initialize Secp256k1 `signature` ``sig`` from hexadecimal string
   ## representation ``data``.
-  try:
-    # TODO strip string?
-    T.fromRaw(hexToSeqByte(data))
-  except CatchableError:
-    err("secp: cannot parse recoverable signature")
+  T.fromRaw(? seq[byte].fromHex(data))
 
 proc toRaw*(sig: SkRecoverableSignature): array[SkRawRecoverableSignatureSize, byte] =
   ## Converts recoverable signature to compact binary form
@@ -318,6 +328,9 @@ proc toRaw*(sig: SkRecoverableSignature): array[SkRawRecoverableSignatureSize, b
   discard secp256k1_ecdsa_recoverable_signature_serialize_compact(
       getContext(), result.ptr0, addr recid, unsafeAddr sig)
   result[64] = byte(recid)
+
+proc toHex*(sig: SkRecoverableSignature): string =
+  toHex(toRaw(sig))
 
 proc random*(T: type SkKeyPair): SkResult[T] =
   ## Generates new random key pair.
@@ -413,3 +426,7 @@ proc clear*(v: var SkEcdhSecret) =
 
 proc clear*(v: var SkEcdhRawSecret) =
   burnMem(v.data)
+
+proc `$`*(
+    v: SkPublicKey | SkSecretKey | SkSignature | SkRecoverableSignature): string =
+  toHex(v)
