@@ -7,17 +7,17 @@
 ## those terms.
 ##
 
+{.push raises: [Defect].}
+
 import
   strformat,
   secp256k1,
   stew/[byteutils, objects, result],
   nimcrypto/[hash, sysrand]
 
-from nimcrypto/utils import burnMem
+from nimcrypto/utils import burnMem, stripSpaces
 
 export result
-
-{.push raises: [Defect].}
 
 # Implementation notes
 #
@@ -140,6 +140,13 @@ func getContext(): ptr secp256k1_context =
       secpContext = newSkContext()
     secpContext.context
 
+proc fromHex*(T: type seq[byte], s: string): SkResult[T] =
+  # TODO move this to some common location and return a general error?
+  try:
+    ok(hexToSeqByte(stripSpaces(s)))
+  except CatchableError:
+    err("secp: cannot parse hex string")
+
 proc random*(T: type SkSecretKey): SkResult[T] =
   ## Generates new random private key.
   let ctx = getContext()
@@ -160,14 +167,10 @@ proc fromRaw*(T: type SkSecretKey, data: openArray[byte]): SkResult[T] =
 
   ok(T(data: toArray(32, data.toOpenArray(0, SkRawSecretKeySize - 1))))
 
-proc fromHex*(T: type SkSecretKey, data: string): SkResult[SkSecretKey] =
+proc fromHex*(T: type SkSecretKey, data: string): SkResult[T] =
   ## Initialize Secp256k1 `private key` ``key`` from hexadecimal string
   ## representation ``data``.
-  try:
-    # TODO strip string?
-    T.fromRaw(hexToSeqByte(data))
-  except CatchableError:
-    err("secp: cannot parse private key")
+  T.fromRaw(? seq[byte].fromHex(data))
 
 proc toRaw*(seckey: SkSecretKey): array[SkRawSecretKeySize, byte] =
   ## Serialize Secp256k1 `private key` ``key`` to raw binary form
@@ -206,11 +209,7 @@ proc fromRaw*(T: type SkPublicKey, data: openArray[byte]): SkResult[T] =
 proc fromHex*(T: type SkPublicKey, data: string): SkResult[T] =
   ## Initialize Secp256k1 `public key` ``key`` from hexadecimal string
   ## representation ``data``.
-  try:
-    # TODO strip string?
-    T.fromRaw(hexToSeqByte(data))
-  except CatchableError:
-    err("secp: cannot parse public key")
+  T.fromRaw(? seq[byte].fromHex(data))
 
 proc toRaw*(pubkey: SkPublicKey): array[SkRawPublicKeySize, byte] =
   ## Serialize Secp256k1 `public key` ``key`` to raw uncompressed form
@@ -256,11 +255,7 @@ proc fromDer*(T: type SkSignature, data: openarray[byte]): SkResult[T] =
 proc fromHex*(T: type SkSignature, data: string): SkResult[T] =
   ## Initialize Secp256k1 `signature` ``sig`` from hexadecimal string
   ## representation ``data``.
-  try:
-    # TODO strip string?
-    T.fromRaw(hexToSeqByte(data))
-  except CatchableError:
-    err("secp: cannot parse signature")
+  T.fromRaw(? seq[byte].fromHex(data))
 
 proc toRaw*(sig: SkSignature): array[SkRawSignatureSize, byte] =
   ## Serialize signature to compact binary form
@@ -305,11 +300,7 @@ proc fromRaw*(T: type SkRecoverableSignature, data: openArray[byte]): SkResult[T
 proc fromHex*(T: type SkRecoverableSignature, data: string): SkResult[T] =
   ## Initialize Secp256k1 `signature` ``sig`` from hexadecimal string
   ## representation ``data``.
-  try:
-    # TODO strip string?
-    T.fromRaw(hexToSeqByte(data))
-  except CatchableError:
-    err("secp: cannot parse recoverable signature")
+  T.fromRaw(? seq[byte].fromHex(data))
 
 proc toRaw*(sig: SkRecoverableSignature): array[SkRawRecoverableSignatureSize, byte] =
   ## Converts recoverable signature to compact binary form
