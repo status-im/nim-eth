@@ -323,10 +323,6 @@ proc random*(T: type SkKeyPair): SkResult[T] =
     pubkey: seckey.toPublicKey().expect("random key should always be valid")
   ))
 
-proc `==`*(lhs, rhs: SkSecretKey): bool =
-  ## Compare Secp256k1 `private key` objects for equality.
-  lhs.data == rhs.data
-
 proc `==`*(lhs, rhs: SkPublicKey): bool =
   ## Compare Secp256k1 `public key` objects for equality.
   lhs.toRaw() == rhs.toRaw()
@@ -338,14 +334,6 @@ proc `==`*(lhs, rhs: SkSignature): bool =
 proc `==`*(lhs, rhs: SkRecoverableSignature): bool =
   ## Compare Secp256k1 `recoverable signature` objects for equality.
   lhs.toRaw() == rhs.toRaw()
-
-proc `==`*(lhs, rhs: SkEcdhSecret): bool =
-  ## Compare Secp256k1 `ECDH key` objects for equality.
-  lhs.data == rhs.data
-
-proc `==`*(lhs, rhs: SkEcdhRawSecret): bool =
-  ## Compare Secp256k1 `ECDH raw key` objects for equality.
-  lhs.data == rhs.data
 
 proc sign*(key: SkSecretKey, msg: SkMessage): SkResult[SkSignature] =
   ## Sign message `msg` using private key `key` and return signature object.
