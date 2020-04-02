@@ -13,7 +13,7 @@
 # * Shared secrets are serialized in raw format without the intial byte
 
 import
-  nimcrypto/hash, nimcrypto/keccak, ./keys/secp, sequtils,
+  nimcrypto/hash, nimcrypto/keccak, ./keys/secp,
   stew/[byteutils, objects, result], strformat
 
 export secp, result
@@ -246,7 +246,7 @@ proc recoverPublicKey*(
   return Error
 
 proc signRawMessage*(data: openarray[byte], seckey: PrivateKey,
-                    signature: var Signature): EthKeysStatus {.deprecated.} =
+                     signature: var Signature): EthKeysStatus {.deprecated.} =
   if len(data) != SkMessageSize:
     return Error
   let sig = signRecoverable(
@@ -346,8 +346,7 @@ proc initSignature*(hexstr: string): Signature =
 proc recoverKeyFromSignature*(signature: Signature,
                               hash: MDigest[256]): PublicKey {.deprecated.} =
   ## Recover public key from signature `signature` using `message`.
-  let key = recover(
-    SkRecoverableSignature(signature), SkMessage(data: hash.data))
+  let key = recover(SkRecoverableSignature(signature), hash)
   if key.isOk():
     return PublicKey(key[])
   raise newException(EthKeysException, $key.error)

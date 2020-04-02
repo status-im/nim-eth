@@ -8,7 +8,10 @@
 ##
 
 import
-  secp256k1, stew/[byteutils, objects, result], nimcrypto/sysrand, strformat
+  strformat,
+  secp256k1,
+  stew/[byteutils, objects, result],
+  nimcrypto/[hash, sysrand]
 
 from nimcrypto/utils import burnMem
 
@@ -76,9 +79,8 @@ type
     ## Representation of Secp256k1 context object.
     context: ptr secp256k1_context
 
-  SkMessage* = object
+  SkMessage* = MDigest[SkMessageSize * 8]
     ## Message that can be signed or verified
-    data*: array[SkMessageSize, byte]
 
   SkEcdhSecret* = object
     ## Representation of ECDH shared secret
