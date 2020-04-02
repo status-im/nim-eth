@@ -289,6 +289,19 @@ proc getRaw*(
   ## Converts signature `s` to serialized form.
   SkRecoverableSignature(s).toRaw()
 
+proc recoverSignatureKey*(signature: Signature,
+                          msg: openarray[byte],
+                          pubkey: var PublicKey): EthKeysStatus  {.deprecated.} =
+  if len(msg) < SkMessageSize:
+    return Error
+  let pk = recover(
+    SkRecoverableSignature(signature),
+    SkMessage(data: toArray(32, msg.toOpenArray(0, 31))))
+  if pk.isErr(): return Error
+
+  pubkey = PublicKey(pk[])
+  return Success
+
 proc recoverSignatureKey*(data: openarray[byte],
                           msg: openarray[byte],
                           pubkey: var PublicKey): EthKeysStatus  {.deprecated.} =
@@ -328,7 +341,7 @@ proc initPublicKey*(
 
   raise newException(EthKeysException, $pk.error)
 
-proc initPublicKey*(data: openarray[byte]): PublicKey =
+proc initPublicKey*(data: openarray[byte]): PublicKey {.deprecated.} =
   let pk = PublicKey.fromRaw(data)
   if pk.isOk(): return pk[]
 
@@ -337,11 +350,31 @@ proc initPublicKey*(data: openarray[byte]): PublicKey =
 proc signMessage*(seckey: PrivateKey, data: string): Signature {.deprecated.} =
   signMessage(seckey, cast[seq[byte]](data))
 
-proc initSignature*(hexstr: string): Signature =
+proc toKeyPair*(key: PrivateKey): KeyPair {.deprecated.} =
+  KeyPair(seckey: key, pubkey: key.getPublicKey())
+
+proc initSignature*(data: openArray[byte]): Signature {.deprecated.} =
+  let sig = SkRecoverableSignature.fromRaw(data)
+  if sig.isOk(): return Signature(sig[])
+
+  raise newException(EthKeysException, $sig.error)
+
+proc initSignature*(hexstr: string): Signature {.deprecated.} =
   let sig = SkRecoverableSignature.fromHex(stripSpaces(hexstr))
   if sig.isOk(): return Signature(sig[])
 
   raise newException(EthKeysException, $sig.error)
+
+proc recoverSignature*(data: openarray[byte],
+                       signature: var Signature): EthKeysStatus {.deprecated.} =
+  ## Deprecated, use `parseCompact` instead
+  if data.len < RawSignatureSize:
+    return(EthKeysStatus.Error)
+  let sig = SkRecoverableSignature.fromRaw(data)
+  if sig.isErr():
+    return Error
+  signature = Signature(sig[])
+  return Success
 
 proc recoverKeyFromSignature*(signature: Signature,
                               hash: MDigest[256]): PublicKey {.deprecated.} =
