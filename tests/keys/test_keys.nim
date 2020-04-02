@@ -70,12 +70,6 @@ suite "ECC/ECDSA/ECDHE tests suite":
       check:
         $signature == $expectSignature
 
-  test "test_signing_from_private_key_obj":
-    var s = initPrivateKey(pkbytes)
-    var signature = s.signMessage(message)
-    var mhash = keccak256.digest(message)
-    check verifyMessage(signature.data, mhash) == true
-
   test "test_recover_from_signature_obj":
     var s = initPrivateKey(pkbytes)
     var mhash = keccak256.digest(message)
@@ -162,7 +156,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
       let expect = fromHex(stripSpaces(sharedSecrets[i]))
       check:
         ecdhAgree(s, p, secret) == EthKeysStatus.Success
-        compare(expect, secret.data) == true
+        expect == secret.data
 
   test "ECDHE/cpp-ethereum crypto.cpp#L394":
     # ECDHE test vectors
@@ -175,7 +169,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
     let expect = fromHex(stripSpaces(expectm))
     check:
       ecdhAgree(s, p, secret) == EthKeysStatus.Success
-      compare(expect, secret.data) == true
+      expect == secret.data
 
   test "ECDHE/cpp-ethereum rlpx.cpp#L425":
     # ECDHE test vectors

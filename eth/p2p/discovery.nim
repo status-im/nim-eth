@@ -341,6 +341,7 @@ when isMainModule:
   discovery.open()
 
   proc test() {.async.} =
-    await discovery.bootstrap()
+    {.gcsafe.}:
+      await discovery.bootstrap()
 
   waitFor test()

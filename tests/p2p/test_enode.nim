@@ -71,7 +71,7 @@ suite "ENode":
       IncorrectIP,
       IncorrectIP,
       IncorrectIP,
-      Success,
+      ENodeStatus.Success,
       IncorrectUri,
       IncorrectPort,
       IncorrectPort,

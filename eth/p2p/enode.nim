@@ -11,6 +11,8 @@
 import uri, strutils, net
 import eth/keys
 
+export keys
+
 type
   ENodeStatus* = enum
     ## ENode status codes
