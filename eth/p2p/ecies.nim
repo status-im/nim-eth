@@ -10,28 +10,36 @@
 
 ## This module implements ECIES method encryption/decryption.
 
+{.push raises: [Defect].}
+
 import eth/keys, nimcrypto/[rijndael, bcmode, hash, hmac, sysrand, sha2, utils]
+import stew/result
+
+export result
 
 const
   emptyMac* = array[0, byte]([])
 
 type
-  EciesException* = object of CatchableError
-  EciesStatus* = enum
-    Success,        ## Operation was successful
-    BufferOverrun,  ## Output buffer size is too small
-    RandomError,    ## Could not obtain random data
-    EcdhError,      ## ECDH shared secret could not be calculated
-    WrongHeader,    ## ECIES header is incorrect
-    IncorrectKey,   ## Recovered public key is invalid
-    IncorrectTag,   ## ECIES tag verification failed
-    IncompleteError ## Decryption needs more data
+  EciesError* = enum
+    BufferOverrun   = "ecies: output buffer size is too small"
+    RandomError     = "ecies: could not obtain random data"
+    EcdhError       = "ecies: ECDH shared secret could not be calculated"
+    WrongHeader     = "ecies: header is incorrect"
+    IncorrectKey    = "ecies: recovered public key is invalid"
+    IncorrectTag    = "ecies: tag verification failed"
+    IncompleteError = "ecies: decryption needs more data"
 
-  EciesHeader* = object {.packed.}
+  EciesHeader* {.packed.} = object
     version*: byte
     pubkey*: array[RawPublicKeySize, byte]
     iv*: array[aes128.sizeBlock, byte]
     data*: byte
+
+  EciesResult*[T] = Result[T, EciesError]
+
+proc mapErrTo[T](r: SkResult[T], v: static EciesError): EciesResult[T] =
+  r.mapErr(proc (e: cstring): EciesError = v)
 
 template eciesOverheadLength*(): int =
   ## Return data overhead size for ECIES encrypted message
@@ -86,7 +94,7 @@ proc kdf*(data: openarray[byte]): array[KeyLength, byte] {.noInit.} =
 
 proc eciesEncrypt*(input: openarray[byte], output: var openarray[byte],
                    pubkey: PublicKey,
-                   sharedmac: openarray[byte] = emptyMac): EciesStatus =
+                   sharedmac: openarray[byte] = emptyMac): EciesResult[void] =
   ## Encrypt data with ECIES method using given public key `pubkey`.
   ## ``input``     - input data
   ## ``output``    - output data
@@ -99,32 +107,30 @@ proc eciesEncrypt*(input: openarray[byte], output: var openarray[byte],
     cipher: CTR[aes128]
     ctx: HMAC[sha256]
     iv: array[aes128.sizeBlock, byte]
-    material: array[KeyLength, byte]
 
   if len(output) < eciesEncryptedLength(len(input)):
-    return(BufferOverrun)
+    return err(BufferOverrun)
   if randomBytes(iv) != aes128.sizeBlock:
-    return(RandomError)
+    return err(RandomError)
 
-  var ephemeral = KeyPair.random()
-  if ephemeral.isErr:
-    return(RandomError)
+  var
+    ephemeral = ? KeyPair.random().mapErrTo(RandomError)
+    secret = ? ecdhRaw(ephemeral.seckey, pubkey).mapErrTo(EcdhError)
+    material = kdf(secret.data)
 
-  var secret = ecdhRaw(ephemeral[].seckey, pubkey)
-  if secret.isErr:
-    return(EcdhError)
-
-  material = kdf(secret[].data)
-  burnMem(secret)
+  clear(secret)
 
   copyMem(addr encKey[0], addr material[0], aes128.sizeKey)
+
   var macKey = sha256.digest(material, ostart = KeyLength div 2)
   burnMem(material)
 
   var header = cast[ptr EciesHeader](addr output[0])
   header.version = 0x04
-  header.pubkey = ephemeral[].pubkey.toRaw()
+  header.pubkey = ephemeral.pubkey.toRaw()
   header.iv = iv
+
+  clear(ephemeral)
 
   var so = eciesDataPos()
   var eo = so + len(input)
@@ -146,12 +152,12 @@ proc eciesEncrypt*(input: openarray[byte], output: var openarray[byte],
   copyMem(addr output[so], addr tag.data[0], sha256.sizeDigest)
   ctx.clear()
 
-  result = Success
+  ok()
 
 proc eciesDecrypt*(input: openarray[byte],
                    output: var openarray[byte],
                    seckey: PrivateKey,
-                   sharedmac: openarray[byte] = emptyMac): EciesStatus =
+                   sharedmac: openarray[byte] = emptyMac): EciesResult[void] =
   ## Decrypt data with ECIES method using given private key `seckey`.
   ## ``input``     - input data
   ## ``output``    - output data
@@ -165,24 +171,23 @@ proc eciesDecrypt*(input: openarray[byte],
     ctx: HMAC[sha256]
 
   if len(input) <= 0:
-    return(IncompleteError)
+    return err(IncompleteError)
 
   var header = cast[ptr EciesHeader](unsafeAddr input[0])
   if header.version != 0x04:
-    return(WrongHeader)
+    return err(WrongHeader)
   if len(input) <= eciesOverheadLength():
-    return(IncompleteError)
+    return err(IncompleteError)
   if len(input) - eciesOverheadLength() > len(output):
-    return(BufferOverrun)
-  let pubkey = PublicKey.fromRaw(header.pubkey)
-  if pubkey.isErr:
-    return(IncorrectKey)
-  var secret = ecdhRaw(seckey, pubkey[])
-  if secret.isErr:
-    return(EcdhError)
+    return err(BufferOverrun)
 
-  var material = kdf(secret[].data)
+  var
+    pubkey = ? PublicKey.fromRaw(header.pubkey).mapErrTo(IncorrectKey)
+    secret = ? ecdhRaw(seckey, pubkey).mapErrTo(EcdhError)
+
+  var material = kdf(secret.data)
   burnMem(secret)
+
   copyMem(addr encKey[0], addr material[0], aes128.sizeKey)
   var macKey = sha256.digest(material, ostart = KeyLength div 2)
   burnMem(material)
@@ -198,7 +203,7 @@ proc eciesDecrypt*(input: openarray[byte],
 
   if not equalMem(addr tag.data[0], unsafeAddr input[eciesMacPos(len(input))],
                   sha256.sizeDigest):
-    return(IncorrectTag)
+    return err(IncorrectTag)
 
   let datsize = eciesDecryptedLength(len(input))
   cipher.init(encKey, header.iv)
@@ -206,4 +211,5 @@ proc eciesDecrypt*(input: openarray[byte],
   cipher.decrypt(toOpenArray(input, eciesDataPos(),
                              eciesDataPos() + datsize - 1), output)
   cipher.clear()
-  result = Success
+
+  ok()

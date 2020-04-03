@@ -16,40 +16,47 @@
 ## - ``FreeBSD``, ``OpenBSD``, ``NetBSD``,
 ##   ``DragonflyBSD`` - using `uuid_create()`.
 
-import nimcrypto/utils, stew/endians2
+{.push raises: [Defect].}
+
+import stew/[byteutils, endians2, result]
+
+from nimcrypto import stripSpaces
+
+export result
 
 type
-  UUIDException = object of CatchableError
-
   UUID* = object
     ## Represents UUID object
     data*: array[16, byte]
 
-proc raiseInvalidUuid() =
-  raise newException(UUIDException, "Invalid UUID!")
+  UuidResult*[T] = Result[T, cstring]
 
-proc uuidFromString*(s: string): UUID =
+proc uuidFromString*(s: string): UuidResult[UUID] =
   ## Convert string representation of UUID into UUID object.
   if len(s) != 36:
-    raiseInvalidUuid()
+    return err("uuid: length must be 36 bytes")
   for i in 0..<len(s):
     if s[i] notin {'A'..'F', '0'..'9', 'a'..'f', '-'}:
-      raiseInvalidUuid()
-  var d = fromHex(stripSpaces(s))
-  var
-    a = uint32.fromBytesBE(d.toOpenArray(0, 3))
-    b = uint16.fromBytesBE(d.toOpenArray(4, 5))
-    c = uint16.fromBytesBE(d.toOpenArray(6, 7))
+      return err("uuid: invalid characters")
+  try:
+    var d = hexToSeqByte(stripSpaces(s))
+    var
+      a = uint32.fromBytesBE(d.toOpenArray(0, 3))
+      b = uint16.fromBytesBE(d.toOpenArray(4, 5))
+      c = uint16.fromBytesBE(d.toOpenArray(6, 7))
 
-  copyMem(addr result.data[0], addr a, 4)
-  copyMem(addr result.data[4], addr b, 2)
-  copyMem(addr result.data[6], addr c, 2)
-  copyMem(addr result.data[8], addr d[8], 8)
+    var ret: UUID
+    copyMem(addr ret.data[0], addr a, 4)
+    copyMem(addr ret.data[4], addr b, 2)
+    copyMem(addr ret.data[6], addr c, 2)
+    copyMem(addr ret.data[8], addr d[8], 8)
+    ok(ret)
+  except CatchableError:
+    err("uuid: cannot parse hex string")
 
-proc uuidToString*(u: UUID, lowercase: bool = false): string =
+proc uuidToString*(u: UUID): string =
   ## Convert UUID object into string representation.
-  ## You can use ``lowercase`` flag to specify letter case
-  ## of output string.
+  ## UUID are lowercase, per RFC4122
   result = newStringOfCap(38)
   var d: array[8, byte]
   var
@@ -60,22 +67,22 @@ proc uuidToString*(u: UUID, lowercase: bool = false): string =
   copyMem(addr d[4], addr b, 2)
   copyMem(addr d[6], addr c, 2)
 
-  result.add(toHex(toOpenArray(d, 0, 3), lowercase))
+  result.add(toHex(toOpenArray(d, 0, 3)))
   result.add("-")
-  result.add(toHex(toOpenArray(d, 4, 5), lowercase))
+  result.add(toHex(toOpenArray(d, 4, 5)))
   result.add("-")
-  result.add(toHex(toOpenArray(d, 6, 7), lowercase))
+  result.add(toHex(toOpenArray(d, 6, 7)))
   result.add("-")
-  result.add(toHex(toOpenArray(u.data, 8, 9), lowercase))
+  result.add(toHex(toOpenArray(u.data, 8, 9)))
   result.add("-")
-  result.add(toHex(toOpenArray(u.data, 10, 15), lowercase))
+  result.add(toHex(toOpenArray(u.data, 10, 15)))
 
-proc `$`*(u: UUID): string {.inline.} =
+proc `$`*(u: UUID): string =
   ## Convert UUID object to lowercase string representation.
-  uuidToString(u, true)
+  uuidToString(u)
 
 when defined(nimdoc):
-  proc uuidGenerate*(output: var UUID): int
+  proc uuidGenerate*(): UuidResult[UUID]
     ## Generates new unique UUID and store it to `output`.
     ##
     ## Return 1 on success, and 0 on failure
@@ -85,9 +92,10 @@ when defined(posix):
     proc uuidGenerateRandom(a: pointer)
          {.importc: "uuid_generate_random", header: "uuid/uuid.h".}
 
-    proc uuidGenerate*(output: var UUID): int =
+    proc uuidGenerate*(): UuidResult[UUID] =
+      var output: UUID
       uuidGenerateRandom(cast[pointer](addr output))
-      result = 1
+      ok(output)
 
   elif defined(freebsd) or defined(netbsd) or defined(openbsd) or
        defined(dragonflybsd):
@@ -95,13 +103,14 @@ when defined(posix):
     proc uuidCreate(a: pointer, s: ptr uint32)
          {.importc: "uuid_create", header: "uuid.h".}
 
-    proc uuidGenerate*(output: var UUID): int =
+    proc uuidGenerate*(): UuidResult[UUID] =
       var status: uint32 = 0
+      var output: UUID
       uuidCreate(cast[pointer](addr output), addr status)
       if status == 0:
-        result = 1
+        ok(output)
       else:
-        result = 0
+        err("uuid: uuid_create failed")
 
   elif defined(linux) or defined(android):
     import posix, os, nimcrypto/sysrand
@@ -124,39 +133,44 @@ when defined(posix):
               break
         discard posix.close(fd)
 
-    proc uuidGenerate*(output: var UUID): int =
-      result = 0
+    proc uuidGenerate*(): UuidResult[UUID] =
       var buffer = newString(37)
       if uuidRead(buffer, 36) == 36:
         buffer.setLen(36)
-        output = uuidFromString(buffer)
-        result = 1
+        uuidFromString(buffer)
       else:
+        var output: UUID
         if randomBytes(output.data) == sizeof(output.data):
-          result = 1
+          ok(output)
+        else:
+          err("uuid: cannot get random bytes")
+
   else:
     import nimcrypto/sysrand
 
-    proc uuidGenerate*(output: var UUID): int =
+    proc uuidGenerate*(): UuidResult[UUID] =
+      var output: UUID
       if randomBytes(output.data) == sizeof(output.data):
-        result = 1
+        ok(output)
       else:
-        result = 0
+        err("uuid: cannot get random bytes")
 
 elif defined(windows):
   proc UuidCreate(p: pointer): int32
        {.stdcall, dynlib: "rpcrt4", importc: "UuidCreate".}
 
-  proc uuidGenerate*(output: var UUID): int =
+  proc uuidGenerate*(): UuidResult[UUID] =
+    var output: UUID
     if UuidCreate(cast[pointer](addr output)) == 0:
-      return 1
+      ok(output)
     else:
-      return 0
+      err("uuid: UuidCreate failed")
 elif not defined(nimdoc):
   import nimcrypto/sysrand
 
-  proc uuidGenerate*(output: var UUID): int =
+  proc uuidGenerate*(): UuidResult[UUID] =
+    var output: UUID
     if randomBytes(output.data) == sizeof(output.data):
-      result = 1
+      ok(output)
     else:
-      result = 0
+      err("uuid: cannot get random bytes")

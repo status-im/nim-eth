@@ -163,13 +163,12 @@ proc get*(r: Record, key: string, T: type): T =
   else:
     raise newException(KeyError, "Key not found in ENR: " & key)
 
-proc get*(r: Record, pubKey: var PublicKey): bool =
+proc get*(r: Record, T: type PublicKey): Option[T] {.raises: [Defect].} =
   var pubkeyField: Field
   if r.getField("secp256k1", pubkeyField) and pubkeyField.kind == kBytes:
     let pk = PublicKey.fromRaw(pubkeyField.bytes)
     if pk.isOk:
-      pubKey = pk[]
-      return true
+      return some pk[]
 
 proc tryGet*(r: Record, key: string, T: type): Option[T] =
   try:
@@ -197,12 +196,12 @@ proc toTypedRecord*(r: Record): Option[TypedRecord] =
     return some(tr)
 
 proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]): bool =
-  var publicKey: PublicKey
-  if r.get(publicKey):
+  let publicKey = r.get(PublicKey)
+  if publicKey.isSome:
     let sig = SignatureNR.fromRaw(sigData)
     if sig.isOk:
       var h = keccak256.digest(content)
-      return verify(sig[], h, publicKey)
+      return verify(sig[], h, publicKey.get)
 
 proc verifySignature(r: Record): bool =
   var rlp = rlpFromBytes(r.raw.toRange)

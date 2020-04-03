@@ -7,7 +7,7 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 
-import eth/keys, eth/keyfile/[uuid, keyfile], json, strutils, os, unittest
+import eth/keys, eth/keyfile/[keyfile], json, os, unittest
 
 # Test vectors copied from
 # https://github.com/ethereum/tests/blob/develop/KeyStoreTests/basic_tests.json
@@ -83,52 +83,45 @@ var TestVectors = [
   }
 ]
 
-var jobject: JsonNode
-
 suite "KeyFile test suite":
   test "KeyStoreTests/basic_tests.json test1":
-    var seckey: PrivateKey
+
     var expectkey = PrivateKey.fromHex(TestVectors[0].getOrDefault("priv").getStr())[]
-    check:
+    let seckey =
       decodeKeyFileJson(TestVectors[0].getOrDefault("keyfile"),
-                        TestVectors[0].getOrDefault("password").getStr(),
-                        seckey) == KeyFileStatus.Success
-      seckey.toRaw == expectkey.toRaw
-  test "KeyStoreTests/basic_tests.json python_generated_test_with_odd_iv":
-    var seckey: PrivateKey
-    var expectkey = PrivateKey.fromHex(TestVectors[1].getOrDefault("priv").getStr())[]
+                        TestVectors[0].getOrDefault("password").getStr())[]
     check:
+      seckey.toRaw() == expectkey.toRaw()
+  test "KeyStoreTests/basic_tests.json python_generated_test_with_odd_iv":
+    var expectkey = PrivateKey.fromHex(TestVectors[1].getOrDefault("priv").getStr())[]
+    let seckey =
       decodeKeyFileJson(TestVectors[1].getOrDefault("keyfile"),
-                        TestVectors[1].getOrDefault("password").getStr(),
-                        seckey) == KeyFileStatus.Success
+                        TestVectors[1].getOrDefault("password").getStr())[]
+    check:
       seckey.toRaw == expectkey.toRaw
   test "KeyStoreTests/basic_tests.json evilnonce":
-    var seckey: PrivateKey
     var expectkey = PrivateKey.fromHex(TestVectors[2].getOrDefault("priv").getStr())[]
+    let seckey = decodeKeyFileJson(TestVectors[2].getOrDefault("keyfile"),
+                      TestVectors[2].getOrDefault("password").getStr())[]
     check:
-      decodeKeyFileJson(TestVectors[2].getOrDefault("keyfile"),
-                        TestVectors[2].getOrDefault("password").getStr(),
-                        seckey) == KeyFileStatus.Success
       seckey.toRaw == expectkey.toRaw
   test "KeyStoreTests/basic_tests.json evilnonce with wrong password":
-    var seckey: PrivateKey
-    check:
+    let seckey =
       decodeKeyFileJson(TestVectors[2].getOrDefault("keyfile"),
-                        "wrongpassword",
-                        seckey) == KeyFileStatus.IncorrectMac
+                        "wrongpassword")
+    check:
+      seckey.error == KeyFileError.IncorrectMac
   test "Create/Save/Load test":
     var seckey0 = PrivateKey.random()[]
-    var seckey1: PrivateKey
+    let jobject = createKeyFileJson(seckey0, "randompassword")[]
+
     check:
-      createKeyFileJson(seckey0, "randompassword",
-                        jobject) == KeyFileStatus.Success
-      saveKeyFile("test.keyfile", jobject) == KeyFileStatus.Success
-      loadKeyFile("test.keyfile", "randompassword",
-                  seckey1) == KeyFileStatus.Success
+      saveKeyFile("test.keyfile", jobject).isOk()
+    var seckey1 = loadKeyFile("test.keyfile", "randompassword")[]
+    check:
       seckey0.toRaw == seckey1.toRaw
     removeFile("test.keyfile")
   test "Load non-existent pathname test":
-    var seckey: PrivateKey
     check:
-      loadKeyFile("nonexistant.keyfile", "password",
-                  seckey) == KeyFileStatus.OsError
+      loadKeyFile("nonexistant.keyfile", "password").error ==
+        KeyFileError.OsError

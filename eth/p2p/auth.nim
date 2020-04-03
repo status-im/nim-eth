@@ -10,12 +10,16 @@
 
 ## This module implements Ethereum authentication
 
+{.push raises: [Defect].}
+
 import eth/[keys, rlp], nimcrypto
 import ecies
-import stew/[byteutils, endians2]
+import stew/[byteutils, endians2, result]
+
+export result
 
 const
-  SupportedRlpxVersion* = 4
+  SupportedRlpxVersion* = 4'u8
   PlainAuthMessageV4Length* = 194
   AuthMessageV4Length* = 307
   PlainAuthMessageEIP8Length = 169
@@ -49,18 +53,17 @@ type
     Responder,      ## `Handshake` owner is connection responder
     Eip8            ## Flag indicates that EIP-8 handshake is used
 
-  AuthStatus* = enum
-    Success,        ## Operation was successful
-    RandomError,    ## Could not obtain random data
-    EcdhError,      ## ECDH shared secret could not be calculated
-    BufferOverrun,  ## Buffer overrun error
-    SignatureError, ## Signature could not be obtained
-    EciesError,     ## ECIES encryption/decryption error
-    InvalidPubKey,  ## Invalid public key
-    InvalidAuth,    ## Invalid Authentication message
-    InvalidAck,     ## Invalid Authentication ACK message
-    RlpError,       ## Error while decoding RLP stream
-    IncompleteError ## Data incomplete error
+  AuthError* = enum
+    RandomError     = "auth: could not obtain random data"
+    EcdhError       = "auth: ECDH shared secret could not be calculated"
+    BufferOverrun   = "auth: buffer overrun"
+    SignatureError  = "auth: signature could not be obtained"
+    EciesError      = "auth: ECIES encryption/decryption error"
+    InvalidPubKey   = "auth: invalid public key"
+    InvalidAuth     = "auth: invalid Authentication message"
+    InvalidAck      = "auth: invalid Authentication ACK message"
+    RlpError        = "auth: error while decoding RLP stream"
+    IncompleteError = "auth: data incomplete"
 
   Handshake* = object
     version*: uint8             ## protocol version
@@ -79,80 +82,94 @@ type
     egressMac*: keccak256
     ingressMac*: keccak256
 
-  AuthException* = object of CatchableError
+  AuthResult*[T] = Result[T, AuthError]
 
 template toa(a, b, c: untyped): untyped =
   toOpenArray((a), (b), (b) + (c) - 1)
 
-proc sxor[T](a: var openarray[T], b: openarray[T]) {.inline.} =
-  doAssert(len(a) == len(b))
+proc `xor`[N: static int](a, b: array[N, byte]): array[N, byte] =
   for i in 0 ..< len(a):
-    a[i] = a[i] xor b[i]
+    result[i] = a[i] xor b[i]
 
-proc newHandshake*(flags: set[HandshakeFlag] = {Initiator},
-                   version: int = SupportedRlpxVersion): Handshake =
+proc mapErrTo[T, E](r: Result[T, E], v: static AuthError): AuthResult[T] =
+  r.mapErr(proc (e: E): AuthError = v)
+
+proc tryInit*(
+    T: type Handshake, host: KeyPair, flags: set[HandshakeFlag] = {Initiator},
+    version: uint8 = SupportedRlpxVersion): AuthResult[T] =
   ## Create new `Handshake` object.
-  result.version = byte(version and 0xFF)
-  result.flags = flags
-  result.ephemeral = KeyPair.random().tryGet()
+
+  var
+    initiatorNonce: Nonce
+    responderNonce: Nonce
+    expectedLength: int
+    ephemeral = ? KeyPair.random().mapErrTo(RandomError)
+
   if Initiator in flags:
-    result.expectedLength = AckMessageV4Length
-    if randomBytes(result.initiatorNonce) != len(result.initiatorNonce):
-      raise newException(AuthException, "Could not obtain random data!")
+    expectedLength = AckMessageV4Length
+    if randomBytes(initiatorNonce) != len(initiatorNonce):
+      return err(RandomError)
   else:
-    result.expectedLength = AuthMessageV4Length
-    if randomBytes(result.responderNonce) != len(result.responderNonce):
-      raise newException(AuthException, "Could not obtain random data!")
+    expectedLength = AuthMessageV4Length
+    if randomBytes(responderNonce) != len(responderNonce):
+      return err(RandomError)
+
+  return ok(T(
+    version: version,
+    flags: flags,
+    host: host,
+    ephemeral: ephemeral,
+    initiatorNonce: initiatorNonce,
+    responderNonce: responderNonce,
+    expectedLength: expectedLength
+  ))
 
 proc authMessagePreEIP8(h: var Handshake,
                         pubkey: PublicKey,
                         output: var openarray[byte],
                         outlen: var int,
-                        flag: int = 0,
-                        encrypt: bool = true): AuthStatus =
+                        flag: byte = 0,
+                        encrypt: bool = true): AuthResult[void] =
   ## Create plain pre-EIP8 authentication message.
   var
     buffer: array[PlainAuthMessageV4Length, byte]
-    flagb: byte
-    header: ptr AuthMessageV4
   outlen = 0
-  flagb = byte(flag)
-  header = cast[ptr AuthMessageV4](addr buffer[0])
-  var secret = ecdhRaw(h.host.seckey, pubkey)
-  if secret.isErr:
-    return(EcdhError)
-  var xornonce = h.initiatorNonce
-  xornonce.sxor(secret[].data)
-  secret[].clear()
-  let sig = sign(h.ephemeral.seckey, SkMessage(data: xornonce))
-  if sig.isErr:
-    return(SignatureError)
+  let header = cast[ptr AuthMessageV4](addr buffer[0])
+
+  var secret = ? ecdhRaw(h.host.seckey, pubkey).mapErrTo(EcdhError)
+  let xornonce = secret.data xor h.initiatorNonce
+
+  secret.clear()
+
+  let signature = ? sign(
+    h.ephemeral.seckey, SkMessage(data: xornonce)).mapErrTo(SignatureError)
+
   h.remoteHPubkey = pubkey
-  header.signature = sig[].toRaw()
+  header.signature = signature.toRaw()
   header.keyhash = keccak256.digest(h.ephemeral.pubkey.toRaw()).data
   header.pubkey = h.host.pubkey.toRaw()
   header.nonce = h.initiatorNonce
-  header.flag = flagb
+  header.flag = flag
   if encrypt:
     if len(output) < AuthMessageV4Length:
-      return(BufferOverrun)
-    if eciesEncrypt(buffer, output, h.remoteHPubkey) != EciesStatus.Success:
-      return(EciesError)
+      return err(BufferOverrun)
+    if eciesEncrypt(buffer, output, h.remoteHPubkey).isErr:
+      return err(EciesError)
     outlen = AuthMessageV4Length
-    result = Success
   else:
     if len(output) < PlainAuthMessageV4Length:
-      return(BufferOverrun)
+      return err(BufferOverrun)
     copyMem(addr output[0], addr buffer[0], PlainAuthMessageV4Length)
     outlen = PlainAuthMessageV4Length
-    result = Success
+
+  ok()
 
 proc authMessageEIP8(h: var Handshake,
                      pubkey: PublicKey,
                      output: var openarray[byte],
                      outlen: var int,
-                     flag: int = 0,
-                     encrypt: bool = true): AuthStatus =
+                     flag: byte = 0,
+                     encrypt: bool = true): AuthResult[void] =
   ## Create EIP8 authentication message.
   var
     buffer: array[PlainAuthMessageMaxEIP8, byte]
@@ -160,17 +177,17 @@ proc authMessageEIP8(h: var Handshake,
 
   doAssert(EIP8 in h.flags)
   outlen = 0
-  var secret = ecdhRaw(h.host.seckey, pubkey)
-  if secret.isErr:
-    return(EcdhError)
-  var xornonce = h.initiatorNonce
-  xornonce.sxor(secret[].data)
-  secret[].clear()
-  var sig = sign(h.ephemeral.seckey, SkMessage(data: xornonce))
-  if sig.isErr:
-    return(SignatureError)
+  var
+    secret = ? ecdhRaw(h.host.seckey, pubkey).mapErrTo(EcdhError)
+    xornonce = secret.data xor h.initiatorNonce
+
+  secret.clear()
+
+  let signature = ? sign(
+    h.ephemeral.seckey, SkMessage(data: xornonce)).mapErrTo(SignatureError)
+
   h.remoteHPubkey = pubkey
-  var payload = rlp.encodeList(sig[].toRaw(),
+  var payload = rlp.encodeList(signature.toRaw(),
                                h.host.pubkey.toRaw(),
                                h.initiatorNonce,
                                [byte(h.version)])
@@ -178,65 +195,67 @@ proc authMessageEIP8(h: var Handshake,
   let pencsize = eciesEncryptedLength(len(payload))
   while true:
     if randomBytes(addr padsize, 1) != 1:
-      return(RandomError)
+      return err(RandomError)
     if int(padsize) > (AuthMessageV4Length - (pencsize + 2)):
       break
   # It is possible to make packet size constant by uncommenting this line
   # padsize = 24
-  var wosize = pencsize + int(padsize)
+  let wosize = pencsize + int(padsize)
   let fullsize = wosize + 2
   if randomBytes(toa(buffer, PlainAuthMessageEIP8Length,
                  int(padsize))) != int(padsize):
-    return(RandomError)
+    return err(RandomError)
   if encrypt:
     copyMem(addr buffer[0], addr payload[0], len(payload))
     if len(output) < fullsize:
-      return(BufferOverrun)
+      return err(BufferOverrun)
     let wosizeBE = uint16(wosize).toBytesBE()
     output[0..<2] = wosizeBE
     if eciesEncrypt(toa(buffer, 0, len(payload) + int(padsize)),
                     toa(output, 2, wosize), pubkey,
-                    toa(output, 0, 2)) != EciesStatus.Success:
-      return(EciesError)
+                    toa(output, 0, 2)).isErr:
+      return err(EciesError)
     outlen = fullsize
   else:
     let plainsize = len(payload) + int(padsize)
     if len(output) < plainsize:
-      return(BufferOverrun)
+      return err(BufferOverrun)
     copyMem(addr output[0], addr buffer[0], plainsize)
     outlen = plainsize
-  result = Success
+
+  ok()
 
 proc ackMessagePreEIP8(h: var Handshake,
                        output: var openarray[byte],
                        outlen: var int,
-                       flag: int = 0,
-                       encrypt: bool = true): AuthStatus =
+                       flag: byte = 0,
+                       encrypt: bool = true): AuthResult[void] =
   ## Create plain pre-EIP8 authentication ack message.
   var buffer: array[PlainAckMessageV4Length, byte]
   outlen = 0
-  var header = cast[ptr AckMessageV4](addr buffer[0])
+  let header = cast[ptr AckMessageV4](addr buffer[0])
   header.pubkey = h.ephemeral.pubkey.toRaw()
   header.nonce = h.responderNonce
-  header.flag = byte(flag)
+  header.flag = flag
   if encrypt:
     if len(output) < AckMessageV4Length:
-      return(BufferOverrun)
-    if eciesEncrypt(buffer, output, h.remoteHPubkey) != EciesStatus.Success:
-      return(EciesError)
+      return err(BufferOverrun)
+    if eciesEncrypt(buffer, output, h.remoteHPubkey).isErr:
+      return err(EciesError)
     outlen = AckMessageV4Length
   else:
     if len(output) < PlainAckMessageV4Length:
-      return(BufferOverrun)
+      return err(BufferOverrun)
     copyMem(addr output[0], addr buffer[0], PlainAckMessageV4Length)
     outlen = PlainAckMessageV4Length
-  result = Success
+
+  ok()
 
 proc ackMessageEIP8(h: var Handshake,
                     output: var openarray[byte],
                     outlen: var int,
-                    flag: int = 0,
-                    encrypt: bool = true): AuthStatus =
+                    flag: byte = 0,
+                    encrypt: bool = true): AuthResult[void] =
   ## Create EIP8 authentication ack message.
   var
     buffer: array[PlainAckMessageMaxEIP8, byte]
@@ -250,34 +269,35 @@ proc ackMessageEIP8(h: var Handshake,
   let pencsize = eciesEncryptedLength(len(payload))
   while true:
     if randomBytes(addr padsize, 1) != 1:
-      return(RandomError)
+      return err(RandomError)
     if int(padsize) > (AckMessageV4Length - (pencsize + 2)):
       break
   # It is possible to make packet size constant by uncommenting this line
   # padsize = 0
-  var wosize = pencsize + int(padsize)
+  let wosize = pencsize + int(padsize)
   let fullsize = wosize + 2
   if int(padsize) > 0:
     if randomBytes(toa(buffer, PlainAckMessageEIP8Length,
                    int(padsize))) != int(padsize):
-      return(RandomError)
+      return err(RandomError)
   copyMem(addr buffer[0], addr payload[0], len(payload))
   if encrypt:
     if len(output) < fullsize:
-      return(BufferOverrun)
+      return err(BufferOverrun)
     output[0..<2] = uint16(wosize).toBytesBE()
     if eciesEncrypt(toa(buffer, 0, len(payload) + int(padsize)),
                     toa(output, 2, wosize), h.remoteHPubkey,
-                    toa(output, 0, 2)) != EciesStatus.Success:
-      return(EciesError)
+                    toa(output, 0, 2)).isErr:
+      return err(EciesError)
     outlen = fullsize
   else:
     let plainsize = len(payload) + int(padsize)
     if len(output) < plainsize:
-      return(BufferOverrun)
+      return err(BufferOverrun)
     copyMem(addr output[0], addr buffer[0], plainsize)
     outlen = plainsize
-  result = Success
+
+  ok()
 
 template authSize*(h: Handshake, encrypt: bool = true): int =
   ## Get number of bytes needed to store AuthMessage.
@@ -295,55 +315,52 @@ template ackSize*(h: Handshake, encrypt: bool = true): int =
 
 proc authMessage*(h: var Handshake, pubkey: PublicKey,
                   output: var openarray[byte],
-                  outlen: var int, flag: int = 0,
-                  encrypt: bool = true): AuthStatus {.inline.} =
+                  outlen: var int, flag: byte = 0,
+                  encrypt: bool = true): AuthResult[void] =
   ## Create new AuthMessage for specified `pubkey` and store it inside
   ## of `output`, size of generated AuthMessage will stored in `outlen`.
   if EIP8 in h.flags:
-    result = authMessageEIP8(h, pubkey, output, outlen, flag, encrypt)
+    authMessageEIP8(h, pubkey, output, outlen, flag, encrypt)
   else:
-    result = authMessagePreEIP8(h, pubkey, output, outlen, flag, encrypt)
+    authMessagePreEIP8(h, pubkey, output, outlen, flag, encrypt)
 
 proc ackMessage*(h: var Handshake, output: var openarray[byte],
-                 outlen: var int, flag: int = 0,
-                 encrypt: bool = true): AuthStatus =
+                 outlen: var int, flag: byte = 0,
+                 encrypt: bool = true): AuthResult[void] =
   ## Create new AckMessage and store it inside of `output`, size of generated
   ## AckMessage will stored in `outlen`.
   if EIP8 in h.flags:
-    result = ackMessageEIP8(h, output, outlen, flag, encrypt)
+    ackMessageEIP8(h, output, outlen, flag, encrypt)
   else:
-    result = ackMessagePreEIP8(h, output, outlen, flag, encrypt)
+    ackMessagePreEIP8(h, output, outlen, flag, encrypt)
 
-proc decodeAuthMessageV4(h: var Handshake, m: openarray[byte]): AuthStatus =
+proc decodeAuthMessageV4(h: var Handshake, m: openarray[byte]): AuthResult[void] =
   ## Decodes V4 AuthMessage.
   var
     buffer: array[PlainAuthMessageV4Length, byte]
 
   doAssert(Responder in h.flags)
-  if eciesDecrypt(m, buffer, h.host.seckey) != EciesStatus.Success:
-    return(EciesError)
-  var header = cast[ptr AuthMessageV4](addr buffer[0])
-  let pubkey = PublicKey.fromRaw(header.pubkey)
-  if pubkey.isErr:
-    return(InvalidPubKey)
-  var secret = ecdhRaw(h.host.seckey, pubkey[])
-  if secret.isErr:
-    return(EcdhError)
-  var xornonce = header.nonce
-  xornonce.sxor(secret[].data)
-  secret[].clear()
-  let sig = Signature.fromRaw(header.signature)
-  if sig.isErr:
-    return(SignatureError)
-  let remoteEPubkey = recover(sig[], SkMessage(data: xornonce))
-  if remoteEPubkey.isErr:
-    return(SignatureError)
-  h.remoteEPubkey = remoteEPubkey[]
-  h.initiatorNonce = header.nonce
-  h.remoteHPubkey = pubkey[]
-  result = Success
+  if eciesDecrypt(m, buffer, h.host.seckey).isErr:
+    return err(EciesError)
 
-proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthStatus =
+  let
+    header = cast[ptr AuthMessageV4](addr buffer[0])
+    pubkey = ? PublicKey.fromRaw(header.pubkey).mapErrTo(InvalidPubKey)
+    signature = ? Signature.fromRaw(header.signature).mapErrTo(SignatureError)
+
+  var secret = ? ecdhRaw(h.host.seckey, pubkey).mapErrTo(EcdhError)
+  let xornonce = secret.data xor header.nonce
+
+  secret.clear()
+
+  h.remoteEPubkey =
+    ? recover(signature, SkMessage(data: xornonce)).mapErrTo(SignatureError)
+  h.initiatorNonce = header.nonce
+  h.remoteHPubkey = pubkey
+
+  ok()
+
+proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AuthMessage.
   var
     nonce: Nonce
@@ -351,155 +368,138 @@ proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthStatus =
   let size = uint16.fromBytesBE(m)
   h.expectedLength = int(size) + 2
   if h.expectedLength > len(m):
-    return(IncompleteError)
+    return err(IncompleteError)
   var buffer = newSeq[byte](eciesDecryptedLength(int(size)))
   if eciesDecrypt(toa(m, 2, int(size)), buffer, h.host.seckey,
-                  toa(m, 0, 2)) != EciesStatus.Success:
-    return(EciesError)
+                  toa(m, 0, 2)).isErr:
+    return err(EciesError)
   try:
     var reader = rlpFromBytes(buffer.toRange())
     if not reader.isList() or reader.listLen() < 4:
-      return(InvalidAuth)
+      return err(InvalidAuth)
     if reader.listElem(0).blobLen != RawSignatureSize:
-      return(InvalidAuth)
+      return err(InvalidAuth)
     if reader.listElem(1).blobLen != RawPublicKeySize:
-      return(InvalidAuth)
+      return err(InvalidAuth)
     if reader.listElem(2).blobLen != KeyLength:
-      return(InvalidAuth)
+      return err(InvalidAuth)
     if reader.listElem(3).blobLen != 1:
-      return(InvalidAuth)
+      return err(InvalidAuth)
     var signatureBr = reader.listElem(0).toBytes()
     var pubkeyBr = reader.listElem(1).toBytes()
     var nonceBr = reader.listElem(2).toBytes()
     var versionBr = reader.listElem(3).toBytes()
-    let pubkey = PublicKey.fromRaw(pubkeyBr.toOpenArray())
-    if pubkey.isErr:
-      return(InvalidPubKey)
-    copyMem(addr nonce[0], nonceBr.baseAddr, KeyLength)
-    var secret = ecdhRaw(h.host.seckey, pubkey[])
-    if secret.isErr:
-      return(EcdhError)
-    var xornonce = nonce
-    xornonce.sxor(secret[].data)
-    secret[].clear()
-    let sig = Signature.fromRaw(signatureBr.toOpenArray())
-    if sig.isErr:
-      return(SignatureError)
-    let remoteEPubkey = recover(sig[], SkMessage(data: xornonce))
-    if remoteEPubkey.isErr:
-      return(SignatureError)
-    h.remoteEPubkey = remoteEPubkey[]
-    h.initiatorNonce = nonce
-    h.remoteHPubkey = pubkey[]
-    h.version = cast[ptr byte](versionBr.baseAddr)[]
-    result = Success
-  except CatchableError:
-    result = RlpError
 
-proc decodeAckMessageEip8*(h: var Handshake, m: openarray[byte]): AuthStatus =
+    let pubkey =
+      ? PublicKey.fromRaw(pubkeyBr.toOpenArray()).mapErrTo(InvalidPubKey)
+
+    copyMem(addr nonce[0], nonceBr.baseAddr, KeyLength)
+
+    var secret = ? ecdhRaw(h.host.seckey, pubkey).mapErrTo(EcdhError)
+
+    let xornonce = nonce xor secret.data
+    secret.clear()
+
+    let signature =
+      ? Signature.fromRaw(signatureBr.toOpenArray()).mapErrTo(SignatureError)
+    h.remoteEPubkey =
+      ? recover(signature, SkMessage(data: xornonce)).mapErrTo(SignatureError)
+
+    h.initiatorNonce = nonce
+    h.remoteHPubkey = pubkey
+    h.version = cast[ptr byte](versionBr.baseAddr)[]
+    ok()
+  except CatchableError:
+    err(RlpError)
+
+proc decodeAckMessageEip8*(h: var Handshake, m: openarray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AckMessage.
   let size = uint16.fromBytesBE(m)
 
   h.expectedLength = 2 + int(size)
   if h.expectedLength > len(m):
-    return(IncompleteError)
+    return err(IncompleteError)
   var buffer = newSeq[byte](eciesDecryptedLength(int(size)))
   if eciesDecrypt(toa(m, 2, int(size)), buffer, h.host.seckey,
-                  toa(m, 0, 2)) != EciesStatus.Success:
-    return(EciesError)
+                  toa(m, 0, 2)).isErr:
+    return err(EciesError)
   try:
     var reader = rlpFromBytes(buffer.toRange())
     if not reader.isList() or reader.listLen() < 3:
-      return(InvalidAck)
+      return err(InvalidAck)
     if reader.listElem(0).blobLen != RawPublicKeySize:
-      return(InvalidAck)
+      return err(InvalidAck)
     if reader.listElem(1).blobLen != KeyLength:
-      return(InvalidAck)
+      return err(InvalidAck)
     if reader.listElem(2).blobLen != 1:
-      return(InvalidAck)
+      return err(InvalidAck)
     let pubkeyBr = reader.listElem(0).toBytes()
     let nonceBr = reader.listElem(1).toBytes()
     let versionBr = reader.listElem(2).toBytes()
-    let remoteEPubkey = PublicKey.fromRaw(pubkeyBr.toOpenArray())
-    if remoteEPubkey.isErr:
-      return(InvalidPubKey)
-    h.remoteEPubkey = remoteEPubkey[]
+    h.remoteEPubkey =
+      ? PublicKey.fromRaw(pubkeyBr.toOpenArray()).mapErrTo(InvalidPubKey)
+
     copyMem(addr h.responderNonce[0], nonceBr.baseAddr, KeyLength)
     h.version = cast[ptr byte](versionBr.baseAddr)[]
-    result = Success
-  except CatchableError:
-    result = RlpError
 
-proc decodeAckMessageV4(h: var Handshake, m: openarray[byte]): AuthStatus =
+    ok()
+  except CatchableError:
+    err(RlpError)
+
+proc decodeAckMessageV4(h: var Handshake, m: openarray[byte]): AuthResult[void] =
   ## Decodes V4 AckMessage.
   var
     buffer: array[PlainAckMessageV4Length, byte]
   doAssert(Initiator in h.flags)
-  if eciesDecrypt(m, buffer, h.host.seckey) != EciesStatus.Success:
-    return(EciesError)
-  var header = cast[ptr AckMessageV4](addr buffer[0])
-  let remoteEPubkey = PublicKey.fromRaw(header.pubkey)
-  if remoteEPubkey.isErr:
-    return(InvalidPubKey)
-  h.remoteEPubkey = remoteEPubkey[]
-  h.responderNonce = header.nonce
-  result = Success
 
-proc decodeAuthMessage*(h: var Handshake, input: openarray[byte]): AuthStatus =
+  if eciesDecrypt(m, buffer, h.host.seckey).isErr:
+    return err(EciesError)
+  var header = cast[ptr AckMessageV4](addr buffer[0])
+
+  h.remoteEPubkey = ? PublicKey.fromRaw(header.pubkey).mapErrTo(InvalidPubKey)
+  h.responderNonce = header.nonce
+
+  ok()
+
+proc decodeAuthMessage*(h: var Handshake, input: openarray[byte]): AuthResult[void] =
   ## Decodes AuthMessage from `input`.
   if len(input) < AuthMessageV4Length:
-    result = IncompleteError
-  elif len(input) == AuthMessageV4Length:
-    var res = h.decodeAuthMessageV4(input)
-    if res != Success:
-      res = h.decodeAuthMessageEip8(input)
-      if res != Success:
-        result = res
-      else:
-        h.flags.incl(EIP8)
-        result = Success
-    else:
-      result = Success
-  else:
-    result = h.decodeAuthMessageEip8(input)
-    if result == Success:
-      h.flags.incl(EIP8)
+    return err(IncompleteError)
 
-proc decodeAckMessage*(h: var Handshake, input: openarray[byte]): AuthStatus =
+  if len(input) == AuthMessageV4Length:
+    let res = h.decodeAuthMessageV4(input)
+    if res.isOk(): return res
+
+  let res = h.decodeAuthMessageEip8(input)
+  if res.isOk():
+    h.flags.incl(EIP8)
+  res
+
+proc decodeAckMessage*(h: var Handshake, input: openarray[byte]): AuthResult[void] =
   ## Decodes AckMessage from `input`.
   if len(input) < AckMessageV4Length:
-    return(IncompleteError)
-  elif len(input) == AckMessageV4Length:
-    var res = h.decodeAckMessageV4(input)
-    if res != Success:
-      res = h.decodeAckMessageEip8(input)
-      if res != Success:
-        result = res
-      else:
-        h.flags.incl(EIP8)
-        result = Success
-    else:
-      result = Success
-  else:
-    result = h.decodeAckMessageEip8(input)
-    if result == Success:
-      h.flags.incl(EIP8)
+    return err(IncompleteError)
+  if len(input) == AckMessageV4Length:
+    let res = h.decodeAckMessageV4(input)
+    if res.isOk(): return res
 
-proc getSecrets*(h: Handshake, authmsg: openarray[byte],
-                 ackmsg: openarray[byte],
-                 secret: var ConnectionSecret): AuthStatus =
+  let res = h.decodeAckMessageEip8(input)
+  if res.isOk(): h.flags.incl(EIP8)
+  res
+
+proc getSecrets*(
+  h: Handshake, authmsg: openarray[byte],
+  ackmsg: openarray[byte]): AuthResult[ConnectionSecret] =
   ## Derive secrets from handshake `h` using encrypted AuthMessage `authmsg` and
   ## encrypted AckMessage `ackmsg`.
   var
     ctx0: keccak256
     ctx1: keccak256
     mac1: MDigest[256]
-    xornonce: Nonce
+    secret: ConnectionSecret
 
   # ecdhe-secret = ecdh.agree(ephemeral-privkey, remote-ephemeral-pubk)
-  var shsec = ecdhRaw(h.ephemeral.seckey, h.remoteEPubkey)
-  if shsec.isErr:
-    return(EcdhError)
+  var shsec = ? ecdhRaw(h.ephemeral.seckey, h.remoteEPubkey).mapErrTo(EcdhError)
 
   # shared-secret = keccak(ecdhe-secret || keccak(nonce || initiator-nonce))
   ctx0.init()
@@ -508,36 +508,36 @@ proc getSecrets*(h: Handshake, authmsg: openarray[byte],
   ctx1.update(h.initiatorNonce)
   mac1 = ctx1.finish()
   ctx1.clear()
-  ctx0.update(shsec[].data)
+  ctx0.update(shsec.data)
   ctx0.update(mac1.data)
   mac1 = ctx0.finish()
 
   # aes-secret = keccak(ecdhe-secret || shared-secret)
   ctx0.init()
-  ctx0.update(shsec[].data)
+  ctx0.update(shsec.data)
   ctx0.update(mac1.data)
   mac1 = ctx0.finish()
 
   # mac-secret = keccak(ecdhe-secret || aes-secret)
   ctx0.init()
-  ctx0.update(shsec[].data)
+  ctx0.update(shsec.data)
   ctx0.update(mac1.data)
   secret.aesKey = mac1.data
   mac1 = ctx0.finish()
   secret.macKey = mac1.data
 
-  shsec[].clear()
+  burnMem(shsec)
 
   # egress-mac = keccak256(mac-secret ^ recipient-nonce || auth-sent-init)
-  xornonce = mac1.data
-  xornonce.sxor(h.responderNonce)
+
+  var xornonce = mac1.data xor h.responderNonce
   ctx0.init()
   ctx0.update(xornonce)
   ctx0.update(authmsg)
 
   # ingress-mac = keccak256(mac-secret ^ initiator-nonce || auth-recvd-ack)
-  xornonce = secret.macKey
-  xornonce.sxor(h.initiatorNonce)
+  xornonce = secret.macKey xor h.initiatorNonce
+
   ctx1.init()
   ctx1.update(xornonce)
   ctx1.update(ackmsg)
@@ -552,4 +552,5 @@ proc getSecrets*(h: Handshake, authmsg: openarray[byte],
 
   ctx0.clear()
   ctx1.clear()
-  result = Success
+
+  ok(secret)

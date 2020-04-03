@@ -266,8 +266,8 @@ p2pProtocol les(version = lesVersion,
       if signature.isNone:
         error "missing announce signature"
         return
-      let sigMsg = rlp.encodeList(headHash, headNumber, headTotalDifficulty)
       let sig = Signature.fromRaw(signature.get).tryGet()
+      let sigMsg = rlp.encodeList(headHash, headNumber, headTotalDifficulty)
       let signerKey = recover(sig, sigMsg).tryGet()
       if signerKey.toNodeId != peer.remote.id:
         error "invalid announce signature"

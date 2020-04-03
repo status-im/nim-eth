@@ -88,18 +88,19 @@ proc testValue(s: string): string =
 
 suite "Ethereum RLPx encryption/decryption test suite":
   proc newTestHandshake(flags: set[HandshakeFlag]): Handshake =
-    result = newHandshake(flags)
     if Initiator in flags:
-      result.host.seckey = PrivateKey.fromHex(testValue("initiator_private_key"))[]
-      result.host.pubkey = result.host.seckey.toPublicKey()[]
+      let pk = PrivateKey.fromHex(testValue("initiator_private_key"))[]
+      let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey()[])
+      result = Handshake.tryInit(kp, flags)[]
       let epki = testValue("initiator_ephemeral_private_key")
       result.ephemeral.seckey = PrivateKey.fromHex(epki)[]
       result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()[]
       let nonce = fromHex(stripSpaces(testValue("initiator_nonce")))
       result.initiatorNonce[0..^1] = nonce[0..^1]
     elif Responder in flags:
-      result.host.seckey = PrivateKey.fromHex(testValue("receiver_private_key"))[]
-      result.host.pubkey = result.host.seckey.toPublicKey()[]
+      let pk = PrivateKey.fromHex(testValue("receiver_private_key"))[]
+      let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey()[])
+      result = Handshake.tryInit(kp, flags)[]
       let epkr = testValue("receiver_ephemeral_private_key")
       result.ephemeral.seckey = PrivateKey.fromHex(epkr)[]
       result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()[]
@@ -111,15 +112,13 @@ suite "Ethereum RLPx encryption/decryption test suite":
     var responder = newTestHandshake({Responder})
     var authm = fromHex(stripSpaces(testValue("auth_ciphertext")))
     var ackm = fromHex(stripSpaces(testValue("authresp_ciphertext")))
-    var csecInitiator: ConnectionSecret
-    var csecResponder: ConnectionSecret
     var stateInitiator0, stateInitiator1: SecretState
     var stateResponder0, stateResponder1: SecretState
-    check:
-      responder.decodeAuthMessage(authm) == AuthStatus.Success
-      initiator.decodeAckMessage(ackm) == AuthStatus.Success
-      initiator.getSecrets(authm, ackm, csecInitiator) == AuthStatus.Success
-      responder.getSecrets(authm, ackm, csecResponder) == AuthStatus.Success
+    responder.decodeAuthMessage(authm).expect("success")
+    initiator.decodeAckMessage(ackm).expect("success")
+
+    var csecInitiator = initiator.getSecrets(authm, ackm)[]
+    var csecResponder = responder.getSecrets(authm, ackm)[]
     initSecretState(csecInitiator, stateInitiator0)
     initSecretState(csecResponder, stateResponder0)
     initSecretState(csecInitiator, stateInitiator1)
@@ -132,7 +131,7 @@ suite "Ethereum RLPx encryption/decryption test suite":
 
     block:
       check stateResponder0.decryptHeader(toOpenArray(initiatorHello, 0, 31),
-                                          header) == RlpxStatus.Success
+                                          header).isOk()
       let bodysize = getBodySize(header)
       check bodysize == 79
       # we need body size to be rounded to 16 bytes boundary to properly
@@ -142,16 +141,16 @@ suite "Ethereum RLPx encryption/decryption test suite":
       check:
         stateResponder0.decryptBody(
           toOpenArray(initiatorHello, 32, len(initiatorHello) - 1),
-          getBodySize(header), body, decrsize) == RlpxStatus.Success
+          getBodySize(header), body, decrsize).isOk()
         decrsize == 79
       body.setLen(decrsize)
       var hello = newSeq[byte](encryptedLength(bodysize))
       check:
-        stateInitiator1.encrypt(header, body, hello) == RlpxStatus.Success
+        stateInitiator1.encrypt(header, body, hello).isOk()
         hello == initiatorHello
     block:
       check stateInitiator0.decryptHeader(toOpenArray(responderHello, 0, 31),
-                                          header) == RlpxStatus.Success
+                                          header).isOk()
       let bodysize = getBodySize(header)
       check bodysize == 79
       # we need body size to be rounded to 16 bytes boundary to properly
@@ -161,34 +160,31 @@ suite "Ethereum RLPx encryption/decryption test suite":
       check:
         stateInitiator0.decryptBody(
           toOpenArray(responderHello, 32, len(initiatorHello) - 1),
-          getBodySize(header), body, decrsize) == RlpxStatus.Success
+          getBodySize(header), body, decrsize).isOk()
         decrsize == 79
       body.setLen(decrsize)
       var hello = newSeq[byte](encryptedLength(bodysize))
       check:
-        stateResponder1.encrypt(header, body, hello) == RlpxStatus.Success
+        stateResponder1.encrypt(header, body, hello).isOk()
         hello == responderHello
 
   test "Continuous stream of different lengths (1000 times)":
     var initiator = newTestHandshake({Initiator})
     var responder = newTestHandshake({Responder})
     var m0 = newSeq[byte](initiator.authSize())
-    var csecInitiator: ConnectionSecret
-    var csecResponder: ConnectionSecret
     var k0 = 0
     var k1 = 0
     check initiator.authMessage(responder.host.pubkey,
-                                m0, k0) == AuthStatus.Success
+                                m0, k0).isOk
     m0.setLen(k0)
-    check responder.decodeAuthMessage(m0) == AuthStatus.Success
+    check responder.decodeAuthMessage(m0).isOk
     var m1 = newSeq[byte](responder.ackSize())
-    check responder.ackMessage(m1, k1) == AuthStatus.Success
+    check responder.ackMessage(m1, k1).isOk
     m1.setLen(k1)
-    check initiator.decodeAckMessage(m1) == AuthStatus.Success
+    check initiator.decodeAckMessage(m1).isOk
 
-    check:
-      initiator.getSecrets(m0, m1, csecInitiator) == AuthStatus.Success
-      responder.getSecrets(m0, m1, csecResponder) == AuthStatus.Success
+    var csecInitiator = initiator.getSecrets(m0, m1)[]
+    var csecResponder = responder.getSecrets(m0, m1)[]
     var stateInitiator: SecretState
     var stateResponder: SecretState
     var iheader, rheader: array[16, byte]
@@ -207,9 +203,9 @@ suite "Ethereum RLPx encryption/decryption test suite":
         check:
           randomBytes(ibody) == len(ibody)
           stateInitiator.encrypt(iheader, ibody,
-                                 encrypted) == RlpxStatus.Success
+                                 encrypted).isOk()
           stateResponder.decryptHeader(toOpenArray(encrypted, 0, 31),
-                                       rheader) == RlpxStatus.Success
+                                       rheader).isOk()
         var length = getBodySize(rheader)
         check length == len(ibody)
         var rbody = newSeq[byte](decryptedLength(length))
@@ -217,7 +213,7 @@ suite "Ethereum RLPx encryption/decryption test suite":
         check:
           stateResponder.decryptBody(
             toOpenArray(encrypted, 32, len(encrypted) - 1),
-            length, rbody, decrsize) == RlpxStatus.Success
+            length, rbody, decrsize).isOk()
           decrsize == length
         rbody.setLen(decrsize)
         check:
@@ -235,9 +231,9 @@ suite "Ethereum RLPx encryption/decryption test suite":
         check:
           randomBytes(ibody) == len(ibody)
           stateResponder.encrypt(iheader, ibody,
-                                 encrypted) == RlpxStatus.Success
+                                 encrypted).isOk()
           stateInitiator.decryptHeader(toOpenArray(encrypted, 0, 31),
-                                       rheader) == RlpxStatus.Success
+                                       rheader).isOk()
         var length = getBodySize(rheader)
         check length == len(ibody)
         var rbody = newSeq[byte](decryptedLength(length))
@@ -245,7 +241,7 @@ suite "Ethereum RLPx encryption/decryption test suite":
         check:
           stateInitiator.decryptBody(
             toOpenArray(encrypted, 32, len(encrypted) - 1),
-            length, rbody, decrsize) == RlpxStatus.Success
+            length, rbody, decrsize).isOk()
           decrsize == length
         rbody.setLen(length)
         check:
