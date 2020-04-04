@@ -430,3 +430,9 @@ proc clear*(v: var SkEcdhRawSecret) =
 proc `$`*(
     v: SkPublicKey | SkSecretKey | SkSignature | SkRecoverableSignature): string =
   toHex(v)
+
+proc fromBytes*(T: type SkMessage, data: openArray[byte]): SkResult[SkMessage] =
+  if data.len() < SkMessageSize:
+    return err("Message must be 32 bytes")
+
+  ok(SkMessage(data: toArray(SkMessageSize, data)))

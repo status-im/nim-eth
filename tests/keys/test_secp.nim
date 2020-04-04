@@ -65,3 +65,9 @@ suite "secp":
       not verify(badSig, msg0, pk)
       not verify(badSig, msg0, badPk)
       recover(badSig2, msg0).isErr
+
+  test "Message":
+    check:
+      SkMessage.fromBytes([]).isErr()
+      SkMessage.fromBytes([0'u8]).isErr()
+      SkMessage.fromBytes(msg0.data).isOk()
