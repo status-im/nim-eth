@@ -1,6 +1,5 @@
-#
 # Nim Ethereum Keys (nim-eth-keys)
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2020 Status Research & Development GmbH
 # Licensed under either of
 # - Apache License, version 2.0, (LICENSE-APACHEv2)
 # - MIT license (LICENSE-MIT)
@@ -11,10 +10,15 @@
 #
 # * Public keys as serialized in uncompressed format without the initial byte
 # * Shared secrets are serialized in raw format without the intial byte
+# * distinct types are used to avoid confusion with the "standard" secp types
+
+{.push raises: [Defect].}
 
 import
   nimcrypto/hash, nimcrypto/keccak, ./keys/secp,
   stew/[byteutils, objects, result], strformat
+
+from nimcrypto/utils import burnMem
 
 export secp, result
 
@@ -43,21 +47,27 @@ type
     seckey*: PrivateKey
     pubkey*: PublicKey
 
+proc random*(T: type PrivateKey): SkResult[T] =
+  SkSecretKey.random().mapConvert(T)
+
+proc fromRaw*(T: type PrivateKey, data: openArray[byte]): SkResult[T] =
+  SkSecretKey.fromRaw(data).mapConvert(T)
+
+proc fromHex*(T: type PrivateKey, data: string): SkResult[T] =
+  SkSecretKey.fromHex(data).mapConvert(T)
+
+proc toRaw*(seckey: PrivateKey): array[SkRawSecretKeySize, byte] {.borrow.}
+
 proc toPublicKey*(seckey: PrivateKey): SkResult[PublicKey] =
   SkSecretKey(seckey).toPublicKey().mapConvert(PublicKey)
-
-proc fromRaw*(T: type PrivateKey, data: openArray[byte]): SkResult[PrivateKey] =
-  SkSecretKey.fromRaw(data).mapConvert(PrivateKey)
-
-proc fromHex*(T: type PrivateKey, data: string): SkResult[PrivateKey] =
-  SkSecretKey.fromHex(data).mapConvert(PrivateKey)
 
 proc fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
   if data.len() == SkRawCompressedPubKeySize:
     return SkPublicKey.fromRaw(data).mapConvert(PublicKey)
 
   if len(data) < SkRawPublicKeySize - 1:
-    return err(&"keys: raw eth public key should be {SkRawPublicKeySize - 1} bytes")
+    return err(static(
+      &"keys: raw eth public key should be {SkRawPublicKeySize - 1} bytes"))
 
   var d: array[SkRawPublicKeySize, byte]
   d[0] = 0x04'u8
@@ -65,22 +75,26 @@ proc fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
 
   SkPublicKey.fromRaw(d).mapConvert(PublicKey)
 
-proc fromHex*(T: type PublicKey, data: string): SkResult[PublicKey] =
-  try:
-    # TODO strip string?
-    T.fromRaw(hexToSeqByte(data))
-  except CatchableError:
-    err("keys: cannot parse eth public key")
+proc fromHex*(T: type PublicKey, data: string): SkResult[T] =
+  T.fromRaw(? seq[byte].fromHex(data))
+
+proc toRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] =
+  let tmp = SkPublicKey(pubkey).toRaw()
+  copyMem(addr result[0], unsafeAddr tmp[1], 64)
+
+proc toRawCompressed*(pubkey: PublicKey): array[33, byte] {.borrow.}
 
 proc random*(t: type KeyPair): SkResult[KeyPair] =
   let tmp = ?SkKeypair.random()
   ok(KeyPair(seckey: PrivateKey(tmp.seckey), pubkey: PublicKey(tmp.pubkey)))
 
-proc toRaw*(pubkey: PublicKey): array[64, byte] =
-  let tmp = SkPublicKey(pubkey).toRaw()
-  copyMem(addr result[0], unsafeAddr tmp[1], 64)
+proc fromRaw(T: type Signature, data: openArray[byte]): SkResult[T] =
+  SkRecoverableSignature.fromRaw(data).mapConvert(Signature)
 
-proc toRawCompressed*(pubkey: PublicKey): array[33, byte] {.borrow.}
+proc fromHex*(T: type Signature, data: string): SkResult[T] =
+  T.fromRaw(? seq[byte].fromHex(data))
+
+proc toRaw*(sig: Signature): array[RawSignatureSize, byte] {.borrow.}
 
 proc toAddress*(pubkey: PublicKey, with0x = true): string =
   ## Convert public key to hexadecimal string address.
@@ -145,21 +159,32 @@ func `$`*(pubkey: PublicKey): string =
 
 func `$`*(sig: Signature): string =
   ## Convert signature to hexadecimal string representation.
-  toHex(SkRecoverableSignature(sig).toRaw())
+  toHex(sig.toRaw())
 
 func `$`*(seckey: PrivateKey): string =
   ## Convert private key to hexadecimal string representation
-  toHex(SkSecretKey(seckey).toRaw())
+  toHex(seckey.toRaw())
 
 proc `==`*(lhs, rhs: PublicKey): bool {.borrow.}
+proc `==`*(lhs, rhs: Signature): bool {.borrow.}
+proc `==`*(lhs, rhs: SignatureNR): bool {.borrow.}
 
-proc random*(T: type PrivateKey): SkResult[PrivateKey] =
-  SkSecretKey.random().mapConvert(PrivateKey)
+proc clear*(v: var PrivateKey) {.borrow.}
+proc clear*(v: var PublicKey) {.borrow.}
+proc clear*(v: var Signature) {.borrow.}
+proc clear*(v: var SignatureNR) {.borrow.}
+proc clear*(v: var KeyPair) =
+  v.seckey.clear()
+  v.pubkey.clear()
 
-proc toRaw*(key: PrivateKey): array[SkRawSecretKeySize, byte] {.borrow.}
+proc clear*(v: var SharedSecret) = burnMem(v.data)
+proc clear*(v: var SharedSecretFull) = burnMem(v.data)
+
 
 # Backwards compat - the functions in here are deprecated and should be moved
 # reimplemented using functions that return Result instead!
+
+{.pop.} # raises
 
 from nimcrypto/utils import stripSpaces
 
@@ -212,7 +237,7 @@ proc getPublicKey*(seckey: PrivateKey): PublicKey {.deprecated: "toPublicKey".} 
   let key = seckey.toPublicKey()
   if key.isErr:
     raise newException(Secp256k1Exception, "invalid private key")
-  PublicKey(key[])
+  key[]
 
 proc ecdhAgree*(
     seckey: PrivateKey, pubkey: PublicKey,
