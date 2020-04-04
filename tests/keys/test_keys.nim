@@ -12,6 +12,8 @@ import eth/keys
 import nimcrypto/hash, nimcrypto/keccak, nimcrypto/utils
 from strutils import toLowerAscii
 
+import stew/byteutils
+
 proc compare(x: openarray[byte], y: openarray[byte]): bool =
   result = len(x) == len(y)
   if result:
@@ -19,9 +21,11 @@ proc compare(x: openarray[byte], y: openarray[byte]): bool =
       if x[i] != y[i]:
         result = false
         break
+
+let message = "message".toBytes()
+
 const
   pkbytes = "58d23b55bc9cdce1f18c2500f40ff4ab7245df9a89505e9b1fa4851f623d241d"
-  message = "message"
   address = "dc544d1aa88ff8bbd2f2aec754b1f1e99e1812fd"
 
   alice = [
@@ -49,50 +53,50 @@ const
 suite "ECC/ECDSA/ECDHE tests suite":
   test "Known private to known public keys (test data from Ethereum eth-keys)":
     for person in [alice, bob, eve]:
-      let privkey = initPrivateKey(person[0])
-      var pubkeyHex = $privkey.getPublicKey()
+      let privkey = PrivateKey.fromHex(person[0])[]
+      var pubkeyHex = $privkey.toPublicKey()[]
       check:
         pubkeyHex == stripSpaces(person[1])
 
   test "Recover public key from message":
     for person in [alice, bob, eve]:
-      let privkey = initPrivateKey(person[0])
-      let signature = privkey.signMessage(message)
-      let recoveredKey = signature.recoverKeyFromSignature(message)
+      let privkey = PrivateKey.fromHex(person[0])[]
+      let signature = privkey.sign(message)[]
+      let recoveredKey = signature.recover(message)[]
       check:
-        $privkey.getPublicKey() == $recoveredKey
+        $privkey.toPublicKey()[] == $recoveredKey
 
   test "Signature serialization and deserialization":
     for person in [alice, bob, eve]:
-      let privkey = initPrivateKey(person[0])
-      let signature = privkey.signMessage(message)
-      let expectSignature = initSignature(person[2])
+      let privkey = PrivateKey.fromHex(person[0])[]
+      let signature = privkey.sign(message)[]
+      let expectSignature = Signature.fromHex(stripSpaces(person[2]))[]
       check:
         $signature == $expectSignature
 
   test "test_recover_from_signature_obj":
-    var s = initPrivateKey(pkbytes)
+    var s = PrivateKey.fromHex(pkbytes)[]
     var mhash = keccak256.digest(message)
-    var signature = s.signMessage(message)
-    var p = recoverKeyFromSignature(signature, mhash)
+    var signature = s.sign(message)[]
+    var p = recover(signature, mhash)
     check:
-      s.getPublicKey() == p
+      s.toPublicKey() == p
 
   test "test_to_address_from_public_key":
-    var s = initPrivateKey(pkbytes)
-    var chk = s.getPublicKey().toAddress()
+    var s = PrivateKey.fromHex(pkbytes)[]
+    var chk = s.toPublicKey()[].toAddress()
     var expect = "0x" & address
     check chk == expect
 
   test "test_to_canonical_address_from_public_key":
-    var s = initPrivateKey(pkbytes)
-    var chk = s.getPublicKey().toCanonicalAddress()
+    var s = PrivateKey.fromHex(pkbytes)[]
+    var chk = s.toPublicKey()[].toCanonicalAddress()
     var expect = fromHex(stripSpaces(address))
     check compare(chk, expect) == true
 
   test "test_to_checksum_address_from_public_key":
-    var s = initPrivateKey(pkbytes)
-    var chk = s.getPublicKey().toChecksumAddress()
+    var s = PrivateKey.fromHex(pkbytes)[]
+    var chk = s.toPublicKey()[].toChecksumAddress()
     var expect = "0x" & address
     check:
       chk.toLowerAscii() == expect
@@ -124,7 +128,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
 
   test "EIP-55 100 addresses":
     for i in 1..100:
-      var kp = newKeyPair()
+      var kp = KeyPair.random()[]
       var chaddress = kp.pubkey.toChecksumAddress()
       var noaddress = kp.pubkey.toAddress()
       if noaddress != chaddress:
@@ -149,13 +153,12 @@ suite "ECC/ECDSA/ECDHE tests suite":
       "ee1418607c2fcfb57fda40380e885a707f49000a5dda056d828b7d9bd1f29a08",
       "167ccc13ac5e8a26b131c3446030c60fbfac6aa8e31149d0869f93626a4cdf62"
     ]
-    var secret: SharedSecret
     for i in 0..1:
-      var s = privateKeys[i].initPrivateKey()
-      var p = publicKeys[i].initPublicKey()
+      var s = PrivateKey.fromHex(privateKeys[i])[]
+      var p = PublicKey.fromHex(stripSpaces(publicKeys[i]))[]
       let expect = fromHex(stripSpaces(sharedSecrets[i]))
+      let secret = ecdhRaw(s, p)[]
       check:
-        ecdhAgree(s, p, secret) == EthKeysStatus.Success
         expect == secret.data
 
   test "ECDHE/cpp-ethereum crypto.cpp#L394":
@@ -163,12 +166,11 @@ suite "ECC/ECDSA/ECDHE tests suite":
     # Copied from https://github.com/ethereum/cpp-ethereum/blob/develop/test/unittests/libdevcrypto/crypto.cpp#L394
     var expectm = """
       8ac7e464348b85d9fdfc0a81f2fdc0bbbb8ee5fb3840de6ed60ad9372e718977"""
-    var secret: SharedSecret
-    var s = initPrivateKey(keccak256.digest("ecdhAgree").data)
-    var p = s.getPublicKey()
+    var s = PrivateKey.fromRaw(keccak256.digest("ecdhAgree").data)[]
+    var p = s.toPublicKey()[]
     let expect = fromHex(stripSpaces(expectm))
+    let secret = ecdhRaw(s, p)[]
     check:
-      ecdhAgree(s, p, secret) == EthKeysStatus.Success
       expect == secret.data
 
   test "ECDHE/cpp-ethereum rlpx.cpp#L425":
@@ -181,12 +183,11 @@ suite "ECC/ECDSA/ECDHE tests suite":
       7f0821367332598b6aa4e180a41e92f4ebbae3518da847f0b1c0bbfe20bcf4e1"""
     var e0 = """
       ee1418607c2fcfb57fda40380e885a707f49000a5dda056d828b7d9bd1f29a08"""
-    var secret: SharedSecret
-    var s = initPrivateKey(s0)
-    var p = initPublicKey(p0)
+    var s = PrivateKey.fromHex(stripSpaces(s0))[]
+    var p = PublicKey.fromHex(stripSpaces(p0))[]
     let expect = fromHex(stripSpaces(e0))
+    let secret = ecdhRaw(s, p)[]
     check:
-      ecdhAgree(s, p, secret) == Success
       compare(expect, secret.data) == true
 
   test "ECDSA/cpp-ethereum crypto.cpp#L132":
@@ -200,72 +201,62 @@ suite "ECC/ECDSA/ECDHE tests suite":
       84453b0b24f49086feba0bd978bb4446bae8dff1e79fcc1e9cf482ec2d07c3"""
     var check1 = fromHex(stripSpaces(signature))
     var check2 = fromHex(stripSpaces(pubkey))
-    var sig: Signature
-    var key: PublicKey
-    var s = initPrivateKey(keccak256.digest("sec").data)
-    var m = keccak256.digest("msg").data
-    check signRawMessage(m, s, sig) == Success
-    var sersig = sig.getRaw()
-    check recoverSignatureKey(sersig, m, key) == Success
-    var serkey = key.getRaw()
+
+    var s = PrivateKey.fromRaw(keccak256.digest("sec").data)[]
+    var m = keccak256.digest("msg")
+    var sig = sign(s, m)[]
+    var sersig = sig.toRaw()
+    var key = recover(sig, m)[]
+    var serkey = key.toRaw()
     check:
       compare(sersig, check1) == true
       compare(serkey, check2) == true
 
   test "ECDSA/100 signatures":
     # signature test
-    var rkey: PublicKey
-    var sig: Signature
     for i in 1..100:
-      var m = newPrivateKey().data
-      var s = newPrivateKey()
-      var key = s.getPublicKey()
-      check signRawMessage(m, s, sig) == Success
-      var sersig = sig.getRaw()
+      var m = PrivateKey.random()[].toRaw
+      var s = PrivateKey.random()[]
+      var key = s.toPublicKey()[]
+      let sig = sign(s, m)[]
+      let rkey = recover(sig, m)[]
       check:
-        recoverSignatureKey(sersig, m, rkey) == Success
         key == rkey
 
   test "KEYS/100 create/recovery keys":
     # key create/recovery test
-    var rkey: PublicKey
     for i in 1..100:
-      var s = newPrivateKey()
-      var key = s.getPublicKey()
+      var s = PrivateKey.random()[]
+      var key = s.toPublicKey()[]
+      let rkey = PublicKey.fromRaw(key.toRaw())[]
       check:
-        recoverPublicKey(key.getRaw(), rkey) == Success
         key == rkey
 
   test "ECDHE/100 shared secrets":
     # ECDHE shared secret test
-    var secret1, secret2: SharedSecret
     for i in 1..100:
-      var aliceSecret = newPrivateKey()
-      var alicePublic = aliceSecret.getPublicKey()
-      var bobSecret = newPrivateKey()
-      var bobPublic = bobSecret.getPublicKey()
+      var aliceSecret = PrivateKey.random()[]
+      var alicePublic = aliceSecret.toPublicKey()[]
+      var bobSecret = PrivateKey.random()[]
+      var bobPublic = bobSecret.toPublicKey()[]
+      var secret1 = ecdhRaw(aliceSecret, bobPublic)[]
+      var secret2 = ecdhRaw(bobSecret, alicePublic)[]
       check:
-        ecdhAgree(aliceSecret, bobPublic, secret1) == Success
-        ecdhAgree(bobSecret, alicePublic, secret2) == Success
         secret1 == secret2
 
-  test "isZeroKey() checks":
+  test "verfiy() checks":
     var seckey1: PrivateKey
-    var pubkey1: PublicKey
-    var seckey2 = newPrivateKey()
-    var pubkey2 = seckey2.getPublicKey()
+    var seckey2 = PrivateKey.random()[]
 
     check:
-      seckey1.isZeroKey() == true
-      pubkey1.isZeroKey() == true
-      seckey2.isZeroKey() == false
-      pubkey2.isZeroKey() == false
+      seckey1.verify() == false
+      seckey2.verify() == true
 
   test "Compressed public keys":
-    let pubkeyCompressed = "03CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258CD3138"
-    let s = initPublicKey(pubkeyCompressed)
+    let pubkeyCompressed = "03CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258CD3138".toLowerAscii
+    let s = PublicKey.fromHex(pubkeyCompressed)[]
     check:
-      s.getRaw.toHex == """CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258
-          CD31387574077F301B421BC84DF7266C44E9E6D569FC56BE00812904767BF5CCD1FC7F""".stripSpaces
+      s.toRaw.toHex == """CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258
+          CD31387574077F301B421BC84DF7266C44E9E6D569FC56BE00812904767BF5CCD1FC7F""".stripSpaces.toLowerAscii
 
-      s.getRawCompressed.toHex == pubkeyCompressed
+      s.toRawCompressed.toHex == pubkeyCompressed

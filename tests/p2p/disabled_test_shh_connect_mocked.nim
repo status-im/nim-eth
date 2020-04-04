@@ -22,7 +22,7 @@ template asyncTest(name, body: untyped) =
 
 asyncTest "network with 3 peers using the Whisper protocol":
   const useCompression = defined(useSnappy)
-  let localKeys = newKeyPair()
+  let localKeys = KeyPair.random()[]
   let localAddress = localAddress(30303)
   var localNode = newEthereumNode(localKeys, localAddress, 1, nil,
                                   addAllCapabilities = false,

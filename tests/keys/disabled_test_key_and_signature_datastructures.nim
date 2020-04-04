@@ -17,7 +17,7 @@ suite "Test key and signature data structure":
   test "Signing from private key object (ported from official eth-keys)":
     for person in [alice, bob, eve]:
       let
-        pk = initPrivateKey(person.privkey)
+        pk = PrivateKey.fromHex(person.privkey)[]
         signature = pk.sign_msg(MSG)
 
       check: verify_msg(pk.public_key, MSG, signature)
@@ -25,7 +25,7 @@ suite "Test key and signature data structure":
   test "Hash signing from private key object (ported from official eth-keys)":
     for person in [alice, bob, eve]:
       let
-        pk = initPrivateKey(person.privkey)
+        pk = PrivateKey.fromHex(person.privkey)[]
         signature = pk.sign_msg(MSGHASH)
 
       check: verify_msg(pk.public_key, MSGHASH, signature)
@@ -33,7 +33,7 @@ suite "Test key and signature data structure":
   test "Recover public key from message":
     for person in [alice, bob, eve]:
       let
-        pk = initPrivateKey(person.privkey)
+        pk = PrivateKey.fromHex(person.privkey)[]
         signature = pk.sign_msg(MSG)
 
         recovered_pubkey = recover_pubkey_from_msg(MSG, signature)
@@ -43,7 +43,7 @@ suite "Test key and signature data structure":
   test "Recover public key from message hash":
     for person in [alice, bob, eve]:
       let
-        pk = initPrivateKey(person.privkey)
+        pk = PrivateKey.formHex(person.privkey)[]
         signature = pk.sign_msg(MSGHASH)
 
         recovered_pubkey = recover_pubkey_from_msg(MSGHASH, signature)
@@ -53,7 +53,7 @@ suite "Test key and signature data structure":
   test "Signature serialization and deserialization":
     for person in [alice, bob, eve]:
       let
-        pk = initPrivateKey(person.privkey)
+        pk = PrivateKey.fromHex(person.privkey)[]
         signature = pk.sign_msg(MSG)
         deserializedSignature = parseSignature(hexToSeqByteBE(person.serialized_sig))
 

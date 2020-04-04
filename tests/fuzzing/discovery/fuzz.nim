@@ -8,7 +8,7 @@ var targetNode: DiscoveryProtocol
 init:
   # Set up a discovery node, this is the node we target when fuzzing
   var
-    targetNodeKey = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")
+    targetNodeKey = PrivateKey.fromRaw("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
     targetNodeAddr = localAddress(DefaultListeningPort)
   targetNode = newDiscoveryProtocol(targetNodeKey, targetNodeAddr, @[])
   # Create the transport as else replies on the messages send will fail.
@@ -22,7 +22,7 @@ test:
   # Sending raw payload is possible but won't find us much. We need a hash and
   # a signature, and without it there is a big chance it will always result in
   # "Wrong msg mac from" error.
-  let nodeKey = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")
+  let nodeKey = PrivateKey.fromRaw("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")[]
   msg = packData(payload, nodeKey)
   address = localAddress(DefaultListeningPort + 1)
 

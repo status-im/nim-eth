@@ -59,10 +59,10 @@ proc makeEnrAux(seqNum: uint64, pk: PrivateKey, pairs: openarray[(string, Field)
   result.pairs = @pairs
   result.seqNum = seqNum
 
-  let pubkey = pk.getPublicKey()
+  let pubkey = pk.toPublicKey().tryGet()
 
   result.pairs.add(("id", Field(kind: kString, str: "v4")))
-  result.pairs.add(("secp256k1", Field(kind: kBytes, bytes: @(pubkey.getRawCompressed()))))
+  result.pairs.add(("secp256k1", Field(kind: kBytes, bytes: @(pubkey.toRawCompressed()))))
 
   # Sort by key
   result.pairs.sort() do(a, b: (string, Field)) -> int:
@@ -82,13 +82,13 @@ proc makeEnrAux(seqNum: uint64, pk: PrivateKey, pairs: openarray[(string, Field)
     var w = initRlpList(result.pairs.len * 2 + 1)
     w.append(seqNum, result.pairs)
 
-  var sig: SignatureNR
-  if signRawMessage(keccak256.digest(toSign).data, pk, sig) != EthKeysStatus.Success:
-    raise newException(EthKeysException, "Could not sign ENR (internal error)")
+  let sig = signNR(pk, toSign)
+  if sig.isErr:
+    raise newException(CatchableError, "Could not sign ENR (internal error)")
 
   result.raw = block:
     var w = initRlpList(result.pairs.len * 2 + 2)
-    w.append(sig.getRaw())
+    w.append(sig[].toRaw())
     w.append(seqNum, result.pairs)
 
 macro initRecord*(seqNum: uint64, pk: PrivateKey, pairs: untyped{nkTableConstr}): untyped =
@@ -146,8 +146,10 @@ proc get*(r: Record, key: string, T: type): T =
       return f.str
     elif T is PublicKey:
       requireKind(f, kBytes)
-      if recoverPublicKey(f.bytes, result) != EthKeysStatus.Success:
+      let pk = PublicKey.fromRaw(f.bytes)
+      if pk.isErr:
         raise newException(ValueError, "Invalid public key")
+      return pk[]
     elif T is array:
       when type(result[0]) is byte:
         requireKind(f, kBytes)
@@ -164,7 +166,10 @@ proc get*(r: Record, key: string, T: type): T =
 proc get*(r: Record, pubKey: var PublicKey): bool =
   var pubkeyField: Field
   if r.getField("secp256k1", pubkeyField) and pubkeyField.kind == kBytes:
-    result = recoverPublicKey(pubkeyField.bytes, pubKey) == EthKeysStatus.Success
+    let pk = PublicKey.fromRaw(pubkeyField.bytes)
+    if pk.isOk:
+      pubKey = pk[]
+      return true
 
 proc tryGet*(r: Record, key: string, T: type): Option[T] =
   try:
@@ -194,11 +199,10 @@ proc toTypedRecord*(r: Record): Option[TypedRecord] =
 proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]): bool =
   var publicKey: PublicKey
   if r.get(publicKey):
-    var sig: SignatureNR
-    if sig.parseCompact(sigData) == EthKeysStatus.Success:
+    let sig = SignatureNR.fromRaw(sigData)
+    if sig.isOk:
       var h = keccak256.digest(content)
-      if verifySignatureRaw(sig, h.data, publicKey) == EthKeysStatus.Success:
-        return true
+      return verify(sig[], h, publicKey)
 
 proc verifySignature(r: Record): bool =
   var rlp = rlpFromBytes(r.raw.toRange)

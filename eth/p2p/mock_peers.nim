@@ -162,7 +162,7 @@ template compression(m: MockConf): bool =
 
 proc newMockPeer*(userConfigurator: proc (m: MockConf)): EthereumNode =
   var mockConf = new MockConf
-  mockConf.keys = newKeyPair()
+  mockConf.keys = KeyPair.random()[]
   mockConf.address = localhostAddress(nextUnusedMockPort)
   inc nextUnusedMockPort
   mockConf.networkId = 1'u

@@ -17,13 +17,13 @@ proc startDiscoveryNode*(privKey: PrivateKey, address: Address,
 
 proc setupBootNode*(): Future[ENode] {.async.} =
   let
-    bootNodeKey = newPrivateKey()
+    bootNodeKey = KeyPair.random()[]
     bootNodeAddr = localAddress(30301)
-    bootNode = await startDiscoveryNode(bootNodeKey, bootNodeAddr, @[])
-  result = initENode(bootNodeKey.getPublicKey, bootNodeAddr)
+    bootNode = await startDiscoveryNode(bootNodeKey.seckey, bootNodeAddr, @[])
+  result = initENode(bootNodeKey.pubkey, bootNodeAddr)
 
 proc setupTestNode*(capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  let keys1 = newKeyPair()
+  let keys1 = KeyPair.random()[]
   result = newEthereumNode(keys1, localAddress(nextPort), 1, nil,
                            addAllCapabilities = false)
   nextPort.inc
@@ -45,7 +45,7 @@ template procSuite*(name, body: untyped) =
 proc packData*(payload: openArray[byte], pk: PrivateKey): seq[byte] =
   let
     payloadSeq = @payload
-    signature = @(pk.signMessage(payload).getRaw())
+    signature = @(pk.sign(payload).tryGet().toRaw())
     msgHash = keccak256.digest(signature & payloadSeq)
   result = @(msgHash.data) & signature & payloadSeq
 

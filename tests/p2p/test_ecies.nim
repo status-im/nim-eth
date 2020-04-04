@@ -69,8 +69,8 @@ suite "ECIES test suite":
     var encr = newSeq[byte](eciesEncryptedLength(len(m)))
     var decr = newSeq[byte](len(m))
     var shmac = [0x13'u8, 0x13'u8]
-    var s = newPrivateKey()
-    var p = s.getPublicKey()
+    var s = PrivateKey.random()[]
+    var p = s.toPublicKey()[]
     check:
       # Without additional mac data
       eciesEncrypt(plain, encr, p) == EciesStatus.Success
@@ -123,7 +123,7 @@ suite "ECIES test suite":
     ]
     var data: array[1024, byte]
     for i in 0..1:
-      var s = initPrivateKey(secretKeys[i])
+      var s = PrivateKey.fromHex(secretKeys[i])[]
       var cipher = fromHex(stripSpaces(cipherText[i]))
       var expect = fromHex(stripSpaces(expectText[i]))
       check:
@@ -164,7 +164,7 @@ suite "ECIES test suite":
     ]
     var data: array[1024, byte]
     for i in 0..3:
-      var s = initPrivateKey(secretKeys[i])
+      var s = PrivateKey.fromHex(secretKeys[i])[]
       var cipher = fromHex(stripSpaces(cipherData[i]))
       check:
         eciesDecrypt(cipher, data, s) == EciesStatus.Success

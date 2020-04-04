@@ -88,28 +88,28 @@ var jobject: JsonNode
 suite "KeyFile test suite":
   test "KeyStoreTests/basic_tests.json test1":
     var seckey: PrivateKey
-    var expectkey = initPrivateKey(TestVectors[0].getOrDefault("priv").getStr())
+    var expectkey = PrivateKey.fromHex(TestVectors[0].getOrDefault("priv").getStr())[]
     check:
       decodeKeyFileJson(TestVectors[0].getOrDefault("keyfile"),
                         TestVectors[0].getOrDefault("password").getStr(),
                         seckey) == KeyFileStatus.Success
-      seckey.data == expectkey.data
+      seckey.toRaw == expectkey.toRaw
   test "KeyStoreTests/basic_tests.json python_generated_test_with_odd_iv":
     var seckey: PrivateKey
-    var expectkey = initPrivateKey(TestVectors[1].getOrDefault("priv").getStr())
+    var expectkey = PrivateKey.fromHex(TestVectors[1].getOrDefault("priv").getStr())[]
     check:
       decodeKeyFileJson(TestVectors[1].getOrDefault("keyfile"),
                         TestVectors[1].getOrDefault("password").getStr(),
                         seckey) == KeyFileStatus.Success
-      seckey.data == expectkey.data
+      seckey.toRaw == expectkey.toRaw
   test "KeyStoreTests/basic_tests.json evilnonce":
     var seckey: PrivateKey
-    var expectkey = initPrivateKey(TestVectors[2].getOrDefault("priv").getStr())
+    var expectkey = PrivateKey.fromHex(TestVectors[2].getOrDefault("priv").getStr())[]
     check:
       decodeKeyFileJson(TestVectors[2].getOrDefault("keyfile"),
                         TestVectors[2].getOrDefault("password").getStr(),
                         seckey) == KeyFileStatus.Success
-      seckey.data == expectkey.data
+      seckey.toRaw == expectkey.toRaw
   test "KeyStoreTests/basic_tests.json evilnonce with wrong password":
     var seckey: PrivateKey
     check:
@@ -117,7 +117,7 @@ suite "KeyFile test suite":
                         "wrongpassword",
                         seckey) == KeyFileStatus.IncorrectMac
   test "Create/Save/Load test":
-    var seckey0 = newPrivateKey()
+    var seckey0 = PrivateKey.random()[]
     var seckey1: PrivateKey
     check:
       createKeyFileJson(seckey0, "randompassword",
@@ -125,7 +125,7 @@ suite "KeyFile test suite":
       saveKeyFile("test.keyfile", jobject) == KeyFileStatus.Success
       loadKeyFile("test.keyfile", "randompassword",
                   seckey1) == KeyFileStatus.Success
-      seckey0.data == seckey1.data
+      seckey0.toRaw == seckey1.toRaw
     removeFile("test.keyfile")
   test "Load non-existent pathname test":
     var seckey: PrivateKey

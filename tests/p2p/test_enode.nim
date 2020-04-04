@@ -97,5 +97,5 @@ suite "ENode":
     check isCorrect(node) == false
     node.address.udpPort = Port(25)
     check isCorrect(node) == false
-    node.pubkey.data[0] = 1'u8
+    node.pubkey = PrivateKey.random()[].toPublicKey()[]
     check isCorrect(node) == true

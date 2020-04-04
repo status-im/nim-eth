@@ -51,7 +51,7 @@ const
   ID_SIZE = 256
 
 proc toNodeId*(pk: PublicKey): NodeId =
-  readUintBE[256](keccak256.digest(pk.getRaw()).data)
+  readUintBE[256](keccak256.digest(pk.toRaw()).data)
 
 proc newNode*(pk: PublicKey, address: Address): Node =
   result.new()
@@ -76,7 +76,7 @@ proc `$`*(n: Node): string =
   else:
     "Node[" & $n.node.address.ip & ":" & $n.node.address.udpPort & "]"
 
-proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.data)
+proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.toRaw)
 proc `==`*(a, b: Node): bool = (a.isNil and b.isNil) or (not a.isNil and not b.isNil and a.node.pubkey == b.node.pubkey)
 
 proc newKBucket(istart, iend: NodeId): KBucket =
@@ -259,7 +259,7 @@ template onTimeout(b: untyped) =
     b
 
 proc pingId(n: Node, token: seq[byte]): seq[byte] {.inline.} =
-  result = token & @(n.node.pubkey.data)
+  result = token & @(n.node.pubkey.toRaw)
 
 proc waitPong(k: KademliaProtocol, n: Node, pingid: seq[byte]): Future[bool] =
   doAssert(pingid notin k.pongFutures, "Already waiting for pong from " & $n)
@@ -441,7 +441,7 @@ proc bootstrap*(k: KademliaProtocol, bootstrapNodes: seq[Node], retries = 0) {.a
 
 proc recvPong*(k: KademliaProtocol, n: Node, token: seq[byte]) =
   trace "<<< pong from ", n
-  let pingid = token & @(n.node.pubkey.data)
+  let pingid = token & @(n.node.pubkey.toRaw)
   var future: Future[bool]
   if k.pongFutures.take(pingid, future):
     future.complete(true)

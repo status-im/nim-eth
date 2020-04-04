@@ -19,16 +19,20 @@ proc nodeIdInNodes(id: NodeId, nodes: openarray[Node]): bool =
 proc test() {.async.} =
   suite "Discovery Tests":
     let
-      bootNodeKey = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")
+      bootNodeKey = PrivateKey.fromHex(
+        "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
       bootNodeAddr = localAddress(20301)
-      bootENode = initENode(bootNodeKey.getPublicKey, bootNodeAddr)
+      bootENode = initENode(bootNodeKey.toPublicKey()[], bootNodeAddr)
       bootNode = await startDiscoveryNode(bootNodeKey, bootNodeAddr, @[])
 
     test "Discover nodes":
       let nodeKeys = [
-        initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618"),
-        initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a619"),
-        initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a620")
+        PrivateKey.fromHex(
+          "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")[],
+        PrivateKey.fromHex(
+          "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a619")[],
+        PrivateKey.fromHex(
+          "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a620")[]
       ]
       var nodeAddrs = newSeqOfCap[Address](nodeKeys.len)
       for i in 0 ..< nodeKeys.len: nodeAddrs.add(localAddress(20302 + i))
@@ -62,7 +66,8 @@ proc test() {.async.} =
       ]
       let
         address = localAddress(20302)
-        nodeKey = initPrivateKey("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+        nodeKey = PrivateKey.fromHex(
+          "b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")[]
 
       for data in validProtocolData:
         # none of these may raise
@@ -80,7 +85,8 @@ proc test() {.async.} =
       ]
       let
         address = localAddress(20302)
-        nodeKey = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")
+        nodeKey = PrivateKey.fromHex(
+          "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")[]
 
       for data in invalidProtocolData:
         expect DiscProtocolError:

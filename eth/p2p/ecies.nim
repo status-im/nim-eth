@@ -99,7 +99,6 @@ proc eciesEncrypt*(input: openarray[byte], output: var openarray[byte],
     cipher: CTR[aes128]
     ctx: HMAC[sha256]
     iv: array[aes128.sizeBlock, byte]
-    secret: SharedSecret
     material: array[KeyLength, byte]
 
   if len(output) < eciesEncryptedLength(len(input)):
@@ -107,12 +106,15 @@ proc eciesEncrypt*(input: openarray[byte], output: var openarray[byte],
   if randomBytes(iv) != aes128.sizeBlock:
     return(RandomError)
 
-  var ephemeral = newKeyPair()
+  var ephemeral = KeyPair.random()
+  if ephemeral.isErr:
+    return(RandomError)
 
-  if ecdhAgree(ephemeral.seckey, pubkey, secret) != EthKeysStatus.Success:
+  var secret = ecdhRaw(ephemeral[].seckey, pubkey)
+  if secret.isErr:
     return(EcdhError)
 
-  material = kdf(secret.data)
+  material = kdf(secret[].data)
   burnMem(secret)
 
   copyMem(addr encKey[0], addr material[0], aes128.sizeKey)
@@ -121,7 +123,7 @@ proc eciesEncrypt*(input: openarray[byte], output: var openarray[byte],
 
   var header = cast[ptr EciesHeader](addr output[0])
   header.version = 0x04
-  header.pubkey = ephemeral.pubkey.getRaw()
+  header.pubkey = ephemeral[].pubkey.toRaw()
   header.iv = iv
 
   var so = eciesDataPos()
@@ -158,11 +160,9 @@ proc eciesDecrypt*(input: openarray[byte],
   ## Length of output data can be calculated using ``eciesDecryptedLength()``
   ## template.
   var
-    pubkey: PublicKey
     encKey: array[aes128.sizeKey, byte]
     cipher: CTR[aes128]
     ctx: HMAC[sha256]
-    secret: SharedSecret
 
   if len(input) <= 0:
     return(IncompleteError)
@@ -174,12 +174,14 @@ proc eciesDecrypt*(input: openarray[byte],
     return(IncompleteError)
   if len(input) - eciesOverheadLength() > len(output):
     return(BufferOverrun)
-  if recoverPublicKey(header.pubkey, pubkey) != EthKeysStatus.Success:
+  let pubkey = PublicKey.fromRaw(header.pubkey)
+  if pubkey.isErr:
     return(IncorrectKey)
-  if ecdhAgree(seckey, pubkey, secret) != EthKeysStatus.Success:
+  var secret = ecdhRaw(seckey, pubkey[])
+  if secret.isErr:
     return(EcdhError)
 
-  var material = kdf(secret.data)
+  var material = kdf(secret[].data)
   burnMem(secret)
   copyMem(addr encKey[0], addr material[0], aes128.sizeKey)
   var macKey = sha256.digest(material, ostart = KeyLength div 2)

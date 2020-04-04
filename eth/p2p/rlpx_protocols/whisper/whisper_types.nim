@@ -297,14 +297,12 @@ proc encode*(self: Payload): Option[Bytes] =
     plain.add padding
 
   if self.src.isSome(): # Private key present - signature requested
-    let hash = keccak256.digest(plain)
-    var sig: Signature
-    let err = signRawMessage(hash.data, self.src.get(), sig)
-    if err != EthKeysStatus.Success:
-      notice "Signing message failed", err
+    let sig = sign(self.src.get(), plain)
+    if sig.isErr:
+      notice "Signing message failed", err = sig.error
       return
 
-    plain.add sig.getRaw()
+    plain.add sig[].toRaw()
 
   if self.dst.isSome(): # Asymmetric key present - encryption requested
     var res = newSeq[byte](eciesEncryptedLength(plain.len))
@@ -392,14 +390,13 @@ proc decode*(data: openarray[byte], dst = none[PrivateKey](),
       debug "Missing expected signature", len = plain.len
       return
 
-    let sig = plain[^keys.RawSignatureSize .. ^1]
-    let hash = keccak256.digest(plain[0 ..< ^keys.RawSignatureSize])
-    var key: PublicKey
-    let err = recoverSignatureKey(sig, hash.data, key)
-    if err != EthKeysStatus.Success:
-      debug "Failed to recover signature key", err
+    let sig = Signature.fromRaw(plain[^keys.RawSignatureSize .. ^1])
+    let key = sig and recover(
+      sig[], plain.toOpenArray(0, plain.len - keys.RawSignatureSize - 1))
+    if key.isErr:
+      debug "Failed to recover signature key", err = key.error
       return
-    res.src = some(key)
+    res.src = some(key[])
 
   if hasSignature:
     if plain.len > pos + keys.RawSignatureSize:
@@ -633,16 +630,16 @@ proc notify*(filters: var Filters, msg: Message) {.gcsafe.} =
      if decoded.isNone():
        continue
      if filter.privateKey.isSome():
-       keyHash = keccak256.digest(filter.privateKey.get().data)
+       keyHash = keccak256.digest(filter.privateKey.get().toRaw())
        # TODO: Get rid of the hash and just use pubkey to compare?
-       dst = some(getPublicKey(filter.privateKey.get()))
+       dst = some(toPublicKey(filter.privateKey.get()).tryGet())
      elif filter.symKey.isSome():
        keyHash = keccak256.digest(filter.symKey.get())
      # else:
        # NOTE: In this case the message was not encrypted
    else:
      if filter.privateKey.isSome():
-       if keyHash != keccak256.digest(filter.privateKey.get().data):
+       if keyHash != keccak256.digest(filter.privateKey.get().toRaw()):
          continue
      elif filter.symKey.isSome():
        if keyHash != keccak256.digest(filter.symKey.get()):
