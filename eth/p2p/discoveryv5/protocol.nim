@@ -108,7 +108,7 @@ proc decodeWhoAreYou(d: Protocol, msg: Bytes): Whoareyou =
 proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthTag) =
   trace "sending who are you", to = $toNode, toAddress = $address
   let challenge = Whoareyou(authTag: authTag, recordSeq: 0)
-  encoding.randomBytes(challenge.idNonce)
+  encoding.randomBytes2(challenge.idNonce)
   # If there is already a handshake going on for this nodeid then we drop this
   # new one. Handshake will get cleaned up after `handshakeTimeout`.
   # If instead overwriting the handshake would be allowed, the handshake timeout
@@ -181,8 +181,6 @@ proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
     RlpError,
     IOError,
     TransportAddressError,
-    EthKeysException,
-    Secp256k1Exception,
   ].} =
   if msg.len < tagSize: # or magicSize, can be either
     return # Invalid msg
@@ -482,7 +480,7 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
   let
     a = Address(ip: externalIp.get(IPv4_any()),
                 tcpPort: tcpPort, udpPort: udpPort)
-    enode = initENode(privKey.getPublicKey(), a)
+    enode = initENode(privKey.toPublicKey().tryGet(), a)
     enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort)
     node = newNode(enode, enrRec)
 

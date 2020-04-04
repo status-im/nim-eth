@@ -46,27 +46,33 @@ type
     PacketError,
     DecryptError
 
-proc randomBytes*(v: var openarray[byte]) =
-  if nimcrypto.randomBytes(v) != v.len:
+proc randomBytes2*(v: var openarray[byte]) =
+  # TODO if this is called randomBytes it breaks calling the real randomBytes
+  #      in other modules... sigh, nim modules and global namespaces...
+  #      ideally, a new random library will take the place of both these proc's
+  #      in as setting without exceptions for such low-level constructs..
+  if randomBytes(v) != v.len:
     raise newException(RandomSourceDepleted, "Could not randomize bytes")
 
-proc idNonceHash(nonce, ephkey: openarray[byte]): array[32, byte] =
+proc idNonceHash(nonce, ephkey: openarray[byte]): MDigest[256] =
   var ctx: sha256
   ctx.init()
   ctx.update(idNoncePrefix)
   ctx.update(nonce)
   ctx.update(ephkey)
-  ctx.finish().data
+  ctx.finish()
 
 proc signIDNonce*(c: Codec, idNonce, ephKey: openarray[byte]): SignatureNR =
-  if signRawMessage(idNonceHash(idNonce, ephKey), c.privKey, result) != EthKeysStatus.Success:
-    raise newException(EthKeysException, "Could not sign idNonce")
+  let sig = signNR(c.privKey, idNonceHash(idNonce, ephKey))
+  if sig.isErr:
+    raise newException(CatchableError, "Could not sign idNonce")
+  sig[]
 
 proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
     idNonce: openarray[byte], result: var HandshakeSecrets) =
-  var eph: SharedSecretFull
-  if ecdhAgree(priv, pub, eph) != EthKeysStatus.Success:
-    raise newException(EthKeysException, "ecdhAgree failed")
+  let eph = ecdhRawFull(priv, pub)
+  if eph.isErr:
+    raise newException(CatchableError, "ecdhRawFull failed")
 
   # TODO: Unneeded allocation here
   var info = newSeqOfCap[byte](idNoncePrefix.len + 32 * 2)
@@ -78,7 +84,7 @@ proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
 
   static: assert(sizeof(result) == aesKeySize * 3)
   var res = cast[ptr UncheckedArray[byte]](addr result)
-  hkdf(sha256, eph.data, idNonce, info, toOpenArray(res, 0, sizeof(result) - 1))
+  hkdf(sha256, eph[].data, idNonce, info, toOpenArray(res, 0, sizeof(result) - 1))
 
 proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
   var ectx: GCM[aes128]
@@ -97,10 +103,10 @@ proc makeAuthHeader(c: Codec, toId: NodeID, nonce: array[gcmNonceSize, byte],
   if challenge.recordSeq < ln.record.seqNum:
     resp.record = ln.record
 
-  let ephKey = newPrivateKey()
-  let ephPubkey = ephKey.getPublicKey().getRaw
+  let ephKey = PrivateKey.random().tryGet()
+  let ephPubkey = ephKey.toPublicKey().tryGet().toRaw
 
-  resp.signature = c.signIDNonce(challenge.idNonce, ephPubkey).getRaw
+  resp.signature = c.signIDNonce(challenge.idNonce, ephPubkey).toRaw
 
   deriveKeys(ln.id, toId, ephKey, challenge.pubKey, challenge.idNonce,
     handshakeSecrets)
@@ -131,7 +137,7 @@ proc encodeEncrypted*(c: Codec,
                       challenge: Whoareyou):
                       (seq[byte], array[gcmNonceSize, byte]) =
   var nonce: array[gcmNonceSize, byte]
-  randomBytes(nonce)
+  randomBytes2(nonce)
   var headEnc: seq[byte]
 
   var writeKey: AesKey
@@ -223,11 +229,11 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
     warn "Unknown auth scheme"
     return false
 
-  var ephKey: PublicKey
-  if recoverPublicKey(head.ephemeralKey, ephKey) != EthKeysStatus.Success:
+  var ephKey = PublicKey.fromRaw(head.ephemeralKey)
+  if ephKey.isErr:
     return false
 
-  deriveKeys(fromId, c.localNode.id, c.privKey, ephKey, challenge.idNonce,
+  deriveKeys(fromId, c.localNode.id, c.privKey, ephKey[], challenge.idNonce,
     secrets)
 
   var zeroNonce: array[gcmNonceSize, byte]

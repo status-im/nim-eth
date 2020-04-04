@@ -20,7 +20,7 @@ proc generate() =
   let
     fromAddr = localAddress(30303)
     toAddr = localAddress(30304)
-    peerKey = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")
+    peerKey = PrivateKey.fromHex("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
 
   # valid data for a Ping packet
   block:
@@ -42,7 +42,7 @@ proc generate() =
   # valid data for a FindNode packet
   block:
     var data: array[64, byte]
-    data[32 .. ^1] = peerKey.getPublicKey.toNodeId().toByteArrayBE()
+    data[32 .. ^1] = peerKey.toPublicKey().tryGet().toNodeId().toByteArrayBE()
     let payload = rlp.encode((data, expiration())).toRange
     let encodedData = @[3.byte] & payload.toSeq()
     debug "FindNode", data=byteutils.toHex(encodedData)
@@ -54,14 +54,16 @@ proc generate() =
     let
       n1Addr = localAddress(30305)
       n2Addr = localAddress(30306)
-      n1Key = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")
-      n2Key = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a619")
+      n1Key = PrivateKey.fromHex(
+        "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")[]
+      n2Key = PrivateKey.fromHex(
+        "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a619")[]
 
     type Neighbour = tuple[ip: IpAddress, udpPort, tcpPort: Port, pk: PublicKey]
     var nodes = newSeqOfCap[Neighbour](2)
 
-    nodes.add((n1Addr.ip, n1Addr.udpPort, n1Addr.tcpPort, n1Key.getPublicKey()))
-    nodes.add((n2Addr.ip, n2Addr.udpPort, n2Addr.tcpPort, n2Key.getPublicKey()))
+    nodes.add((n1Addr.ip, n1Addr.udpPort, n1Addr.tcpPort, n1Key.toPublicKey().tryGet()))
+    nodes.add((n2Addr.ip, n2Addr.udpPort, n2Addr.tcpPort, n2Key.toPublicKey().tryGet()))
 
     let payload = rlp.encode((nodes, expiration())).toRange
     let encodedData = @[4.byte] & payload.toSeq()

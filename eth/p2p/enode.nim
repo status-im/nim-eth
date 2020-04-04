@@ -60,7 +60,6 @@ proc initENode*(e: string, node: var ENode): ENodeStatus =
     uport: int = 0
     tport: int = 0
     uri: Uri = initUri()
-    data: string
 
   if len(e) == 0:
     return IncorrectUri
@@ -104,13 +103,10 @@ proc initENode*(e: string, node: var ENode): ENodeStatus =
   else:
     uport = tport
 
-  try:
-    data = parseHexStr(uri.username)
-    if recoverPublicKey(cast[seq[byte]](data),
-                        node.pubkey) != EthKeysStatus.Success:
-      return IncorrectNodeId
-  except CatchableError:
+  let pk = PublicKey.fromHex(uri.username)
+  if pk.isErr:
     return IncorrectNodeId
+  node.pubkey = pk[]
 
   try:
     node.address.ip = parseIpAddress(uri.hostname)
@@ -135,11 +131,8 @@ proc initENode*(pubkey: PublicKey, address: Address): ENode {.inline.} =
 
 proc isCorrect*(n: ENode): bool =
   ## Returns ``true`` if ENode ``n`` is properly filled.
-  result = false
-  for i in n.pubkey.data:
-    if i != 0x00'u8:
-      result = true
-      break
+  var pk: PublicKey
+  n.pubkey != pk
 
 proc `$`*(n: ENode): string =
   ## Returns string representation of ENode.

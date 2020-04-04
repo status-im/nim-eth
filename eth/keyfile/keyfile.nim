@@ -177,7 +177,7 @@ proc encryptKey(seckey: PrivateKey,
   if cryptkind == AES128CTR:
     var ctx: CTR[aes128]
     ctx.init(toOpenArray(key, 0, 15), iv)
-    ctx.encrypt(seckey.data, crypttext)
+    ctx.encrypt(seckey.toRaw(), crypttext)
     ctx.clear()
     result = Success
   else:
@@ -308,7 +308,7 @@ proc createKeyFileJson*(seckey: PrivateKey,
 
   outjson = %*
     {
-      "address": seckey.getPublicKey().toAddress(false),
+      "address": seckey.toPublicKey().tryGet().toAddress(false),
       "crypto": {
         "cipher": $cryptkind,
         "cipherparams": {
@@ -394,7 +394,7 @@ proc decodeKeyFileJson*(j: JsonNode,
     if res != Success:
       return res
     try:
-      seckey = initPrivateKey(plaintext)
+      seckey = PrivateKey.fromRaw(plaintext).tryGet()
     except CatchableError:
       return IncorrectPrivateKey
     result = Success

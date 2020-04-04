@@ -857,8 +857,8 @@ proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = fals
     removePeer(peer.network, peer)
 
 proc validatePubKeyInHello(msg: DevP2P.hello, pubKey: PublicKey): bool =
-  var pk: PublicKey
-  recoverPublicKey(msg.nodeId, pk) == EthKeysStatus.Success and pk == pubKey
+  let pk = PublicKey.fromRaw(msg.nodeId)
+  pk.isOk and pk[] == pubKey
 
 proc checkUselessPeer(peer: Peer) {.inline.} =
   if peer.dispatcher.numProtocols == 0:
@@ -1012,7 +1012,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
       node.clientId,
       node.capabilities,
       uint(node.address.tcpPort),
-      node.keys.pubkey.getRaw())
+      node.keys.pubkey.toRaw())
 
     var response = await result.handshakeImpl(
       sendHelloFut,
@@ -1102,7 +1102,7 @@ proc rlpxAccept*(node: EthereumNode,
       node.clientId,
       node.capabilities,
       listenPort.uint,
-      node.keys.pubkey.getRaw())
+      node.keys.pubkey.toRaw())
 
     var response = await result.handshakeImpl(
       sendHelloFut,

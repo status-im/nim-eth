@@ -266,11 +266,9 @@ p2pProtocol les(version = lesVersion,
       if signature.isNone:
         error "missing announce signature"
         return
-      let sigHash = keccak256.digest rlp.encodeList(headHash,
-                                                    headNumber,
-                                                    headTotalDifficulty)
-      let signerKey = recoverKeyFromSignature(signature.get.initSignature,
-                                              sigHash)
+      let sigMsg = rlp.encodeList(headHash, headNumber, headTotalDifficulty)
+      let sig = Signature.fromRaw(signature.get).tryGet()
+      let signerKey = recover(sig, sigMsg).tryGet()
       if signerKey.toNodeId != peer.remote.id:
         error "invalid announce signature"
         # TODO: should we disconnect this peer?

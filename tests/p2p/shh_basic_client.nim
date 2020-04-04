@@ -79,15 +79,17 @@ if config.main:
 else:
   netId = 15
 
-let keypair = newKeyPair()
+let keypair = KeyPair.random()[]
 var node = newEthereumNode(keypair, address, netId, nil, addAllCapabilities = false)
 node.addCapability Whisper
 
 # lets prepare some prearranged keypairs
-let encPrivateKey = initPrivateKey("5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3")
-let encPublicKey = encPrivateKey.getPublicKey()
-let signPrivateKey = initPrivateKey("365bda0757d22212b04fada4b9222f8c3da59b49398fa04cf612481cd893b0a3")
-let signPublicKey = signPrivateKey.getPublicKey()
+let encPrivateKey = PrivateKey.fromHex(
+  "5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3")[]
+let encPublicKey = encPrivateKey.toPublicKey()[]
+let signPrivateKey = PrivateKey.fromHex(
+  "365bda0757d22212b04fada4b9222f8c3da59b49398fa04cf612481cd893b0a3")[]
+let signPublicKey = signPrivateKey.toPublicKey()[]
 var symKey: SymKey
 # To test with geth: all 0's key is invalid in geth console
 symKey[31] = 1

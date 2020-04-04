@@ -26,13 +26,13 @@ proc randomPacket(tag: PacketTag): seq[byte] =
     authTag: AuthTag
     msg: array[44, byte]
 
-  randomBytes(authTag)
-  randomBytes(msg)
+  randomBytes2(authTag)
+  randomBytes2(msg)
   result.add(tag)
   result.add(rlp.encode(authTag))
   result.add(msg)
 
-proc generateNode(privKey = newPrivateKey(), port: int): Node =
+proc generateNode(privKey = PrivateKey.random()[], port: int): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, some(parseIpAddress("127.0.0.1")),
     port, port)
@@ -41,13 +41,17 @@ proc generateNode(privKey = newPrivateKey(), port: int): Node =
 suite "Discovery v5 Tests":
   asyncTest "Random nodes":
     let
-      bootNodeKey = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")
+      bootNodeKey = PrivateKey.fromHex(
+        "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
       bootNode = initDiscoveryNode(bootNodeKey, localAddress(20301))
 
     let nodeKeys = [
-        initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618"),
-        initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a619"),
-        initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a620")
+        PrivateKey.fromHex(
+          "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")[],
+        PrivateKey.fromHex(
+          "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a619")[],
+        PrivateKey.fromHex(
+          "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a620")[]
       ]
     var nodeAddrs = newSeqOfCap[Address](nodeKeys.len)
     for i in 0 ..< nodeKeys.len: nodeAddrs.add(localAddress(20302 + i))
@@ -74,13 +78,13 @@ suite "Discovery v5 Tests":
     const
       nodeCount = 17
 
-    let bootNode = initDiscoveryNode(newPrivateKey(), localAddress(20301))
+    let bootNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20301))
     bootNode.start()
 
     var nodes = newSeqOfCap[discv5_protocol.Protocol](nodeCount)
     nodes.add(bootNode)
     for i in 1 ..< nodeCount:
-      nodes.add(initDiscoveryNode(newPrivateKey(), localAddress(20301 + i),
+      nodes.add(initDiscoveryNode(PrivateKey.random()[], localAddress(20301 + i),
         @[bootNode.localNode.record]))
       nodes[i].start()
 
@@ -96,7 +100,7 @@ suite "Discovery v5 Tests":
 
   asyncTest "FindNode with test table":
 
-    let mainNode = initDiscoveryNode(newPrivateKey(), localAddress(20301))
+    let mainNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20301))
 
     # Generate 1000 random nodes and add to our main node's routing table
     for i in 0..<1000:
@@ -110,7 +114,7 @@ suite "Discovery v5 Tests":
     debug "Closest neighbour", closestDistance, id=closest.id.toHex()
 
     let
-      testNode = initDiscoveryNode(newPrivateKey(), localAddress(20302),
+      testNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20302),
         @[mainNode.localNode.record])
       discovered = await discv5_protocol.findNode(testNode, mainNode.localNode,
         closestDistance)
@@ -123,7 +127,7 @@ suite "Discovery v5 Tests":
   asyncTest "GetNode":
     # TODO: This could be tested in just a routing table only context
     let
-      node = initDiscoveryNode(newPrivateKey(), localAddress(20302))
+      node = initDiscoveryNode(PrivateKey.random()[], localAddress(20302))
       targetNode = generateNode(port = 20303)
 
     node.addNode(targetNode)
@@ -137,10 +141,10 @@ suite "Discovery v5 Tests":
 
   asyncTest "Node deletion":
     let
-      bootnode = initDiscoveryNode(newPrivateKey(), localAddress(20301))
-      node1 = initDiscoveryNode(newPrivateKey(), localAddress(20302),
+      bootnode = initDiscoveryNode(PrivateKey.random()[], localAddress(20301))
+      node1 = initDiscoveryNode(PrivateKey.random()[], localAddress(20302),
         @[bootnode.localNode.record])
-      node2 = initDiscoveryNode(newPrivateKey(), localAddress(20303),
+      node2 = initDiscoveryNode(PrivateKey.random()[], localAddress(20303),
         @[bootnode.localNode.record])
       pong1 = await discv5_protocol.ping(node1, bootnode.localNode)
       pong2 = await discv5_protocol.ping(node1, node2.localNode)
@@ -160,12 +164,12 @@ suite "Discovery v5 Tests":
 
 
   asyncTest "Handshake cleanup":
-    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302))
+    let node = initDiscoveryNode(PrivateKey.random()[], localAddress(20302))
     var tag: PacketTag
     let a = localAddress(20303)
 
     for i in 0 ..< 5:
-      randomBytes(tag)
+      randomBytes2(tag)
       node.receive(a, randomPacket(tag))
 
     # Checking different nodeIds but same address
@@ -179,7 +183,7 @@ suite "Discovery v5 Tests":
     await node.closeWait()
 
   asyncTest "Handshake different address":
-    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302))
+    let node = initDiscoveryNode(PrivateKey.random()[], localAddress(20302))
     var tag: PacketTag
 
     for i in 0 ..< 5:
@@ -191,7 +195,7 @@ suite "Discovery v5 Tests":
     await node.closeWait()
 
   asyncTest "Handshake duplicates":
-    let node = initDiscoveryNode(newPrivateKey(), localAddress(20302))
+    let node = initDiscoveryNode(PrivateKey.random()[], localAddress(20302))
     var tag: PacketTag
     let a = localAddress(20303)
 
@@ -235,8 +239,8 @@ suite "Discovery v5 Tests":
         ("8c5b422155d33ea8e9d46f71d1ad3e7b24cb40051413ffa1a81cff613d243ba9", 256'u32)
       ]
 
-    let targetId = toNodeId(initPublicKey(targetKey))
+    let targetId = toNodeId(PublicKey.fromHex(targetKey)[])
 
     for (key, d) in testValues:
-      let id = toNodeId(initPrivateKey(key).getPublicKey())
+      let id = toNodeId(PrivateKey.fromHex(key)[].toPublicKey()[])
       check logDist(targetId, id) == d

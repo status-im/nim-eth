@@ -9,7 +9,7 @@ type
     record*: Record
 
 proc toNodeId*(pk: PublicKey): NodeId =
-  readUintBE[256](keccak256.digest(pk.getRaw()).data)
+  readUintBE[256](keccak256.digest(pk.toRaw()).data)
 
 proc newNode*(enode: ENode): Node =
   Node(node: enode,
@@ -43,15 +43,15 @@ proc newNode*(r: Record): Node =
     # Will need some refactor though.
     discard
 
-  var pk: PublicKey
-  if recoverPublicKey(r.get("secp256k1", seq[byte]), pk) != EthKeysStatus.Success:
-    warn "Could not recover public key"
+  let pk = PublicKey.fromRaw(r.get("secp256k1", seq[byte]))
+  if pk.isErr:
+    warn "Could not recover public key", err = pk.error
     return
 
-  result = newNode(initENode(pk, a))
+  result = newNode(initENode(pk[], a))
   result.record = r
 
-proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.data)
+proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.toRaw)
 proc `==`*(a, b: Node): bool = (a.isNil and b.isNil) or (not a.isNil and not b.isNil and a.node.pubkey == b.node.pubkey)
 
 proc address*(n: Node): Address {.inline.} = n.node.address

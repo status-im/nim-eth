@@ -30,8 +30,8 @@ procSuite "Whisper connections":
       node1.peerPool.connectedNodes.len() == 1
 
   asyncTest "Filters with encryption and signing":
-    let encryptKeyPair = newKeyPair()
-    let signKeyPair = newKeyPair()
+    let encryptKeyPair = KeyPair.random()[]
+    let signKeyPair = KeyPair.random()[]
     var symKey: SymKey
     let topic = [byte 0x12, 0, 0, 0]
     var filters: seq[string] = @[]

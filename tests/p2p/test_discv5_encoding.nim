@@ -132,13 +132,12 @@ suite "Discovery v5 Cryptographic Primitives":
       sharedSecret = "0x033b11a2a1f214567e1537ce5e509ffd9b21373247f2a3ff6841f4976f53165e7e"
 
     let
-      pub = initPublicKey(publicKey)
-      priv = initPrivateKey(secretKey)
-    var eph: SharedSecretFull
+      pub = PublicKey.fromHex(publicKey)[]
+      priv = PrivateKey.fromHex(secretKey)[]
 
+    let eph = ecdhRawFull(priv, pub)
     check:
-      ecdhAgree(priv, pub, eph) == EthKeysStatus.Success
-      eph.data == hexToSeqByte(sharedSecret)
+      eph[].data == hexToSeqByte(sharedSecret)
 
   test "Key Derivation":
     # const
@@ -167,10 +166,10 @@ suite "Discovery v5 Cryptographic Primitives":
       idNonceSig = "0xc5036e702a79902ad8aa147dabfe3958b523fd6fa36cc78e2889b912d682d8d35fdea142e141f690736d86f50b39746ba2d2fc510b46f82ee08f08fd55d133a4"
 
     let
-      c = Codec(privKey: initPrivateKey(localSecretKey))
+      c = Codec(privKey: PrivateKey.fromHex(localSecretKey)[])
       signature = signIDNonce(c, hexToByteArray[idNonceSize](idNonce),
         hexToByteArray[64](ephemeralKey))
-    check signature.getRaw() == hexToByteArray[64](idNonceSig)
+    check signature.toRaw() == hexToByteArray[64](idNonceSig)
 
   test "Encryption/Decryption":
     const

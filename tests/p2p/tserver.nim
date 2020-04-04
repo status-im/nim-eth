@@ -97,7 +97,7 @@ template sendResponse(peer: Peer, proto, msg: untyped, data: varargs[untyped]): 
 
 asyncTest "network with 3 peers using custom protocols":
   const useCompression = defined(useSnappy)
-  let localKeys = newKeyPair()
+  let localKeys = KeyPair.random()[]
   let localAddress = localAddress(30303)
   var localNode = newEthereumNode(localKeys, localAddress, 1, nil, useCompression = useCompression)
   localNode.startListening()

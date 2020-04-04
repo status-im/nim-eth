@@ -56,7 +56,7 @@ proc append*(w: var RlpWriter, a: IpAddress) =
     w.append(a.address_v4.toMemRange)
 
 proc append(w: var RlpWriter, p: Port) {.inline.} = w.append(p.int)
-proc append(w: var RlpWriter, pk: PublicKey) {.inline.} = w.append(pk.getRaw())
+proc append(w: var RlpWriter, pk: PublicKey) {.inline.} = w.append(pk.toRaw())
 proc append(w: var RlpWriter, h: MDigest[256]) {.inline.} = w.append(h.data)
 
 proc pack(cmdId: CommandId, payload: BytesRange, pk: PrivateKey): Bytes =
@@ -67,7 +67,7 @@ proc pack(cmdId: CommandId, payload: BytesRange, pk: PrivateKey): Bytes =
 
   # TODO: There is a lot of unneeded allocations here
   let encodedData = @[cmdId.byte] & payload.toSeq()
-  let signature = @(pk.signMessage(encodedData).getRaw())
+  let signature = @(pk.sign(encodedData).tryGet().toRaw())
   let msgHash = keccak256.digest(signature & encodedData)
   result = @(msgHash.data) & signature & encodedData
 
@@ -77,10 +77,13 @@ proc validateMsgHash(msg: Bytes, msgHash: var MDigest[256]): bool =
     result = msgHash == keccak256.digest(msg.toOpenArray(MAC_SIZE, msg.high))
 
 proc recoverMsgPublicKey(msg: Bytes, pk: var PublicKey): bool =
-  msg.len > HEAD_SIZE and
-    recoverSignatureKey(msg.toOpenArray(MAC_SIZE, HEAD_SIZE),
-      keccak256.digest(msg.toOpenArray(HEAD_SIZE, msg.high)).data,
-      pk) == EthKeysStatus.Success
+  if msg.len > HEAD_SIZE:
+    let sig = Signature.fromRaw(msg.toOpenArray(MAC_SIZE, HEAD_SIZE))
+    if sig.isOk():
+      let pubkey = recover(sig[], msg.toOpenArray(HEAD_SIZE, msg.high))
+      if pubkey.isOk():
+        pk = pubkey[]
+        return true
 
 proc unpack(msg: Bytes): tuple[cmdId: CommandId, payload: Bytes] =
   # Check against possible RangeError
@@ -154,7 +157,7 @@ proc newDiscoveryProtocol*(privKey: PrivateKey, address: Address,
   result.address = address
   result.bootstrapNodes = newSeqOfCap[Node](bootstrapNodes.len)
   for n in bootstrapNodes: result.bootstrapNodes.add(newNode(n))
-  result.thisNode = newNode(privKey.getPublicKey(), address)
+  result.thisNode = newNode(privKey.toPublicKey().tryGet(), address)
   result.kademlia = newKademliaProtocol(result.thisNode, result)
 
 proc recvPing(d: DiscoveryProtocol, node: Node,
@@ -190,12 +193,12 @@ proc recvNeighbours(d: DiscoveryProtocol, node: Node,
 
     let udpPort = n.listElem(1).toInt(uint16).Port
     let tcpPort = n.listElem(2).toInt(uint16).Port
-    var pk: PublicKey
-    if recoverPublicKey(n.listElem(3).toBytes.toOpenArray(), pk) != EthKeysStatus.Success:
+    let pk = PublicKey.fromRaw(n.listElem(3).toBytes.toOpenArray())
+    if pk.isErr:
       warn "Could not parse public key"
       continue
 
-    neighbours.add(newNode(pk, Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
+    neighbours.add(newNode(pk[], Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
   d.kademlia.recvNeighbours(node, neighbours)
 
 proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: Bytes) {.inline, gcsafe.} =
@@ -314,9 +317,10 @@ when isMainModule:
     let (cmdId, payload) = unpack(m)
     doAssert(payload == hexToSeqByte"f2cb842edbd4d182944382765da0ab56fb9e64a85a597e6bb27c656b4f1afb7e06b0fd4e41ccde6dba69a3c4a150845aaa4de2")
     doAssert(cmdId == cmdPong)
-    doAssert(remotePubkey == initPublicKey("78de8a0916848093c73790ead81d1928bec737d565119932b98c6b100d944b7a95e94f847f689fc723399d2e31129d182f7ef3863f2b4c820abbf3ab2722344d"))
+    doAssert(remotePubkey == PublicKey.fromHex(
+      "78de8a0916848093c73790ead81d1928bec737d565119932b98c6b100d944b7a95e94f847f689fc723399d2e31129d182f7ef3863f2b4c820abbf3ab2722344d"))[]
 
-  let privKey = initPrivateKey("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")
+  let privKey = PrivateKey.fromHex("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
 
   # echo privKey
 

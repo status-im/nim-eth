@@ -90,19 +90,19 @@ suite "Ethereum RLPx encryption/decryption test suite":
   proc newTestHandshake(flags: set[HandshakeFlag]): Handshake =
     result = newHandshake(flags)
     if Initiator in flags:
-      result.host.seckey = initPrivateKey(testValue("initiator_private_key"))
-      result.host.pubkey = result.host.seckey.getPublicKey()
+      result.host.seckey = PrivateKey.fromHex(testValue("initiator_private_key"))[]
+      result.host.pubkey = result.host.seckey.toPublicKey()[]
       let epki = testValue("initiator_ephemeral_private_key")
-      result.ephemeral.seckey = initPrivateKey(epki)
-      result.ephemeral.pubkey = result.ephemeral.seckey.getPublicKey()
+      result.ephemeral.seckey = PrivateKey.fromHex(epki)[]
+      result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()[]
       let nonce = fromHex(stripSpaces(testValue("initiator_nonce")))
       result.initiatorNonce[0..^1] = nonce[0..^1]
     elif Responder in flags:
-      result.host.seckey = initPrivateKey(testValue("receiver_private_key"))
-      result.host.pubkey = result.host.seckey.getPublicKey()
+      result.host.seckey = PrivateKey.fromHex(testValue("receiver_private_key"))[]
+      result.host.pubkey = result.host.seckey.toPublicKey()[]
       let epkr = testValue("receiver_ephemeral_private_key")
-      result.ephemeral.seckey = initPrivateKey(epkr)
-      result.ephemeral.pubkey = result.ephemeral.seckey.getPublicKey()
+      result.ephemeral.seckey = PrivateKey.fromHex(epkr)[]
+      result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()[]
       let nonce = fromHex(stripSpaces(testValue("receiver_nonce")))
       result.responderNonce[0..^1] = nonce[0..^1]
 

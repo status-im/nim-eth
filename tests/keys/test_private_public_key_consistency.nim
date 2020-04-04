@@ -16,12 +16,12 @@ suite "Testing private -> public key conversion":
   test "Known private to known public keys (test data from Ethereum eth-keys)":
     for person in [alice, bob, eve]:
       let
-        privKey = initPrivateKey(person.privkey)
-        pubKey = privKey.getPublicKey
+        privKey = PrivateKey.fromHex(person.privkey)[]
+        pubKey = privKey.toPublicKey()[]
 
       check:
         # Compare as strings
         $pubKey == person.pubkey
 
         # Compare as keys
-        pubKey == initPublicKey(person.pubkey)
+        pubKey == PublicKey.fromHex(person.pubkey)[]
