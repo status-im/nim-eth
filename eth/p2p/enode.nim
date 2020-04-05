@@ -1,6 +1,6 @@
 #
 #                 Ethereum P2P
-#              (c) Copyright 2018
+#              (c) Copyright 2018-2020
 #       Status Research & Development GmbH
 #
 #            Licensed under either of
@@ -8,22 +8,23 @@
 #            MIT license (LICENSE-MIT)
 #
 
+{.push raises: [Defect].}
+
 import uri, strutils, net
 import eth/keys
 
 export keys
 
 type
-  ENodeStatus* = enum
+  ENodeError* = enum
     ## ENode status codes
-    Success,              ## Conversion operation succeed
-    IncorrectNodeId,      ## Incorrect public key supplied
-    IncorrectScheme,      ## Incorrect URI scheme supplied
-    IncorrectIP,          ## Incorrect IP address supplied
-    IncorrectPort,        ## Incorrect TCP port supplied
-    IncorrectDiscPort,    ## Incorrect UDP discovery port supplied
-    IncorrectUri,         ## Incorrect URI supplied
-    IncompleteENode       ## Incomplete ENODE object
+    IncorrectNodeId   = "enode: incorrect public key"
+    IncorrectScheme   = "enode: incorrect URI scheme"
+    IncorrectIP       = "enode: incorrect IP address"
+    IncorrectPort     = "enode: incorrect TCP port"
+    IncorrectDiscPort = "enode: incorrect UDP discovery port"
+    IncorrectUri      = "enode: incorrect URI"
+    IncompleteENode   = "enode: incomplete ENODE object"
 
   Address* = object
     ## Network address object
@@ -36,25 +37,12 @@ type
     pubkey*: PublicKey    ## Node public key
     address*: Address     ## Node address
 
-  ENodeException* = object of CatchableError
+  ENodeResult*[T] = Result[T, ENodeError]
 
-proc raiseENodeError(status: ENodeStatus) =
-  if status == IncorrectIP:
-    raise newException(ENodeException, "Incorrect IP address")
-  elif status == IncorrectPort:
-    raise newException(ENodeException, "Incorrect port number")
-  elif status == IncorrectDiscPort:
-    raise newException(ENodeException, "Incorrect discovery port number")
-  elif status == IncorrectUri:
-    raise newException(ENodeException, "Incorrect URI")
-  elif status == IncorrectScheme:
-    raise newException(ENodeException, "Incorrect scheme")
-  elif status == IncorrectNodeId:
-    raise newException(ENodeException, "Incorrect node id")
-  elif status == IncompleteENode:
-    raise newException(ENodeException, "Incomplete enode")
+proc mapErrTo[T, E](r: Result[T, E], v: static ENodeError): ENodeResult[T] =
+  r.mapErr(proc (e: E): ENodeError = v)
 
-proc initENode*(e: string, node: var ENode): ENodeStatus =
+proc fromString*(T: type ENode, e: string): ENodeResult[ENode] =
   ## Initialize ENode ``node`` from URI string ``uri``.
   var
     uport: int = 0
@@ -62,83 +50,67 @@ proc initENode*(e: string, node: var ENode): ENodeStatus =
     uri: Uri = initUri()
 
   if len(e) == 0:
-    return IncorrectUri
+    return err(IncorrectUri)
 
   parseUri(e, uri)
 
   if len(uri.scheme) == 0 or uri.scheme.toLowerAscii() != "enode":
-    return IncorrectScheme
+    return err(IncorrectScheme)
 
   if len(uri.username) != 128:
-    return IncorrectNodeId
+    return err(IncorrectNodeId)
 
   for i in uri.username:
     if i notin {'A'..'F', 'a'..'f', '0'..'9'}:
-      return IncorrectNodeId
+      return err(IncorrectNodeId)
 
   if len(uri.password) != 0 or len(uri.path) != 0 or len(uri.anchor) != 0:
-    return IncorrectUri
+    return err(IncorrectUri)
 
   if len(uri.hostname) == 0:
-    return IncorrectIP
+    return err(IncorrectIP)
 
   try:
     if len(uri.port) == 0:
-      return IncorrectPort
+      return err(IncorrectPort)
     tport = parseInt(uri.port)
     if tport <= 0 or tport > 65535:
-      return IncorrectPort
+      return err(IncorrectPort)
   except ValueError:
-    return IncorrectPort
+    return err(IncorrectPort)
 
   if len(uri.query) > 0:
     if not uri.query.toLowerAscii().startsWith("discport="):
-      return IncorrectDiscPort
+      return err(IncorrectDiscPort)
     try:
       uport = parseInt(uri.query[9..^1])
       if uport <= 0 or uport > 65535:
-        return IncorrectDiscPort
+        return err(IncorrectDiscPort)
     except ValueError:
-      return IncorrectDiscPort
+      return err(IncorrectDiscPort)
   else:
     uport = tport
 
-  let pk = PublicKey.fromHex(uri.username)
-  if pk.isErr:
-    return IncorrectNodeId
-  node.pubkey = pk[]
-
+  var ip: IpAddress
   try:
-    node.address.ip = parseIpAddress(uri.hostname)
+    ip = parseIpAddress(uri.hostname)
   except ValueError:
-    zeroMem(addr node.pubkey, KeyLength * 2)
-    return IncorrectIP
+    return err(IncorrectIP)
 
-  node.address.tcpPort = Port(tport)
-  node.address.udpPort = Port(uport)
-  result = Success
+  let pubkey = ? PublicKey.fromHex(uri.username).mapErrTo(IncorrectNodeId)
 
-proc initENode*(uri: string): ENode {.inline.} =
-  ## Returns ENode object from URI string ``uri``.
-  let res = initENode(uri, result)
-  if res != Success:
-    raiseENodeError(res)
-
-proc initENode*(pubkey: PublicKey, address: Address): ENode {.inline.} =
-  ## Create ENode object from public key ``pubkey`` and ``address``.
-  result.pubkey = pubkey
-  result.address = address
-
-proc isCorrect*(n: ENode): bool =
-  ## Returns ``true`` if ENode ``n`` is properly filled.
-  var pk: PublicKey
-  n.pubkey != pk
+  ok(ENode(
+    pubkey: pubkey,
+    address: Address(
+      ip: ip,
+      tcpPort: Port(tport),
+      udpPort: Port(uport)
+    )
+  ))
 
 proc `$`*(n: ENode): string =
   ## Returns string representation of ENode.
   var ipaddr: string
-  if not isCorrect(n):
-    raiseENodeError(IncompleteENode)
   if n.address.ip.family == IpAddressFamily.IPv4:
     ipaddr = $(n.address.ip)
   else:

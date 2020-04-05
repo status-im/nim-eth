@@ -16,8 +16,7 @@ init:
   node2 = setupTestNode(eth, Whisper)
 
   node2.startListening()
-  peer = waitFor node1.rlpxConnect(newNode(initENode(node2.keys.pubKey,
-                                                     node2.address)))
+  peer = waitFor node1.rlpxConnect(newNode(node2.toENode()))
 
 test:
   aflLoop: # This appears to have unstable results with afl-clang-fast, probably

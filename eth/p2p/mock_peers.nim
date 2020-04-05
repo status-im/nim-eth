@@ -212,7 +212,5 @@ proc newMockPeer*(userConfigurator: proc (m: MockConf)): EthereumNode =
   return node
 
 proc rlpxConnect*(node, otherNode: EthereumNode): Future[Peer] =
-  let otherAsRemote = newNode(initENode(otherNode.keys.pubKey,
-                                        otherNode.address))
+  let otherAsRemote = newNode(otherNode.toENode())
   return rlpx.rlpxConnect(node, otherAsRemote)
-

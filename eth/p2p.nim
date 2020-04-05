@@ -74,7 +74,7 @@ proc processIncoming(server: StreamServer,
       node.peerPool.addPeer(peer)
 
 proc listeningAddress*(node: EthereumNode): ENode =
-  return initENode(node.keys.pubKey, node.address)
+  node.toENode()
 
 proc startListening*(node: EthereumNode) =
   # TODO allow binding to specific IP / IPv6 / etc

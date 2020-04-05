@@ -98,20 +98,15 @@ let topic = [byte 0x12, 0, 0, 0]
 if config.main:
   var bootnodes: seq[ENode] = @[]
   for nodeId in MainnetBootnodes:
-    var bootnode: ENode
-    discard initENode(nodeId, bootnode)
-    bootnodes.add(bootnode)
+    bootnodes.add(ENode.fromString(nodeId).expect("static nodes"))
 
   asyncCheck node.connectToNetwork(bootnodes, true, true)
   # main network has mostly non SHH nodes, so we connect directly to SHH nodes
   for nodeId in WhisperNodes:
-    var whisperENode: ENode
-    discard initENode(nodeId, whisperENode)
-    var whisperNode = newNode(whisperENode)
+    var whisperNode = newNode(ENode.fromString(nodeId).expect("static nodes"))
     asyncCheck node.peerPool.connectToNode(whisperNode)
 else:
-  var bootENode: ENode
-  discard initENode(DockerBootNode, bootENode)
+  let bootENode = ENode.fromString(DockerBootnode).expect("static node")
   waitFor node.connectToNetwork(@[bootENode], true, true)
 
 if config.watch:

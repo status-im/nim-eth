@@ -21,10 +21,10 @@ proc newNode*(enode: ENode, r: Record): Node =
        record: r)
 
 proc newNode*(uriString: string): Node =
-  newNode initENode(uriString)
+  newNode ENode.fromString(uriString).tryGet()
 
 proc newNode*(pk: PublicKey, address: Address): Node =
-  newNode initENode(pk, address)
+  newNode ENode(pubkey: pk, address: address)
 
 proc newNode*(r: Record): Node =
   # TODO: Handle IPv6
@@ -48,7 +48,7 @@ proc newNode*(r: Record): Node =
     warn "Could not recover public key", err = pk.error
     return
 
-  result = newNode(initENode(pk[], a))
+  result = newNode(ENode(pubkey: pk[], address: a))
   result.record = r
 
 proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.toRaw)

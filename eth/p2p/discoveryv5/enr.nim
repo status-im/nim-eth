@@ -6,6 +6,8 @@ import
   nimcrypto, stew/base64,
   eth/[rlp, keys], ../enode
 
+export options
+
 const
   maxEnrSize = 300
   minRlpListLen = 4 # for signature, seqId, "id" key, id

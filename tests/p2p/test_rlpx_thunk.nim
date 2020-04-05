@@ -13,8 +13,7 @@ node1 = setupTestNode(eth, Whisper)
 node2 = setupTestNode(eth, Whisper)
 
 node2.startListening()
-peer = waitFor node1.rlpxConnect(newNode(initENode(node2.keys.pubKey,
-                                                   node2.address)))
+peer = waitFor node1.rlpxConnect(newNode(node2.toENode()))
 
 proc testThunk(payload: openArray[byte]) =
   var (msgId, msgData) = recvMsgMock(payload)

@@ -334,7 +334,7 @@ when isMainModule:
 
   var bootnodes = newSeq[ENode]()
   for item in LOCAL_BOOTNODES:
-    bootnodes.add(initENode(item))
+    bootnodes.add(ENode.fromString(item)[])
 
   let listenPort = Port(30310)
   var address = Address(udpPort: listenPort, tcpPort: listenPort)

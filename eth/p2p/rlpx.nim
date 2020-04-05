@@ -1112,7 +1112,8 @@ proc rlpxAccept*(node: EthereumNode,
     let remote = transport.remoteAddress()
     let address = Address(ip: remote.address, tcpPort: remote.port,
                           udpPort: remote.port)
-    result.remote = newNode(initEnode(handshake.remoteHPubkey, address))
+    result.remote = newNode(
+      ENode(pubkey: handshake.remoteHPubkey, address: address))
 
     trace "devp2p handshake completed", peer = result.remote,
       clientId = response.clientId

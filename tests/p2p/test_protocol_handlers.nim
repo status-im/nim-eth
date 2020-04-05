@@ -58,8 +58,7 @@ suite "Testing protocol handlers":
     var node2 = setupTestNode(abc, xyz)
 
     node2.startListening()
-    let peer = await node1.rlpxConnect(newNode(initENode(node2.keys.pubKey,
-                                                         node2.address)))
+    let peer = await node1.rlpxConnect(newNode(node2.toENode()))
     check:
       peer.isNil == false
 
@@ -74,8 +73,7 @@ suite "Testing protocol handlers":
     var node1 = setupTestNode(hah)
     var node2 = setupTestNode(hah)
     node2.startListening()
-    let peer = await node1.rlpxConnect(newNode(initENode(node2.keys.pubKey,
-                                                         node2.address)))
+    let peer = await node1.rlpxConnect(newNode(node2.toENode()))
     check:
       peer.isNil == true
       # To check if the disconnection handler did not run

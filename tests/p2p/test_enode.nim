@@ -7,7 +7,7 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #            MIT license (LICENSE-MIT)
 
-import unittest, net
+import unittest, net, options
 import eth/p2p/enode
 
 suite "ENode":
@@ -28,26 +28,27 @@ suite "ENode":
     ]
 
     const results = [
-      IncorrectScheme,
-      IncorrectNodeId,
-      IncorrectIP,
-      IncorrectPort,
-      IncorrectDiscPort,
-      IncorrectScheme,
-      IncorrectNodeId,
-      IncorrectScheme,
-      ENodeStatus.Success,
-      ENodeStatus.Success,
-      ENodeStatus.Success,
-      ENodeStatus.Success
+      some IncorrectScheme,
+      some IncorrectNodeId,
+      some IncorrectIP,
+      some IncorrectPort,
+      some IncorrectDiscPort,
+      some IncorrectScheme,
+      some IncorrectNodeId,
+      some IncorrectScheme,
+      none(ENodeError),
+      none(ENodeError),
+      none(ENodeError),
+      none(ENodeError),
     ]
 
     for index in 0..<len(enodes):
-      var node: ENode
-      let res = initENode(enodes[index], node)
-      check res == results[index]
-      if res == ENodeStatus.Success:
-        check enodes[index] == $node
+      let res = ENode.fromString(enodes[index])
+      check (results[index].isSome and res.error == results[index].get) or
+        res.isOk
+
+      if res.isOk:
+        check enodes[index] == $res[]
 
   test "Custom validation tests":
     const enodes = [
@@ -67,35 +68,23 @@ suite "ENode":
     ]
 
     const results = [
-      IncorrectIP,
-      IncorrectIP,
-      IncorrectIP,
-      IncorrectIP,
-      ENodeStatus.Success,
-      IncorrectUri,
-      IncorrectPort,
-      IncorrectPort,
-      IncorrectDiscPort,
-      IncorrectDiscPort,
-      IncorrectUri,
-      IncorrectIP,
-      IncorrectNodeId
+      some IncorrectIP,
+      some IncorrectIP,
+      some IncorrectIP,
+      some IncorrectIP,
+      none(ENodeError),
+      some IncorrectUri,
+      some IncorrectPort,
+      some IncorrectPort,
+      some IncorrectDiscPort,
+      some IncorrectDiscPort,
+      some IncorrectUri,
+      some IncorrectIP,
+      some IncorrectNodeId
     ]
 
     for index in 0..<len(enodes):
-      var node: ENode
-      let res = initENode(enodes[index], node)
-      check res == results[index]
+      let res = ENode.fromString(enodes[index])
 
-  test "isCorrect() tests":
-    var node: ENode
-    check isCorrect(node) == false
-    let ip = IpAddress(family:IpAddressFamily.IPv4)
-    node = Enode(address: Address(ip: ip))
-    check isCorrect(node) == false
-    node.address.tcpPort = Port(25)
-    check isCorrect(node) == false
-    node.address.udpPort = Port(25)
-    check isCorrect(node) == false
-    node.pubkey = PrivateKey.random()[].toPublicKey()[]
-    check isCorrect(node) == true
+      check (results[index].isSome and res.error == results[index].get) or
+        res.isOk

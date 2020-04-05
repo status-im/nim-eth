@@ -23,8 +23,7 @@ procSuite "Whisper connections":
   var node1 = setupTestNode(Whisper)
   var node2 = setupTestNode(Whisper)
   node2.startListening()
-  waitFor node1.peerPool.connectToNode(newNode(initENode(node2.keys.pubKey,
-                                                         node2.address)))
+  waitFor node1.peerPool.connectToNode(newNode(node2.toENode()))
   asyncTest "Two peers connected":
     check:
       node1.peerPool.connectedNodes.len() == 1
@@ -298,8 +297,7 @@ procSuite "Whisper connections":
     var ln1 = setupTestNode(Whisper)
     ln1.setLightNode(true)
 
-    await ln1.peerPool.connectToNode(newNode(initENode(node2.keys.pubKey,
-                                                       node2.address)))
+    await ln1.peerPool.connectToNode(newNode(node2.toENode()))
 
     let topic = [byte 0, 0, 0, 0]
 
@@ -322,6 +320,5 @@ procSuite "Whisper connections":
     ln2.setLightNode(true)
 
     ln2.startListening()
-    let peer = await ln1.rlpxConnect(newNode(initENode(ln2.keys.pubKey,
-                                                       ln2.address)))
+    let peer = await ln1.rlpxConnect(newNode(ln2.toENode()))
     check peer.isNil == true

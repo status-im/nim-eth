@@ -49,7 +49,7 @@ p2pProtocol Hive(version = hiveVersion,
     debug "Hive peer connected"
 
 proc initProtocolState*(network: BzzNetwork, node: EthereumNode) {.gcsafe.} =
-  network.thisENode = initENode(node.keys.pubkey, node.address)
+  network.thisENode = node.toENode()
 
 p2pProtocol Bzz(version = bzzVersion,
                 rlpxName = "bzz",
