@@ -71,14 +71,18 @@ suite "ECIES test suite":
     var shmac = [0x13'u8, 0x13'u8]
     var s = PrivateKey.random()[]
     var p = s.toPublicKey()[]
+
+    eciesEncrypt(plain, encr, p).expect("encryption should succeed")
+    eciesDecrypt(encr, decr, s).expect("decryption should succeed")
+
     check:
       # Without additional mac data
-      eciesEncrypt(plain, encr, p) == EciesStatus.Success
-      eciesDecrypt(encr, decr, s) == EciesStatus.Success
       equalMem(addr m[0], addr decr[0], len(m))
-      # With additional mac data
-      eciesEncrypt(plain, encr, p, shmac) == EciesStatus.Success
-      eciesDecrypt(encr, decr, s, shmac) == EciesStatus.Success
+    # With additional mac data
+    eciesEncrypt(plain, encr, p, shmac).expect("encryption should succeed")
+    eciesDecrypt(encr, decr, s, shmac).expect("decryption should succeed")
+
+    check:
       equalMem(addr m[0], addr decr[0], len(m))
 
   test "ECIES/py-evm/cpp-ethereum test_ecies.py#L43/rlpx.cpp#L187":
@@ -126,8 +130,10 @@ suite "ECIES test suite":
       var s = PrivateKey.fromHex(secretKeys[i])[]
       var cipher = fromHex(stripSpaces(cipherText[i]))
       var expect = fromHex(stripSpaces(expectText[i]))
+
+      eciesDecrypt(cipher, data, s).expect("decryption should succeed")
+
       check:
-        eciesDecrypt(cipher, data, s) == EciesStatus.Success
         compare(data, expect) == true
 
   test "ECIES/cpp-ethereum rlpx.cpp#L432-L459":
@@ -167,5 +173,5 @@ suite "ECIES test suite":
       var s = PrivateKey.fromHex(secretKeys[i])[]
       var cipher = fromHex(stripSpaces(cipherData[i]))
       check:
-        eciesDecrypt(cipher, data, s) == EciesStatus.Success
+        eciesDecrypt(cipher, data, s).isOk()
         compare(data, expectData[i]) == true

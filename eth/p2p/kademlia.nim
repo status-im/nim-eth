@@ -55,12 +55,12 @@ proc toNodeId*(pk: PublicKey): NodeId =
 
 proc newNode*(pk: PublicKey, address: Address): Node =
   result.new()
-  result.node = initENode(pk, address)
+  result.node = ENode(pubkey: pk, address: address)
   result.id = pk.toNodeId()
 
 proc newNode*(uriString: string): Node =
   result.new()
-  result.node = initENode(uriString)
+  result.node = ENode.fromString(uriString)[]
   result.id = result.node.pubkey.toNodeId()
 
 proc newNode*(enode: ENode): Node =

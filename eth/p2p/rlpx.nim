@@ -390,7 +390,7 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
 
   var msgSize: int
   if decryptHeaderAndGetMsgSize(peer.secretsState,
-                                headerBytes, msgSize) != RlpxStatus.Success:
+                                headerBytes, msgSize).isErr():
     await peer.disconnectAndRaise(BreachOfProtocol,
                                   "Cannot decrypt RLPx frame header")
 
@@ -414,7 +414,7 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
     decryptedBytesCount = 0
 
   if decryptBody(peer.secretsState, encryptedBytes, msgSize,
-                 decryptedBytes, decryptedBytesCount) != RlpxStatus.Success:
+                 decryptedBytes, decryptedBytesCount).isErr():
     await peer.disconnectAndRaise(BreachOfProtocol,
                                   "Cannot decrypt RLPx frame body")
 
@@ -929,14 +929,9 @@ template `^`(arr): auto =
   # variable as an open array
   arr.toOpenArray(0, `arr Len` - 1)
 
-proc check(status: AuthStatus) =
-  if status != AuthStatus.Success:
-    raise newException(CatchableError, "Error: " & $status)
-
 proc initSecretState(hs: var Handshake, authMsg, ackMsg: openarray[byte],
                      p: Peer) =
-  var secrets: ConnectionSecret
-  check hs.getSecrets(authMsg, ackMsg, secrets)
+  var secrets = hs.getSecrets(authMsg, ackMsg).tryGet()
   initSecretState(secrets, p.secretsState)
   burnMem(secrets)
 
@@ -975,12 +970,12 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
   var ok = false
   try:
     result.transport = await connect(ta)
-    var handshake = newHandshake({Initiator, EIP8}, int(node.baseProtocolVersion))
-    handshake.host = node.keys
+    var handshake = Handshake.tryInit(
+      node.keys, {Initiator, EIP8}, node.baseProtocolVersion).tryGet()
 
     var authMsg: array[AuthMessageMaxEIP8, byte]
     var authMsgLen = 0
-    check authMessage(handshake, remote.node.pubkey, authMsg, authMsgLen)
+    authMessage(handshake, remote.node.pubkey, authMsg, authMsgLen).tryGet()
     var res = await result.transport.write(addr authMsg[0], authMsgLen)
     if res != authMsgLen:
       raisePeerDisconnected("Unexpected disconnect while authenticating",
@@ -993,12 +988,12 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     await result.transport.readExactly(addr ackMsg[0], len(ackMsg))
 
     var ret = handshake.decodeAckMessage(ackMsg)
-    if ret == AuthStatus.IncompleteError:
+    if ret.isErr and ret.error == AuthError.IncompleteError:
       ackMsg.setLen(handshake.expectedLength)
       await result.transport.readExactly(addr ackMsg[initialSize],
                                          len(ackMsg) - initialSize)
       ret = handshake.decodeAckMessage(ackMsg)
-    check ret
+    ret.tryGet() # for the raise!
 
     node.checkSnappySupport(handshake, result)
     initSecretState(handshake, ^authMsg, ackMsg, result)
@@ -1062,8 +1057,7 @@ proc rlpxAccept*(node: EthereumNode,
   result.transport = transport
   result.network = node
 
-  var handshake = newHandshake({auth.Responder})
-  handshake.host = node.keys
+  var handshake = HandShake.tryInit(node.keys, {auth.Responder}).tryGet
 
   var ok = false
   try:
@@ -1073,19 +1067,20 @@ proc rlpxAccept*(node: EthereumNode,
     authMsg.setLen(initialSize)
     await transport.readExactly(addr authMsg[0], len(authMsg))
     var ret = handshake.decodeAuthMessage(authMsg)
-    if ret == AuthStatus.IncompleteError: # Eip8 auth message is likely
+    if ret.isErr and ret.error == AuthError.IncompleteError:
+      # Eip8 auth message is likely
       authMsg.setLen(handshake.expectedLength)
       await transport.readExactly(addr authMsg[initialSize],
                                   len(authMsg) - initialSize)
       ret = handshake.decodeAuthMessage(authMsg)
-    check ret
+    ret.tryGet() # for the raise!
 
     node.checkSnappySupport(handshake, result)
     handshake.version = uint8(result.baseProtocolVersion)
 
     var ackMsg: array[AckMessageMaxEIP8, byte]
     var ackMsgLen: int
-    check handshake.ackMessage(ackMsg, ackMsgLen)
+    handshake.ackMessage(ackMsg, ackMsgLen).tryGet()
     var res = await transport.write(addr ackMsg[0], ackMsgLen)
     if res != ackMsgLen:
       raisePeerDisconnected("Unexpected disconnect while authenticating",
@@ -1117,7 +1112,8 @@ proc rlpxAccept*(node: EthereumNode,
     let remote = transport.remoteAddress()
     let address = Address(ip: remote.address, tcpPort: remote.port,
                           udpPort: remote.port)
-    result.remote = newNode(initEnode(handshake.remoteHPubkey, address))
+    result.remote = newNode(
+      ENode(pubkey: handshake.remoteHPubkey, address: address))
 
     trace "devp2p handshake completed", peer = result.remote,
       clientId = response.clientId

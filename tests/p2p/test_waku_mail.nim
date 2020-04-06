@@ -16,9 +16,8 @@ procSuite "Waku Mail Client":
   var simpleServer = setupTestNode(Waku)
 
   simpleServer.startListening()
-  let simpleServerNode = newNode(initENode(simpleServer.keys.pubKey,
-    simpleServer.address))
-  let clientNode = newNode(initENode(client.keys.pubKey, client.address))
+  let simpleServerNode = newNode(simpleServer.toENode())
+  let clientNode = newNode(client.toENode())
   waitFor client.peerPool.connectToNode(simpleServerNode)
   require:
     waitFor simpleServer.waitForConnected().withTimeout(transmissionTimeout)

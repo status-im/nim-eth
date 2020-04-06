@@ -134,9 +134,9 @@ suite "Discovery v5 Cryptographic Primitives":
     let
       pub = PublicKey.fromHex(publicKey)[]
       priv = PrivateKey.fromHex(secretKey)[]
-
     let eph = ecdhRawFull(priv, pub)
     check:
+      eph.isOk()
       eph[].data == hexToSeqByte(sharedSecret)
 
   test "Key Derivation":

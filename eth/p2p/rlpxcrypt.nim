@@ -10,8 +10,12 @@
 
 ## This module implements RLPx cryptography
 
-import stew/ranges/stackarrays, eth/rlp/types, nimcrypto
+{.push raises: [Defect].}
+
+import stew/ranges/stackarrays, eth/rlp/types, nimcrypto, stew/result
 from auth import ConnectionSecret
+
+export result
 
 const
   RlpHeaderLength* = 16
@@ -27,14 +31,15 @@ type
     emac*: keccak256
     imac*: keccak256
 
-  RlpxStatus* = enum
-    Success,         ## Operation was successful
-    IncorrectMac,    ## MAC verification failed
-    BufferOverrun,   ## Buffer overrun error
-    IncompleteError, ## Data incomplete error
-    IncorrectArgs    ## Incorrect arguments
+  RlpxError* = enum
+    IncorrectMac = "rlpx: MAC verification failed"
+    BufferOverrun = "rlpx: buffer overrun"
+    IncompleteError = "rlpx: data incomplete"
+    IncorrectArgs = "rlpx: incorrect arguments"
 
   RlpxHeader* = array[16, byte]
+
+  RlpxResult*[T] = Result[T, RlpxError]
 
 proc roundup16*(x: int): int {.inline.} =
   ## Procedure aligns `x` to
@@ -76,7 +81,7 @@ template decryptedLength*(size: int): int =
 
 proc encrypt*(c: var SecretState, header: openarray[byte],
               frame: openarray[byte],
-              output: var openarray[byte]): RlpxStatus =
+              output: var openarray[byte]): RlpxResult[void] =
   ## Encrypts `header` and `frame` using SecretState `c` context and store
   ## result into `output`.
   ##
@@ -92,7 +97,7 @@ proc encrypt*(c: var SecretState, header: openarray[byte],
   let framePos = RlpHeaderLength + RlpMacLength
   let frameMacPos = RlpHeaderLength * 2 + frameLength
   if len(header) != RlpHeaderLength or len(frame) == 0 or length != len(output):
-    return IncorrectArgs
+    return err(IncorrectArgs)
   # header_ciphertext = self.aes_enc.update(header)
   c.aesenc.encrypt(header, toa(output, 0, RlpHeaderLength))
   # mac_secret = self.egress_mac.digest()[:HEADER_LEN]
@@ -128,7 +133,7 @@ proc encrypt*(c: var SecretState, header: openarray[byte],
   # return header_ciphertext + header_mac + frame_ciphertext + frame_mac
   copyMem(addr output[headerMacPos], addr headerMac.data[0], RlpHeaderLength)
   copyMem(addr output[frameMacPos], addr frameMac.data[0], RlpHeaderLength)
-  result = Success
+  ok()
 
 proc encryptMsg*(msg: openarray[byte], secrets: var SecretState): seq[byte] =
   var header: RlpxHeader
@@ -152,13 +157,13 @@ proc encryptMsg*(msg: openarray[byte], secrets: var SecretState): seq[byte] =
   # This would be safer if we use a thread-local sequ for the temporary buffer
   result = newSeq[byte](encryptedLength(msg.len))
   let s = encrypt(secrets, header, msg, result)
-  doAssert s == Success
+  s.expect("always succeeds because we call with correct buffer")
 
 proc getBodySize*(a: RlpxHeader): int =
   (int(a[0]) shl 16) or (int(a[1]) shl 8) or int(a[2])
 
 proc decryptHeader*(c: var SecretState, data: openarray[byte],
-                    output: var openarray[byte]): RlpxStatus =
+                    output: var openarray[byte]): RlpxResult[void] =
   ## Decrypts header `data` using SecretState `c` context and store
   ## result into `output`.
   ##
@@ -169,9 +174,9 @@ proc decryptHeader*(c: var SecretState, data: openarray[byte],
     aes: array[RlpHeaderLength, byte]
 
   if len(data) != RlpHeaderLength + RlpMacLength:
-    return IncompleteError
+    return err(IncompleteError)
   if len(output) < RlpHeaderLength:
-    return IncorrectArgs
+    return err(IncorrectArgs)
   # mac_secret = self.ingress_mac.digest()[:HEADER_LEN]
   tmpmac = c.imac
   var macsec = tmpmac.finish()
@@ -188,22 +193,22 @@ proc decryptHeader*(c: var SecretState, data: openarray[byte],
   let headerMacPos = RlpHeaderLength
   if not equalMem(cast[pointer](unsafeAddr data[headerMacPos]),
                   cast[pointer](addr expectMac.data[0]), RlpMacLength):
-    result = IncorrectMac
+    result = err(IncorrectMac)
   else:
     # return self.aes_dec.update(header_ciphertext)
     c.aesdec.decrypt(toa(data, 0, RlpHeaderLength), output)
-    result = Success
+    result = ok()
 
 proc decryptHeaderAndGetMsgSize*(c: var SecretState,
                                  encryptedHeader: openarray[byte],
-                                 outSize: var int): RlpxStatus =
+                                 outSize: var int): RlpxResult[void] =
   var decryptedHeader: RlpxHeader
   result = decryptHeader(c, encryptedHeader, decryptedHeader)
-  if result == Success:
+  if result.isOk():
     outSize = decryptedHeader.getBodySize
 
 proc decryptBody*(c: var SecretState, data: openarray[byte], bodysize: int,
-                  output: var openarray[byte], outlen: var int): RlpxStatus =
+                  output: var openarray[byte], outlen: var int): RlpxResult[void] =
   ## Decrypts body `data` using SecretState `c` context and store
   ## result into `output`.
   ##
@@ -217,9 +222,9 @@ proc decryptBody*(c: var SecretState, data: openarray[byte], bodysize: int,
   outlen = 0
   let rsize = roundup16(bodysize)
   if len(data) < rsize + RlpMacLength:
-    return IncompleteError
+    return err(IncompleteError)
   if len(output) < rsize:
-    return IncorrectArgs
+    return err(IncorrectArgs)
   # self.ingress_mac.update(frame_ciphertext)
   c.imac.update(toa(data, 0, rsize))
   tmpmac = c.imac
@@ -235,8 +240,8 @@ proc decryptBody*(c: var SecretState, data: openarray[byte], bodysize: int,
   let bodyMacPos = rsize
   if not equalMem(cast[pointer](unsafeAddr data[bodyMacPos]),
                   cast[pointer](addr expectMac.data[0]), RlpMacLength):
-    result = IncorrectMac
+    result = err(IncorrectMac)
   else:
     c.aesdec.decrypt(toa(data, 0, rsize), output)
     outlen = bodysize
-    result = Success
+    result = ok()

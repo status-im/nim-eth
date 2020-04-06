@@ -26,8 +26,7 @@ procSuite "Waku - Whisper bridge tests":
     nodeWaku = setupTestNode(Waku)
 
   nodeWakuWhisper.startListening()
-  let bridgeNode = newNode(initENode(nodeWakuWhisper.keys.pubKey,
-    nodeWakuWhisper.address))
+  let bridgeNode = newNode(nodeWakuWhisper.toENode())
   nodeWakuWhisper.shareMessageQueue()
 
   waitFor nodeWhisper.peerPool.connectToNode(bridgeNode)

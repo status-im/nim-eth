@@ -215,18 +215,20 @@ suite "Ethereum P2P handshake test suite":
 
   block:
     proc newTestHandshake(flags: set[HandshakeFlag]): Handshake =
-      result = newHandshake(flags)
       if Initiator in flags:
-        result.host.seckey = PrivateKey.fromHex(testValue("initiator_private_key"))[]
-        result.host.pubkey = result.host.seckey.toPublicKey()[]
+        let pk = PrivateKey.fromHex(testValue("initiator_private_key"))[]
+        let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey()[])
+        result = Handshake.tryInit(kp, flags)[]
+
         let epki = testValue("initiator_ephemeral_private_key")
         result.ephemeral.seckey = PrivateKey.fromHex(epki)[]
         result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()[]
         let nonce = fromHex(stripSpaces(testValue("initiator_nonce")))
         result.initiatorNonce[0..^1] = nonce[0..^1]
       elif Responder in flags:
-        result.host.seckey = PrivateKey.fromHex(testValue("receiver_private_key"))[]
-        result.host.pubkey = result.host.seckey.toPublicKey()[]
+        let pk = PrivateKey.fromHex(testValue("receiver_private_key"))[]
+        let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey()[])
+        result = Handshake.tryInit(kp, flags)[]
         let epkr = testValue("receiver_ephemeral_private_key")
         result.ephemeral.seckey = PrivateKey.fromHex(epkr)[]
         result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()[]
@@ -238,9 +240,8 @@ suite "Ethereum P2P handshake test suite":
       var responder = newTestHandshake({Responder})
       var m0 = newSeq[byte](initiator.authSize(false))
       var k0 = 0
-      check:
-        initiator.authMessage(responder.host.pubkey,
-                              m0, k0, 0, false) == AuthStatus.Success
+      initiator.authMessage(
+        responder.host.pubkey, m0, k0, 0, false).expect("auth success")
       var expect1 = fromHex(stripSpaces(testValue("auth_plaintext")))
       var expect2 = fromHex(stripSpaces(pyevmAuth))
       check:
@@ -254,10 +255,11 @@ suite "Ethereum P2P handshake test suite":
       var k0 = 0
       let remoteEPubkey0 = initiator.ephemeral.pubkey
       let remoteHPubkey0 = initiator.host.pubkey
+
+      initiator.authMessage(
+        responder.host.pubkey, m0, k0).expect("auth success")
+      responder.decodeAuthMessage(m0).expect("decode success")
       check:
-        initiator.authMessage(responder.host.pubkey,
-                              m0, k0) == AuthStatus.Success
-        responder.decodeAuthMessage(m0) == AuthStatus.Success
         responder.initiatorNonce[0..^1] == initiator.initiatorNonce[0..^1]
         responder.remoteEPubkey == remoteEPubkey0
         responder.remoteHPubkey == remoteHPubkey0
@@ -270,11 +272,11 @@ suite "Ethereum P2P handshake test suite":
       var k0 = 0
       var k1 = 0
       var expect0 = fromHex(stripSpaces(testValue("authresp_plaintext")))
+      initiator.authMessage(
+        responder.host.pubkey, m0, k0).expect("auth success")
+      responder.decodeAuthMessage(m0).expect("decode success")
+      responder.ackMessage(m1, k1, 0, false).expect("ack success")
       check:
-        initiator.authMessage(responder.host.pubkey,
-                              m0, k0) == AuthStatus.Success
-        responder.decodeAuthMessage(m0) == AuthStatus.Success
-        responder.ackMessage(m1, k1, 0, false) == AuthStatus.Success
         m1 == expect0
         responder.initiatorNonce == initiator.initiatorNonce
 
@@ -285,12 +287,12 @@ suite "Ethereum P2P handshake test suite":
       var m1 = newSeq[byte](responder.ackSize())
       var k0 = 0
       var k1 = 0
-      check:
-        initiator.authMessage(responder.host.pubkey,
-                              m0, k0) == AuthStatus.Success
-        responder.decodeAuthMessage(m0) == AuthStatus.Success
-        responder.ackMessage(m1, k1) == AuthStatus.Success
-        initiator.decodeAckMessage(m1) == AuthStatus.Success
+
+      initiator.authMessage(
+        responder.host.pubkey, m0, k0).expect("auth success")
+      responder.decodeAuthMessage(m0).expect("decode success")
+      responder.ackMessage(m1, k1).expect("ack success")
+      initiator.decodeAckMessage(m1).expect("decode success")
       let remoteEPubkey0 = responder.ephemeral.pubkey
       let remoteHPubkey0 = responder.host.pubkey
       check:
@@ -307,13 +309,12 @@ suite "Ethereum P2P handshake test suite":
       var tmac = fromHex(stripSpaces(testValue("mac_secret")))
       var temac = fromHex(stripSpaces(testValue("initial_egress_MAC")))
       var timac = fromHex(stripSpaces(testValue("initial_ingress_MAC")))
-      var csecInitiator: ConnectionSecret
-      var csecResponder: ConnectionSecret
+
+      responder.decodeAuthMessage(authm).expect("decode success")
+      initiator.decodeAckMessage(ackm).expect("ack success")
+      var csecInitiator = initiator.getSecrets(authm, ackm).expect("secrets success")
+      var csecResponder = responder.getSecrets(authm, ackm).expect("secrets success")
       check:
-        responder.decodeAuthMessage(authm) == AuthStatus.Success
-        initiator.decodeAckMessage(ackm) == AuthStatus.Success
-        initiator.getSecrets(authm, ackm, csecInitiator) == AuthStatus.Success
-        responder.getSecrets(authm, ackm, csecResponder) == AuthStatus.Success
         csecInitiator.aesKey == csecResponder.aesKey
         csecInitiator.macKey == csecResponder.macKey
         taes[0..^1] == csecInitiator.aesKey[0..^1]
@@ -330,9 +331,11 @@ suite "Ethereum P2P handshake test suite":
 
   block:
     proc newTestHandshake(flags: set[HandshakeFlag]): Handshake =
-      result = newHandshake(flags)
       if Initiator in flags:
-        result.host.seckey = PrivateKey.fromHex(testE8Value("initiator_private_key"))[]
+        let pk = PrivateKey.fromHex(testE8Value("initiator_private_key"))[]
+        let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey()[])
+        result = Handshake.tryInit(kp, flags)[]
+
         result.host.pubkey = result.host.seckey.toPublicKey()[]
         let esec = testE8Value("initiator_ephemeral_private_key")
         result.ephemeral.seckey = PrivateKey.fromHex(esec)[]
@@ -340,8 +343,10 @@ suite "Ethereum P2P handshake test suite":
         let nonce = fromHex(stripSpaces(testE8Value("initiator_nonce")))
         result.initiatorNonce[0..^1] = nonce[0..^1]
       elif Responder in flags:
-        result.host.seckey = PrivateKey.fromHex(testE8Value("receiver_private_key"))[]
-        result.host.pubkey = result.host.seckey.toPublicKey()[]
+        let pk = PrivateKey.fromHex(testE8Value("receiver_private_key"))[]
+        let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey()[])
+        result = Handshake.tryInit(kp, flags)[]
+
         let esec = testE8Value("receiver_ephemeral_private_key")
         result.ephemeral.seckey = PrivateKey.fromHex(esec)[]
         result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()[]
@@ -352,8 +357,8 @@ suite "Ethereum P2P handshake test suite":
       var initiator = newTestHandshake({Initiator})
       var responder = newTestHandshake({Responder})
       var m0 = fromHex(stripSpaces(testE8Value("auth_ciphertext_v4")))
+      responder.decodeAuthMessage(m0).expect("decode success")
       check:
-        responder.decodeAuthMessage(m0) == AuthStatus.Success
         responder.initiatorNonce[0..^1] == initiator.initiatorNonce[0..^1]
       let remoteEPubkey0 = initiator.ephemeral.pubkey
       let remoteHPubkey0 = initiator.host.pubkey
@@ -361,7 +366,7 @@ suite "Ethereum P2P handshake test suite":
         responder.remoteEPubkey == remoteEPubkey0
         responder.remoteHPubkey == remoteHPubkey0
       var m1 = fromHex(stripSpaces(testE8Value("authack_ciphertext_v4")))
-      check initiator.decodeAckMessage(m1) == AuthStatus.Success
+      initiator.decodeAckMessage(m1).expect("decode success")
       let remoteEPubkey1 = responder.ephemeral.pubkey
       check:
         initiator.remoteEPubkey == remoteEPubkey1
@@ -371,28 +376,27 @@ suite "Ethereum P2P handshake test suite":
       var initiator = newTestHandshake({Initiator})
       var responder = newTestHandshake({Responder})
       var m0 = fromHex(stripSpaces(testE8Value("auth_ciphertext_eip8")))
+      responder.decodeAuthMessage(m0).expect("decode success")
       check:
-        responder.decodeAuthMessage(m0) == AuthStatus.Success
         responder.initiatorNonce[0..^1] == initiator.initiatorNonce[0..^1]
       let remoteEPubkey0 = initiator.ephemeral.pubkey
       check responder.remoteEPubkey == remoteEPubkey0
       let remoteHPubkey0 = initiator.host.pubkey
       check responder.remoteHPubkey == remoteHPubkey0
       var m1 = fromHex(stripSpaces(testE8Value("authack_ciphertext_eip8")))
-      check initiator.decodeAckMessage(m1) == AuthStatus.Success
+      initiator.decodeAckMessage(m1).expect("decode success")
       let remoteEPubkey1 = responder.ephemeral.pubkey
       check:
         initiator.remoteEPubkey == remoteEPubkey1
         initiator.responderNonce[0..^1] == responder.responderNonce[0..^1]
       var taes = fromHex(stripSpaces(testE8Value("auth2ack2_aes_secret")))
       var tmac = fromHex(stripSpaces(testE8Value("auth2ack2_mac_secret")))
-      var csecInitiator: ConnectionSecret
-      var csecResponder: ConnectionSecret
+
+      var csecInitiator = initiator.getSecrets(m0, m1).expect("secrets")
+      var csecResponder = responder.getSecrets(m0, m1).expect("secrets")
       check:
         int(initiator.version) == 4
         int(responder.version) == 4
-        initiator.getSecrets(m0, m1, csecInitiator) == AuthStatus.Success
-        responder.getSecrets(m0, m1, csecResponder) == AuthStatus.Success
         csecInitiator.aesKey == csecResponder.aesKey
         csecInitiator.macKey == csecResponder.macKey
         taes[0..^1] == csecInitiator.aesKey[0..^1]
@@ -407,8 +411,8 @@ suite "Ethereum P2P handshake test suite":
       var initiator = newTestHandshake({Initiator})
       var responder = newTestHandshake({Responder})
       var m0 = fromHex(stripSpaces(testE8Value("auth_ciphertext_eip8_3f")))
+      responder.decodeAuthMessage(m0).expect("decode success")
       check:
-        responder.decodeAuthMessage(m0) == AuthStatus.Success
         responder.initiatorNonce[0..^1] == initiator.initiatorNonce[0..^1]
       let remoteEPubkey0 = initiator.ephemeral.pubkey
       let remoteHPubkey0 = initiator.host.pubkey
@@ -416,7 +420,7 @@ suite "Ethereum P2P handshake test suite":
         responder.remoteEPubkey == remoteEPubkey0
         responder.remoteHPubkey == remoteHPubkey0
       var m1 = fromHex(stripSpaces(testE8Value("authack_ciphertext_eip8_3f")))
-      check initiator.decodeAckMessage(m1) == AuthStatus.Success
+      initiator.decodeAckMessage(m1).expect("decode success")
       let remoteEPubkey1 = responder.ephemeral.pubkey
       check:
         int(initiator.version) == 57
@@ -429,22 +433,20 @@ suite "Ethereum P2P handshake test suite":
         var initiator = newTestHandshake({Initiator, EIP8})
         var responder = newTestHandshake({Responder})
         var m0 = newSeq[byte](initiator.authSize())
-        var csecInitiator: ConnectionSecret
-        var csecResponder: ConnectionSecret
         var k0 = 0
         var k1 = 0
-        check initiator.authMessage(responder.host.pubkey,
-                                    m0, k0) == AuthStatus.Success
+        initiator.authMessage(
+          responder.host.pubkey, m0, k0).expect("auth success")
         m0.setLen(k0)
-        check responder.decodeAuthMessage(m0) == AuthStatus.Success
+        responder.decodeAuthMessage(m0).expect("decode success")
         check (EIP8 in responder.flags) == true
         var m1 = newSeq[byte](responder.ackSize())
-        check responder.ackMessage(m1, k1) == AuthStatus.Success
+        responder.ackMessage(m1, k1).expect("ack success")
         m1.setLen(k1)
-        check initiator.decodeAckMessage(m1) == AuthStatus.Success
+        initiator.decodeAckMessage(m1).expect("decode success")
+        var csecInitiator = initiator.getSecrets(m0, m1).expect("secrets")
+        var csecResponder = responder.getSecrets(m0, m1).expect("secrets")
         check:
-          initiator.getSecrets(m0, m1, csecInitiator) == AuthStatus.Success
-          responder.getSecrets(m0, m1, csecResponder) == AuthStatus.Success
           csecInitiator.aesKey == csecResponder.aesKey
           csecInitiator.macKey == csecResponder.macKey
 
@@ -453,21 +455,19 @@ suite "Ethereum P2P handshake test suite":
         var initiator = newTestHandshake({Initiator})
         var responder = newTestHandshake({Responder})
         var m0 = newSeq[byte](initiator.authSize())
-        var csecInitiator: ConnectionSecret
-        var csecResponder: ConnectionSecret
         var k0 = 0
         var k1 = 0
-        check initiator.authMessage(responder.host.pubkey,
-                                    m0, k0) == AuthStatus.Success
+        initiator.authMessage(
+          responder.host.pubkey, m0, k0).expect("auth success")
         m0.setLen(k0)
-        check responder.decodeAuthMessage(m0) == AuthStatus.Success
+        responder.decodeAuthMessage(m0).expect("auth success")
         var m1 = newSeq[byte](responder.ackSize())
-        check responder.ackMessage(m1, k1) == AuthStatus.Success
+        responder.ackMessage(m1, k1).expect("ack success")
         m1.setLen(k1)
-        check initiator.decodeAckMessage(m1) == AuthStatus.Success
+        initiator.decodeAckMessage(m1).expect("ack success")
 
+        var csecInitiator = initiator.getSecrets(m0, m1).expect("secrets")
+        var csecResponder = responder.getSecrets(m0, m1).expect("secrets")
         check:
-          initiator.getSecrets(m0, m1, csecInitiator) == AuthStatus.Success
-          responder.getSecrets(m0, m1, csecResponder) == AuthStatus.Success
           csecInitiator.aesKey == csecResponder.aesKey
           csecInitiator.macKey == csecResponder.macKey

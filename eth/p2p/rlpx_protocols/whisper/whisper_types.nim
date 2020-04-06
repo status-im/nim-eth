@@ -307,8 +307,8 @@ proc encode*(self: Payload): Option[Bytes] =
   if self.dst.isSome(): # Asymmetric key present - encryption requested
     var res = newSeq[byte](eciesEncryptedLength(plain.len))
     let err = eciesEncrypt(plain, res, self.dst.get())
-    if err != EciesStatus.Success:
-      notice "Encryption failed", err
+    if err.isErr:
+      notice "Encryption failed", err = err.error
       return
     return some(res)
 
@@ -343,7 +343,7 @@ proc decode*(data: openarray[byte], dst = none[PrivateKey](),
       return
 
     plain.setLen(eciesDecryptedLength(data.len))
-    if eciesDecrypt(data, plain, dst.get()) != EciesStatus.Success:
+    if eciesDecrypt(data, plain, dst.get()).isErr:
       debug "Couldn't decrypt using asymmetric key", len = data.len
       return
   elif symKey.isSome():

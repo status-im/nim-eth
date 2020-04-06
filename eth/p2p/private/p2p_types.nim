@@ -168,3 +168,5 @@ type
 
 proc `$`*(peer: Peer): string = $peer.remote
 
+proc toENode*(v: EthereumNode): ENode =
+  ENode(pubkey: v.keys.pubkey, address: v.address)

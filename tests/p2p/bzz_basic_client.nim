@@ -7,10 +7,9 @@ import
 
 var node = setupTestNode(Bzz, Hive)
 
-var bzzENode: ENode
 let nodeId = "enode://10420addaa648ffcf09c4ba9df7ce876f276f77aae015bc9346487780c9c04862dc47cec17c86be10d4fb7d93f2cae3f8e702f94cb6dea5807bfedad218a53df@127.0.0.1:30399"
-discard initENode(nodeId, bzzENode)
-waitFor node.peerPool.connectToNode(newNode(bzzENode))
+let enode = ENode.fromString(nodeId)[]
+waitFor node.peerPool.connectToNode(newNode(enode))
 
 doAssert node.peerPool.connectedNodes.len() == 1
 

@@ -20,7 +20,7 @@ proc setupBootNode*(): Future[ENode] {.async.} =
     bootNodeKey = KeyPair.random()[]
     bootNodeAddr = localAddress(30301)
     bootNode = await startDiscoveryNode(bootNodeKey.seckey, bootNodeAddr, @[])
-  result = initENode(bootNodeKey.pubkey, bootNodeAddr)
+  result = ENode(pubkey: bootNodeKey.pubkey, address: bootNodeAddr)
 
 proc setupTestNode*(capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
   let keys1 = KeyPair.random()[]

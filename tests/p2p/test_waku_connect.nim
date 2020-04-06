@@ -48,9 +48,9 @@ suite "Waku connections":
     n3.startListening()
 
     let
-      p1 = await n2.rlpxConnect(newNode(initENode(n1.keys.pubKey, n1.address)))
-      p2 = await n2.rlpxConnect(newNode(initENode(n3.keys.pubKey, n3.address)))
-      p3 = await n4.rlpxConnect(newNode(initENode(n3.keys.pubKey, n3.address)))
+      p1 = await n2.rlpxConnect(newNode(n1.toENode()))
+      p2 = await n2.rlpxConnect(newNode(n3.toENode()))
+      p3 = await n4.rlpxConnect(newNode(n3.toENode()))
     check:
       p1.isNil
       p2.isNil == false
@@ -70,8 +70,7 @@ suite "Waku connections":
     wakuTopicNode.protocolState(Waku).config.topics = some(@[topic1])
 
     wakuNode.startListening()
-    await wakuTopicNode.peerPool.connectToNode(newNode(
-      initENode(wakuNode.keys.pubKey, wakuNode.address)))
+    await wakuTopicNode.peerPool.connectToNode(newNode(wakuNode.toENode()))
 
     # Update topic interest
     check:
@@ -93,8 +92,7 @@ suite "Waku connections":
       wakuNode = setupTestNode(Waku)
 
     wakuNode.startListening()
-    await wakuPowNode.peerPool.connectToNode(newNode(
-      initENode(wakuNode.keys.pubKey, wakuNode.address)))
+    await wakuPowNode.peerPool.connectToNode(newNode(wakuNode.toENode()))
 
     # Update minimum pow
     await setPowRequirement(wakuPowNode, 1.0)
@@ -114,8 +112,7 @@ suite "Waku connections":
       wakuNode = setupTestNode(Waku)
 
     wakuNode.startListening()
-    await wakuLightNode.peerPool.connectToNode(newNode(
-      initENode(wakuNode.keys.pubKey, wakuNode.address)))
+    await wakuLightNode.peerPool.connectToNode(newNode(wakuNode.toENode()))
 
     # Update minimum pow
     await setLightNode(wakuLightNode, true)
@@ -140,8 +137,7 @@ suite "Waku connections":
     discard await wakuBloomNode.setTopicInterest(topics)
 
     wakuBloomNode.startListening()
-    await wakuNode.peerPool.connectToNode(newNode(
-      initENode(wakuBloomNode.keys.pubKey, wakuBloomNode.address)))
+    await wakuNode.peerPool.connectToNode(newNode(wakuBloomNode.toENode()))
 
     # Sanity check
     check:
@@ -188,8 +184,7 @@ suite "Waku connections":
     wakuTopicNode.protocolState(Waku).config.topics = some(@[topic1, topic2])
 
     wakuNode.startListening()
-    await wakuTopicNode.peerPool.connectToNode(newNode(
-      initENode(wakuNode.keys.pubKey, wakuNode.address)))
+    await wakuTopicNode.peerPool.connectToNode(newNode(wakuNode.toENode()))
 
     let payload = repeat(byte 0, 10)
     check:
@@ -217,8 +212,7 @@ suite "Waku connections":
     wakuTopicNode.protocolState(Waku).config.bloom = some(toBloom([bloomTopic]))
 
     wakuNode.startListening()
-    await wakuTopicNode.peerPool.connectToNode(newNode(
-      initENode(wakuNode.keys.pubKey, wakuNode.address)))
+    await wakuTopicNode.peerPool.connectToNode(newNode(wakuNode.toENode()))
 
     let payload = repeat(byte 0, 10)
     check:
@@ -235,8 +229,7 @@ suite "Waku connections":
     await ln.setLightNode(true)
     var fn = setupTestNode(Waku)
     fn.startListening()
-    await ln.peerPool.connectToNode(newNode(initENode(fn.keys.pubKey,
-                                                      fn.address)))
+    await ln.peerPool.connectToNode(newNode(fn.toENode()))
 
     let topic = [byte 0, 0, 0, 0]
 

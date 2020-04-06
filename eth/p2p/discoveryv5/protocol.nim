@@ -480,7 +480,7 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
   let
     a = Address(ip: externalIp.get(IPv4_any()),
                 tcpPort: tcpPort, udpPort: udpPort)
-    enode = initENode(privKey.toPublicKey().tryGet(), a)
+    enode = ENode(pubkey: privKey.toPublicKey().tryGet(), address: a)
     enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort)
     node = newNode(enode, enrRec)
 

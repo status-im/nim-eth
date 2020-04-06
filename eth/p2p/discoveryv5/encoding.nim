@@ -2,6 +2,8 @@ import
   std/[tables, options], nimcrypto, stint, chronicles,
   types, node, enr, hkdf, ../enode, eth/[rlp, keys]
 
+export keys
+
 const
   idNoncePrefix = "discovery-id-nonce"
   keyAgreementPrefix = "discovery v5 key agreement"
@@ -103,12 +105,11 @@ proc makeAuthHeader(c: Codec, toId: NodeID, nonce: array[gcmNonceSize, byte],
   if challenge.recordSeq < ln.record.seqNum:
     resp.record = ln.record
 
-  let ephKey = PrivateKey.random().tryGet()
-  let ephPubkey = ephKey.toPublicKey().tryGet().toRaw
+  let ephKeys = KeyPair.random().tryGet()
 
-  resp.signature = c.signIDNonce(challenge.idNonce, ephPubkey).toRaw
+  resp.signature = c.signIDNonce(challenge.idNonce, ephKeys.pubkey.toRaw).toRaw
 
-  deriveKeys(ln.id, toId, ephKey, challenge.pubKey, challenge.idNonce,
+  deriveKeys(ln.id, toId, ephKeys.seckey, challenge.pubKey, challenge.idNonce,
     handshakeSecrets)
 
   let respRlp = rlp.encode(resp)
@@ -117,7 +118,7 @@ proc makeAuthHeader(c: Codec, toId: NodeID, nonce: array[gcmNonceSize, byte],
   let respEnc = encryptGCM(handshakeSecrets.authRespKey, zeroNonce, respRLP, [])
 
   let header = AuthHeader(auth: nonce, idNonce: challenge.idNonce,
-    scheme: authSchemeName, ephemeralKey: ephPubkey, response: respEnc)
+    scheme: authSchemeName, ephemeralKey: ephKeys.pubkey.toRaw, response: respEnc)
   rlp.encode(header)
 
 proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =

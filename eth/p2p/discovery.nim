@@ -11,11 +11,12 @@
 import
   times,
   chronos, stint, nimcrypto, chronicles,
-  eth/common/eth_types_json_serialization, eth/[keys, rlp],
-  kademlia, enode
+  eth/[keys, rlp],
+  kademlia, enode,
+  stew/result
 
 export
-  Node
+  Node, result
 
 logScope:
   topics = "discovery"
@@ -45,7 +46,8 @@ type
 
   DiscProtocolError* = object of CatchableError
 
-const MaxDgramSize = 1280
+  DiscResult*[T] = Result[T, cstring]
+
 const MinListLen: array[CommandId, int] = [4, 3, 2, 2]
 
 proc append*(w: var RlpWriter, a: IpAddress) =
@@ -71,19 +73,22 @@ proc pack(cmdId: CommandId, payload: BytesRange, pk: PrivateKey): Bytes =
   let msgHash = keccak256.digest(signature & encodedData)
   result = @(msgHash.data) & signature & encodedData
 
-proc validateMsgHash(msg: Bytes, msgHash: var MDigest[256]): bool =
+proc validateMsgHash(msg: Bytes): DiscResult[MDigest[256]] =
   if msg.len > HEAD_SIZE:
-    msgHash.data[0 .. ^1] = msg.toOpenArray(0, msgHash.data.high)
-    result = msgHash == keccak256.digest(msg.toOpenArray(MAC_SIZE, msg.high))
+    var ret: MDigest[256]
+    ret.data[0 .. ^1] = msg.toOpenArray(0, ret.data.high)
+    if ret == keccak256.digest(msg.toOpenArray(MAC_SIZE, msg.high)):
+      ok(ret)
+    else:
+      err("disc: invalid message hash")
+  else:
+    err("disc: msg missing hash")
 
-proc recoverMsgPublicKey(msg: Bytes, pk: var PublicKey): bool =
-  if msg.len > HEAD_SIZE:
-    let sig = Signature.fromRaw(msg.toOpenArray(MAC_SIZE, HEAD_SIZE))
-    if sig.isOk():
-      let pubkey = recover(sig[], msg.toOpenArray(HEAD_SIZE, msg.high))
-      if pubkey.isOk():
-        pk = pubkey[]
-        return true
+proc recoverMsgPublicKey(msg: openArray[byte]): DiscResult[PublicKey] =
+  if msg.len <= HEAD_SIZE:
+    return err("disc: can't get public key")
+  let sig = ? Signature.fromRaw(msg.toOpenArray(MAC_SIZE, HEAD_SIZE))
+  recover(sig, msg.toOpenArray(HEAD_SIZE, msg.high))
 
 proc unpack(msg: Bytes): tuple[cmdId: CommandId, payload: Bytes] =
   # Check against possible RangeError
@@ -231,17 +236,17 @@ proc expirationValid(cmdId: CommandId, rlpEncodedPayload: seq[byte]):
 proc receive*(d: DiscoveryProtocol, a: Address, msg: Bytes) {.gcsafe.} =
   ## Can raise `DiscProtocolError` and all of `RlpError`
   # Note: export only needed for testing
-  var msgHash: MDigest[256]
-  if validateMsgHash(msg, msgHash):
-    var remotePubkey: PublicKey
-    if recoverMsgPublicKey(msg, remotePubkey):
+  let msgHash = validateMsgHash(msg)
+  if msgHash.isOk():
+    let remotePubkey = recoverMsgPublicKey(msg)
+    if remotePubkey.isOk:
       let (cmdId, payload) = unpack(msg)
 
       if expirationValid(cmdId, payload):
-        let node = newNode(remotePubkey, a)
+        let node = newNode(remotePubkey[], a)
         case cmdId
         of cmdPing:
-          d.recvPing(node, msgHash)
+          d.recvPing(node, msgHash[])
         of cmdPong:
           d.recvPong(node, payload)
         of cmdNeighbours:
@@ -251,14 +256,13 @@ proc receive*(d: DiscoveryProtocol, a: Address, msg: Bytes) {.gcsafe.} =
       else:
         trace "Received msg already expired", cmdId, a
     else:
-      error "Wrong public key from ", a
+      notice "Wrong public key from ", a, err = remotePubkey.error
   else:
-    error "Wrong msg mac from ", a
+    notice "Wrong msg mac from ", a
 
 proc processClient(transp: DatagramTransport,
                    raddr: TransportAddress): Future[void] {.async, gcsafe.} =
   var proto = getUserData[DiscoveryProtocol](transp)
-  var buf: seq[byte]
   try:
     # TODO: Maybe here better to use `peekMessage()` to avoid allocation,
     # but `Bytes` object is just a simple seq[byte], and `ByteRange` object
@@ -309,16 +313,14 @@ when isMainModule:
 
   block:
     let m = hexToSeqByte"79664bff52ee17327b4a2d8f97d8fb32c9244d719e5038eb4f6b64da19ca6d271d659c3ad9ad7861a928ca85f8d8debfbe6b7ade26ad778f2ae2ba712567fcbd55bc09eb3e74a893d6b180370b266f6aaf3fe58a0ad95f7435bf3ddf1db940d20102f2cb842edbd4d182944382765da0ab56fb9e64a85a597e6bb27c656b4f1afb7e06b0fd4e41ccde6dba69a3c4a150845aaa4de2"
-    var msgHash: MDigest[256]
-    doAssert(validateMsgHash(m, msgHash))
-    var remotePubkey: PublicKey
-    doAssert(recoverMsgPublicKey(m, remotePubkey))
+    discard validateMsgHash(m).expect("valid hash")
+    var remotePubkey = recoverMsgPublicKey(m).expect("valid key")
 
     let (cmdId, payload) = unpack(m)
     doAssert(payload == hexToSeqByte"f2cb842edbd4d182944382765da0ab56fb9e64a85a597e6bb27c656b4f1afb7e06b0fd4e41ccde6dba69a3c4a150845aaa4de2")
     doAssert(cmdId == cmdPong)
     doAssert(remotePubkey == PublicKey.fromHex(
-      "78de8a0916848093c73790ead81d1928bec737d565119932b98c6b100d944b7a95e94f847f689fc723399d2e31129d182f7ef3863f2b4c820abbf3ab2722344d"))[]
+      "78de8a0916848093c73790ead81d1928bec737d565119932b98c6b100d944b7a95e94f847f689fc723399d2e31129d182f7ef3863f2b4c820abbf3ab2722344d")[])
 
   let privKey = PrivateKey.fromHex("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
 
@@ -332,7 +334,7 @@ when isMainModule:
 
   var bootnodes = newSeq[ENode]()
   for item in LOCAL_BOOTNODES:
-    bootnodes.add(initENode(item))
+    bootnodes.add(ENode.fromString(item)[])
 
   let listenPort = Port(30310)
   var address = Address(udpPort: listenPort, tcpPort: listenPort)
