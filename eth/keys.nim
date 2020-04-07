@@ -16,11 +16,11 @@
 
 import
   nimcrypto/hash, nimcrypto/keccak, ./keys/secp,
-  stew/[byteutils, objects, result], strformat
+  stew/[byteutils, objects, results], strformat
 
 from nimcrypto/utils import burnMem
 
-export secp, result
+export secp, results
 
 const
   KeyLength* = SkEcdhRawSecretSize - 1

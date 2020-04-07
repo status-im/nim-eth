@@ -12,12 +12,12 @@
 import
   strformat,
   secp256k1,
-  stew/[byteutils, objects, result],
+  stew/[byteutils, objects, results],
   nimcrypto/[hash, sysrand]
 
 from nimcrypto/utils import burnMem
 
-export result
+export results
 
 # Implementation notes
 #
@@ -93,7 +93,7 @@ type
     # (`y` is 0x02 when pubkey.y is even or 0x03 when odd)
     data*: array[SkEcdhRawSecretSize, byte]
 
-  SkResult*[T] = result.Result[T, cstring]
+  SkResult*[T] = Result[T, cstring]
 
 ##
 ## Private procedures interface

@@ -13,9 +13,9 @@
 {.push raises: [Defect].}
 
 import eth/keys, nimcrypto/[rijndael, bcmode, hash, hmac, sysrand, sha2, utils]
-import stew/result
+import stew/results
 
-export result
+export results
 
 const
   emptyMac* = array[0, byte]([])

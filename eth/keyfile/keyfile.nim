@@ -10,9 +10,9 @@
 {.push raises: [Defect].}
 
 import nimcrypto/[bcmode, hmac, rijndael, pbkdf2, sha2, sysrand, utils, keccak],
-       eth/keys, json, uuid, strutils, stew/result
+       eth/keys, json, uuid, strutils, stew/results
 
-export result
+export results
 
 const
   # Version 3 constants

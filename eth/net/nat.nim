@@ -8,7 +8,7 @@
 
 import
   options, os, strutils, times,
-  stew/result, nat_traversal/[miniupnpc, natpmp],
+  stew/results, nat_traversal/[miniupnpc, natpmp],
   chronicles, json_serialization/std/net
 
 type

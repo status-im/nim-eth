@@ -18,11 +18,11 @@
 
 {.push raises: [Defect].}
 
-import stew/[byteutils, endians2, result]
+import stew/[byteutils, endians2, results]
 
 from nimcrypto import stripSpaces
 
-export result
+export results
 
 type
   UUID* = object
