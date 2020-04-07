@@ -13,10 +13,10 @@ import
   chronos, stint, nimcrypto, chronicles,
   eth/[keys, rlp],
   kademlia, enode,
-  stew/result
+  stew/results
 
 export
-  Node, result
+  Node, results
 
 logScope:
   topics = "discovery"

@@ -12,10 +12,10 @@
 
 {.push raises: [Defect].}
 
-import stew/ranges/stackarrays, eth/rlp/types, nimcrypto, stew/result
+import stew/ranges/stackarrays, eth/rlp/types, nimcrypto, stew/results
 from auth import ConnectionSecret
 
-export result
+export results
 
 const
   RlpHeaderLength* = 16

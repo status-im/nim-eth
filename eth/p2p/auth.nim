@@ -14,9 +14,9 @@
 
 import eth/[keys, rlp], nimcrypto
 import ecies
-import stew/[byteutils, endians2, result]
+import stew/[byteutils, endians2, results]
 
-export result
+export results
 
 const
   SupportedRlpxVersion* = 4'u8
