@@ -20,6 +20,8 @@ matrix:
     - os: osx
       before_install:
         - launchctl setenv LIBRARY_PATH /usr/local/lib # for RocksDB
+        - brew install ccache
+        - export PATH="/usr/local/opt/ccache/libexec:$PATH"
 
 install:
   # build nim from our own branch - this to avoid the day-to-day churn and
@@ -44,4 +46,3 @@ install:
 script:
   - nimble install -y
   - nimble test
-
