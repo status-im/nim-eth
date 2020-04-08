@@ -59,7 +59,7 @@ const
   ]
 
   # curl -s  https://fleets.status.im | jq '"\"" + .fleets["eth.test"].boot[] + "\","' -r
-  StatusBootNodesTest = [
+  StatusBootNodesTest* = [
     "enode://daae2e72820e86e942fa2a8aa7d6e9954d4043a753483d8bd338e16be82cf962392d5c0e1ae57c3d793c3d3dddd8fd58339262e4234dc966f953cd73b535f5fa@47.52.188.149:443",
     "enode://9e0988575eb7717c25dea72fd11c7b37767dc09c1a7686f7c2ec577d308d24b377ceb675de4317474a1a870e47882732967f4fa785b02ba95d669b31d464dec0@206.189.243.164:443",
     "enode://c1e5018887c863d64e431b69bf617561087825430e4401733f5ba77c70db14236df381fefb0ebe1ac42294b9e261bbe233dbdb83e32c586c66ae26c8de70cb4c@35.188.168.137:443",
