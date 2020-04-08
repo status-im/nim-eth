@@ -2,6 +2,7 @@ language: c
 
 # https://docs.travis-ci.com/user/caching/
 cache:
+  ccache: true
   directories:
     - NimBinaries
     - rocksdbCache
