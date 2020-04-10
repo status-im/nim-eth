@@ -218,10 +218,15 @@ suite "Discovery v5 Tests":
         ("0x0002", 2'u32),
         ("0x0003", 2'u32),
         ("0x0004", 3'u32),
+        ("0x0007", 3'u32),
         ("0x0008", 4'u32),
+        ("0x000f", 4'u32),
+        ("0x0080", 8'u32),
         ("0x00ff", 8'u32),
         ("0x0100", 9'u32),
-        ("0xf000", 16'u32)
+        ("0x01ff", 9'u32),
+        ("0x8000", 16'u32),
+        ("0xffff", 16'u32)
       ]
 
     for (id, d) in testValues:
@@ -244,3 +249,36 @@ suite "Discovery v5 Tests":
     for (key, d) in testValues:
       let id = toNodeId(PrivateKey.fromHex(key)[].toPublicKey()[])
       check logDist(targetId, id) == d
+
+  test "Distance to id check":
+    const
+      targetId = "0x0000"
+      testValues = [ # possible id in that distance range
+        ("0x0001", 1'u32),
+        ("0x0002", 2'u32),
+        ("0x0004", 3'u32),
+        ("0x0008", 4'u32),
+        ("0x0080", 8'u32),
+        ("0x0100", 9'u32),
+        ("0x8000", 16'u32)
+      ]
+
+    for (id, d) in testValues:
+      check idAtDistance(parse(targetId, UInt256, 16), d) == parse(id, UInt256, 16)
+
+  test "Distance to id check with keys":
+    const
+      targetKey = "5d485bdcbe9bc89314a10ae9231e429d33853e3a8fa2af39f5f827370a2e4185e344ace5d16237491dad41f278f1d3785210d29ace76cd627b9147ee340b1125"
+      testValues = [ # possible id in that distance range
+        ("9e5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 251'u32),
+        ("925b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 252'u32),
+        ("8a5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 253'u32),
+        ("ba5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 254'u32),
+        ("da5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 255'u32),
+        ("1a5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 256'u32)
+      ]
+
+    let targetId = toNodeId(PublicKey.fromHex(targetKey)[])
+
+    for (id, d) in testValues:
+      check idAtDistance(targetId, d) == parse(id, UInt256, 16)
