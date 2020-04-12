@@ -102,7 +102,7 @@ type
 var secpContext {.threadvar.}: SkContext
   ## Thread local variable which holds current context
 
-proc illegalCallback(message: cstring, data: pointer) {.cdecl.} =
+proc illegalCallback(message: cstring, data: pointer) {.cdecl, raises: [].} =
   # This is called for example when an invalid key is used - we'll simply
   # ignore and rely on the return value
   # TODO it would be nice if a "constructor" could be used such that no invalid
@@ -113,7 +113,7 @@ proc illegalCallback(message: cstring, data: pointer) {.cdecl.} =
   #      check
   discard
 
-proc errorCallback(message: cstring, data: pointer) {.cdecl.} =
+proc errorCallback(message: cstring, data: pointer) {.cdecl, raises: [].} =
   # Internal panic - should never happen
   echo message
   echo getStackTrace()
@@ -132,10 +132,10 @@ proc newSkContext(): SkContext =
   new(result, shutdownLibsecp256k1)
   let flags = cuint(SECP256K1_CONTEXT_VERIFY or SECP256K1_CONTEXT_SIGN)
   result.context = secp256k1_context_create(flags)
-  secp256k1_context_set_illegal_callback(result.context, illegalCallback,
-                                         cast[pointer](result))
-  secp256k1_context_set_error_callback(result.context, errorCallback,
-                                       cast[pointer](result))
+  secp256k1_context_set_illegal_callback(
+    result.context, illegalCallback, cast[pointer](result))
+  secp256k1_context_set_error_callback(
+    result.context, errorCallback, cast[pointer](result))
 
 func getContext(): ptr secp256k1_context =
   ## Get current `EccContext`
@@ -151,12 +151,15 @@ proc fromHex*(T: type seq[byte], s: string): SkResult[T] =
   except CatchableError:
     err("secp: cannot parse hex string")
 
+proc verify*(seckey: SkSecretKey): bool =
+  secp256k1_ec_seckey_verify(
+    secp256k1_context_no_precomp, seckey.data.ptr0) == 1
+
 proc random*(T: type SkSecretKey): SkResult[T] =
   ## Generates new random private key.
-  let ctx = getContext()
   var sk: T
   while randomBytes(sk.data) == SkRawSecretKeySize:
-    if secp256k1_ec_seckey_verify(ctx, sk.data.ptr0) == 1:
+    if sk.verify():
       return ok(sk)
 
   return err("secp: cannot get random bytes for key")
@@ -166,7 +169,7 @@ proc fromRaw*(T: type SkSecretKey, data: openArray[byte]): SkResult[T] =
   if len(data) < SkRawSecretKeySize:
     return err(static(&"secp: raw private key should be {SkRawSecretKeySize} bytes"))
 
-  if secp256k1_ec_seckey_verify(getContext(), data.ptr0) != 1:
+  if secp256k1_ec_seckey_verify(secp256k1_context_no_precomp, data.ptr0) != 1:
     return err("secp: invalid private key")
 
   ok(T(data: toArray(32, data.toOpenArray(0, SkRawSecretKeySize - 1))))
@@ -191,9 +194,6 @@ proc toPublicKey*(key: SkSecretKey): SkResult[SkPublicKey] =
 
   ok(pubkey)
 
-proc verify*(seckey: SkSecretKey): bool =
-  secp256k1_ec_seckey_verify(getContext(), seckey.data.ptr0) == 1
-
 proc fromRaw*(T: type SkPublicKey, data: openArray[byte]): SkResult[T] =
   ## Initialize Secp256k1 `public key` ``key`` from raw binary
   ## representation ``data``, which may be compressed, uncompressed or hybrid
@@ -211,7 +211,7 @@ proc fromRaw*(T: type SkPublicKey, data: openArray[byte]): SkResult[T] =
 
   var key: SkPublicKey
   if secp256k1_ec_pubkey_parse(
-      getContext(), addr key, data.ptr0, length) != 1:
+      getContext(), addr key, data.ptr0, csize_t(length)) != 1:
     return err("secp: cannot parse public key")
 
   ok(key)
@@ -223,7 +223,7 @@ proc fromHex*(T: type SkPublicKey, data: string): SkResult[T] =
 
 proc toRaw*(pubkey: SkPublicKey): array[SkRawPublicKeySize, byte] =
   ## Serialize Secp256k1 `public key` ``key`` to raw uncompressed form
-  var length = csize(len(result))
+  var length = csize_t(len(result))
   # Can't fail, per documentation
   discard secp256k1_ec_pubkey_serialize(
     getContext(), result.ptr0, addr length, unsafeAddr pubkey,
@@ -234,7 +234,7 @@ proc toHex*(pubkey: SkPublicKey): string =
 
 proc toRawCompressed*(pubkey: SkPublicKey): array[SkRawCompressedPubKeySize, byte] =
   ## Serialize Secp256k1 `public key` ``key`` to raw compressed form
-  var length = csize(len(result))
+  var length = csize_t(len(result))
   # Can't fail, per documentation
   discard secp256k1_ec_pubkey_serialize(
     getContext(), result.ptr0, addr length, unsafeAddr pubkey,
@@ -263,7 +263,7 @@ proc fromDer*(T: type SkSignature, data: openarray[byte]): SkResult[T] =
 
   var sig: T
   if secp256k1_ecdsa_signature_parse_der(
-      getContext().context, addr sig, data.ptr0, csize(len(data))) != 1:
+      getContext().context, addr sig, data.ptr0, csize_t(len(data))) != 1:
     return err("secp: cannot parse DER signature")
 
   ok(sig)
@@ -287,12 +287,12 @@ proc toDer*(sig: SkSignature, data: var openarray[byte]): int =
   ## Secp256k1 signature.
   let ctx = getContext()
   var buffer: array[SkDerSignatureMaxSize, byte]
-  var plength = csize(len(buffer))
+  var plength = csize_t(len(buffer))
   discard secp256k1_ecdsa_signature_serialize_der(
     ctx, buffer.ptr0, addr plength, unsafeAddr sig)
-  result = plength
-  if len(data) >= plength:
-    copyMem(addr data[0], addr buffer[0], plength)
+  result = int(plength)
+  if len(data) >= result:
+    copyMem(addr data[0], addr buffer[0], result)
 
 proc toDer*(sig: SkSignature): seq[byte] =
   ## Serialize Secp256k1 `signature` and return it.
