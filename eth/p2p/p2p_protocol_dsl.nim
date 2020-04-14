@@ -160,7 +160,7 @@ when tracingEnabled:
       logMsgEventImpl = ident "logMsgEventImpl"
 
     result = quote do:
-      var `tracerStream` = init OutputStream
+      var `tracerStream` = memoryOutput()
       var `tracer` = JsonWriter.init(`tracerStream`)
       beginRecord(`tracer`)
 
@@ -601,7 +601,7 @@ proc useStandardBody*(sendProc: SendProc,
     mixin init, WriterType, beginRecord, endRecord, getOutput
 
     `initResultFuture`
-    var `outputStream` = init OutputStream
+    var `outputStream` = memoryOutput()
     `preSerialization`
     `serilization`
     `postSerialization`
@@ -614,7 +614,7 @@ proc correctSerializerProcParams(params: NimNode) =
   # 1. it has a void return type
   params[0] = ident "void"
   # 2. The peer params is replaced with OutputStream
-  params[1] = newIdentDefs(streamVar, bindSym "OutputStreamVar")
+  params[1] = newIdentDefs(streamVar, bindSym "OutputStream")
   # 3. The timeout param is removed
   params.del(params.len - 1)
 
