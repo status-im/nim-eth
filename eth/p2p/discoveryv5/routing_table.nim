@@ -18,9 +18,17 @@ const
   BITS_PER_HOP = 8
   ID_SIZE = 256
 
-proc distanceTo(n: Node, id: NodeId): UInt256 = n.id xor id
+proc distanceTo(n: Node, id: NodeId): UInt256 =
+  ## Calculate the distance to a NodeId.
+  n.id xor id
 
 proc logDist*(a, b: NodeId): uint32 =
+  ## Calculate the logarithmic distance between two `NodeId`s.
+  ##
+  ## According the specification, this is the log base 2 of the distance. But it
+  ## is rather the log base 2 of the distance + 1, as else the 0 value can not
+  ## be used (e.g. by FindNode call to return peer its own ENR)
+  ## For NodeId of 256 bits, range is 0-256.
   let a = a.toBytes
   let b = b.toBytes
   var lz = 0
@@ -157,6 +165,8 @@ proc addNode*(r: var RoutingTable, n: Node): Node =
     # to 0 mod BITS_PER_HOP
 
     let depth = computeSharedPrefixBits(bucket.nodes)
+    # TODO: Shouldn't the adding to replacement cache be done only if the bucket
+    # doesn't get split?
     if bucket.inRange(r.thisNode) or (depth mod BITS_PER_HOP != 0 and depth != ID_SIZE):
       r.splitBucket(r.buckets.find(bucket))
       return r.addNode(n) # retry
@@ -191,10 +201,16 @@ proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
   if result.len > k:
     result.setLen(k)
 
-proc idAtDistance(id: NodeId, dist: uint32): NodeId =
-  id and (Uint256.high shl dist.int)
+proc idAtDistance*(id: NodeId, dist: uint32): NodeId =
+  ## Calculate the "lowest" `NodeId` for given logarithmic distance.
+  ## A logarithmic distance obviously covers a whole range of distances and thus
+  ## potential `NodeId`s.
+  # xor the NodeId with 2^(d - 1) or one could say, calculate back the leading
+  # zeroes and xor those` with the id.
+  id xor (1.stuint(256) shl (dist.int - 1))
 
 proc neighboursAtDistance*(r: RoutingTable, distance: uint32, k: int = BUCKET_SIZE): seq[Node] =
+  # TODO: Filter out nodes with not exact distance here?
   r.neighbours(idAtDistance(r.thisNode.id, distance), k)
 
 proc len*(r: RoutingTable): int =
