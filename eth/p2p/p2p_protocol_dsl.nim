@@ -532,6 +532,9 @@ proc setBody*(sendProc: SendProc, body: NimNode) =
 
 proc writeParamsAsRecord*(params: openarray[NimNode],
                           outputStream, Format, RecordType: NimNode): NimNode =
+  if params.len == 0:
+    return newStmtList()
+
   var
     appendParams = newStmtList()
     recordWriterCtx = ident "recordWriterCtx"
@@ -568,7 +571,6 @@ proc useStandardBody*(sendProc: SendProc,
     outputStream = ident "outputStream"
     msgBytes = ident "msgBytes"
 
-    initFuture = bindSym "initFuture"
     recipient = sendProc.peerParam
     msgRecName = msg.recName
     Format = msg.protocol.backend.SerializationFormat
@@ -584,9 +586,6 @@ proc useStandardBody*(sendProc: SendProc,
 
     appendParams = newStmtList()
 
-    initResultFuture = if msg.kind != msgRequest: newStmtList()
-                       else: newCall(initFuture, resultIdent)
-
     sendCall = sendCallGenerator(recipient, msgBytes)
 
     tracing = when not tracingEnabled:
@@ -600,7 +599,6 @@ proc useStandardBody*(sendProc: SendProc,
   sendProc.setBody quote do:
     mixin init, WriterType, beginRecord, endRecord, getOutput
 
-    `initResultFuture`
     var `outputStream` = memoryOutput()
     `preSerialization`
     `serilization`
