@@ -12,7 +12,7 @@ proc initDiscoveryNode*(privKey: PrivateKey, address: Address,
   result = newProtocol(privKey, db,
                        some(parseIpAddress("127.0.0.1")),
                        address.tcpPort, address.udpPort,
-                       bootstrapRecords)
+                       bootstrapRecords = bootstrapRecords)
 
   result.open()
 

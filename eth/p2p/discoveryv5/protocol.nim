@@ -476,7 +476,7 @@ proc lookupLoop(d: Protocol) {.async.} =
 
 proc newProtocol*(privKey: PrivateKey, db: Database,
                   externalIp: Option[IpAddress], tcpPort, udpPort: Port,
-                  localEnrFields: openarray[FieldPair],
+                  localEnrFields: openarray[FieldPair] = [],
                   bootstrapRecords: openarray[Record] = []): Protocol =
   let
     a = Address(ip: externalIp.get(IPv4_any()),
