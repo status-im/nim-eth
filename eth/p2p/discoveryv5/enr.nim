@@ -13,11 +13,13 @@ const
   minRlpListLen = 4 # for signature, seqId, "id" key, id
 
 type
+  FieldPair* = (string, Field)
+
   Record* = object
     seqNum*: uint64
     # signature: seq[byte]
     raw*: seq[byte] # RLP encoded record
-    pairs: seq[(string, Field)] # sorted list of all key/value pairs
+    pairs: seq[FieldPair] # sorted list of all key/value pairs
 
   EnrUri* = distinct string
 
@@ -101,25 +103,31 @@ macro initRecord*(seqNum: uint64, pk: PrivateKey, pairs: untyped{nkTableConstr})
   result = quote do:
     makeEnrAux(`seqNum`, `pk`, `pairs`)
 
+template toFieldPair*(key: string, value: auto): FieldPair =
+  (key, toField(value))
+
 proc init*(T: type Record, seqNum: uint64,
                            pk: PrivateKey,
                            ip: Option[IpAddress],
-                           tcpPort, udpPort: Port): T =
+                           tcpPort, udpPort: Port,
+                           extraFields: openarray[FieldPair] = []): T =
+  var fields = newSeq[FieldPair]()
+
   if ip.isSome():
     let
       ipExt = ip.get()
       isV6 = ipExt.family == IPv6
-      ipField = if isV6: ("ip6", ipExt.address_v6.toField)
-                else: ("ip", ipExt.address_v4.toField)
-      tcpField = ((if isV6: "tcp6" else: "tcp"), tcpPort.uint16.toField)
-      udpField = ((if isV6: "udp6" else: "udp"), udpPort.uint16.toField)
 
-    makeEnrAux(seqNum, pk, [ipField, tcpField, udpField])
+    fields.add(if isV6: ("ip6", ipExt.address_v6.toField)
+               else: ("ip", ipExt.address_v4.toField))
+    fields.add(((if isV6: "tcp6" else: "tcp"), tcpPort.uint16.toField))
+    fields.add(((if isV6: "udp6" else: "udp"), udpPort.uint16.toField))
   else:
-    let
-      tcpField = ("tcp", tcpPort.uint16.toField)
-      udpField = ("udp", udpPort.uint16.toField)
-    makeEnrAux(seqNum, pk, [tcpField, udpField])
+    fields.add(("tcp", tcpPort.uint16.toField))
+    fields.add(("udp", udpPort.uint16.toField))
+
+  fields.add extraFields
+  makeEnrAux(seqNum, pk, fields)
 
 proc getField(r: Record, name: string, field: var Field): bool =
   # It might be more correct to do binary search,

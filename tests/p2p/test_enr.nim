@@ -35,7 +35,7 @@ suite "ENR":
     let
       keys = KeyPair.random()[]
       ip = parseIpAddress("10.20.30.40")
-      enr = Record.init(100, keys.seckey, some(ip), Port(9000), Port(9000))
+      enr = Record.init(100, keys.seckey, some(ip), Port(9000), Port(9000), @[])
       typedEnr = get enr.toTypedRecord()
 
     check:

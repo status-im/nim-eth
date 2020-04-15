@@ -476,12 +476,13 @@ proc lookupLoop(d: Protocol) {.async.} =
 
 proc newProtocol*(privKey: PrivateKey, db: Database,
                   externalIp: Option[IpAddress], tcpPort, udpPort: Port,
+                  localEnrFields: openarray[FieldPair],
                   bootstrapRecords: openarray[Record] = []): Protocol =
   let
     a = Address(ip: externalIp.get(IPv4_any()),
                 tcpPort: tcpPort, udpPort: udpPort)
     enode = ENode(pubkey: privKey.toPublicKey().tryGet(), address: a)
-    enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort)
+    enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort, localEnrFields)
     node = newNode(enode, enrRec)
 
   result = Protocol(
