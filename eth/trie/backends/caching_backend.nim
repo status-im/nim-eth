@@ -12,7 +12,7 @@ proc newCachingDB*(backing: TrieDatabaseRef): CachingDB =
   result.new()
   result.backing = backing
   result.changed = initTable[seq[byte], seq[byte]]()
-  result.deleted = initSet[seq[byte]]()
+  result.deleted = initHashSet[seq[byte]]()
 
 proc get*(db: CachingDB, key: openarray[byte]): seq[byte] =
   let key = @key

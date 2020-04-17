@@ -1,3 +1,5 @@
+{.used.}
+
 import
   unittest, random,
   eth/trie/[trie_defs, db, binary],
@@ -66,10 +68,8 @@ suite "binary trie":
         if will_raise_error:
           try:
             trie.deleteSubtrie(key_to_be_deleted)
-          except NodeOverrideError as E:
+          except NodeOverrideError:
             discard
-          except:
-            check(false)
         else:
           let root_hash_before_delete = trie.getRootHash()
           trie.deleteSubtrie(key_to_be_deleted)
@@ -101,10 +101,8 @@ suite "binary trie":
       if if_error:
         try:
           trie.delete(invalidKey)
-        except NodeOverrideError as E:
+        except NodeOverrideError:
           discard
-        except:
-          check(false)
       else:
         let previous_root_hash = trie.getRootHash()
         trie.delete(invalidKey)

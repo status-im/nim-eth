@@ -1,11 +1,10 @@
+{.used.}
+
 import
-  os, json, tables, sequtils, strutils, algorithm,
-  eth/rlp/types, nimcrypto/utils,
+  os, json, tables, strutils, algorithm,
+  eth/rlp/types,
   eth/trie/[trie_defs, db, hexary],
   ./testutils
-
-proc `==`(lhs: JsonNode, rhs: string): bool =
-  lhs.kind == JString and lhs.str == rhs
 
 type
   TestOp = object

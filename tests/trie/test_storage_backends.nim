@@ -1,3 +1,5 @@
+{.used.}
+
 import
   unittest, macros, os,
   eth/trie/backends/[rocksdb_backend, sqlite_backend, lmdb_backend]

@@ -30,7 +30,7 @@ type
   MDB_Dbi = distinct cuint
 
   MDB_val = object
-    mv_size: csize
+    mv_size: csize_t
     mv_data: pointer
 
 # this is only a subset of LMDB API needed in nimbus
@@ -77,7 +77,7 @@ proc txCommit*(db: ChainDB, manualCommit = true): bool =
   mdb_dbi_close(db.env, db.dbi)
 
 proc toMdbVal(val: openArray[byte]): MDB_Val =
-  result.mv_size = val.len
+  result.mv_size = csize_t(val.len)
   result.mv_data = unsafeAddr val[0]
 
 proc get*(db: ChainDB, key: openarray[byte]): seq[byte] =

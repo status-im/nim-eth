@@ -1,7 +1,7 @@
 import
   deques, tables,
   eth/[rlp, keys], chronos, eth/common/eth_types,
-  ../enode, ../kademlia, ../discovery, ../options, ../rlpxcrypt
+  ../enode, ../kademlia, ../discovery, ../rlpxcrypt
 
 const
   useSnappy* = defined(useSnappy)

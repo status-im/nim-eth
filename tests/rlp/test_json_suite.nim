@@ -1,3 +1,5 @@
+{.used.}
+
 import
   os, strutils, strformat,
   util/json_testing

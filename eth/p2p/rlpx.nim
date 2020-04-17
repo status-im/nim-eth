@@ -437,7 +437,6 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
                                   "Cannot read RLPx message id")
 
 proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type): auto {.inline.} =
-  let tmp = r
   when defined(release):
     return r.read(MsgType)
   else:

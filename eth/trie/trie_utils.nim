@@ -1,9 +1,7 @@
 import
-  strutils, parseutils,
+  stew/byteutils,
   stew/ranges/[typedranges, ptr_arith], nimcrypto/[hash, keccak],
   trie_defs, binaries
-
-#proc baseAddr*(x: Bytes): ptr byte = x[0].unsafeAddr
 
 proc toTrieNodeKey*(hash: KeccakHash): TrieNodeKey =
   result = newRange[byte](32)
@@ -26,17 +24,7 @@ proc toRange*(str: string): ByteRange =
   result = toRange(s)
 
 proc hashFromHex*(bits: static[int], input: string): MDigest[bits] =
-  if input.len != bits div 4:
-    raise newException(ValueError,
-                       "The input string has incorrect size")
-
-  for i in 0 ..< bits div 8:
-    var nextByte: int
-    if parseHex(input, nextByte, i*2, 2) == 2:
-      result.data[i] = uint8(nextByte)
-    else:
-      raise newException(ValueError,
-"The input string contains invalid characters")
+  MDigest(data: hexToByteArray[bits div 8](input))
 
 template hashFromHex*(s: static[string]): untyped = hashFromHex(s.len * 4, s)
 

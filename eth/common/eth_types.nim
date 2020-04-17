@@ -261,7 +261,7 @@ proc append*(rlpWriter: var RlpWriter, value: StUint) =
     rlpWriter.append bytes.toOpenArray(bytes.len - nonZeroBytes,
                                        bytes.len - 1)
   else:
-    rlpWriter.append(value.toInt)
+    rlpWriter.append(value.truncate(int))
 
 proc read*(rlp: var Rlp, T: typedesc[Stint]): T {.inline.} =
   # The Ethereum Yellow Paper defines the RLP serialization only

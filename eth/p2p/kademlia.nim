@@ -363,8 +363,8 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
 
   ## It approaches the target by querying nodes that are closer to it on each iteration.  The
   ## given target does not need to be an actual node identifier.
-  var nodesAsked = initSet[Node]()
-  var nodesSeen = initSet[Node]()
+  var nodesAsked = initHashSet[Node]()
+  var nodesSeen = initHashSet[Node]()
 
   proc findNode(nodeId: NodeId, remote: Node): Future[seq[Node]] {.async.} =
     k.wire.sendFindNode(remote, nodeId)
@@ -388,7 +388,7 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
       result = candidates
 
   proc excludeIfAsked(nodes: seq[Node]): seq[Node] =
-    result = toSeq(items(nodes.toSet() - nodesAsked))
+    result = toSeq(items(nodes.toHashSet() - nodesAsked))
     sortByDistance(result, nodeId, FIND_CONCURRENCY)
 
   var closest = k.routing.neighbours(nodeId)
@@ -396,7 +396,7 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
   var nodesToAsk = excludeIfAsked(closest)
   while nodesToAsk.len != 0:
     trace "Node lookup; querying ", nodesToAsk
-    nodesAsked.incl(nodesToAsk.toSet())
+    nodesAsked.incl(nodesToAsk.toHashSet())
     let results = await all(nodesToAsk.mapIt(findNode(nodeId, it)))
     for candidates in results:
       closest.add(candidates)
@@ -489,7 +489,7 @@ proc randomNodes*(k: KademliaProtocol, count: int): seq[Node] =
     count = sz
 
   result = newSeqOfCap[Node](count)
-  var seen = initSet[Node]()
+  var seen = initHashSet[Node]()
 
   # This is a rather inneficient way of randomizing nodes from all buckets, but even if we
   # iterate over all nodes in the routing table, the time it takes would still be

@@ -1,3 +1,5 @@
+{.used.}
+
 import
   unittest,
   eth/trie/nibbles

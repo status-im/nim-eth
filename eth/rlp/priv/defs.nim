@@ -1,6 +1,3 @@
-import
-  ../types
-
 const
   MAX_LENGTH_BYTES* = 8
 
