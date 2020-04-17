@@ -15,12 +15,13 @@
 {.push raises: [Defect].}
 
 import
-  nimcrypto/hash, nimcrypto/keccak, ./keys/secp,
+  secp256k1,
+  nimcrypto/hash, nimcrypto/keccak,
   stew/[byteutils, objects, results], strformat
 
 from nimcrypto/utils import burnMem
 
-export secp, results
+export secp256k1, results
 
 const
   KeyLength* = SkEcdhRawSecretSize - 1
@@ -66,7 +67,7 @@ proc toPublicKey*(seckey: PrivateKey): SkResult[PublicKey] =
 proc verify*(seckey: PrivateKey): bool {.borrow.}
 
 proc fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
-  if data.len() == SkRawCompressedPubKeySize:
+  if data.len() == SkRawCompressedPublicKeySize:
     return SkPublicKey.fromRaw(data).mapConvert(PublicKey)
 
   if len(data) < SkRawPublicKeySize - 1:
