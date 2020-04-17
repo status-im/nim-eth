@@ -50,7 +50,7 @@ proc newChainDB*(basePath: string, readOnly = false): ChainDB =
 
   let s = result.store.init(dataDir, backupsDir, readOnly,
                             maxOpenFiles = maxOpenFiles)
-  if not s.ok: raiseStorageInitError()
+  if not s.isOk: raiseStorageInitError()
 
   if not readOnly:
     put(result, emptyRlpHash.data, emptyRlp)
