@@ -56,76 +56,75 @@ proc rlpFromHex*(input: string): Rlp =
 
   result.bytes = backingStore.toRange()
 
-{.this: self.}
-
 proc hasData*(self: Rlp): bool =
-  position < bytes.len
+  self.position < self.bytes.len
 
 proc currentElemEnd*(self: Rlp): int {.gcsafe.}
 
 proc rawData*(self: Rlp): BytesRange =
-  return self.bytes[position ..< self.currentElemEnd]
+  return self.bytes[self.position ..< self.currentElemEnd]
 
 proc isBlob*(self: Rlp): bool =
-  hasData() and bytes[position] < LIST_START_MARKER
+  self.hasData() and self.bytes[self.position] < LIST_START_MARKER
 
 proc isEmpty*(self: Rlp): bool =
   ### Contains a blob or a list of zero length
-  hasData() and (bytes[position] == BLOB_START_MARKER or
-                 bytes[position] == LIST_START_MARKER)
+  self.hasData() and (self.bytes[self.position] == BLOB_START_MARKER or
+                 self.bytes[self.position] == LIST_START_MARKER)
 
 proc isList*(self: Rlp): bool =
-  hasData() and bytes[position] >= LIST_START_MARKER
+  self.hasData() and self.bytes[self.position] >= LIST_START_MARKER
 
 template eosError =
   raise newException(MalformedRlpError, "Read past the end of the RLP stream")
 
 template requireData {.dirty.} =
-  if not hasData():
+  if not self.hasData():
     raise newException(MalformedRlpError, "Illegal operation over an empty RLP stream")
 
 proc getType*(self: Rlp): RlpNodeType =
   requireData()
-  return if isBlob(): rlpBlob else: rlpList
+  return if self.isBlob(): rlpBlob else: rlpList
 
 proc lengthBytesCount(self: Rlp): int =
-  var marker = bytes[position]
-  if isBlob() and marker > LEN_PREFIXED_BLOB_MARKER:
+  var marker = self.bytes[self.position]
+  if self.isBlob() and marker > LEN_PREFIXED_BLOB_MARKER:
     return int(marker - LEN_PREFIXED_BLOB_MARKER)
-  if isList() and marker > LEN_PREFIXED_LIST_MARKER:
+  if self.isList() and marker > LEN_PREFIXED_LIST_MARKER:
     return int(marker - LEN_PREFIXED_LIST_MARKER)
   return 0
 
 proc isSingleByte*(self: Rlp): bool =
-  hasData() and bytes[position] < BLOB_START_MARKER
+  self.hasData() and self.bytes[self.position] < BLOB_START_MARKER
 
 proc getByteValue*(self: Rlp): byte =
   doAssert self.isSingleByte()
-  return bytes[position]
+  return self.bytes[self.position]
 
 proc payloadOffset(self: Rlp): int =
-  if isSingleByte(): 0 else: 1 + lengthBytesCount()
+  if self.isSingleByte(): 0 else: 1 + self.lengthBytesCount()
 
-template readAheadCheck(numberOfBytes) =
+template readAheadCheck(numberOfBytes: int) =
   # important to add nothing to the left side of the equation as `numberOfBytes`
   # can in theory be at max size of its type already
-  if numberOfBytes > bytes.len - position - payloadOffset(): eosError()
+  if numberOfBytes > self.bytes.len - self.position - self.payloadOffset():
+    eosError()
 
 template nonCanonicalNumberError =
   raise newException(MalformedRlpError, "Small number encoded in a non-canonical way")
 
 proc payloadBytesCount(self: Rlp): int =
-  if not hasData():
+  if not self.hasData():
     return 0
 
-  var marker = bytes[position]
+  var marker = self.bytes[self.position]
   if marker < BLOB_START_MARKER:
     return 1
   if marker <= LEN_PREFIXED_BLOB_MARKER:
     result = int(marker - BLOB_START_MARKER)
     readAheadCheck(result)
     if result == 1:
-      if bytes[position + 1] < BLOB_START_MARKER:
+      if self.bytes[self.position + 1] < BLOB_START_MARKER:
         nonCanonicalNumberError()
     return
 
@@ -162,22 +161,22 @@ proc payloadBytesCount(self: Rlp): int =
   readAheadCheck(result)
 
 proc blobLen*(self: Rlp): int =
-  if isBlob(): payloadBytesCount() else: 0
+  if self.isBlob(): self.payloadBytesCount() else: 0
 
 proc isInt*(self: Rlp): bool =
-  if not hasData():
+  if not self.hasData():
     return false
-  var marker = bytes[position]
+  var marker = self.bytes[self.position]
   if marker < BLOB_START_MARKER:
     return marker != 0
   if marker == BLOB_START_MARKER:
     return true
   if marker <= LEN_PREFIXED_BLOB_MARKER:
-    return bytes[position + 1] != 0
+    return self.bytes[self.position + 1] != 0
   if marker < LIST_START_MARKER:
-    let offset = position + int(marker + 1 - LEN_PREFIXED_BLOB_MARKER)
-    if offset >= bytes.len: eosError()
-    return bytes[offset] != 0
+    let offset = self.position + int(marker + 1 - LEN_PREFIXED_BLOB_MARKER)
+    if offset >= self.bytes.len: eosError()
+    return self.bytes[offset] != 0
   return false
 
 template maxBytes*(o: type[Ordinal | uint64 | uint]): int = sizeof(o)
@@ -206,83 +205,83 @@ proc toInt*(self: Rlp, IntType: type): IntType =
     result = (result shl 8) or OutputType(self.bytes[self.position + i])
 
 proc toString*(self: Rlp): string =
-  if not isBlob():
+  if not self.isBlob():
     raise newException(RlpTypeMismatch, "String expected, but the source RLP is not a blob")
 
   let
-    payloadOffset = payloadOffset()
-    payloadLen = payloadBytesCount()
+    payloadOffset = self.payloadOffset()
+    payloadLen = self.payloadBytesCount()
 
   result = newString(payloadLen)
   for i in 0 ..< payloadLen:
     # XXX: switch to copyMem here
-    result[i] = char(bytes[position + payloadOffset + i])
+    result[i] = char(self.bytes[self.position + payloadOffset + i])
 
 proc toBytes*(self: Rlp): BytesRange =
-  if not isBlob():
+  if not self.isBlob():
     raise newException(RlpTypeMismatch,
                        "Bytes expected, but the source RLP in not a blob")
 
-  let payloadLen = payloadBytesCount()
+  let payloadLen = self.payloadBytesCount()
 
   if payloadLen > 0:
     let
-      payloadOffset = payloadOffset()
-      ibegin = position + payloadOffset
+      payloadOffset = self.payloadOffset()
+      ibegin = self.position + payloadOffset
       iend = ibegin + payloadLen - 1
 
-    result = bytes.slice(ibegin, iend)
+    result = self.bytes.slice(ibegin, iend)
 
 proc currentElemEnd*(self: Rlp): int =
-  doAssert hasData()
-  result = position
+  doAssert self.hasData()
+  result = self.position
 
-  if isSingleByte():
+  if self.isSingleByte():
     result += 1
-  elif isBlob() or isList():
-    result += payloadOffset() + payloadBytesCount()
+  elif self.isBlob() or self.isList():
+    result += self.payloadOffset() + self.payloadBytesCount()
 
 proc enterList*(self: var Rlp): bool =
-  if not isList():
+  if not self.isList():
     return false
 
-  position += payloadOffset()
+  self.position += self.payloadOffset()
   return true
 
 proc tryEnterList*(self: var Rlp) =
-  if not enterList():
+  if not self.enterList():
     raise newException(RlpTypeMismatch, "List expected, but source RLP is not a list")
 
 proc skipElem*(rlp: var Rlp) =
   rlp.position = rlp.currentElemEnd
 
 iterator items*(self: var Rlp): var Rlp =
-  doAssert isList()
+  doAssert self.isList()
 
   var
-    payloadOffset = payloadOffset()
-    payloadEnd = position + payloadOffset + payloadBytesCount()
+    payloadOffset = self.payloadOffset()
+    payloadEnd = self.position + payloadOffset + self.payloadBytesCount()
 
-  if payloadEnd > bytes.len:
+  if payloadEnd > self.bytes.len:
     raise newException(MalformedRlpError, "List length extends past the end of the stream")
 
-  position += payloadOffset
+  self.position += payloadOffset
 
-  while position < payloadEnd:
-    let elemEnd = currentElemEnd()
+  while self.position < payloadEnd:
+    let elemEnd = self.currentElemEnd()
     yield self
-    position = elemEnd
+    self.position = elemEnd
 
 proc listElem*(self: Rlp, i: int): Rlp =
-  doAssert isList()
+  doAssert self.isList()
   let
-    payloadOffset = payloadOffset()
+    payloadOffset = self.payloadOffset()
 
   # This will only check if there is some data, not if it is correct according
   # to list length. Could also run here payloadBytesCount() instead.
-  if position + payloadOffset + 1 > bytes.len: eosError()
+  if self.position + payloadOffset + 1 > self.bytes.len: eosError()
 
-  let payload = bytes.slice(position + payloadOffset)
+  let payload = self.bytes.slice(self.position + payloadOffset)
   result = rlpFromBytes payload
   var pos = 0
   while pos < i and result.hasData:
@@ -290,7 +289,7 @@ proc listElem*(self: Rlp, i: int): Rlp =
     inc pos
 
 proc listLen*(self: Rlp): int =
-  if not isList():
+  if not self.isList():
     return 0
 
   var rlp = self
@@ -398,16 +397,16 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
 proc toNodes*(self: var Rlp): RlpNode =
   requireData()
 
-  if isList():
+  if self.isList():
     result.kind = rlpList
     newSeq result.elems, 0
     for e in self:
       result.elems.add e.toNodes
   else:
-    doAssert isBlob()
+    doAssert self.isBlob()
     result.kind = rlpBlob
-    result.bytes = toBytes()
-    position = currentElemEnd()
+    result.bytes = self.toBytes()
+    self.position = self.currentElemEnd()
 
 # We define a single `read` template with a pretty low specifity
 # score in order to facilitate easier overloading with user types:
@@ -450,7 +449,7 @@ proc isPrintable(s: string): bool =
   return true
 
 proc inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) =
-  if not hasData():
+  if not self.hasData():
     return
 
   template indent =
@@ -461,7 +460,7 @@ proc inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) 
 
   if self.isSingleByte:
     output.add "byte "
-    output.add $bytes[position]
+    output.add $self.bytes[self.position]
   elif self.isBlob:
     let str = self.toString
     if str.isPrintable:
@@ -491,6 +490,5 @@ proc inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) 
 
 proc inspect*(self: Rlp, indent = 0, hexOutput = true): string =
   var rlpCopy = self
-  result = newStringOfCap(bytes.len)
+  result = newStringOfCap(self.bytes.len)
   inspectAux(rlpCopy, indent, hexOutput, result)
-

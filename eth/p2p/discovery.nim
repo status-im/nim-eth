@@ -53,9 +53,9 @@ const MinListLen: array[CommandId, int] = [4, 3, 2, 2]
 proc append*(w: var RlpWriter, a: IpAddress) =
   case a.family
   of IpAddressFamily.IPv6:
-    w.append(a.address_v6.toMemRange)
+    w.append(a.address_v6)
   of IpAddressFamily.IPv4:
-    w.append(a.address_v4.toMemRange)
+    w.append(a.address_v4)
 
 proc append(w: var RlpWriter, p: Port) {.inline.} = w.append(p.int)
 proc append(w: var RlpWriter, pk: PublicKey) {.inline.} = w.append(pk.toRaw())
