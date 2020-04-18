@@ -2,6 +2,7 @@ language: c
 
 # https://docs.travis-ci.com/user/caching/
 cache:
+  ccache: true
   directories:
     - NimBinaries
     - rocksdbCache
@@ -19,6 +20,8 @@ matrix:
     - os: osx
       before_install:
         - launchctl setenv LIBRARY_PATH /usr/local/lib # for RocksDB
+        - HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ccache
+        - export PATH="/usr/local/opt/ccache/libexec:$PATH"
 
 install:
   # build nim from our own branch - this to avoid the day-to-day churn and
@@ -43,4 +46,3 @@ install:
 script:
   - nimble install -y
   - nimble test
-
