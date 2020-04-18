@@ -168,7 +168,7 @@ proc newSyncContext(chain: AbstractChainDB, peerPool: PeerPool): SyncContext =
   new result
   result.chain = chain
   result.peerPool = peerPool
-  result.trustedPeers = initSet[Peer]()
+  result.trustedPeers = initHashSet[Peer]()
   result.finalizedBlock = chain.getBestBlockHeader().blockNumber
 
 proc handleLostPeer(ctx: SyncContext) =

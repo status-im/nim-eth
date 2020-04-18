@@ -1,3 +1,5 @@
+{.used.}
+
 import
   unittest,
   nimcrypto/[keccak, hash],

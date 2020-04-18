@@ -1,5 +1,7 @@
+{.used.}
+
 import
-  random, sets, unittest, strutils, sets,
+  sets, unittest, strutils, sets,
   eth/trie/[db, binary, branches]
 
 suite "branches utils":
@@ -91,7 +93,7 @@ suite "branches utils":
     for c in trieNodesData:
       let root = c[0].toRange()
       let nodes = toRanges(c[1])
-      check toSet(nodes) == toSet(getTrieNodes(db, root))
+      check toHashSet(nodes) == toHashSet(getTrieNodes(db, root))
 
   const witnessData = [
     ("\x12\x34\x56\x78\x9b",
@@ -137,6 +139,6 @@ suite "branches utils":
       let nodes = toRanges(c[1])
 
       if nodes.len != 0:
-        let x = toSet(nodes)
-        let y = toSet(getWitness(db, trie.getRootHash(), key))
+        let x = toHashSet(nodes)
+        let y = toHashSet(getWitness(db, trie.getRootHash(), key))
         check x == y

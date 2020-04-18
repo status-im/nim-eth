@@ -1,5 +1,5 @@
 import
-  stew/ranges/[ptr_arith, typedranges, bitranges], eth/rlp/types,
+  stew/ranges/[typedranges, bitranges], eth/rlp/types,
   trie_defs, trie_utils, db, sparse_proofs
 
 export

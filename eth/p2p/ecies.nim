@@ -122,7 +122,8 @@ proc eciesEncrypt*(input: openarray[byte], output: var openarray[byte],
 
   copyMem(addr encKey[0], addr material[0], aes128.sizeKey)
 
-  var macKey = sha256.digest(material, ostart = KeyLength div 2)
+  var macKey =
+    sha256.digest(material.toOpenArray(KeyLength div 2, material.high))
   burnMem(material)
 
   var header = cast[ptr EciesHeader](addr output[0])
@@ -189,7 +190,8 @@ proc eciesDecrypt*(input: openarray[byte],
   burnMem(secret)
 
   copyMem(addr encKey[0], addr material[0], aes128.sizeKey)
-  var macKey = sha256.digest(material, ostart = KeyLength div 2)
+  var macKey =
+    sha256.digest(material.toOpenArray(KeyLength div 2, material.high))
   burnMem(material)
 
   let macsize = eciesMacLength(len(input) - eciesOverheadLength())

@@ -77,7 +77,7 @@ const
   keyAnnounceSignature = "sign"
 
 proc initProtocolState(network: LesNetwork, node: EthereumNode) {.gcsafe.} =
-  network.peers = initSet[LesPeer]()
+  network.peers = initHashSet[LesPeer]()
 
 proc addPeer(network: LesNetwork, peer: LesPeer) =
   network.enlistInFlowControl peer

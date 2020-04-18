@@ -21,7 +21,7 @@ proc newPeerPool*(network: EthereumNode,
   result.networkId = networkId
   result.discovery = discovery
   result.connectedNodes = initTable[Node, Peer]()
-  result.connectingNodes = initSet[Node]()
+  result.connectingNodes = initHashSet[Node]()
   result.observers = initTable[int, PeerObserver]()
   result.listenPort = listenPort
 

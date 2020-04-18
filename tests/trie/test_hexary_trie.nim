@@ -1,3 +1,5 @@
+{.used.}
+
 import
   unittest, sequtils, os,
   stew/ranges/typedranges, eth/trie/[hexary, db, trie_defs], nimcrypto/utils,

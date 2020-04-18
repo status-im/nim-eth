@@ -1,5 +1,7 @@
+{.used.}
+
 import
-  unittest, strutils, sequtils, os,
+  unittest,
   eth/trie/[db, trie_defs], ./testutils,
   eth/rlp/types as rlpTypes
 

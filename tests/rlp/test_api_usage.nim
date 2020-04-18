@@ -31,9 +31,7 @@ test "you cannot finish a list without appending enough elements":
   writer.append "bar"
 
   expect Defect:
-    let result = writer.finish
-
-proc withNewLines(x: string): string = x & "\n"
+    discard writer.finish
 
 test "encode/decode object":
   type

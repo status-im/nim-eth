@@ -419,7 +419,7 @@ when defined(testing):
 
         setup:
           var lesNetwork = new LesNetwork
-          lesNetwork.peers = initSet[LesPeer]()
+          lesNetwork.peers = initHashSet[LesPeer]()
           lesNetwork.initFlowControl(dummyLes.protocolInfo,
                                      reqCostTarget = 300,
                                      maxReqCount = 5,

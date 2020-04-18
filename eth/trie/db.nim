@@ -108,7 +108,7 @@ proc put*(db: MemoryLayer, key, val: openarray[byte]) =
 proc newMemoryLayer: MemoryLayer =
   result.new
   result.records = initTable[Bytes, MemDBRec]()
-  result.deleted = initSet[Bytes]()
+  result.deleted = initHashSet[Bytes]()
 
 proc commit(memDb: MemoryLayer, db: TrieDatabaseRef, applyDeletes: bool = true) =
   if applyDeletes:

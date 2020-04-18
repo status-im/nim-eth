@@ -1,3 +1,5 @@
+{.used.}
+
 import
   unittest, strutils,
   stew/ranges/bitranges, eth/rlp/types, nimcrypto/[keccak, hash],

@@ -1,3 +1,5 @@
+{.used.}
+
 import
   unittest, times, eth/rlp, util/json_testing
 
@@ -16,8 +18,6 @@ type
   Bar = object
     b: string
     f: Foo
-
-  CompressedFoo = object
 
   CustomSerialized = object
     customFoo {.rlpCustomSerialization.}: Foo

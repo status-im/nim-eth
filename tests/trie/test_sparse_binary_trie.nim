@@ -1,3 +1,5 @@
+{.used.}
+
 import
   unittest, random,
   eth/trie/[trie_defs, db, sparse_binary, sparse_proofs],

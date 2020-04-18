@@ -1,6 +1,6 @@
 import
   stew/ranges/[typedranges, bitranges],
-  trie_defs, db, trie_utils
+  trie_defs, trie_utils
 
 const
   treeHeight* = 160
