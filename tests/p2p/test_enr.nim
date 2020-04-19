@@ -1,7 +1,7 @@
 import
   net, unittest, options,
   nimcrypto/utils,
-  eth/p2p/enode, eth/p2p/discoveryv5/enr, eth/keys, eth/rlp
+  eth/p2p/enode, eth/p2p/discoveryv5/enr, eth/keys
 
 suite "ENR":
   test "Serialization":

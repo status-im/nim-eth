@@ -13,7 +13,7 @@ import
   chronos, stint, nimcrypto, chronicles,
   eth/[keys, rlp],
   kademlia, enode,
-  stew/results
+  stew/[objects, results]
 
 export
   Node, results
@@ -61,19 +61,19 @@ proc append(w: var RlpWriter, p: Port) {.inline.} = w.append(p.int)
 proc append(w: var RlpWriter, pk: PublicKey) {.inline.} = w.append(pk.toRaw())
 proc append(w: var RlpWriter, h: MDigest[256]) {.inline.} = w.append(h.data)
 
-proc pack(cmdId: CommandId, payload: BytesRange, pk: PrivateKey): Bytes =
+proc pack(cmdId: CommandId, payload: openArray[byte], pk: PrivateKey): seq[byte] =
   ## Create and sign a UDP message to be sent to a remote node.
   ##
   ## See https://github.com/ethereum/devp2p/blob/master/rlpx.md#node-discovery for information on
   ## how UDP packets are structured.
 
   # TODO: There is a lot of unneeded allocations here
-  let encodedData = @[cmdId.byte] & payload.toSeq()
+  let encodedData = @[cmdId.byte] & @payload
   let signature = @(pk.sign(encodedData).tryGet().toRaw())
   let msgHash = keccak256.digest(signature & encodedData)
   result = @(msgHash.data) & signature & encodedData
 
-proc validateMsgHash(msg: Bytes): DiscResult[MDigest[256]] =
+proc validateMsgHash(msg: openArray[byte]): DiscResult[MDigest[256]] =
   if msg.len > HEAD_SIZE:
     var ret: MDigest[256]
     ret.data[0 .. ^1] = msg.toOpenArray(0, ret.data.high)
@@ -90,7 +90,7 @@ proc recoverMsgPublicKey(msg: openArray[byte]): DiscResult[PublicKey] =
   let sig = ? Signature.fromRaw(msg.toOpenArray(MAC_SIZE, HEAD_SIZE))
   recover(sig, msg.toOpenArray(HEAD_SIZE, msg.high))
 
-proc unpack(msg: Bytes): tuple[cmdId: CommandId, payload: Bytes] =
+proc unpack(msg: openArray[byte]): tuple[cmdId: CommandId, payload: seq[byte]] =
   # Check against possible RangeError
   if msg[HEAD_SIZE].int < CommandId.low.ord or
      msg[HEAD_SIZE].int > CommandId.high.ord:
@@ -112,14 +112,14 @@ proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) =
 
 proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] =
   let payload = rlp.encode((PROTO_VERSION, d.address, n.node.address,
-                            expiration())).toRange
+                            expiration()))
   let msg = pack(cmdPing, payload, d.privKey)
   result = msg[0 ..< MAC_SIZE]
   trace ">>> ping ", n
   d.send(n, msg)
 
 proc sendPong*(d: DiscoveryProtocol, n: Node, token: MDigest[256]) =
-  let payload = rlp.encode((n.node.address, token, expiration())).toRange
+  let payload = rlp.encode((n.node.address, token, expiration()))
   let msg = pack(cmdPong, payload, d.privKey)
   trace ">>> pong ", n
   d.send(n, msg)
@@ -127,7 +127,7 @@ proc sendPong*(d: DiscoveryProtocol, n: Node, token: MDigest[256]) =
 proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
   var data: array[64, byte]
   data[32 .. ^1] = targetNodeId.toByteArrayBE()
-  let payload = rlp.encode((data, expiration())).toRange
+  let payload = rlp.encode((data, expiration()))
   let msg = pack(cmdFindNode, payload, d.privKey)
   trace ">>> find_node to ", n#, ": ", msg.toHex()
   d.send(n, msg)
@@ -140,7 +140,7 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
 
   template flush() =
     block:
-      let payload = rlp.encode((nodes, expiration())).toRange
+      let payload = rlp.encode((nodes, expiration()))
       let msg = pack(cmdNeighbours, payload, d.privkey)
       trace "Neighbours to", node, nodes
       d.send(node, msg)
@@ -169,14 +169,14 @@ proc recvPing(d: DiscoveryProtocol, node: Node,
               msgHash: MDigest[256]) {.inline.} =
   d.kademlia.recvPing(node, msgHash)
 
-proc recvPong(d: DiscoveryProtocol, node: Node, payload: Bytes) {.inline.} =
-  let rlp = rlpFromBytes(payload.toRange)
-  let tok = rlp.listElem(1).toBytes().toSeq()
+proc recvPong(d: DiscoveryProtocol, node: Node, payload: seq[byte]) {.inline.} =
+  let rlp = rlpFromBytes(payload)
+  let tok = rlp.listElem(1).toBytes()
   d.kademlia.recvPong(node, tok)
 
 proc recvNeighbours(d: DiscoveryProtocol, node: Node,
-                    payload: Bytes) {.inline.} =
-  let rlp = rlpFromBytes(payload.toRange)
+                    payload: seq[byte]) {.inline.} =
+  let rlp = rlpFromBytes(payload)
   let neighboursList = rlp.listElem(0)
   let sz = neighboursList.listLen()
 
@@ -187,18 +187,18 @@ proc recvNeighbours(d: DiscoveryProtocol, node: Node,
     var ip: IpAddress
     case ipBlob.len
     of 4:
-      ip = IpAddress(family: IpAddressFamily.IPv4)
-      copyMem(addr ip.address_v4[0], baseAddr ipBlob, 4)
+      ip = IpAddress(
+        family: IpAddressFamily.IPv4, address_v4: toArray(4, ipBlob))
     of 16:
-      ip = IpAddress(family: IpAddressFamily.IPv6)
-      copyMem(addr ip.address_v6[0], baseAddr ipBlob, 16)
+      ip = IpAddress(
+        family: IpAddressFamily.IPv6, address_v6: toArray(16, ipBlob))
     else:
       error "Wrong ip address length!"
       continue
 
     let udpPort = n.listElem(1).toInt(uint16).Port
     let tcpPort = n.listElem(2).toInt(uint16).Port
-    let pk = PublicKey.fromRaw(n.listElem(3).toBytes.toOpenArray())
+    let pk = PublicKey.fromRaw(n.listElem(3).toBytes)
     if pk.isErr:
       warn "Could not parse public key"
       continue
@@ -206,24 +206,24 @@ proc recvNeighbours(d: DiscoveryProtocol, node: Node,
     neighbours.add(newNode(pk[], Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
   d.kademlia.recvNeighbours(node, neighbours)
 
-proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: Bytes) {.inline, gcsafe.} =
-  let rlp = rlpFromBytes(payload.toRange)
+proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte]) {.inline, gcsafe.} =
+  let rlp = rlpFromBytes(payload)
   trace "<<< find_node from ", node
   let rng = rlp.listElem(0).toBytes
   # Check for pubkey len
   if rng.len == 64:
-    let nodeId = readUIntBE[256](rng[32 .. ^1].toOpenArray())
+    let nodeId = readUIntBE[256](rng[32 .. ^1])
     d.kademlia.recvFindNode(node, nodeId)
   else:
     trace "Invalid target public key received"
 
-proc expirationValid(cmdId: CommandId, rlpEncodedPayload: seq[byte]):
+proc expirationValid(cmdId: CommandId, rlpEncodedPayload: openArray[byte]):
     bool {.inline, raises:[DiscProtocolError, RlpError].} =
   ## Can only raise `DiscProtocolError` and all of `RlpError`
   # Check if there is a payload
   if rlpEncodedPayload.len <= 0:
     raise newException(DiscProtocolError, "RLP stream is empty")
-  let rlp = rlpFromBytes(rlpEncodedPayload.toRange)
+  let rlp = rlpFromBytes(rlpEncodedPayload)
   # Check payload is an RLP list and if the list has the minimum items required
   # for this packet type
   if rlp.isList and rlp.listLen >= MinListLen[cmdId]:
@@ -233,7 +233,7 @@ proc expirationValid(cmdId: CommandId, rlpEncodedPayload: seq[byte]):
   else:
     raise newException(DiscProtocolError, "Invalid RLP list for this packet id")
 
-proc receive*(d: DiscoveryProtocol, a: Address, msg: Bytes) {.gcsafe.} =
+proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte]) {.gcsafe.} =
   ## Can raise `DiscProtocolError` and all of `RlpError`
   # Note: export only needed for testing
   let msgHash = validateMsgHash(msg)

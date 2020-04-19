@@ -214,11 +214,11 @@ proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]):
       return verify(sig[], h, publicKey.get)
 
 proc verifySignature(r: Record): bool =
-  var rlp = rlpFromBytes(r.raw.toRange)
+  var rlp = rlpFromBytes(r.raw)
   let sz = rlp.listLen
   if not rlp.enterList:
     return false
-  let sigData = rlp.read(Bytes)
+  let sigData = rlp.read(seq[byte])
   let content = block:
     var writer = initRlpList(sz - 1)
     var reader = rlp
@@ -240,7 +240,7 @@ proc fromBytesAux(r: var Record): bool =
   if r.raw.len > maxEnrSize:
     return false
 
-  var rlp = rlpFromBytes(r.raw.toRange)
+  var rlp = rlpFromBytes(r.raw)
   if not rlp.isList:
     return false
 
@@ -270,7 +270,7 @@ proc fromBytesAux(r: var Record): bool =
       let v = rlp.read(uint16)
       r.pairs.add((k, Field(kind: kNum, num: v)))
     else:
-      r.pairs.add((k, Field(kind: kBytes, bytes: rlp.read(Bytes))))
+      r.pairs.add((k, Field(kind: kBytes, bytes: rlp.read(seq[byte]))))
 
   verifySignature(r)
 
@@ -329,9 +329,9 @@ proc `$`*(r: Record): string =
 proc `==`*(a, b: Record): bool = a.raw == b.raw
 
 proc read*(rlp: var Rlp, T: typedesc[Record]): T {.inline.} =
-  if not result.fromBytes(rlp.rawData.toOpenArray):
+  if not result.fromBytes(rlp.rawData):
     raise newException(ValueError, "Could not deserialize")
   rlp.skipElem()
 
 proc append*(rlpWriter: var RlpWriter, value: Record) =
-  rlpWriter.appendRawBytes(value.raw.toRange)
+  rlpWriter.appendRawBytes(value.raw)

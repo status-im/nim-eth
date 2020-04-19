@@ -1,4 +1,4 @@
-import os, stew/ranges, eth/trie/[trie_defs, db_tracing]
+import os, eth/trie/[trie_defs, db_tracing]
 import backend_defs
 
 when defined(windows):

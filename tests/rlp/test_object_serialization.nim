@@ -1,7 +1,7 @@
 {.used.}
 
 import
-  unittest, times, eth/rlp, util/json_testing
+  unittest, times, eth/rlp, stew/byteutils
 
 type
   Transaction = object
@@ -46,7 +46,7 @@ test "encoding and decoding an object":
                         f: Foo(x: 5'u64, y: "hocus pocus", z: @[100, 200, 300]))
 
   var bytes = encode(originalBar)
-  var r = rlpFromBytes(bytes.toRange)
+  var r = rlpFromBytes(bytes)
   var restoredBar = r.read(Bar)
 
   check:
@@ -57,7 +57,7 @@ test "encoding and decoding an object":
   var t2 = bytes.decode(Transaction)
 
   check:
-    bytes.hexRepr == "cd85416c69636583426f628203e8" # verifies that Alice comes first
+    bytes.toHex == "cd85416c69636583426f628203e8" # verifies that Alice comes first
     t2.time == default(Time)
     t2.sender == "Alice"
     t2.receiver == "Bob"
@@ -66,7 +66,7 @@ test "encoding and decoding an object":
 test "custom field serialization":
   var origVal = CustomSerialized(customFoo: Foo(x: 10'u64, y: "y", z: @[]), ignored: 5)
   var bytes = encode(origVal)
-  var r = rlpFromBytes(bytes.toRange)
+  var r = rlpFromBytes(bytes)
   var restored = r.read(CustomSerialized)
 
   check:
@@ -79,4 +79,3 @@ test "RLP fields count":
     Bar.rlpFieldsCount == 2
     Foo.rlpFieldsCount == 3
     Transaction.rlpFieldsCount == 3
-

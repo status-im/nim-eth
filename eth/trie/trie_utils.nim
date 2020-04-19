@@ -1,42 +1,22 @@
 import
   stew/byteutils,
-  stew/ranges/[typedranges, ptr_arith], nimcrypto/[hash, keccak],
-  trie_defs, binaries
-
-proc toTrieNodeKey*(hash: KeccakHash): TrieNodeKey =
-  result = newRange[byte](32)
-  copyMem(result.baseAddr, hash.data.baseAddr, 32)
+  nimcrypto/[hash, keccak],
+  trie_defs
 
 template checkValidHashZ*(x: untyped) =
   when x.type isnot KeccakHash:
     doAssert(x.len == 32 or x.len == 0)
 
-template isZeroHash*(x: ByteRange): bool =
+template isZeroHash*(x: openArray[byte]): bool =
   x.len == 0
-
-template toRange*(hash: KeccakHash): ByteRange =
-  toTrieNodeKey(hash)
-
-proc toRange*(str: string): ByteRange =
-  var s = newSeq[byte](str.len)
-  if str.len > 0:
-    copyMem(s[0].addr, str[0].unsafeAddr, str.len)
-  result = toRange(s)
 
 proc hashFromHex*(bits: static[int], input: string): MDigest[bits] =
   MDigest(data: hexToByteArray[bits div 8](input))
 
 template hashFromHex*(s: static[string]): untyped = hashFromHex(s.len * 4, s)
 
-proc keccakHash*(input: openArray[byte]): ByteRange =
-  var s = newSeq[byte](32)
-  var ctx: keccak256
-  ctx.init()
-  if input.len > 0:
-    ctx.update(input[0].unsafeAddr, uint(input.len))
-  ctx.finish s
-  ctx.clear()
-  result = toRange(s)
+proc keccakHash*(input: openArray[byte]): KeccakHash =
+  keccak256.digest(input)
 
 proc keccakHash*(dest: var openArray[byte], a, b: openArray[byte]) =
   var ctx: keccak256
@@ -48,16 +28,7 @@ proc keccakHash*(dest: var openArray[byte], a, b: openArray[byte]) =
   ctx.finish dest
   ctx.clear()
 
-proc keccakHash*(a, b: openArray[byte]): ByteRange =
-  var s = newSeq[byte](32)
+proc keccakHash*(a, b: openArray[byte]): KeccakHash =
+  var s: array[32, byte]
   keccakHash(s, a, b)
-  result = toRange(s)
-
-template keccakHash*(input: ByteRange): ByteRange =
-  keccakHash(input.toOpenArray)
-
-template keccakHash*(a, b: ByteRange): ByteRange =
-  keccakHash(a.toOpenArray, b.toOpenArray)
-
-template keccakHash*(dest: var ByteRange, a, b: ByteRange) =
-  keccakHash(dest.toOpenArray, a.toOpenArray, b.toOpenArray)
+  KeccakHash(data: s)

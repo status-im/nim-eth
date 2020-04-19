@@ -9,7 +9,7 @@
 #
 
 import
-  algorithm, bitops, math, options, strutils, tables, times, chronicles, hashes,
+  algorithm, bitops, math, options, tables, times, chronicles, hashes,
   stew/[byteutils, endians2], metrics,
   nimcrypto/[bcmode, hash, keccak, rijndael, sysrand],
   eth/[keys, rlp, p2p], eth/p2p/ecies
@@ -56,16 +56,16 @@ type
     src*: Option[PrivateKey] ## Optional key used for signing message
     dst*: Option[PublicKey] ## Optional key used for asymmetric encryption
     symKey*: Option[SymKey] ## Optional key used for symmetric encryption
-    payload*: Bytes ## Application data / message contents
-    padding*: Option[Bytes] ## Padding - if unset, will automatically pad up to
+    payload*: seq[byte] ## Application data / message contents
+    padding*: Option[seq[byte]] ## Padding - if unset, will automatically pad up to
                             ## nearest maxPadLen-byte boundary
   DecodedPayload* = object
     ## The decoded payload of a received message.
 
     src*: Option[PublicKey] ## If the message was signed, this is the public key
                             ## of the source
-    payload*: Bytes ## Application data / message contents
-    padding*: Option[Bytes] ## Message padding
+    payload*: seq[byte] ## Application data / message contents
+    padding*: Option[seq[byte]] ## Message padding
 
   Envelope* = object
     ## What goes on the wire in the whisper protocol - a payload and some
@@ -74,7 +74,7 @@ type
     expiry*: uint32 ## Unix timestamp when message expires
     ttl*: uint32 ## Time-to-live, seconds - message was created at (expiry - ttl)
     topic*: Topic
-    data*: Bytes ## Payload, as given by user
+    data*: seq[byte] ## Payload, as given by user
     nonce*: uint64 ## Nonce used for proof-of-work calculation
 
   Message* = object
@@ -177,7 +177,7 @@ proc `or`(a, b: Bloom): Bloom =
   for i in 0..<a.len:
     result[i] = a[i] or b[i]
 
-proc bytesCopy*(bloom: var Bloom, b: Bytes) =
+proc bytesCopy*(bloom: var Bloom, b: openArray[byte]) =
   doAssert b.len == bloomSize
   copyMem(addr bloom[0], unsafeAddr b[0], bloomSize)
 
@@ -198,7 +198,7 @@ proc fullBloom*(): Bloom =
     result[i] = 0xFF
 
 proc encryptAesGcm(plain: openarray[byte], key: SymKey,
-    iv: array[gcmIVLen, byte]): Bytes =
+    iv: array[gcmIVLen, byte]): seq[byte] =
   ## Encrypt using AES-GCM, making sure to append tag and iv, in that order
   var gcm: GCM[aes256]
   result = newSeqOfCap[byte](plain.len + gcmTagLen + iv.len)
@@ -210,7 +210,7 @@ proc encryptAesGcm(plain: openarray[byte], key: SymKey,
   result.add tag
   result.add iv
 
-proc decryptAesGcm(cipher: openarray[byte], key: SymKey): Option[Bytes] =
+proc decryptAesGcm(cipher: openarray[byte], key: SymKey): Option[seq[byte]] =
   ## Decrypt AES-GCM ciphertext and validate authenticity - assumes
   ## cipher-tag-iv format of the buffer
   if cipher.len < gcmTagLen + gcmIVLen:
@@ -237,7 +237,7 @@ proc decryptAesGcm(cipher: openarray[byte], key: SymKey): Option[Bytes] =
 # simply because that makes it closer to EIP 627 - see also:
 # https://github.com/paritytech/parity-ethereum/issues/9652
 
-proc encode*(self: Payload): Option[Bytes] =
+proc encode*(self: Payload): Option[seq[byte]] =
   ## Encode a payload according so as to make it suitable to put in an Envelope
   ## The format follows EIP 627 - https://eips.ethereum.org/EIPS/eip-627
 
@@ -333,7 +333,7 @@ proc decode*(data: openarray[byte], dst = none[PrivateKey](),
 
   var res: DecodedPayload
 
-  var plain: Bytes
+  var plain: seq[byte]
   if dst.isSome():
     # XXX: eciesDecryptedLength is pretty fragile, API-wise.. is this really the
     #      way to check for errors / sufficient length?
@@ -426,11 +426,11 @@ proc valid*(self: Envelope, now = epochTime()): bool =
 
 proc len(self: Envelope): int = 20 + self.data.len
 
-proc toShortRlp*(self: Envelope): Bytes =
+proc toShortRlp*(self: Envelope): seq[byte] =
   ## RLP-encoded message without nonce is used during proof-of-work calculations
   rlp.encodeList(self.expiry, self.ttl, self.topic, self.data)
 
-proc toRlp(self: Envelope): Bytes =
+proc toRlp(self: Envelope): seq[byte] =
   ## What gets sent out over the wire includes the nonce
   rlp.encode(self)
 

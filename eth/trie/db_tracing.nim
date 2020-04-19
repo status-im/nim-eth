@@ -9,11 +9,11 @@ when db_tracing in ["on", "1"]:
 
   template traceGet*(k, v) =
     if dbTracingEnabled:
-      echo "GET ", toHex(k), " = ", toHex(v) # rlpFromBytes(@v.toRange).inspect
+      echo "GET ", toHex(k), " = ", toHex(v) # rlpFromBytes(v).inspect
 
   template tracePut*(k, v) =
     if dbTracingEnabled:
-      echo "PUT ", toHex(k), " = ", toHex(v) # rlpFromBytes(@v.toRange).inspect
+      echo "PUT ", toHex(k), " = ", toHex(v) # rlpFromBytes(v).inspect
 
   template traceDel*(k) =
     if dbTracingEnabled:

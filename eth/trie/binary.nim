@@ -1,9 +1,9 @@
 import
-  stew/ranges/[typedranges, bitranges], eth/rlp/types,
+  stew/ranges/[typedranges, bitranges],
   trie_defs, db, binaries, trie_utils
 
 export
-  types, trie_utils
+  trie_utils
 
 type
   DB = TrieDatabaseRef
@@ -14,18 +14,18 @@ type
 
   NodeOverrideError* = object of CatchableError
 
-let
-  zeroHash* = zeroBytesRange
+const
+  zeroHash* = default(seq[byte])
 
 proc init*(x: typedesc[BinaryTrie], db: DB,
-           rootHash: BytesContainer | KeccakHash = zeroHash): BinaryTrie =
+           rootHash: openArray[byte]): BinaryTrie =
   checkValidHashZ(rootHash)
   result.db = db
-  result.rootHash = toRange(rootHash)
+  result.rootHash = @(rootHash)
 
 proc getDB*(t: BinaryTrie): auto = t.db
 
-proc initBinaryTrie*(db: DB, rootHash: BytesContainer | KeccakHash): BinaryTrie =
+proc initBinaryTrie*(db: DB, rootHash: openArray[byte]): BinaryTrie =
   init(BinaryTrie, db, rootHash)
 
 proc initBinaryTrie*(db: DB): BinaryTrie =
@@ -36,64 +36,64 @@ proc getRootHash*(self: BinaryTrie): TrieNodeKey {.inline.} =
 
 template fetchNode(self: BinaryTrie, nodeHash: TrieNodeKey): TrieNode =
   doAssert(nodeHash.len == 32)
-  parseNode self.db.get(nodeHash.toOpenArray).toRange
+  parseNode self.db.get(nodeHash)
 
-proc getAux(self: BinaryTrie, nodeHash: TrieNodeKey, keyPath: TrieBitRange): BytesRange =
+proc getAux(self: BinaryTrie, nodeHash: TrieNodeKey, keyPath: TrieBitRange): seq[byte] =
   # Empty trie
   if isZeroHash(nodeHash):
-    return zeroBytesRange
+    return
 
   let node = self.fetchNode(nodeHash)
 
   # Key-value node descend
   if node.kind == LEAF_TYPE:
-    if keyPath.len != 0: return zeroBytesRange
+    if keyPath.len != 0: return
     return node.value
   elif node.kind == KV_TYPE:
     # keyPath too short
-    if keyPath.len == 0: return zeroBytesRange
+    if keyPath.len == 0: return
     let sliceLen = min(node.keyPath.len, keyPath.len)
     if keyPath[0..<sliceLen] == node.keyPath:
       return self.getAux(node.child, keyPath.sliceToEnd(node.keyPath.len))
     else:
-      return zeroBytesRange
+      return
   # Branch node descend
   elif node.kind == BRANCH_TYPE:
     # keyPath too short
-    if keyPath.len == 0: return zeroBytesRange
+    if keyPath.len == 0: return
     if keyPath[0]: # first bit == 1
       return self.getAux(node.rightChild, keyPath.sliceToEnd(1))
     else:
       return self.getAux(node.leftChild, keyPath.sliceToEnd(1))
 
-proc get*(self: BinaryTrie, key: BytesContainer): BytesRange {.inline.} =
-  var keyBits = MutByteRange(key.toRange).bits
+proc get*(self: BinaryTrie, key: openArray[byte]): seq[byte] {.inline.} =
+  var keyBits = MutByteRange(@(key).toRange).bits
   return self.getAux(self.rootHash, keyBits)
 
-proc hashAndSave*(self: BinaryTrie, node: BytesRange | Bytes): TrieNodeKey =
-  result = keccakHash(node)
-  self.db.put(result.toOpenArray, node.toRange.toOpenArray)
+proc hashAndSave*(self: BinaryTrie, node: openArray[byte]): TrieNodeKey =
+  result = @(keccakHash(node).data)
+  self.db.put(result, node)
 
-template saveKV(self: BinaryTrie, keyPath: TrieBitRange | bool, child: BytesRange): untyped =
+template saveKV(self: BinaryTrie, keyPath: TrieBitRange | bool, child: openArray[byte]): untyped =
   self.hashAndsave(encodeKVNode(keyPath, child))
 
-template saveLeaf(self: BinaryTrie, value: BytesRange): untyped =
+template saveLeaf(self: BinaryTrie, value: openArray[byte]): untyped =
   self.hashAndsave(encodeLeafNode(value))
 
-template saveBranch(self: BinaryTrie, L, R: BytesRange): untyped =
+template saveBranch(self: BinaryTrie, L, R: openArray[byte]): untyped =
   self.hashAndsave(encodeBranchNode(L, R))
 
 proc setBranchNode(self: BinaryTrie, keyPath: TrieBitRange, node: TrieNode,
-  value: BytesRange, deleteSubtrie = false): TrieNodeKey
+  value: openArray[byte], deleteSubtrie = false): TrieNodeKey
 proc setKVNode(self: BinaryTrie, keyPath: TrieBitRange, nodeHash: TrieNodeKey,
-  node: TrieNode, value: BytesRange, deleteSubtrie = false): TrieNodeKey
+  node: TrieNode, value: openArray[byte], deleteSubtrie = false): TrieNodeKey
 
 const
   overrideErrorMsg =
     "Fail to set the value because the prefix of it's key is the same as existing key"
 
 proc setAux(self: BinaryTrie, nodeHash: TrieNodeKey, keyPath: TrieBitRange,
-  value: BytesRange, deleteSubtrie = false): TrieNodeKey =
+  value: openArray[byte], deleteSubtrie = false): TrieNodeKey =
   ## If deleteSubtrie is set to True, what it will do is that it take in a keyPath
   ## and traverse til the end of keyPath, then delete the whole subtrie of that node.
   ## Note: keyPath should be in binary array format, i.e., encoded by encode_to_bin()
@@ -131,15 +131,15 @@ proc setAux(self: BinaryTrie, nodeHash: TrieNodeKey, keyPath: TrieBitRange,
     checkBadKeyPath()
     return self.setBranchNode(keyPath, node, value, deleteSubtrie)
 
-proc set*(self: var BinaryTrie, key, value: distinct BytesContainer) {.inline.} =
+proc set*(self: var BinaryTrie, key, value: openArray[byte]) {.inline.} =
   ## Sets the value at the given keyPath from the given node
   ## Key will be encoded into binary array format first.
 
-  var keyBits = bits MutByteRange(key.toRange)
-  self.rootHash = self.setAux(self.rootHash, keyBits, toRange(value))
+  var keyBits = bits MutByteRange(@(key).toRange)
+  self.rootHash = self.setAux(self.rootHash, keyBits, value)
 
 proc setBranchNode(self: BinaryTrie, keyPath: TrieBitRange, node: TrieNode,
-  value: BytesRange, deleteSubtrie = false): TrieNodeKey =
+  value: openArray[byte], deleteSubtrie = false): TrieNodeKey =
   # Which child node to update? Depends on first bit in keyPath
   var newLeftChild, newRightChild: TrieNodeKey
 
@@ -170,7 +170,7 @@ proc setBranchNode(self: BinaryTrie, keyPath: TrieBitRange, node: TrieNode,
     result = self.saveBranch(newLeftChild, newRightChild)
 
 proc setKVNode(self: BinaryTrie, keyPath: TrieBitRange, nodeHash: TrieNodeKey,
-  node: TrieNode, value: BytesRange, deleteSubtrie = false): TrieNodeKey =
+  node: TrieNode, value: openArray[byte], deleteSubtrie = false): TrieNodeKey =
   # keyPath prefixes match
   if deleteSubtrie:
     if keyPath.len < node.keyPath.len and keyPath == node.keyPath[0..<keyPath.len]:
@@ -251,35 +251,35 @@ proc setKVNode(self: BinaryTrie, keyPath: TrieBitRange, nodeHash: TrieNodeKey,
     else:
       return newSub
 
-template exists*(self: BinaryTrie, key: BytesContainer): bool =
-  self.get(toRange(key)) != zeroBytesRange
+template exists*(self: BinaryTrie, key: openArray[byte]): bool =
+  self.get(key) != []
 
-proc delete*(self: var BinaryTrie, key: BytesContainer) {.inline.} =
+proc delete*(self: var BinaryTrie, key: openArray[byte]) {.inline.} =
   ## Equals to setting the value to zeroBytesRange
-  var keyBits = bits MutByteRange(key.toRange)
-  self.rootHash = self.setAux(self.rootHash, keyBits, zeroBytesRange)
+  var keyBits = bits MutByteRange(@(key).toRange)
+  self.rootHash = self.setAux(self.rootHash, keyBits, [])
 
-proc deleteSubtrie*(self: var BinaryTrie, key: BytesContainer) {.inline.} =
+proc deleteSubtrie*(self: var BinaryTrie, key: openArray[byte]) {.inline.} =
   ## Given a key prefix, delete the whole subtrie that starts with the key prefix.
   ## Key will be encoded into binary array format first.
   ## It will call `setAux` with `deleteSubtrie` set to true.
 
-  var keyBits = bits MutByteRange(key.toRange)
-  self.rootHash = self.setAux(self.rootHash, keyBits, zeroBytesRange, true)
+  var keyBits = bits MutByteRange(@(key).toRange)
+  self.rootHash = self.setAux(self.rootHash, keyBits, [], true)
 
 # Convenience
-proc rootNode*(self: BinaryTrie): BytesRange {.inline.} =
-  self.db.get(self.rootHash.toOpenArray).toRange
+proc rootNode*(self: BinaryTrie): seq[byte] {.inline.} =
+  self.db.get(self.rootHash)
 
-proc rootNode*(self: var BinaryTrie, node: BytesContainer) {.inline.} =
-  self.rootHash = self.hashAndSave(toRange(node))
+proc rootNode*(self: var BinaryTrie, node: openArray[byte]) {.inline.} =
+  self.rootHash = self.hashAndSave(node)
 
 # Dictionary API
-template `[]`*(self: BinaryTrie, key: BytesContainer): BytesRange =
+template `[]`*(self: BinaryTrie, key: seq[byte]): seq[byte] =
   self.get(key)
 
-template `[]=`*(self: var BinaryTrie, key, value: distinct BytesContainer) =
+template `[]=`*(self: var BinaryTrie, key, value: seq[byte]) =
   self.set(key, value)
 
-template contains*(self: BinaryTrie, key: BytesContainer): bool =
+template contains*(self: BinaryTrie, key: seq[byte]): bool =
   self.exists(key)

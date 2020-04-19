@@ -15,12 +15,12 @@ const
   requestCompleteTimeout = chronos.seconds(5)
 
 type
-  Cursor = Bytes
+  Cursor = seq[byte]
 
   MailRequest* = object
     lower*: uint32 ## Unix timestamp; oldest requested envelope's creation time
     upper*: uint32 ## Unix timestamp; newest requested envelope's creation time
-    bloom*: Bytes ## Bloom filter to apply on the envelopes
+    bloom*: seq[byte] ## Bloom filter to apply on the envelopes
     limit*: uint32 ## Maximum amount of envelopes to return
     cursor*: Cursor ## Optional cursor
 

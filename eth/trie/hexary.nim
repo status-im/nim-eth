@@ -1,7 +1,7 @@
 import
   tables,
-  nimcrypto/[keccak, hash, utils], stew/ranges/ptr_arith, eth/rlp,
-  trie_defs, nibbles, trie_utils as trieUtils, db
+  nimcrypto/[keccak, hash], eth/rlp,
+  trie_defs, nibbles, db
 
 type
   TrieNodeKey = object
@@ -17,28 +17,26 @@ type
 
   SecureHexaryTrie* = distinct HexaryTrie
 
-  TrieNode = Rlp
-
 template len(key: TrieNodeKey): int =
   key.usedBytes.int
 
-proc keccak*(r: BytesRange): KeccakHash =
-  keccak256.digest r.toOpenArray
+proc keccak*(r: openArray[byte]): KeccakHash =
+  keccak256.digest r
 
 template asDbKey(k: TrieNodeKey): untyped =
   doAssert k.usedBytes == 32
   k.hash.data
 
-proc expectHash(r: Rlp): BytesRange =
+proc expectHash(r: Rlp): seq[byte] =
   result = r.toBytes
   if result.len != 32:
     raise newException(RlpTypeMismatch,
       "RLP expected to be a Keccak hash value, but has an incorrect length")
 
-proc dbPut(db: DB, data: BytesRange): TrieNodeKey {.gcsafe.}
+proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey {.gcsafe.}
 
-template get(db: DB, key: Rlp): BytesRange =
-  db.get(key.expectHash.toOpenArray).toRange
+template get(db: DB, key: Rlp): seq[byte] =
+  db.get(key.expectHash)
 
 converter toTrieNodeKey(hash: KeccakHash): TrieNodeKey =
   result.hash = hash
@@ -54,7 +52,7 @@ template initSecureHexaryTrie*(db: DB, rootHash: KeccakHash, isPruning = true): 
 
 proc initHexaryTrie*(db: DB, isPruning = true): HexaryTrie =
   result.db = db
-  result.root = result.db.dbPut(emptyRlp.toRange)
+  result.root = result.db.dbPut(emptyRlp)
   result.isPruning = isPruning
 
 template initSecureHexaryTrie*(db: DB, isPruning = true): SecureHexaryTrie =
@@ -72,38 +70,32 @@ template prune(t: HexaryTrie, x: openArray[byte]) =
 proc isPruning*(t: HexaryTrie): bool =
   t.isPruning
 
-proc getLocalBytes(x: TrieNodeKey): BytesRange =
+proc getLocalBytes(x: TrieNodeKey): seq[byte] =
   ## This proc should be used on nodes using the optimization
   ## of short values within the key.
   doAssert x.usedBytes < 32
+  x.hash.data[0..<x.usedBytes]
 
-  when defined(rangesEnableUnsafeAPI):
-    result = unsafeRangeConstruction(x.data, x.usedBytes)
-  else:
-    var dataCopy = newSeq[byte](x.usedBytes)
-    copyMem(dataCopy.baseAddr, x.hash.data.baseAddr, x.usedBytes)
-    return dataCopy.toRange
-
-template keyToLocalBytes(db: DB, k: TrieNodeKey): BytesRange =
+template keyToLocalBytes(db: DB, k: TrieNodeKey): seq[byte] =
   if k.len < 32: k.getLocalBytes
-  else: db.get(k.asDbKey).toRange
+  else: db.get(k.asDbKey)
 
 template extensionNodeKey(r: Rlp): auto =
   hexPrefixDecode r.listElem(0).toBytes
 
-proc getAux(db: DB, nodeRlp: Rlp, path: NibblesRange): BytesRange {.gcsafe.}
+proc getAux(db: DB, nodeRlp: Rlp, path: NibblesRange): seq[byte] {.gcsafe.}
 
-proc getAuxByHash(db: DB, node: TrieNodeKey, path: NibblesRange): BytesRange =
+proc getAuxByHash(db: DB, node: TrieNodeKey, path: NibblesRange): seq[byte] =
   var nodeRlp = rlpFromBytes keyToLocalBytes(db, node)
   return getAux(db, nodeRlp, path)
 
 template getLookup(elem: untyped): untyped =
   if elem.isList: elem
-  else: rlpFromBytes(get(db, toOpenArray(elem.expectHash)).toRange)
+  else: rlpFromBytes(get(db, elem.expectHash))
 
-proc getAux(db: DB, nodeRlp: Rlp, path: NibblesRange): BytesRange =
+proc getAux(db: DB, nodeRlp: Rlp, path: NibblesRange): seq[byte] =
   if not nodeRlp.hasData or nodeRlp.isEmpty:
-    return zeroBytesRange
+    return
 
   case nodeRlp.listLen
   of 2:
@@ -118,13 +110,13 @@ proc getAux(db: DB, nodeRlp: Rlp, path: NibblesRange): BytesRange =
         let nextLookup = value.getLookup
         return getAux(db, nextLookup, path.slice(sharedNibbles))
 
-    return zeroBytesRange
+    return
   of 17:
     if path.len == 0:
       return nodeRlp.listElem(16).toBytes
     var branch = nodeRlp.listElem(path[0].int)
     if branch.isEmpty:
-      return zeroBytesRange
+      return
     else:
       let nextLookup = branch.getLookup
       return getAux(db, nextLookup, path.slice(1))
@@ -132,10 +124,10 @@ proc getAux(db: DB, nodeRlp: Rlp, path: NibblesRange): BytesRange =
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
-proc get*(self: HexaryTrie; key: BytesRange): BytesRange =
+proc get*(self: HexaryTrie; key: openArray[byte]): seq[byte] =
   return getAuxByHash(self.db, self.root, initNibbleRange(key))
 
-proc getKeysAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]]): BytesRange =
+proc getKeysAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]]): seq[byte] =
   while stack.len > 0:
     let (nodeRlp, path) = stack.pop()
     if not nodeRlp.hasData or nodeRlp.isEmpty:
@@ -172,15 +164,14 @@ proc getKeysAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]])
       raise newException(CorruptedTrieDatabase,
                         "HexaryTrie node with an unexpected number of children")
 
-iterator keys*(self: HexaryTrie): BytesRange =
+iterator keys*(self: HexaryTrie): seq[byte] =
   var
     nodeRlp = rlpFromBytes keyToLocalBytes(self.db, self.root)
-    path = newRange[byte](0)
-    stack = @[(nodeRlp, initNibbleRange(path))]
+    stack = @[(nodeRlp, initNibbleRange([]))]
   while stack.len > 0:
     yield getKeysAux(self.db, stack)
 
-proc getValuesAux(db: DB, stack: var seq[Rlp]): BytesRange =
+proc getValuesAux(db: DB, stack: var seq[Rlp]): seq[byte] =
   while stack.len > 0:
     let nodeRlp = stack.pop()
     if not nodeRlp.hasData or nodeRlp.isEmpty:
@@ -211,14 +202,14 @@ proc getValuesAux(db: DB, stack: var seq[Rlp]): BytesRange =
       raise newException(CorruptedTrieDatabase,
                         "HexaryTrie node with an unexpected number of children")
 
-iterator values*(self: HexaryTrie): BytesRange =
+iterator values*(self: HexaryTrie): seq[byte] =
   var
     nodeRlp = rlpFromBytes keyToLocalBytes(self.db, self.root)
     stack = @[nodeRlp]
   while stack.len > 0:
     yield getValuesAux(self.db, stack)
 
-proc getPairsAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]]): (BytesRange, BytesRange) =
+proc getPairsAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]]): (seq[byte], seq[byte]) =
   while stack.len > 0:
     let (nodeRlp, path) = stack.pop()
     if not nodeRlp.hasData or nodeRlp.isEmpty:
@@ -254,11 +245,10 @@ proc getPairsAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]]
       raise newException(CorruptedTrieDatabase,
                         "HexaryTrie node with an unexpected number of children")
 
-iterator pairs*(self: HexaryTrie): (BytesRange, BytesRange) =
+iterator pairs*(self: HexaryTrie): (seq[byte], seq[byte]) =
   var
     nodeRlp = rlpFromBytes keyToLocalBytes(self.db, self.root)
-    path = newRange[byte](0)
-    stack = @[(nodeRlp, initNibbleRange(path))]
+    stack = @[(nodeRlp, initNibbleRange([]))]
   while stack.len > 0:
     # perhaps a Nim bug #9778
     # cannot yield the helper proc directly
@@ -266,7 +256,7 @@ iterator pairs*(self: HexaryTrie): (BytesRange, BytesRange) =
     let res = getPairsAux(self.db, stack)
     yield res
 
-iterator replicate*(self: HexaryTrie): (BytesRange, BytesRange) =
+iterator replicate*(self: HexaryTrie): (seq[byte], seq[byte]) =
   # this iterator helps 'rebuild' the entire trie without
   # going through a trie algorithm, but it will pull the entire
   # low level KV pairs. Thus the target db will only use put operations
@@ -274,19 +264,18 @@ iterator replicate*(self: HexaryTrie): (BytesRange, BytesRange) =
   var
     localBytes = keyToLocalBytes(self.db, self.root)
     nodeRlp = rlpFromBytes localBytes
-    path = newRange[byte](0)
-    stack = @[(nodeRlp, initNibbleRange(path))]
+    stack = @[(nodeRlp, initNibbleRange([]))]
 
   template pushOrYield(elem: untyped) =
     if elem.isList:
       stack.add((elem, key))
     else:
-      let rlpBytes = get(self.db, toOpenArray(elem.expectHash)).toRange
+      let rlpBytes = get(self.db, elem.expectHash)
       let nextLookup = rlpFromBytes(rlpBytes)
       stack.add((nextLookup, key))
       yield (elem.toBytes, rlpBytes)
 
-  yield (self.rootHash.toRange, localBytes)
+  yield (@(self.rootHash.data), localBytes)
   while stack.len > 0:
     let (nodeRlp, path) = stack.pop()
     if not nodeRlp.hasData or nodeRlp.isEmpty:
@@ -310,21 +299,21 @@ iterator replicate*(self: HexaryTrie): (BytesRange, BytesRange) =
       raise newException(CorruptedTrieDatabase,
                         "HexaryTrie node with an unexpected number of children")
 
-proc getValues*(self: HexaryTrie): seq[BytesRange] =
+proc getValues*(self: HexaryTrie): seq[seq[byte]] =
   result = @[]
   for v in self.values:
     result.add v
 
-proc getKeys*(self: HexaryTrie): seq[BytesRange] =
+proc getKeys*(self: HexaryTrie): seq[seq[byte]] =
   result = @[]
   for k in self.keys:
     result.add k
 
 template getNode(elem: untyped): untyped =
-  if elem.isList: elem.rawData
-  else: get(db, toOpenArray(elem.expectHash)).toRange
+  if elem.isList: @(elem.rawData)
+  else: get(db, elem.expectHash)
 
-proc getBranchAux(db: DB, node: BytesRange, path: NibblesRange, output: var seq[BytesRange]) =
+proc getBranchAux(db: DB, node: openArray[byte], path: NibblesRange, output: var seq[seq[byte]]) =
   var nodeRlp = rlpFromBytes node
   if not nodeRlp.hasData or nodeRlp.isEmpty: return
 
@@ -349,21 +338,21 @@ proc getBranchAux(db: DB, node: BytesRange, path: NibblesRange, output: var seq[
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
-proc getBranch*(self: HexaryTrie; key: BytesRange): seq[BytesRange] =
+proc getBranch*(self: HexaryTrie; key: openArray[byte]): seq[seq[byte]] =
   result = @[]
   var node = keyToLocalBytes(self.db, self.root)
   result.add node
   getBranchAux(self.db, node, initNibbleRange(key), result)
 
-proc dbDel(t: var HexaryTrie, data: BytesRange) =
+proc dbDel(t: var HexaryTrie, data: openArray[byte]) =
   if data.len >= 32: t.prune(data.keccak.data)
 
-proc dbPut(db: DB, data: BytesRange): TrieNodeKey =
+proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey =
   result.hash = data.keccak
   result.usedBytes = 32
-  put(db, result.asDbKey, data.toOpenArray)
+  put(db, result.asDbKey, data)
 
-proc appendAndSave(rlpWriter: var RlpWriter, data: BytesRange, db: DB) =
+proc appendAndSave(rlpWriter: var RlpWriter, data: openArray[byte], db: DB) =
   if data.len >= 32:
     var nodeKey = dbPut(db, data)
     rlpWriter.append(nodeKey.hash)
@@ -373,7 +362,7 @@ proc appendAndSave(rlpWriter: var RlpWriter, data: BytesRange, db: DB) =
 proc isTrieBranch(rlp: Rlp): bool =
   rlp.isList and (var len = rlp.listLen; len == 2 or len == 17)
 
-proc replaceValue(data: Rlp, key: NibblesRange, value: BytesRange): Bytes =
+proc replaceValue(data: Rlp, key: NibblesRange, value: openArray[byte]): seq[byte] =
   if data.isEmpty:
     let prefix = hexPrefixEncode(key, true)
     return encodeList(prefix, value)
@@ -403,11 +392,6 @@ proc isTwoItemNode(self: HexaryTrie; r: Rlp): bool =
   else:
     return r.isList and r.listLen == 2
 
-proc isLeaf(r: Rlp): bool =
-  doAssert r.isList and r.listLen == 2
-  let b = r.listElem(0).toBytes()
-  return (b[0] and 0x20) != 0
-
 proc findSingleChild(r: Rlp; childPos: var byte): Rlp =
   result = zeroBytesRlp
   var i: byte = 0
@@ -421,7 +405,7 @@ proc findSingleChild(r: Rlp; childPos: var byte): Rlp =
         return zeroBytesRlp
     inc i
 
-proc deleteAt(self: var HexaryTrie; origRlp: Rlp, key: NibblesRange): BytesRange {.gcsafe.}
+proc deleteAt(self: var HexaryTrie; origRlp: Rlp, key: NibblesRange): seq[byte] {.gcsafe.}
 
 proc deleteAux(self: var HexaryTrie; rlpWriter: var RlpWriter;
                origRlp: Rlp; path: NibblesRange): bool =
@@ -439,16 +423,15 @@ proc deleteAux(self: var HexaryTrie; rlpWriter: var RlpWriter;
   rlpWriter.appendAndSave(b, self.db)
   return true
 
-proc graft(self: var HexaryTrie; r: Rlp): Bytes =
+proc graft(self: var HexaryTrie; r: Rlp): seq[byte] =
   doAssert r.isList and r.listLen == 2
-  var (origIsLeaf, origPath) = r.extensionNodeKey
+  var (_, origPath) = r.extensionNodeKey
   var value = r.listElem(1)
 
-  var n: Rlp
   if not value.isList:
     let nodeKey = value.expectHash
-    var resolvedData = self.db.get(nodeKey.toOpenArray).toRange
-    self.prune(nodeKey.toOpenArray)
+    var resolvedData = self.db.get(nodeKey)
+    self.prune(nodeKey)
     value = rlpFromBytes resolvedData
 
   doAssert value.listLen == 2
@@ -460,7 +443,7 @@ proc graft(self: var HexaryTrie; r: Rlp): Bytes =
   return rlpWriter.finish
 
 proc mergeAndGraft(self: var HexaryTrie;
-                   soleChild: Rlp, childPos: byte): Bytes =
+                   soleChild: Rlp, childPos: byte): seq[byte] =
   var output = initRlpList(2)
   if childPos == 16:
     output.append hexPrefixEncode(zeroNibblesRange, true)
@@ -471,20 +454,20 @@ proc mergeAndGraft(self: var HexaryTrie;
   result = output.finish()
 
   if self.isTwoItemNode(soleChild):
-    result = self.graft(rlpFromBytes(result.toRange))
+    result = self.graft(rlpFromBytes(result))
 
 proc deleteAt(self: var HexaryTrie;
-              origRlp: Rlp, key: NibblesRange): BytesRange =
+              origRlp: Rlp, key: NibblesRange): seq[byte] =
   if origRlp.isEmpty:
-    return zeroBytesRange
+    return
 
   doAssert origRlp.isTrieBranch
-  let origBytes = origRlp.rawData
+  let origBytes = @(origRlp.rawData)
   if origRlp.listLen == 2:
     let (isLeaf, k) = origRlp.extensionNodeKey
     if k == key and isLeaf:
       self.dbDel origBytes
-      return emptyRlp.toRange
+      return emptyRlp
 
     if key.startsWith(k):
       var
@@ -493,22 +476,22 @@ proc deleteAt(self: var HexaryTrie;
         value = origRlp.listElem(1)
       rlpWriter.append(path)
       if not self.deleteAux(rlpWriter, value, key.slice(k.len)):
-        return zeroBytesRange
+        return
       self.dbDel origBytes
-      var finalBytes = rlpWriter.finish.toRange
+      var finalBytes = rlpWriter.finish
       var rlp = rlpFromBytes(finalBytes)
       if self.isTwoItemNode(rlp.listElem(1)):
-        return self.graft(rlp).toRange
+        return self.graft(rlp)
       return finalBytes
     else:
-      return zeroBytesRange
+      return
   else:
     if key.len == 0 and origRlp.listElem(16).isEmpty:
       self.dbDel origBytes
       var foundChildPos: byte
       let singleChild = origRlp.findSingleChild(foundChildPos)
       if singleChild.hasData and foundChildPos != 16:
-        result = self.mergeAndGraft(singleChild, foundChildPos).toRange
+        result = self.mergeAndGraft(singleChild, foundChildPos)
       else:
         var rlpRes = initRlpList(17)
         var iter = origRlp
@@ -518,7 +501,7 @@ proc deleteAt(self: var HexaryTrie;
           rlpRes.append iter
           iter.skipElem
         rlpRes.append ""
-        return rlpRes.finish.toRange
+        return rlpRes.finish
     else:
       var rlpWriter = initRlpList(17)
       let keyHead = int(key[0])
@@ -527,20 +510,20 @@ proc deleteAt(self: var HexaryTrie;
       for elem in items(origCopy):
         if i == keyHead:
           if not self.deleteAux(rlpWriter, elem, key.slice(1)):
-            return zeroBytesRange
+            return
         else:
           rlpWriter.append(elem)
         inc i
 
       self.dbDel origBytes
-      result = rlpWriter.finish.toRange
+      result = rlpWriter.finish
       var resultRlp = rlpFromBytes(result)
       var foundChildPos: byte
       let singleChild = resultRlp.findSingleChild(foundChildPos)
       if singleChild.hasData:
-        result = self.mergeAndGraft(singleChild, foundChildPos).toRange
+        result = self.mergeAndGraft(singleChild, foundChildPos)
 
-proc del*(self: var HexaryTrie; key: BytesRange) =
+proc del*(self: var HexaryTrie; key: openArray[byte]) =
   var
     rootBytes = keyToLocalBytes(self.db, self.root)
     rootRlp = rlpFromBytes rootBytes
@@ -552,16 +535,16 @@ proc del*(self: var HexaryTrie; key: BytesRange) =
     self.root = self.db.dbPut(newRootBytes)
 
 proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
-             key: NibblesRange, value: BytesRange,
-             isInline = false): BytesRange {.gcsafe.}
+             key: NibblesRange, value: openArray[byte],
+             isInline = false): seq[byte] {.gcsafe.}
 
 proc mergeAt(self: var HexaryTrie, rlp: Rlp,
-             key: NibblesRange, value: BytesRange,
-             isInline = false): BytesRange =
+             key: NibblesRange, value: openArray[byte],
+             isInline = false): seq[byte] =
   self.mergeAt(rlp, rlp.rawData.keccak, key, value, isInline)
 
 proc mergeAtAux(self: var HexaryTrie, output: var RlpWriter, orig: Rlp,
-                key: NibblesRange, value: BytesRange) =
+                key: NibblesRange, value: openArray[byte]) =
   var resolved = orig
   var isRemovable = false
   if not (orig.isList or orig.isEmpty):
@@ -572,11 +555,11 @@ proc mergeAtAux(self: var HexaryTrie, output: var RlpWriter, orig: Rlp,
   output.appendAndSave(b, self.db)
 
 proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
-             key: NibblesRange, value: BytesRange,
-             isInline = false): BytesRange =
+             key: NibblesRange, value: openArray[byte],
+             isInline = false): seq[byte] =
   template origWithNewValue: auto =
     self.prune(origHash.data)
-    replaceValue(orig, key, value).toRange
+    replaceValue(orig, key, value)
 
   if orig.isEmpty:
     return origWithNewValue()
@@ -595,7 +578,7 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
       var r = initRlpList(2)
       r.append orig.listElem(0)
       self.mergeAtAux(r, origValue, key.slice(k.len), value)
-      return r.finish.toRange
+      return r.finish
 
     if orig.rawData.len >= 32:
       self.prune(origHash.data)
@@ -608,9 +591,9 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
 
       var top = initRlpList(2)
       top.append hexPrefixEncode(k.slice(0, sharedNibbles), false)
-      top.appendAndSave(bottom.finish.toRange, self.db)
+      top.appendAndSave(bottom.finish, self.db)
 
-      return self.mergeAt(rlpFromBytes(top.finish.toRange), key, value, true)
+      return self.mergeAt(rlpFromBytes(top.finish), key, value, true)
     else:
       # Create a branch node
       var branches = initRlpList(17)
@@ -626,7 +609,7 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
           if byte(i) == n:
             if isLeaf or k.len > 1:
               let childNode = encodeList(hexPrefixEncode(k.slice(1), isLeaf),
-                                         origValue).toRange
+                                         origValue)
               branches.appendAndSave(childNode, self.db)
             else:
               branches.append origValue
@@ -634,7 +617,7 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
             branches.append ""
         branches.append ""
 
-      return self.mergeAt(rlpFromBytes(branches.finish.toRange), key, value, true)
+      return self.mergeAt(rlpFromBytes(branches.finish), key, value, true)
   else:
     if key.len == 0:
       return origWithNewValue()
@@ -654,12 +637,12 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
         r.append(elem)
       inc i
 
-    return r.finish.toRange
+    return r.finish
 
-proc put*(self: var HexaryTrie; key, value: BytesRange) =
+proc put*(self: var HexaryTrie; key, value: openArray[byte]) =
   let root = self.root.hash
 
-  var rootBytes = self.db.get(root.data).toRange
+  var rootBytes = self.db.get(root.data)
   doAssert rootBytes.len > 0
 
   let newRootBytes = self.mergeAt(rlpFromBytes(rootBytes), root,
@@ -669,23 +652,19 @@ proc put*(self: var HexaryTrie; key, value: BytesRange) =
 
   self.root = self.db.dbPut(newRootBytes)
 
-proc put*(self: var SecureHexaryTrie; key, value: BytesRange) =
-  let keyHash = @(key.keccak.data)
-  put(HexaryTrie(self), keyHash.toRange, value)
+proc put*(self: var SecureHexaryTrie; key, value: openArray[byte]) =
+  put(HexaryTrie(self), key.keccak.data, value)
 
-proc get*(self: SecureHexaryTrie; key: BytesRange): BytesRange =
-  let keyHash = @(key.keccak.data)
-  return get(HexaryTrie(self), keyHash.toRange)
+proc get*(self: SecureHexaryTrie; key: openArray[byte]): seq[byte] =
+  return get(HexaryTrie(self), key.keccak.data)
 
-proc del*(self: var SecureHexaryTrie; key: BytesRange) =
-  let keyHash = @(key.keccak.data)
-  del(HexaryTrie(self), keyHash.toRange)
+proc del*(self: var SecureHexaryTrie; key: openArray[byte]) =
+  del(HexaryTrie(self), key.keccak.data)
 
 proc rootHash*(self: SecureHexaryTrie): KeccakHash {.borrow.}
 proc rootHashHex*(self: SecureHexaryTrie): string {.borrow.}
 proc isPruning*(self: SecureHexaryTrie): bool {.borrow.}
 
 template contains*(self: HexaryTrie | SecureHexaryTrie;
-                   key: BytesRange): bool =
+                   key: openArray[byte]): bool =
   self.get(key).len > 0
-

@@ -3,16 +3,16 @@
 ## https://ethereum.github.io/yellowpaper/paper.pdf
 
 import
-  macros, strutils, parseutils,
-  rlp/[types, writer, object_serialization],
+  macros, strutils, stew/byteutils,
+  rlp/[writer, object_serialization],
   rlp/priv/defs
 
 export
-  types, writer, object_serialization
+  writer, object_serialization
 
 type
   Rlp* = object
-    bytes: BytesRange
+    bytes: seq[byte]
     position*: int
 
   RlpNodeType* = enum
@@ -22,7 +22,7 @@ type
   RlpNode* = object
     case kind*: RlpNodeType
     of rlpBlob:
-      bytes*: BytesRange
+      bytes*: seq[byte]
     of rlpList:
       elems*: seq[RlpNode]
 
@@ -31,38 +31,24 @@ type
   UnsupportedRlpError* = object of RlpError
   RlpTypeMismatch* = object of RlpError
 
-proc rlpFromBytes*(data: BytesRange): Rlp =
-  result.bytes = data
-  result.position = 0
+proc rlpFromBytes*(data: seq[byte]): Rlp =
+  Rlp(bytes: data, position: 0)
+
+proc rlpFromBytes*(data: openArray[byte]): Rlp =
+  rlpFromBytes(@data)
 
 const zeroBytesRlp* = Rlp()
 
 proc rlpFromHex*(input: string): Rlp =
-  doAssert input.len mod 2 == 0,
-          "rlpFromHex expects a string with even number of characters (assuming two characters per byte)"
-
-  var startByte = if input.len >= 2 and input[0] == '0' and input[1] == 'x': 2
-                  else: 0
-
-  let totalBytes = (input.len - startByte) div 2
-  var backingStore = newSeq[byte](totalBytes)
-
-  for i in 0 ..< totalBytes:
-    var nextByte: int
-    if parseHex(input, nextByte, startByte + i*2, 2) == 2:
-      backingStore[i] = byte(nextByte)
-    else:
-      doAssert false, "rlpFromHex expects a hexademical string, but the input contains non hexademical characters"
-
-  result.bytes = backingStore.toRange()
+  rlpFromBytes(hexToSeqByte(input))
 
 proc hasData*(self: Rlp): bool =
   self.position < self.bytes.len
 
 proc currentElemEnd*(self: Rlp): int {.gcsafe.}
 
-proc rawData*(self: Rlp): BytesRange =
-  return self.bytes[self.position ..< self.currentElemEnd]
+template rawData*(self: Rlp): openArray[byte] =
+  self.bytes.toOpenArray(self.position, self.currentElemEnd - 1)
 
 proc isBlob*(self: Rlp): bool =
   self.hasData() and self.bytes[self.position] < LIST_START_MARKER
@@ -217,7 +203,7 @@ proc toString*(self: Rlp): string =
     # XXX: switch to copyMem here
     result[i] = char(self.bytes[self.position + payloadOffset + i])
 
-proc toBytes*(self: Rlp): BytesRange =
+proc toBytes*(self: Rlp): seq[byte] =
   if not self.isBlob():
     raise newException(RlpTypeMismatch,
                        "Bytes expected, but the source RLP in not a blob")
@@ -230,7 +216,7 @@ proc toBytes*(self: Rlp): BytesRange =
       ibegin = self.position + payloadOffset
       iend = ibegin + payloadLen - 1
 
-    result = self.bytes.slice(ibegin, iend)
+    result = self.bytes[ibegin..iend]
 
 proc currentElemEnd*(self: Rlp): int =
   doAssert self.hasData()
@@ -281,7 +267,7 @@ proc listElem*(self: Rlp, i: int): Rlp =
   # to list length. Could also run here payloadBytesCount() instead.
   if self.position + payloadOffset + 1 > self.bytes.len: eosError()
 
-  let payload = self.bytes.slice(self.position + payloadOffset)
+  let payload = self.bytes[self.position + payloadOffset..^1]
   result = rlpFromBytes payload
   var pos = 0
   while pos < i and result.hasData:
@@ -335,7 +321,7 @@ proc readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
     if result.len != bytes.len:
       raise newException(RlpTypeMismatch, "Fixed-size array expected, but the source RLP contains a blob of different length")
 
-    copyMem(addr result[0], bytes.baseAddr, bytes.len)
+    copyMem(addr result[0], unsafeAddr bytes[0], bytes.len)
 
     rlp.skipElem
 
@@ -355,10 +341,7 @@ proc readImpl[E](rlp: var Rlp, T: type seq[E]): T =
   mixin read
 
   when E is (byte or char):
-    var bytes = rlp.toBytes
-    if bytes.len != 0:
-      result = newSeq[byte](bytes.len)
-      copyMem(addr result[0], bytes.baseAddr, bytes.len)
+    result = rlp.toBytes
     rlp.skipElem
   else:
     if not rlp.isList:
@@ -382,7 +365,9 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
                         "List expected, but the source RLP is not a list.")
     var
       payloadOffset = rlp.payloadOffset()
-      payloadEnd = rlp.position + payloadOffset + rlp.payloadBytesCount()
+
+    # there's an exception-raising side effect in there *sigh*
+    discard rlp.payloadBytesCount()
 
     rlp.position += payloadOffset
 
@@ -421,22 +406,18 @@ template readRecordType*(rlp: var Rlp, T: type, wrappedInList: bool): auto =
   readImpl(rlp, T, wrappedInList)
 
 proc decode*(bytes: openarray[byte]): RlpNode =
-  var
-    bytesCopy = @bytes
-    rlp = rlpFromBytes(bytesCopy.toRange())
-  return rlp.toNodes
+  var rlp = rlpFromBytes(bytes)
+  rlp.toNodes
 
-template decode*(bytes: BytesRange, T: type): untyped =
+template decode*(bytes: openArray[byte], T: type): untyped =
   mixin read
   var rlp = rlpFromBytes(bytes)
   rlp.read(T)
 
-template decode*(bytes: openarray[byte], T: type): T =
-  var bytesCopy = @bytes
-  decode(bytesCopy.toRange, T)
-
 template decode*(bytes: seq[byte], T: type): untyped =
-  decode(bytes.toRange, T)
+  mixin read
+  var rlp = rlpFromBytes(bytes)
+  rlp.read(T)
 
 proc append*(writer: var RlpWriter; rlp: Rlp) =
   appendRawBytes(writer, rlp.rawData)

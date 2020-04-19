@@ -202,7 +202,7 @@ proc decodePacketBody(typ: byte,
 
   let kind = cast[PacketKind](typ)
   res = Packet(kind: kind)
-  var rlp = rlpFromBytes(@body.toRange)
+  var rlp = rlpFromBytes(body)
   if rlp.enterList:
     res.reqId = rlp.read(RequestId)
 
@@ -258,12 +258,11 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
 proc decodeEncrypted*(c: var Codec,
                       fromId: NodeID,
                       fromAddr: Address,
-                      input: seq[byte],
+                      input: openArray[byte],
                       authTag: var AuthTag,
                       newNode: var Node,
                       packet: var Packet): DecodeStatus =
-  let input = input.toRange
-  var r = rlpFromBytes(input[tagSize .. ^1])
+  var r = rlpFromBytes(input.toOpenArray(tagSize, input.high))
   var auth: AuthHeader
 
   var readKey: AesKey
@@ -312,10 +311,11 @@ proc decodeEncrypted*(c: var Codec,
       # doAssert(false, "TODO: HANDLE ME!")
 
   let headSize = tagSize + r.position
-  let bodyEnc = input[headSize .. ^1]
 
-  let body = decryptGCM(readKey, auth.auth, bodyEnc.toOpenArray,
-    input[0 .. tagSize - 1].toOpenArray)
+  let body = decryptGCM(
+    readKey, auth.auth,
+    input.toOpenArray(headSize, input.high),
+    input.toOpenArray(0, tagSize - 1))
   if body.isNone():
     discard c.db.deleteKeys(fromId, fromAddr)
     return DecryptError

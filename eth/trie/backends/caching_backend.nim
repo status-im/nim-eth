@@ -1,5 +1,5 @@
 import
-  stew/ranges, tables, sets,
+  tables, sets,
   eth/trie/db
 
 type

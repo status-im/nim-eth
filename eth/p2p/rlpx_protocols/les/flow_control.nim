@@ -103,7 +103,7 @@ proc loadMessageStats*(network: LesNetwork,
       break readFromDB
 
     try:
-      var statsRlp = rlpFromBytes(stats.toRange)
+      var statsRlp = rlpFromBytes(stats)
       if not statsRlp.enterList:
         notice "Found a corrupted LES stats record"
         break readFromDB

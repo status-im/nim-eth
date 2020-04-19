@@ -1,5 +1,5 @@
 import
-  json, strutils, unittest, eth/rlp
+  json, stew/byteutils, unittest, eth/rlp
 
 proc append(output: var RlpWriter, js: JsonNode) =
   case js.kind
@@ -13,11 +13,6 @@ proc append(output: var RlpWriter, js: JsonNode) =
     output.append js.str
   of JArray:
     output.append js.elems
-
-proc hexRepr*(bytes: BytesRange|Bytes): string =
-  result = newStringOfCap(bytes.len * 2)
-  for byte in bytes:
-    result.add(toHex(int(byte), 2).toLowerAscii)
 
 proc `==`(lhs: JsonNode, rhs: string): bool =
   lhs.kind == JString and lhs.str == rhs
@@ -58,7 +53,7 @@ proc runTests*(filename: string) =
           var outRlp = initRlpWriter()
           outRlp.append input
           let
-            actual = outRlp.finish.hexRepr
+            actual = outRlp.finish.toHex
             expected = output.str
           check actual == expected
 

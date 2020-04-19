@@ -1,26 +1,17 @@
 {.used.}
 
 import
-  unittest, sequtils, os,
+  unittest, sequtils, os, stew/byteutils,
   stew/ranges/typedranges, eth/trie/[hexary, db, trie_defs], nimcrypto/utils,
-  ./testutils, algorithm, eth/rlp/types as rlpTypes, random
+  ./testutils, algorithm, random
 
 from strutils import split
-
-template put(t: HexaryTrie|SecureHexaryTrie, key, val: string) =
-  t.put(key.toBytesRange, val.toBytesRange)
-
-template del(t: HexaryTrie|SecureHexaryTrie, key) =
-  t.del(key.toBytesRange)
-
-template get(t: HexaryTrie|SecureHexaryTrie, key): auto =
-  t.get(key.toBytesRange)
 
 suite "hexary trie":
   setup:
     var
       db = newMemoryDB()
-      tr = initHexaryTrie(db)
+      tr {.used.} = initHexaryTrie(db)
 
   test "ref-counted keys crash":
     proc addKey(intKey: int) =
@@ -28,12 +19,12 @@ suite "hexary trie":
       key[19] = byte(intKey)
       var data = newSeqWith(29, 1.byte)
 
-      var k = key.toRange
+      var k = key
 
       let v = tr.get(k)
       doAssert(v.len == 0)
 
-      tr.put(k, toRange(data))
+      tr.put(k, data)
 
     addKey(166)
     addKey(193)
@@ -78,12 +69,12 @@ suite "hexary trie":
           key = fromHex(parts[0])
           val = fromHex(parts[1])
 
-        SecureHexaryTrie(tr).put(key.toRange, val.toRange)
+        SecureHexaryTrie(tr).put(key, val)
 
       check tr.rootHashHex == "D7F8974FB5AC78D9AC099B9AD5018BEDC2CE0A72DAD1827A1709DA30580F0544"
 
   # lexicographic comparison
-  proc lexComp(a, b: BytesRange): bool =
+  proc lexComp(a, b: seq[byte]): bool =
     var
       x = 0
       y = 0
@@ -98,7 +89,7 @@ suite "hexary trie":
 
     result = y != ylen
 
-  proc cmp(a, b: BytesRange): int =
+  proc cmp(a, b: seq[byte]): int =
     if a == b: return 0
     if a.lexComp(b): return 1
     return -1
@@ -109,17 +100,17 @@ suite "hexary trie":
       memdb = newMemoryDB()
       trie = initHexaryTrie(memdb)
       keys = [
-        "key".toBytesRange,
-        "abc".toBytesRange,
-        "hola".toBytesRange,
-        "bubble".toBytesRange
+        "key".toBytes,
+        "abc".toBytes,
+        "hola".toBytes,
+        "bubble".toBytes
       ]
 
       vals = [
-        "hello".toBytesRange,
-        "world".toBytesRange,
-        "block".toBytesRange,
-        "chain".toBytesRange
+        "hello".toBytes,
+        "world".toBytes,
+        "block".toBytes,
+        "chain".toBytes
       ]
 
     for i in 0 ..< keys.len:
@@ -157,11 +148,11 @@ suite "hexary trie":
     var
       memdb = newMemoryDB()
       trie = initHexaryTrie(memdb)
-      keys = randList(BytesRange, randGen(5, 32), randGen(10))
-      vals = randList(BytesRange, randGen(5, 7), randGen(10))
+      keys = randList(seq[byte], randGen(5, 32), randGen(10))
+      vals = randList(seq[byte], randGen(5, 7), randGen(10))
 
-      keys2 = randList(BytesRange, randGen(5, 30), randGen(15))
-      vals2 = randList(BytesRange, randGen(5, 7), randGen(15))
+      keys2 = randList(seq[byte], randGen(5, 30), randGen(15))
+      vals2 = randList(seq[byte], randGen(5, 7), randGen(15))
 
     for i in 0 ..< keys.len:
       trie.put(keys[i], vals[i])
@@ -226,11 +217,11 @@ suite "hexary trie":
     var
       memdb = newMemoryDB()
       nonPruningTrie = initHexaryTrie(memdb, false)
-      keys = randList(BytesRange, randGen(5, 77), randGen(30))
-      vals = randList(BytesRange, randGen(1, 57), randGen(30))
+      keys = randList(seq[byte], randGen(5, 77), randGen(30))
+      vals = randList(seq[byte], randGen(1, 57), randGen(30))
 
-      moreKeys = randList(BytesRange, randGen(5, 33), randGen(45))
-      moreVals = randList(BytesRange, randGen(1, 47), randGen(45))
+      moreKeys = randList(seq[byte], randGen(5, 33), randGen(45))
+      moreVals = randList(seq[byte], randGen(1, 47), randGen(45))
 
     for i in 0 ..< keys.len:
       nonPruningTrie.put(keys[i], vals[i])
@@ -265,8 +256,8 @@ suite "hexary trie":
   test "elaborate non-pruning test":
     type
       History = object
-        keys: seq[BytesRange]
-        values: seq[BytesRange]
+        keys: seq[seq[byte]]
+        values: seq[seq[byte]]
         rootHash: KeccakHash
 
     const
@@ -277,14 +268,14 @@ suite "hexary trie":
       var
         memdb = newMemoryDB()
         nonPruningTrie = initHexaryTrie(memdb, false)
-        keys = randList(BytesRange, randGen(3, 33), randGen(listLength))
-        values = randList(BytesRange, randGen(5, 77), randGen(listLength))
+        keys = randList(seq[byte], randGen(3, 33), randGen(listLength))
+        values = randList(seq[byte], randGen(5, 77), randGen(listLength))
         historyList = newSeq[History](listLength)
         ok = true
 
       for i, k in keys:
-        historyList[i].keys = newSeq[BytesRange](i + 1)
-        historyList[i].values = newSeq[BytesRange](i + 1)
+        historyList[i].keys = newSeq[seq[byte]](i + 1)
+        historyList[i].values = newSeq[seq[byte]](i + 1)
         for x in 0 ..< i + 1:
           historyList[i].keys[x] = keys[x]
           historyList[i].values[x] = values[x]
@@ -296,7 +287,7 @@ suite "hexary trie":
       for h in historyList:
         var
           trie = initHexaryTrie(memdb, h.rootHash)
-          pKeys: seq[BytesRange] = @[]
+          pKeys: seq[seq[byte]] = @[]
           pValues = trie.getValues()
 
         for k in trie.keys:
@@ -318,7 +309,7 @@ suite "hexary trie":
         echo "ITERATION: ", iteration
         break
 
-  proc isValidBranch(branch: seq[BytesRange], rootHash: KeccakHash, key, value: BytesRange): bool =
+  proc isValidBranch(branch: seq[seq[byte]], rootHash: KeccakHash, key, value: seq[byte]): bool =
     # branch must not be empty
     doAssert(branch.len != 0)
 
@@ -326,17 +317,17 @@ suite "hexary trie":
     for node in branch:
       doAssert(node.len != 0)
       let nodeHash = hexary.keccak(node)
-      db.put(nodeHash.data, node.toOpenArray)
+      db.put(nodeHash.data, node)
 
     var trie = initHexaryTrie(db, rootHash)
-    result = trie.get(key) == toRange(value)
+    result = trie.get(key) == value
 
   test "get branch with pruning trie":
     var
       memdb = newMemoryDB()
       trie = initHexaryTrie(memdb)
-      keys = randList(BytesRange, randGen(5, 77), randGen(30))
-      vals = randList(BytesRange, randGen(1, 57), randGen(30))
+      keys = randList(seq[byte], randGen(5, 77), randGen(30))
+      vals = randList(seq[byte], randGen(1, 57), randGen(30))
 
     for i in 0 ..< keys.len:
       trie.put(keys[i], vals[i])
@@ -352,8 +343,8 @@ suite "hexary trie":
     var
       memdb = newMemoryDB()
       nonPruningTrie = initHexaryTrie(memdb, false)
-      keys = randList(BytesRange, randGen(5, 77), randGen(numKeyVal))
-      vals = randList(BytesRange, randGen(1, 57), randGen(numKeyVal))
+      keys = randList(seq[byte], randGen(5, 77), randGen(numKeyVal))
+      vals = randList(seq[byte], randGen(1, 57), randGen(numKeyVal))
       roots = newSeq[KeccakHash](numKeyVal)
 
     for i in 0 ..< keys.len:
@@ -388,9 +379,9 @@ suite "hexary trie":
       pruningTrie = initHexaryTrie(memdb, isPruning = true)
 
     let
-      keys = randList(BytesRange, randGen(5, 77), randGen(numKeyVal))
-      vals = randList(BytesRange, randGen(1, 57), randGen(numKeyVal))
-      newVals = randList(BytesRange, randGen(1, 63), randGen(numKeyVal))
+      keys = randList(seq[byte], randGen(5, 77), randGen(numKeyVal))
+      vals = randList(seq[byte], randGen(1, 57), randGen(numKeyVal))
+      newVals = randList(seq[byte], randGen(1, 63), randGen(numKeyVal))
 
     var tx1 = memdb.beginTransaction()
     for i in 0 ..< numKeyVal:
@@ -426,15 +417,15 @@ suite "hexary trie":
       pruningTrie = initHexaryTrie(memdb, isPruning = true)
 
     let
-      keys = randList(BytesRange, randGen(5, 77), randGen(numKeyVal))
-      vals = randList(BytesRange, randGen(1, 57), randGen(numKeyVal))
+      keys = randList(seq[byte], randGen(5, 77), randGen(numKeyVal))
+      vals = randList(seq[byte], randGen(1, 57), randGen(numKeyVal))
 
     for i in 0 ..< numKeyVal:
       pruningTrie.put(keys[i], vals[i])
 
     let rootHash = pruningTrie.rootHash
     for k, v in pruningTrie.replicate:
-      repdb.put(k.toOpenArray, v.toOpenArray)
+      repdb.put(k, v)
 
     var trie = initHexaryTrie(repdb, rootHash, isPruning = true)
     var numPairs = 0

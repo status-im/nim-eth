@@ -49,7 +49,7 @@ procSuite "Waku Mail Client":
     let decoded = decode(response.envelope.data, symKey = some(symKey))
     require decoded.isSome()
 
-    var rlp = rlpFromBytes(decoded.get().payload.toRange)
+    var rlp = rlpFromBytes(decoded.get().payload)
     let output = rlp.read(MailRequest)
     check:
       output.lower == lower
@@ -92,7 +92,7 @@ procSuite "Waku Mail Client":
       var envelopes: seq[Envelope]
       traceAsyncErrors peer.p2pMessage(envelopes)
 
-      var cursor: Bytes
+      var cursor: seq[byte]
       count = count - 1
       if count == 0:
         cursor = @[]

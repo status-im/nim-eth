@@ -24,8 +24,8 @@ proc generate() =
 
   # valid data for a Ping packet
   block:
-    let payload = rlp.encode((4, fromAddr, toAddr, expiration())).toRange
-    let encodedData = @[1.byte] & payload.toSeq()
+    let payload = rlp.encode((4, fromAddr, toAddr, expiration()))
+    let encodedData = @[1.byte] & payload
     debug "Ping", data=byteutils.toHex(encodedData)
 
     encodedData.toFile(inputsDir & "ping")
@@ -33,8 +33,8 @@ proc generate() =
   # valid data for a Pong packet
   block:
     let token = keccak256.digest(@[0])
-    let payload = rlp.encode((toAddr, token , expiration())).toRange
-    let encodedData = @[2.byte] & payload.toSeq()
+    let payload = rlp.encode((toAddr, token , expiration()))
+    let encodedData = @[2.byte] & payload
     debug "Pong", data=byteutils.toHex(encodedData)
 
     encodedData.toFile(inputsDir & "pong")
@@ -43,7 +43,7 @@ proc generate() =
   block:
     var data: array[64, byte]
     data[32 .. ^1] = peerKey.toPublicKey().tryGet().toNodeId().toByteArrayBE()
-    let payload = rlp.encode((data, expiration())).toRange
+    let payload = rlp.encode((data, expiration()))
     let encodedData = @[3.byte] & payload.toSeq()
     debug "FindNode", data=byteutils.toHex(encodedData)
 
@@ -65,7 +65,7 @@ proc generate() =
     nodes.add((n1Addr.ip, n1Addr.udpPort, n1Addr.tcpPort, n1Key.toPublicKey().tryGet()))
     nodes.add((n2Addr.ip, n2Addr.udpPort, n2Addr.tcpPort, n2Key.toPublicKey().tryGet()))
 
-    let payload = rlp.encode((nodes, expiration())).toRange
+    let payload = rlp.encode((nodes, expiration()))
     let encodedData = @[4.byte] & payload.toSeq()
     debug "Neighbours", data=byteutils.toHex(encodedData)
 

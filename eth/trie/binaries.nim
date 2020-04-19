@@ -1,6 +1,5 @@
 import
-  sequtils,
-  stew/ranges/[ptr_arith, bitranges], eth/rlp/types, trie_defs
+  stew/ranges/[ptr_arith, bitranges, typedranges], trie_defs
 
 type
   TrieNodeKind* = enum
@@ -8,7 +7,7 @@ type
     BRANCH_TYPE = 1
     LEAF_TYPE = 2
 
-  TrieNodeKey* = BytesRange
+  TrieNodeKey* = seq[byte]
   TrieBitRange* = BitRange
 
   TrieNode* = object
@@ -20,7 +19,7 @@ type
       leftChild*: TrieNodeKey
       rightChild*: TrieNodeKey
     of LEAF_TYPE:
-      value*: BytesRange
+      value*: seq[byte]
 
   InvalidNode* = object of CorruptedTrieDatabase
   ValidationError* = object of CorruptedTrieDatabase
@@ -29,10 +28,10 @@ type
 template sliceToEnd*(r: TrieBitRange, index: int): TrieBitRange =
   if r.len <= index: TrieBitRange() else: r[index .. ^1]
 
-proc decodeToBinKeypath*(path: BytesRange): TrieBitRange =
+proc decodeToBinKeypath*(path: seq[byte]): TrieBitRange =
   ## Decodes bytes into a sequence of 0s and 1s
   ## Used in decoding key path of a KV-NODE
-  var path = MutByteRange(path).bits
+  var path = MutByteRange(path.toRange).bits
   if path[0]:
     path = path[4..^1]
 
@@ -46,7 +45,7 @@ proc decodeToBinKeypath*(path: BytesRange): TrieBitRange =
   else:
     result = BitRange()
 
-proc parseNode*(node: BytesRange): TrieNode =
+proc parseNode*(node: openArray[byte]): TrieNode =
   # Input: a serialized node
 
   if node.len == 0:
@@ -76,7 +75,7 @@ proc parseNode*(node: BytesRange): TrieNode =
     # Output: node type, value
     return TrieNode(kind: LEAF_TYPE, value: node[1..^1])
 
-proc encodeKVNode*(keyPath: TrieBitRange, childHash: TrieNodeKey): Bytes =
+proc encodeKVNode*(keyPath: TrieBitRange, childHash: TrieNodeKey): seq[byte] =
   ## Serializes a key/value node
   if keyPath.len == 0:
     raise newException(ValidationError, "Key path can not be empty")
@@ -110,13 +109,13 @@ proc encodeKVNode*(keyPath: TrieBitRange, childHash: TrieNodeKey): Bytes =
       inc(nbits, 8)
   copyMem(result[^32].addr, childHash.baseAddr, 32)
 
-proc encodeKVNode*(keyPath: bool, childHash: TrieNodeKey): Bytes =
+proc encodeKVNode*(keyPath: bool, childHash: TrieNodeKey): seq[byte] =
   result = newSeq[byte](34)
   result[0] = KV_TYPE.byte
   result[1] = byte(16) or byte(keyPath)
   copyMem(result[^32].addr, childHash.baseAddr, 32)
 
-proc encodeBranchNode*(leftChildHash, rightChildHash: TrieNodeKey): Bytes =
+proc encodeBranchNode*(leftChildHash, rightChildHash: TrieNodeKey): seq[byte] =
   ## Serializes a branch node
   const
     BRANCH_TYPE_PREFIX = @[BRANCH_TYPE.byte]
@@ -126,7 +125,7 @@ proc encodeBranchNode*(leftChildHash, rightChildHash: TrieNodeKey): Bytes =
 
   result = BRANCH_TYPE_PREFIX.concat(leftChildHash, rightChildHash)
 
-proc encodeLeafNode*(value: BytesRange | Bytes): Bytes =
+proc encodeLeafNode*(value: openArray[byte]): seq[byte] =
   ## Serializes a leaf node
   const
     LEAF_TYPE_PREFIX = @[LEAF_TYPE.byte]
@@ -134,7 +133,7 @@ proc encodeLeafNode*(value: BytesRange | Bytes): Bytes =
   if value.len == 0:
     raise newException(ValidationError, "Value of leaf node can not be empty")
 
-  result = LEAF_TYPE_PREFIX.concat(value)
+  result = LEAF_TYPE_PREFIX.concat(@value)
 
 proc getCommonPrefixLength*(a, b: TrieBitRange): int =
   let len = min(a.len, b.len)
