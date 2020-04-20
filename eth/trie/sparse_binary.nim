@@ -1,9 +1,9 @@
 import
-  stew/ranges/[typedranges, bitranges], eth/rlp/types,
-  trie_defs, trie_utils, db, sparse_proofs
+  ./trie_bitseq,
+  ./trie_defs, ./trie_utils, ./db, ./sparse_proofs
 
 export
-  types, trie_utils, bitranges,
+  trie_utils, trie_bitseq,
   sparse_proofs.verifyProof
 
 type
@@ -11,11 +11,7 @@ type
 
   SparseBinaryTrie* = object
     db: DB
-    rootHash: ByteRange
-
-proc `==`(a: ByteRange, b: KeccakHash): bool =
-  if a.len != b.data.len: return false
-  equalMem(a.baseAddr, b.data[0].unsafeAddr, a.len)
+    rootHash: seq[byte]
 
 type
   # 256 * 2 div 8
@@ -24,83 +20,83 @@ type
 proc initDoubleHash(a, b: openArray[byte]): DoubleHash =
   doAssert(a.len == 32, $a.len)
   doAssert(b.len == 32, $b.len)
-  copyMem(result[ 0].addr, a[0].unsafeAddr, 32)
-  copyMem(result[32].addr, b[0].unsafeAddr, 32)
+  result[0..31] = a
+  result[32..^1] = b
 
-proc initDoubleHash(x: ByteRange): DoubleHash =
-  initDoubleHash(x.toOpenArray, x.toOpenArray)
+proc initDoubleHash(x: openArray[byte]): DoubleHash =
+  initDoubleHash(x, x)
 
 proc init*(x: typedesc[SparseBinaryTrie], db: DB): SparseBinaryTrie =
   result.db = db
   # Initialize an empty tree with one branch
-  var value = initDoubleHash(emptyNodeHashes[0])
-  result.rootHash = keccakHash(value)
-  result.db.put(result.rootHash.toOpenArray, value)
+  var value = initDoubleHash(emptyNodeHashes[0].data)
+  result.rootHash = @(keccakHash(value).data)
+  result.db.put(result.rootHash, value)
 
   for i in 0..<treeHeight - 1:
-    value = initDoubleHash(emptyNodeHashes[i+1])
-    result.db.put(emptyNodeHashes[i].toOpenArray, value)
+    value = initDoubleHash(emptyNodeHashes[i+1].data)
+    result.db.put(emptyNodeHashes[i].data, value)
 
-  result.db.put(emptyLeafNodeHash.data, zeroBytesRange.toOpenArray)
+  result.db.put(emptyLeafNodeHash.data, [])
 
 proc initSparseBinaryTrie*(db: DB): SparseBinaryTrie =
   init(SparseBinaryTrie, db)
 
 proc init*(x: typedesc[SparseBinaryTrie], db: DB,
-           rootHash: BytesContainer | KeccakHash): SparseBinaryTrie =
+           rootHash: openArray[byte]): SparseBinaryTrie =
   checkValidHashZ(rootHash)
   result.db = db
-  result.rootHash = rootHash
+  result.rootHash = @rootHash
 
-proc initSparseBinaryTrie*(db: DB, rootHash: BytesContainer | KeccakHash): SparseBinaryTrie =
+proc initSparseBinaryTrie*(db: DB, rootHash: openArray[byte]): SparseBinaryTrie =
   init(SparseBinaryTrie, db, rootHash)
 
 proc getDB*(t: SparseBinaryTrie): auto = t.db
 
-proc getRootHash*(self: SparseBinaryTrie): ByteRange {.inline.} =
+proc getRootHash*(self: SparseBinaryTrie): seq[byte] {.inline.} =
   self.rootHash
 
-proc getAux(self: SparseBinaryTrie, path: BitRange, rootHash: ByteRange): ByteRange =
-  var nodeHash = rootHash
+proc getAux(self: SparseBinaryTrie, path: TrieBitSeq, rootHash: openArray[byte]): seq[byte] =
+  var nodeHash = @rootHash
   for targetBit in path:
-    let value = self.db.get(nodeHash.toOpenArray).toRange
-    if value.len == 0: return zeroBytesRange
+    let value = self.db.get(nodeHash)
+    if value.len == 0: return
     if targetBit: nodeHash = value[32..^1]
     else: nodeHash = value[0..31]
 
-  if nodeHash.toOpenArray == emptyLeafNodeHash.data:
-    result = zeroBytesRange
+  if nodeHash == emptyLeafNodeHash.data:
+    result = @[]
   else:
-    result = self.db.get(nodeHash.toOpenArray).toRange
+    result = self.db.get(nodeHash)
 
-proc get*(self: SparseBinaryTrie, key: BytesContainer): ByteRange =
+proc get*(self: SparseBinaryTrie, key: openArray[byte]): seq[byte] =
   ## gets a key from the tree.
   doAssert(key.len == pathByteLen)
-  let path = MutByteRange(key.toRange).bits
+  let path = bits key
   self.getAux(path, self.rootHash)
 
-proc get*(self: SparseBinaryTrie, key, rootHash: distinct BytesContainer): ByteRange =
+proc get*(self: SparseBinaryTrie, key, rootHash: openArray[byte]): seq[byte] =
   ## gets a key from the tree at a specific root.
   doAssert(key.len == pathByteLen)
-  let path = MutByteRange(key.toRange).bits
-  self.getAux(path, rootHash.toRange)
+  let path = bits key
+  self.getAux(path, rootHash)
 
-proc hashAndSave*(self: SparseBinaryTrie, node: ByteRange): ByteRange =
-  result = keccakHash(node)
-  self.db.put(result.toOpenArray, node.toOpenArray)
+proc hashAndSave*(self: SparseBinaryTrie, node: openArray[byte]): seq[byte] =
+  result = @(keccakHash(node).data)
+  self.db.put(result, node)
 
-proc hashAndSave*(self: SparseBinaryTrie, a, b: ByteRange): ByteRange =
-  let value = initDoubleHash(a.toOpenArray, b.toOpenArray)
-  result = keccakHash(value)
-  self.db.put(result.toOpenArray, value)
+proc hashAndSave*(self: SparseBinaryTrie, a, b: openArray[byte]): seq[byte] =
+  let value = initDoubleHash(a, b)
+  result = @(keccakHash(value).data)
+  self.db.put(result, value)
 
-proc setAux(self: var SparseBinaryTrie, value: ByteRange,
-    path: BitRange, depth: int, nodeHash: ByteRange): ByteRange =
+proc setAux(self: var SparseBinaryTrie, value: openArray[byte],
+    path: TrieBitSeq, depth: int, nodeHash: openArray[byte]): seq[byte] =
   if depth == treeHeight:
     result = self.hashAndSave(value)
   else:
     let
-      node = self.db.get(nodeHash.toOpenArray).toRange
+      node = self.db.get(nodeHash)
       leftNode = node[0..31]
       rightNode = node[32..^1]
     if path[depth]:
@@ -108,75 +104,75 @@ proc setAux(self: var SparseBinaryTrie, value: ByteRange,
     else:
       result = self.hashAndSave(self.setAux(value, path, depth+1, leftNode), rightNode)
 
-proc set*(self: var SparseBinaryTrie, key, value: distinct BytesContainer) =
+proc set*(self: var SparseBinaryTrie, key, value: openArray[byte]) =
   ## sets a new value for a key in the tree, returns the new root,
   ## and sets the new current root of the tree.
   doAssert(key.len == pathByteLen)
-  let path = MutByteRange(key.toRange).bits
-  self.rootHash = self.setAux(value.toRange, path, 0, self.rootHash)
+  let path = bits key
+  self.rootHash = self.setAux(value, path, 0, self.rootHash)
 
-proc set*(self: var SparseBinaryTrie, key, value, rootHash: distinct BytesContainer): ByteRange =
+proc set*(self: var SparseBinaryTrie, key, value, rootHash: openArray[byte]): seq[byte] =
   ## sets a new value for a key in the tree at a specific root,
   ## and returns the new root.
   doAssert(key.len == pathByteLen)
-  let path = MutByteRange(key.toRange).bits
-  self.setAux(value.toRange, path, 0, rootHash.toRange)
+  let path = bits key
+  self.setAux(value, path, 0, rootHash)
 
-template exists*(self: SparseBinaryTrie, key: BytesContainer): bool =
-  self.get(toRange(key)) != zeroBytesRange
+template exists*(self: SparseBinaryTrie, key: openArray[byte]): bool =
+  self.get(key) != []
 
-proc del*(self: var SparseBinaryTrie, key: BytesContainer) =
+proc del*(self: var SparseBinaryTrie, key: openArray[byte]) =
   ## Equals to setting the value to zeroBytesRange
   doAssert(key.len == pathByteLen)
-  self.set(key, zeroBytesRange)
+  self.set(key, [])
 
 # Dictionary API
-template `[]`*(self: SparseBinaryTrie, key: BytesContainer): ByteRange =
+template `[]`*(self: SparseBinaryTrie, key: openArray[byte]): seq[byte] =
   self.get(key)
 
-template `[]=`*(self: var SparseBinaryTrie, key, value: distinct BytesContainer) =
+template `[]=`*(self: var SparseBinaryTrie, key, value: openArray[byte]) =
   self.set(key, value)
 
-template contains*(self: SparseBinaryTrie, key: BytesContainer): bool =
+template contains*(self: SparseBinaryTrie, key: openArray[byte]): bool =
   self.exists(key)
 
-proc proveAux(self: SparseBinaryTrie, key, rootHash: ByteRange, output: var seq[ByteRange]): bool =
+proc proveAux(self: SparseBinaryTrie, key, rootHash: openArray[byte], output: var seq[seq[byte]]): bool =
   doAssert(key.len == pathByteLen)
-  var currVal = self.db.get(rootHash.toOpenArray).toRange
+  var currVal = self.db.get(rootHash)
   if currVal.len == 0: return false
 
-  let path = MutByteRange(key).bits
+  let path = bits key
   for i, bit in path:
     if bit:
       # right side
       output[i] = currVal[0..31]
-      currVal = self.db.get(currVal[32..^1].toOpenArray).toRange
+      currVal = self.db.get(currVal[32..^1])
       if currVal.len == 0: return false
     else:
       output[i] = currVal[32..^1]
-      currVal = self.db.get(currVal[0..31].toOpenArray).toRange
+      currVal = self.db.get(currVal[0..31])
       if currVal.len == 0: return false
 
   result = true
 
 # prove generates a Merkle proof for a key.
-proc prove*(self: SparseBinaryTrie, key: BytesContainer): seq[ByteRange] =
-  result = newSeq[ByteRange](treeHeight)
-  if not self.proveAux(key.toRange, self.rootHash, result):
+proc prove*(self: SparseBinaryTrie, key: openArray[byte]): seq[seq[byte]] =
+  result = newSeq[seq[byte]](treeHeight)
+  if not self.proveAux(key, self.rootHash, result):
     result = @[]
 
 # prove generates a Merkle proof for a key, at a specific root.
-proc prove*(self: SparseBinaryTrie, key, rootHash: distinct BytesContainer): seq[ByteRange] =
-  result = newSeq[ByteRange](treeHeight)
-  if not self.proveAux(key.toRange, rootHash.toRange, result):
+proc prove*(self: SparseBinaryTrie, key, rootHash: openArray[byte]): seq[seq[byte]] =
+  result = newSeq[seq[byte]](treeHeight)
+  if not self.proveAux(key, rootHash, result):
     result = @[]
 
 # proveCompact generates a compacted Merkle proof for a key.
-proc proveCompact*(self: SparseBinaryTrie, key: BytesContainer): seq[ByteRange] =
+proc proveCompact*(self: SparseBinaryTrie, key: openArray[byte]): seq[seq[byte]] =
   var temp = self.prove(key)
   temp.compactProof
 
 # proveCompact generates a compacted Merkle proof for a key, at a specific root.
-proc proveCompact*(self: SparseBinaryTrie, key, rootHash: distinct BytesContainer): seq[ByteRange] =
+proc proveCompact*(self: SparseBinaryTrie, key, rootHash: openArray[byte]): seq[seq[byte]] =
   var temp = self.prove(key, rootHash)
   temp.compactProof

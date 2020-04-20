@@ -2,11 +2,11 @@
 
 import
   unittest, strutils,
-  stew/ranges/bitranges, eth/rlp/types, nimcrypto/[keccak, hash],
-  eth/trie/[binaries, trie_utils],
-  ./testutils
+  nimcrypto/[keccak, hash],
+  eth/trie/[binaries, trie_bitseq],
+  ./testutils, stew/byteutils
 
-proc parseBitVector(x: string): BitRange =
+proc parseBitVector(x: string): TrieBitSeq =
   result = genBitVec(x.len)
   for i, c in x:
     result[i] = (c == '1')
@@ -53,7 +53,7 @@ suite "binaries utils":
 
   test "node parsing":
     for c in parseNodeData:
-      let input = toRange(c[0])
+      let input = toBytes(c[0])
       let node = c[1]
       let kind = TrieNodeKind(node[0])
       let raiseError = node[3]
@@ -69,12 +69,12 @@ suite "binaries utils":
       case res.kind
       of KV_TYPE:
         check(res.keyPath == parseBitVector(node[1]))
-        check(res.child == toRange(node[2]))
+        check(res.child == toBytes(node[2]))
       of BRANCH_TYPE:
-        check(res.leftChild == toRange(node[2]))
-        check(res.rightChild == toRange(node[2]))
+        check(res.leftChild == toBytes(node[2]))
+        check(res.rightChild == toBytes(node[2]))
       of LEAF_TYPE:
-        check(res.value == toRange(node[2]))
+        check(res.value == toBytes(node[2]))
 
   const
     kvData = [
@@ -88,7 +88,7 @@ suite "binaries utils":
   test "kv node encoding":
     for c in kvData:
       let keyPath = parseBitVector(c[0])
-      let node    = toRange(c[1])
+      let node    = toBytes(c[1])
       let output  = toBytes(c[2])
       let raiseError = c[3]
 
@@ -110,8 +110,8 @@ suite "binaries utils":
 
   test "branch node encode":
     for c in branchData:
-      let left   = toRange(c[0])
-      let right  = toRange(c[1])
+      let left   = toBytes(c[0])
+      let right  = toBytes(c[1])
       let output = toBytes(c[2])
       let raiseError = c[3]
 
@@ -132,34 +132,34 @@ suite "binaries utils":
       let raiseError = c[2]
       if raiseError:
         expect(ValidationError):
-          check toBytes(c[1]) == encodeLeafNode(toRange(c[0]))
+          check toBytes(c[1]) == encodeLeafNode(toBytes(c[0]))
       else:
-        check toBytes(c[1]) == encodeLeafNode(toRange(c[0]))
+        check toBytes(c[1]) == encodeLeafNode(toBytes(c[0]))
 
   test "random kv encoding":
     let lengths = randList(int, randGen(1, 999), randGen(100, 100), unique = false)
     for len in lengths:
       var k = len
       var bitvec = genBitVec(len)
-      var nodeHash = keccak256.digest(cast[ptr byte](k.addr), uint(sizeof(int))).toRange
-      var kvnode = encodeKVNode(bitvec, nodeHash).toRange
+      var nodeHash = keccak256.digest(cast[ptr byte](k.addr), uint(sizeof(int)))
+      var kvnode = encodeKVNode(bitvec, @(nodeHash.data))
       # first byte if KV_TYPE
       # in the middle are 1..n bits of binary-encoded-keypath
       # last 32 bytes are hash
       var keyPath = decodeToBinKeypath(kvnode[1..^33])
       check kvnode[0].ord == KV_TYPE.ord
       check keyPath == bitvec
-      check kvnode[^32..^1] == nodeHash
+      check kvnode[^32..^1] == nodeHash.data
 
   test "optimized single bit keypath kvnode encoding":
     var k = 1
-    var nodeHash = keccak256.digest(cast[ptr byte](k.addr), uint(sizeof(int))).toRange
+    var nodeHash = keccak256.digest(cast[ptr byte](k.addr), uint(sizeof(int)))
     var bitvec = genBitVec(1)
     bitvec[0] = false
-    var kvnode = encodeKVNode(bitvec, nodeHash).toRange
+    var kvnode = encodeKVNode(bitvec, @(nodeHash.data))
     var kp = decodeToBinKeypath(kvnode[1..^33])
 
-    var okv = encodeKVNode(false, nodeHash).toRange
+    var okv = encodeKVNode(false, @(nodeHash.data))
     check okv == kvnode
     var okp = decodeToBinKeypath(kvnode[1..^33])
     check okp == kp
@@ -167,10 +167,10 @@ suite "binaries utils":
     check okp == bitvec
 
     bitvec[0] = true
-    kvnode = encodeKVNode(bitvec, nodeHash).toRange
+    kvnode = encodeKVNode(bitvec, @(nodeHash.data))
     kp = decodeToBinKeypath(kvnode[1..^33])
 
-    okv = encodeKVNode(true, nodeHash).toRange
+    okv = encodeKVNode(true, @(nodeHash.data))
     check okv == kvnode
     okp = decodeToBinKeypath(kvnode[1..^33])
     check okp == kp

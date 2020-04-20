@@ -19,7 +19,7 @@ These are the mandatory `test` block and the optional `init` block.
 Example usage:
 ```nim
 test:
-  var rlp = rlpFromBytes(@payload.toRange)
+  var rlp = rlpFromBytes(payload)
   discard rlp.inspect()
 ```
 
@@ -30,7 +30,7 @@ E.g.:
 ```nim
 test:
   try:
-    var rlp = rlpFromBytes(@payload.toRange)
+    var rlp = rlpFromBytes(payload)
     discard rlp.inspect()
   except RlpError as e:
     debug "Inspect failed", err = e.msg

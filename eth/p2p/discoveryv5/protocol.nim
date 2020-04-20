@@ -97,13 +97,13 @@ proc whoareyouMagic(toNode: NodeId): array[magicSize, byte] =
   for i, c in prefix: data[sizeof(toNode) + i] = byte(c)
   sha256.digest(data).data
 
-proc isWhoAreYou(d: Protocol, msg: Bytes): bool =
+proc isWhoAreYou(d: Protocol, msg: openArray[byte]): bool =
   if msg.len > d.whoareyouMagic.len:
     result = d.whoareyouMagic == msg.toOpenArray(0, magicSize - 1)
 
-proc decodeWhoAreYou(d: Protocol, msg: Bytes): Whoareyou =
+proc decodeWhoAreYou(d: Protocol, msg: openArray[byte]): Whoareyou =
   result = Whoareyou()
-  result[] = rlp.decode(msg.toRange[magicSize .. ^1], WhoareyouObj)
+  result[] = rlp.decode(msg.toOpenArray(magicSize, msg.high), WhoareyouObj)
 
 proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthTag) =
   trace "sending who are you", to = $toNode, toAddress = $address
@@ -172,7 +172,7 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
     d.sendNodes(fromId, fromAddr, reqId,
       d.routingTable.neighboursAtDistance(distance))
 
-proc receive*(d: Protocol, a: Address, msg: Bytes) {.gcsafe,
+proc receive*(d: Protocol, a: Address, msg: openArray[byte]) {.gcsafe,
   raises: [
     Defect,
     # TODO This is now coming from Chronos's callSoon

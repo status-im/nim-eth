@@ -2,8 +2,7 @@
 
 import
   unittest,
-  eth/trie/[db, trie_defs], ./testutils,
-  eth/rlp/types as rlpTypes
+  eth/trie/[db], ./testutils
 
 suite "transaction db":
   setup:
@@ -11,10 +10,10 @@ suite "transaction db":
       listLength = 30
 
     var
-      keysA = randList(Bytes, randGen(3, 33), randGen(listLength))
-      valuesA = randList(Bytes, randGen(5, 77), randGen(listLength))
-      keysB = randList(Bytes, randGen(3, 33), randGen(listLength))
-      valuesB = randList(Bytes, randGen(5, 77), randGen(listLength))
+      keysA = randList(seq[byte], randGen(3, 33), randGen(listLength))
+      valuesA = randList(seq[byte], randGen(5, 77), randGen(listLength))
+      keysB = randList(seq[byte], randGen(3, 33), randGen(listLength))
+      valuesB = randList(seq[byte], randGen(5, 77), randGen(listLength))
 
     proc populateA(db: TrieDatabaseRef) =
       for i in 0 ..< listLength:

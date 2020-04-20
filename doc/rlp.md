@@ -10,15 +10,9 @@ and [Wiki](https://github.com/ethereum/wiki/wiki/RLP).
 ### Reading RLP data
 
 The `Rlp` type provided by this library represents a cursor over an RLP-encoded
-byte stream. Before instantiating such a cursor, you must convert your
-input data a `BytesRange` value provided by the [nim-ranges][RNG] library,
-which represents an immutable and thus cheap-to-copy sub-range view over an
-underlying `seq[byte]` instance:
-
-[RNG]: https://github.com/status-im/nim-ranges
-
+byte stream.
 ``` nim
-proc rlpFromBytes*(data: BytesRange): Rlp
+proc rlpFromBytes*(data: openArray[byte]): Rlp
 ```
 
 ### Streaming API
@@ -67,7 +61,7 @@ type
   RlpNode* = object
     case kind*: RlpNodeType
     of rlpBlob:
-      bytes*: BytesRange
+      bytes*: seq[byte]
     of rlpList:
       elems*: seq[RlpNode]
 ```
@@ -86,7 +80,7 @@ proc inspect*(self: Rlp, indent = 0): string
 The `RlpWriter` type can be used to encode RLP data. Instances are created
 with the `initRlpWriter` proc. This should be followed by one or more calls
 to `append` which is overloaded to accept arbitrary values. Finally, you can
-call `finish` to obtain the final `BytesRange`.
+call `finish` to obtain the final `seq[byte]`.
 
 If the end result should be a RLP list of particular length, you can replace
 the initial call to `initRlpWriter` with `initRlpList(n)`. Calling `finish`

@@ -1,30 +1,22 @@
 import
   tables, hashes, sets,
-  nimcrypto/[hash, keccak], eth/rlp,
+  nimcrypto/[hash, keccak],
   trie_defs, db_tracing
 
 type
   MemDBRec = object
     refCount: int
-    value: Bytes
+    value: seq[byte]
 
   MemoryLayer* = ref object of RootObj
-    records: Table[Bytes, MemDBRec]
-    deleted: HashSet[Bytes]
-
-  TrieDatabaseConcept* = concept DB
-    mixin put, del, get
-
-    put(var DB, KeccakHash, BytesRange)
-    del(var DB, KeccakHash)
-    get(DB, KeccakHash) is Bytes
-    contains(DB, KeccakHash) is bool
+    records: Table[seq[byte], MemDBRec]
+    deleted: HashSet[seq[byte]]
 
   # XXX: poor's man vtref types
   PutProc = proc (db: RootRef, key, val: openarray[byte]) {.
     gcsafe, raises: [Defect, CatchableError] .}
 
-  GetProc = proc (db: RootRef, key: openarray[byte]): Bytes {.
+  GetProc = proc (db: RootRef, key: openarray[byte]): seq[byte] {.
     gcsafe, raises: [Defect, CatchableError] .}
     ## The result will be empty seq if not found
 
@@ -56,14 +48,14 @@ type
   TransactionID* = distinct DbTransaction
 
 proc put*(db: TrieDatabaseRef, key, val: openarray[byte]) {.gcsafe.}
-proc get*(db: TrieDatabaseRef, key: openarray[byte]): Bytes {.gcsafe.}
+proc get*(db: TrieDatabaseRef, key: openarray[byte]): seq[byte] {.gcsafe.}
 proc del*(db: TrieDatabaseRef, key: openarray[byte]) {.gcsafe.}
 proc beginTransaction*(db: TrieDatabaseRef): DbTransaction {.gcsafe.}
 
-proc keccak*(r: BytesRange): KeccakHash =
-  keccak256.digest r.toOpenArray
+proc keccak*(r: openArray[byte]): KeccakHash =
+  keccak256.digest r
 
-proc get*(db: MemoryLayer, key: openarray[byte]): Bytes =
+proc get*(db: MemoryLayer, key: openarray[byte]): seq[byte] =
   result = db.records.getOrDefault(@key).value
   traceGet key, result
 
@@ -107,8 +99,8 @@ proc put*(db: MemoryLayer, key, val: openarray[byte]) =
 
 proc newMemoryLayer: MemoryLayer =
   result.new
-  result.records = initTable[Bytes, MemDBRec]()
-  result.deleted = initHashSet[Bytes]()
+  result.records = initTable[seq[byte], MemDBRec]()
+  result.deleted = initHashSet[seq[byte]]()
 
 proc commit(memDb: MemoryLayer, db: TrieDatabaseRef, applyDeletes: bool = true) =
   if applyDeletes:
@@ -136,7 +128,7 @@ proc totalRecordsInMemoryDB*(db: TrieDatabaseRef): int =
   doAssert isMemoryDB(db)
   return db.mostInnerTransaction.modifications.records.len
 
-iterator pairsInMemoryDB*(db: TrieDatabaseRef): (Bytes, Bytes) =
+iterator pairsInMemoryDB*(db: TrieDatabaseRef): (seq[byte], seq[byte]) =
   doAssert isMemoryDB(db)
   for k, v in db.mostInnerTransaction.modifications.records:
     yield (k, v.value)
@@ -178,7 +170,7 @@ proc putImpl[T](db: RootRef, key, val: openarray[byte]) =
   mixin put
   put(T(db), key, val)
 
-proc getImpl[T](db: RootRef, key: openarray[byte]): Bytes =
+proc getImpl[T](db: RootRef, key: openarray[byte]): seq[byte] =
   mixin get
   return get(T(db), key)
 
@@ -207,7 +199,7 @@ proc put*(db: TrieDatabaseRef, key, val: openarray[byte]) =
   else:
     db.putProc(db.obj, key, val)
 
-proc get*(db: TrieDatabaseRef, key: openarray[byte]): Bytes =
+proc get*(db: TrieDatabaseRef, key: openarray[byte]): seq[byte] =
   # TODO: This is quite inefficient and it won't be necessary once
   # https://github.com/nim-lang/Nim/issues/7457 is developed.
   let key = @key

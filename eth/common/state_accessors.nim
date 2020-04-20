@@ -6,7 +6,7 @@ proc getAccount*(db: TrieDatabaseRef,
                  rootHash: KeccakHash,
                  account: EthAddress): Account =
   let trie = initSecureHexaryTrie(db, rootHash)
-  let data = trie.get(unnecessary_OpenArrayToRange account)
+  let data = trie.get(account)
   if data.len > 0:
     result = rlp.decode(data, Account)
   else:
@@ -21,6 +21,3 @@ proc getContractCode*(chain: AbstractChainDB, req: ContractCodeRequest): Blob {.
 proc getStorageNode*(chain: AbstractChainDB, hash: KeccakHash): Blob =
   let db = chain.getTrieDB
   return db.get(hash.data)
-  # let trie = initSecureHexaryTrie(db, emptyRlpHash) # TODO emptyRlpHash is not correct here
-  # return trie.get(unnecessary_OpenArrayToRange hash.data)
-

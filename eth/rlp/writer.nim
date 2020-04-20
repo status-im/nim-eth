@@ -1,15 +1,11 @@
 import
-  macros, types,
-  stew/ranges/[memranges, ptr_arith],
+  macros,
   object_serialization, priv/defs
-
-export
-  memranges
 
 type
   RlpWriter* = object
     pendingLists: seq[tuple[remainingItems, outBytes: int]]
-    output: Bytes
+    output: seq[byte]
 
   IntLike* = concept x, y
     type T = type(x)
@@ -39,7 +35,7 @@ proc bytesNeeded(num: Integer): int =
     inc result
     n = n shr 8
 
-proc writeBigEndian(outStream: var Bytes, number: Integer,
+proc writeBigEndian(outStream: var seq[byte], number: Integer,
                     lastByteIdx: int, numberOfBytes: int) =
   mixin `and`, `shr`
 
@@ -48,12 +44,12 @@ proc writeBigEndian(outStream: var Bytes, number: Integer,
     outStream[i] = byte(n and 0xff)
     n = n shr 8
 
-proc writeBigEndian(outStream: var Bytes, number: Integer,
+proc writeBigEndian(outStream: var seq[byte], number: Integer,
                     numberOfBytes: int) {.inline.} =
   outStream.setLen(outStream.len + numberOfBytes)
   outStream.writeBigEndian(number, outStream.len - 1, numberOfBytes)
 
-proc writeCount(bytes: var Bytes, count: int, baseMarker: byte) =
+proc writeCount(bytes: var seq[byte], count: int, baseMarker: byte) =
   if count < THRESHOLD_LIST_LEN:
     bytes.add(baseMarker + byte(count))
   else:
@@ -65,19 +61,6 @@ proc writeCount(bytes: var Bytes, count: int, baseMarker: byte) =
     bytes[origLen] = baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
     bytes.writeBigEndian(count, bytes.len - 1, lenPrefixBytes)
 
-proc add(outStream: var Bytes, newChunk: BytesRange) =
-  let prevLen = outStream.len
-  outStream.setLen(prevLen + newChunk.len)
-  # XXX: Use copyMem here
-  for i in 0 ..< newChunk.len:
-    outStream[prevLen + i] = newChunk[i]
-
-{.this: self.}
-{.experimental.}
-
-using
-  self: var RlpWriter
-
 proc initRlpWriter*: RlpWriter =
   newSeq(result.pendingLists, 0)
   newSeq(result.output, 0)
@@ -86,88 +69,74 @@ proc decRet(n: var int, delta: int): int =
   n -= delta
   return n
 
-proc maybeClosePendingLists(self) =
-  while pendingLists.len > 0:
-    let lastListIdx = pendingLists.len - 1
-    doAssert pendingLists[lastListIdx].remainingItems >= 1
-    if decRet(pendingLists[lastListIdx].remainingItems, 1) == 0:
+proc maybeClosePendingLists(self: var RlpWriter) =
+  while self.pendingLists.len > 0:
+    let lastListIdx = self.pendingLists.len - 1
+    doAssert self.pendingLists[lastListIdx].remainingItems >= 1
+    if decRet(self.pendingLists[lastListIdx].remainingItems, 1) == 0:
       # A list have been just finished. It was started in `startList`.
-      let listStartPos = pendingLists[lastListIdx].outBytes
-      pendingLists.setLen lastListIdx
+      let listStartPos = self.pendingLists[lastListIdx].outBytes
+      self.pendingLists.setLen lastListIdx
 
       # How many bytes were written since the start?
-      let listLen = output.len - listStartPos
+      let listLen = self.output.len - listStartPos
 
       # Compute the number of bytes required to write down the list length
       let totalPrefixBytes = if listLen < int(THRESHOLD_LIST_LEN): 1
                              else: int(listLen.bytesNeeded) + 1
 
       # Shift the written data to make room for the prefix length
-      output.setLen(output.len + totalPrefixBytes)
-      let outputBaseAddr = output.baseAddr
+      self.output.setLen(self.output.len + totalPrefixBytes)
 
-      moveMem(outputBaseAddr.shift(listStartPos + totalPrefixBytes),
-              outputBaseAddr.shift(listStartPos),
+      moveMem(addr self.output[listStartPos + totalPrefixBytes],
+              unsafeAddr self.output[listStartPos],
               listLen)
 
       # Write out the prefix length
       if listLen < THRESHOLD_LIST_LEN:
-        output[listStartPos] = LIST_START_MARKER + byte(listLen)
+        self.output[listStartPos] = LIST_START_MARKER + byte(listLen)
       else:
         let listLenBytes = totalPrefixBytes - 1
-        output[listStartPos] = LEN_PREFIXED_LIST_MARKER + byte(listLenBytes)
-        output.writeBigEndian(listLen, listStartPos + listLenBytes, listLenBytes)
+        self.output[listStartPos] = LEN_PREFIXED_LIST_MARKER + byte(listLenBytes)
+        self.output.writeBigEndian(listLen, listStartPos + listLenBytes, listLenBytes)
     else:
       # The currently open list is not finished yet. Nothing to do.
       return
 
-proc appendRawList(self; bytes: BytesRange) =
-  output.writeCount(bytes.len, LIST_START_MARKER)
-  output.add(bytes)
-  maybeClosePendingLists()
+proc appendRawList(self: var RlpWriter, bytes: openArray[byte]) =
+  self.output.writeCount(bytes.len, LIST_START_MARKER)
+  self.output.add(bytes)
+  self.maybeClosePendingLists()
 
-proc appendRawBytes*(self; bytes: BytesRange) =
-  output.add(bytes)
-  maybeClosePendingLists()
+proc appendRawBytes*(self: var RlpWriter, bytes: openArray[byte]) =
+  self.output.add(bytes)
+  self.maybeClosePendingLists()
 
-proc startList*(self; listSize: int) =
+proc startList*(self: var RlpWriter, listSize: int) =
   if listSize == 0:
-    appendRawList(BytesRange())
+    self.appendRawList([])
   else:
-    pendingLists.add((listSize, output.len))
+    self.pendingLists.add((listSize, self.output.len))
 
-template appendBlob(self; data, startMarker) =
-  mixin baseAddr
-
+proc appendBlob(self: var RlpWriter, data: openArray[byte], startMarker: byte) =
   if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:
     self.output.add byte(data[0])
   else:
     self.output.writeCount(data.len, startMarker)
+    self.output.add data
 
-    let startPos = output.len
-    self.output.setLen(startPos + data.len)
-    copyMem(shift(baseAddr(self.output), startPos),
-            baseAddr(data),
-            data.len)
+  self.maybeClosePendingLists()
 
-  maybeClosePendingLists()
+proc appendImpl(self: var RlpWriter, data: string) =
+  appendBlob(self, data.toOpenArrayByte(0, data.high), BLOB_START_MARKER)
 
-proc appendImpl(self; data: string) =
+proc appendBlob(self: var RlpWriter, data: openarray[byte]) =
   appendBlob(self, data, BLOB_START_MARKER)
 
-proc appendBlob(self; data: openarray[byte]) =
-  appendBlob(self, data, BLOB_START_MARKER)
+proc appendBlob(self: var RlpWriter, data: openarray[char]) =
+  appendBlob(self, data.toOpenArrayByte(0, data.high), BLOB_START_MARKER)
 
-proc appendBlob(self; data: openarray[char]) =
-  appendBlob(self, data, BLOB_START_MARKER)
-
-proc appendBytesRange(self; data: BytesRange) =
-  appendBlob(self, data, BLOB_START_MARKER)
-
-proc appendImpl(self; data: MemRange) =
-  appendBlob(self, data, BLOB_START_MARKER)
-
-proc appendInt(self; i: Integer) =
+proc appendInt(self: var RlpWriter, i: Integer) =
   # this is created as a separate proc as an extra precaution against
   # any overloading resolution problems when matching the IntLike concept.
   type IntType = type(i)
@@ -183,7 +152,7 @@ proc appendInt(self; i: Integer) =
 
   self.maybeClosePendingLists()
 
-proc appendFloat(self; data: float64) =
+proc appendFloat(self: var RlpWriter, data: float64) =
   # This is not covered in the RLP spec, but Geth uses Go's
   # `math.Float64bits`, which is defined here:
   # https://github.com/gopherjs/gopherjs/blob/master/compiler/natives/src/math/math.go
@@ -191,16 +160,16 @@ proc appendFloat(self; data: float64) =
   let uint64bits = (uint64(uintWords[1]) shl 32) or uint64(uintWords[0])
   self.appendInt(uint64bits)
 
-template appendImpl(self; i: Integer) =
+template appendImpl(self: var RlpWriter, i: Integer) =
   appendInt(self, i)
 
-template appendImpl(self; e: enum) =
+template appendImpl(self: var RlpWriter, e: enum) =
   appendImpl(self, int(e))
 
-template appendImpl(self; b: bool) =
+template appendImpl(self: var RlpWriter, b: bool) =
   appendImpl(self, int(b))
 
-proc appendImpl[T](self; listOrBlob: openarray[T]) =
+proc appendImpl[T](self: var RlpWriter, listOrBlob: openarray[T]) =
   mixin append
 
   # TODO: This append proc should be overloaded by `openarray[byte]` after
@@ -212,7 +181,7 @@ proc appendImpl[T](self; listOrBlob: openarray[T]) =
     for i in 0 ..< listOrBlob.len:
       self.append listOrBlob[i]
 
-proc appendRecordType*(self; obj: object|tuple, wrapInList = wrapObjsInList) =
+proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrapObjsInList) =
   mixin enumerateRlpFields, append
 
   if wrapInList:
@@ -226,15 +195,10 @@ proc appendRecordType*(self; obj: object|tuple, wrapInList = wrapObjsInList) =
 
   enumerateRlpFields(obj, op)
 
-proc appendImpl(self; data: object) {.inline.} =
-  # TODO: This append proc should be overloaded by `BytesRange` after
-  # nim bug #7416 is fixed.
-  when data is BytesRange:
-    self.appendBytesRange(data)
-  else:
+proc appendImpl(self: var RlpWriter, data: object) {.inline.} =
     self.appendRecordType(data)
 
-proc appendImpl(self; data: tuple) {.inline.} =
+proc appendImpl(self: var RlpWriter, data: tuple) {.inline.} =
   self.appendRecordType(data)
 
 # We define a single `append` template with a pretty low specifity
@@ -253,22 +217,22 @@ proc initRlpList*(listSize: int): RlpWriter =
   startList(result, listSize)
 
 # TODO: This should return a lent value
-proc finish*(self): Bytes =
-  doAssert pendingLists.len == 0, "Insufficient number of elements written to a started list"
-  result = output
+template finish*(self: RlpWriter): seq[byte] =
+  doAssert self.pendingLists.len == 0, "Insufficient number of elements written to a started list"
+  self.output
 
-proc encode*[T](v: T): Bytes =
+proc encode*[T](v: T): seq[byte] =
   mixin append
   var writer = initRlpWriter()
   writer.append(v)
   return writer.finish
 
-proc encodeInt*(i: Integer): Bytes =
+proc encodeInt*(i: Integer): seq[byte] =
   var writer = initRlpWriter()
   writer.appendInt(i)
   return writer.finish
 
-macro encodeList*(args: varargs[untyped]): Bytes =
+macro encodeList*(args: varargs[untyped]): seq[byte] =
   var
     listLen = args.len
     writer = genSym(nskVar, "rlpWriter")
@@ -286,10 +250,9 @@ macro encodeList*(args: varargs[untyped]): Bytes =
 
 when false:
   # XXX: Currently fails with a malformed AST error on the args.len expression
-  template encodeList*(args: varargs[untyped]): BytesRange =
+  template encodeList*(args: varargs[untyped]): seq[byte] =
     mixin append
     var writer = initRlpList(args.len)
     for arg in args:
       writer.append(arg)
     writer.finish
-

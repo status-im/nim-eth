@@ -1,33 +1,26 @@
-import
-  trie_defs
-
 type
-  NibblesRange* = object
-    bytes: ByteRange
+  NibblesSeq* = object
+    bytes: seq[byte]
     ibegin, iend: int
 
-proc initNibbleRange*(bytes: ByteRange): NibblesRange =
-  result.bytes = bytes
+proc initNibbleRange*(bytes: openArray[byte]): NibblesSeq =
+  result.bytes = @bytes
   result.ibegin = 0
   result.iend = bytes.len * 2
 
-# can't be a const: https://github.com/status-im/nim-eth/issues/6
-# we can't initialise it here, but since it's already zeroed memory, we don't need to
-var zeroNibblesRange* {.threadvar.}: NibblesRange
-
-proc `{}`(r: NibblesRange, pos: int): byte {.inline.} =
+proc `{}`(r: NibblesSeq, pos: int): byte {.inline.} =
   ## This is a helper for a more raw access to the nibbles.
   ## It works with absolute positions.
   if pos > r.iend: raise newException(RangeError, "index out of range")
   return if (pos and 1) != 0: (r.bytes[pos div 2] and 0xf)
          else: (r.bytes[pos div 2] shr 4)
 
-template `[]`*(r: NibblesRange, i: int): byte = r{r.ibegin + i}
+template `[]`*(r: NibblesSeq, i: int): byte = r{r.ibegin + i}
 
-proc len*(r: NibblesRange): int =
+proc len*(r: NibblesSeq): int =
   r.iend - r.ibegin
 
-proc `==`*(lhs, rhs: NibblesRange): bool =
+proc `==`*(lhs, rhs: NibblesSeq): bool =
   if lhs.len == rhs.len:
     for i in 0 ..< lhs.len:
       if lhs[i] != rhs[i]:
@@ -36,7 +29,7 @@ proc `==`*(lhs, rhs: NibblesRange): bool =
   else:
     return false
 
-proc `$`*(r: NibblesRange): string =
+proc `$`*(r: NibblesSeq): string =
   result = newStringOfCap(100)
   for i in r.ibegin ..< r.iend:
     let n = int r{i}
@@ -44,7 +37,7 @@ proc `$`*(r: NibblesRange): string =
             else: char(ord('0') + n)
     result.add c
 
-proc slice*(r: NibblesRange, ibegin: int, iend = -1): NibblesRange =
+proc slice*(r: NibblesSeq, ibegin: int, iend = -1): NibblesSeq =
   result.bytes = r.bytes
   result.ibegin = r.ibegin + ibegin
   let e = if iend < 0: r.iend + iend + 1
@@ -69,11 +62,11 @@ template writeNibbles(r) {.dirty.} =
       result[writeHead] = nextNibble shl 4
     oddnessFlag = not oddnessFlag
 
-proc hexPrefixEncode*(r: NibblesRange, isLeaf = false): Bytes =
+proc hexPrefixEncode*(r: NibblesSeq, isLeaf = false): seq[byte] =
   writeFirstByte(r.len)
   writeNibbles(r)
 
-proc hexPrefixEncode*(r1, r2: NibblesRange, isLeaf = false): Bytes =
+proc hexPrefixEncode*(r1, r2: NibblesSeq, isLeaf = false): seq[byte] =
   writeFirstByte(r1.len + r2.len)
   writeNibbles(r1)
   writeNibbles(r2)
@@ -82,16 +75,16 @@ proc hexPrefixEncodeByte*(val: byte, isLeaf = false): byte =
   doAssert val < 16
   result = (((byte(isLeaf) * 2) + 1) shl 4) or val
 
-proc sharedPrefixLen*(lhs, rhs: NibblesRange): int =
+proc sharedPrefixLen*(lhs, rhs: NibblesSeq): int =
   result = 0
   while result < lhs.len and result < rhs.len:
     if lhs[result] != rhs[result]: break
     inc result
 
-proc startsWith*(lhs, rhs: NibblesRange): bool =
+proc startsWith*(lhs, rhs: NibblesSeq): bool =
   sharedPrefixLen(lhs, rhs) == rhs.len
 
-proc hexPrefixDecode*(r: ByteRange): tuple[isLeaf: bool, nibbles: NibblesRange] =
+proc hexPrefixDecode*(r: openArray[byte]): tuple[isLeaf: bool, nibbles: NibblesSeq] =
   result.nibbles = initNibbleRange(r)
   if r.len > 0:
     result.isLeaf = (r[0] and 0x20) != 0
@@ -115,7 +108,7 @@ template putNibbles(bytes, src: untyped) =
 template calcNeededBytes(len: int): int =
   (len shr 1) + (len and 1)
 
-proc `&`*(a, b: NibblesRange): NibblesRange =
+proc `&`*(a, b: NibblesSeq): NibblesSeq =
   let
     len = a.len + b.len
     bytesNeeded = calcNeededBytes(len)
@@ -128,10 +121,10 @@ proc `&`*(a, b: NibblesRange): NibblesRange =
   bytes.putNibbles(a)
   bytes.putNibbles(b)
 
-  result = initNibbleRange(bytes.toRange)
+  result = initNibbleRange(bytes)
   result.iend = len
 
-proc cloneAndReserveNibble*(a: NibblesRange): NibblesRange =
+proc cloneAndReserveNibble*(a: NibblesSeq): NibblesSeq =
   let
     len = a.len + 1
     bytesNeeded = calcNeededBytes(len)
@@ -142,24 +135,15 @@ proc cloneAndReserveNibble*(a: NibblesRange): NibblesRange =
     pos   = 0
 
   bytes.putNibbles(a)
-  result = initNibbleRange(bytes.toRange)
+  result = initNibbleRange(bytes)
   result.iend = len
 
-proc replaceLastNibble*(a: var NibblesRange, b: byte) =
+proc replaceLastNibble*(a: var NibblesSeq, b: byte) =
   var
     odd = (a.len and 1) == 0
     pos = (a.len shr 1) - odd.int
 
-  putNibble(MutRange[byte](a.bytes), b)
+  putNibble(a.bytes, b)
 
-proc getBytes*(a: NibblesRange): ByteRange =
+proc getBytes*(a: NibblesSeq): seq[byte] =
   a.bytes
-
-when false:
-  proc keyOf(r: ByteRange): NibblesRange =
-    let firstIdx = if r.len == 0: 0
-                   elif (r[0] and 0x10) != 0: 1
-                   else: 2
-
-    return initNibbleRange(s).slice(firstIdx)
-

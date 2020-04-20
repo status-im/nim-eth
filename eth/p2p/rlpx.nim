@@ -255,7 +255,7 @@ proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void] =
 
   return thunk(peer, msgId, msgData)
 
-template compressMsg(peer: Peer, data: Bytes): Bytes =
+template compressMsg(peer: Peer, data: seq[byte]): seq[byte] =
   when useSnappy:
     if peer.snappyEnabled:
       snappy.compress(data)
@@ -263,7 +263,7 @@ template compressMsg(peer: Peer, data: Bytes): Bytes =
   else:
     data
 
-proc sendMsg*(peer: Peer, data: Bytes) {.gcsafe, async.} =
+proc sendMsg*(peer: Peer, data: seq[byte]) {.gcsafe, async.} =
   try:
     var cipherText = encryptMsg(peer.compressMsg(data), peer.secretsState)
     var res = await peer.transport.write(cipherText)
@@ -426,7 +426,7 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
       if decryptedBytes.len == 0:
         await peer.disconnectAndRaise(BreachOfProtocol,
                                       "Snappy uncompress encountered malformed data")
-  var rlp = rlpFromBytes(decryptedBytes.toRange)
+  var rlp = rlpFromBytes(decryptedBytes)
 
   try:
     # int32 as this seems more than big enough for the amount of msgIds
@@ -561,7 +561,6 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     EthereumNode = bindSym "EthereumNode"
 
     initRlpWriter = bindSym "initRlpWriter"
-    rlpFromBytes = bindSym "rlpFromBytes"
     append = bindSym("append", brForceOpen)
     read = bindSym("read", brForceOpen)
     checkedRlpRead = bindSym "checkedRlpRead"

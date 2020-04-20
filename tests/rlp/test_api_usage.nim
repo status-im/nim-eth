@@ -1,13 +1,15 @@
+{.used.}
+
 import
-  math, unittest, strutils,
-  eth/rlp, util/json_testing
+  math, unittest, strutils, stew/byteutils,
+  eth/rlp
 
 proc q(s: string): string = "\"" & s & "\""
 proc i(s: string): string = s.replace(" ").replace("\n")
 proc inspectMatch(r: Rlp, s: string): bool = r.inspect.i == s.i
 
 test "empty bytes are not a proper RLP":
-  var rlp = rlpFromBytes Bytes(@[]).toRange
+  var rlp = rlpFromBytes seq[byte](@[])
 
   check:
     not rlp.hasData
@@ -52,7 +54,7 @@ test "encode/decode object":
   var writer = initRlpWriter()
   writer.append(input)
   let bytes = writer.finish()
-  var rlp = rlpFromBytes(bytes.toRange)
+  var rlp = rlpFromBytes(bytes)
 
   var output = rlp.read(MyObj)
   check:
@@ -66,10 +68,10 @@ test "encode and decode lists":
 
   var
     bytes = writer.finish
-    rlp = rlpFromBytes bytes.toRange
+    rlp = rlpFromBytes bytes
 
   check:
-    bytes.hexRepr == "d183666f6fc8836261728362617ac31e2832"
+    bytes.toHex == "d183666f6fc8836261728362617ac31e2832"
     rlp.inspectMatch """
       {
         "foo"
@@ -89,7 +91,7 @@ test "encode and decode lists":
                      "Lorem ipsum dolor sit amet",
                      "Donec ligula tortor, egestas eu est vitae")
 
-  rlp = rlpFromBytes bytes.toRange
+  rlp = rlpFromBytes bytes
   check:
     rlp.listLen == 3
     rlp.listElem(0).toInt(int) == 6000
@@ -97,7 +99,7 @@ test "encode and decode lists":
     rlp.listElem(2).toString == "Donec ligula tortor, egestas eu est vitae"
 
   # test creating RLPs from other RLPs
-  var list = rlpFromBytes encodeList(rlp.listELem(1), rlp.listELem(0)).toRange
+  var list = rlpFromBytes encodeList(rlp.listELem(1), rlp.listELem(0))
 
   # test that iteration with enterList/skipElem works as expected
   doAssert list.enterList # We already know that we are working with a list
@@ -117,11 +119,11 @@ test "toBytes":
   let tok = rlp.listElem(1).toBytes()
   check:
     tok.len == 32
-    tok.hexRepr == "40ef02798f211da2e8173d37f255be908871ae65060dbb2f77fb29c0421447f4"
+    tok.toHex == "40ef02798f211da2e8173d37f255be908871ae65060dbb2f77fb29c0421447f4"
 
 test "nested lists":
   let listBytes = encode([[1, 2, 3], [5, 6, 7]])
-  let listRlp = rlpFromBytes listBytes.toRange
+  let listRlp = rlpFromBytes listBytes
   let sublistRlp0 = listRlp.listElem(0)
   let sublistRlp1 = listRlp.listElem(1)
   check sublistRlp0.listElem(0).toInt(int) == 1
@@ -133,12 +135,12 @@ test "nested lists":
 
 test "encoding length":
   let listBytes = encode([1,2,3,4,5])
-  let listRlp = rlpFromBytes listBytes.toRange
+  let listRlp = rlpFromBytes listBytes
   check listRlp.listLen == 5
 
   let emptyListBytes = encode ""
   check emptyListBytes.len == 1
-  let emptyListRlp = rlpFromBytes emptyListBytes.toRange
+  let emptyListRlp = rlpFromBytes emptyListBytes
   check emptyListRlp.blobLen == 0
 
 test "basic decoding":
@@ -159,21 +161,21 @@ test "encode byte arrays":
   var b2 = [byte(6), 8, 12, 123]
   var b3 = @[byte(122), 56, 65, 12]
 
-  let rlp = rlpFromBytes(encode((b1, b2, b3)).toRange)
+  let rlp = rlpFromBytes(encode((b1, b2, b3)))
   check:
     rlp.listLen == 3
-    rlp.listElem(0).toBytes().toSeq() == @b1
-    rlp.listElem(1).toBytes().toSeq() == @b2
-    rlp.listElem(2).toBytes().toSeq() == @b3
+    rlp.listElem(0).toBytes() == b1
+    rlp.listElem(1).toBytes() == b2
+    rlp.listElem(2).toBytes() == b3
 
     # The first byte here is the length of the datum (132 - 128 => 4)
-    $(rlp.listElem(1).rawData) == "R[132, 6, 8, 12, 123]"
+    $(rlp.listElem(1).rawData) == "[132, 6, 8, 12, 123]"
 
 test "empty byte arrays":
   var
-    rlp = rlpFromBytes rlp.encode("").toRange
+    rlp = rlpFromBytes rlp.encode("")
     b = rlp.toBytes
-  check $b == "R[]"
+  check $b == "@[]"
 
 test "encode/decode floats":
   for f in [high(float64), low(float64), 0.1, 122.23,
@@ -202,7 +204,7 @@ test "invalid enum":
   writer.append(2)
   writer.append(-1)
   let bytes = writer.finish()
-  var rlp = rlpFromBytes(bytes.toRange)
+  var rlp = rlpFromBytes(bytes)
   expect RlpTypeMismatch:
     discard rlp.read(MyEnum)
   rlp.skipElem()

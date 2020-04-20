@@ -244,7 +244,7 @@ proc read*(rlp: var Rlp, T: typedesc[StUint]): T {.inline.} =
     if bytes.len > 0:
       # be sure the amount of bytes matches the size of the stint
       if bytes.len <= sizeof(result):
-        result.initFromBytesBE(bytes.toOpenArray)
+        result.initFromBytesBE(bytes)
       else:
         raise newException(RlpTypeMismatch, "Unsigned integer expected, but the source RLP has the wrong length")
     else:
@@ -375,7 +375,7 @@ method getTrieDB*(db: AbstractChainDB): TrieDatabaseRef {.base, gcsafe.} =
 method getCodeByHash*(db: AbstractChainDB, hash: KeccakHash): Blob {.base, gcsafe.} =
   notImplemented()
 
-method getSetting*(db: AbstractChainDB, key: string): Bytes {.base, gcsafe.} =
+method getSetting*(db: AbstractChainDB, key: string): seq[byte] {.base, gcsafe.} =
   notImplemented()
 
 method setSetting*(db: AbstractChainDB, key: string, val: openarray[byte]) {.base, gcsafe.} =

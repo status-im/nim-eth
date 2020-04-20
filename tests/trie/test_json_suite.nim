@@ -2,15 +2,14 @@
 
 import
   os, json, tables, strutils, algorithm,
-  eth/rlp/types,
-  eth/trie/[trie_defs, db, hexary],
-  ./testutils
+  eth/trie/[db, hexary],
+  stew/byteutils
 
 type
   TestOp = object
     idx: int
-    key: BytesRange
-    value: BytesRange
+    key: seq[byte]
+    value: seq[byte]
 
 proc cmp(lhs, rhs: TestOp): int = cmp(lhs.idx, rhs.idx)
 proc `<=`(lhs, rhs: TestOp): bool = lhs.idx <= rhs.idx
@@ -76,12 +75,12 @@ proc runTests*(filename: string) =
           case v.kind
           of JString:
             inputs.add(TestOp(idx: inputs.len,
-                              key: k.str.toBytesRange,
-                              value: v.str.toBytesRange))
+                              key: k.str.toBytes,
+                              value: v.str.toBytes))
           of JNull:
             inputs.add(TestOp(idx: inputs.len,
-                              key: k.str.toBytesRange,
-                              value: zeroBytesRange))
+                              key: k.str.toBytes,
+                              value: @[]))
 
           else: invalidTest()
         else: invalidTest()
@@ -91,12 +90,12 @@ proc runTests*(filename: string) =
         case v.kind
         of JString:
           inputs.add(TestOp(idx: inputs.len,
-                            key: k.toBytesRange,
-                            value: v.str.toBytesRange))
+                            key: k.toBytes,
+                            value: v.str.toBytes))
         of JNull:
           inputs.add(TestOp(idx: inputs.len,
-                            key: k.toBytesRange,
-                            value: zeroBytesRange))
+                            key: k.toBytes,
+                            value: @[]))
 
         else: invalidTest()
     else: invalidTest()

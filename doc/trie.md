@@ -62,12 +62,9 @@ The primary API for Binary-trie is `set` and `get`.
 * set(key, value)  ---  _store a value associated with a key_
 * get(key): value  --- _get a value using a key_
 
-Both `key` and `value` are of `BytesRange` type. And they cannot have zero length.
-You can also use convenience API `get` and `set` which accepts
-`Bytes` or `string` (a `string` is conceptually wrong in this context
-and may costlier than a `BytesRange`, but it is good for testing purpose).
+Both `key` and `value` are of `seq[byte]` type. And they cannot have zero length.
 
-Getting a non-existent key will return zero length BytesRange.
+Getting a non-existent key will return zero length seq[byte].
 
 Binary-trie also provide dictionary syntax API for `set` and `get`.
 * trie[key] = value -- same as `set`
@@ -81,11 +78,11 @@ Additional APIs are:
    that starts with the same key prefix
  * rootNode() -- get root node
  * rootNode(node) -- replace the root node
- * getRootHash(): `KeccakHash` with `BytesRange` type
+ * getRootHash(): `KeccakHash` with `seq[byte]` type
  * getDB(): `DB` -- get flat-db pointer
 
 Constructor API:
- * initBinaryTrie(DB, rootHash[optional]) -- rootHash has `BytesRange` or KeccakHash type
+ * initBinaryTrie(DB, rootHash[optional]) -- rootHash has `seq[byte]` or KeccakHash type
  * init(BinaryTrie, DB, rootHash[optional])
 
 Normally you would not set the rootHash when constructing an empty Binary-trie.
@@ -103,17 +100,17 @@ var db = newMemoryDB()
 var trie = initBinaryTrie(db)
 trie.set("key1", "value1")
 trie.set("key2", "value2")
-doAssert trie.get("key1") == "value1".toRange
-doAssert trie.get("key2") == "value2".toRange
+doAssert trie.get("key1") == "value1".toBytes
+doAssert trie.get("key2") == "value2".toBytes
 
 # delete all subtrie with key prefixes "key"
 trie.deleteSubtrie("key")
-doAssert trie.get("key1") == zeroBytesRange
-doAssert trie.get("key2") == zeroBytesRange
+doAssert trie.get("key1") == []
+doAssert trie.get("key2") == []]
 
 trie["moon"] = "sun"
 doAssert "moon" in trie
-doAssert trie["moon"] == "sun".toRange
+doAssert trie["moon"] == "sun".toBytes
 ```
 
 Remember, `set` and `get` are trie operations. A single `set` operation may invoke
@@ -142,12 +139,12 @@ The branch utils consist of these API:
  * getTrieNodes(DB; nodeHash): branch
 
 `keyPrefix`, `key`, and `value` are bytes container with length greater than zero.
-They can be BytesRange, Bytes, and string(again, for convenience and testing purpose).
+They can be openArray[byte].
 
 `rootHash` and `nodeHash` also bytes container,
 but they have constraint: must be 32 bytes in length, and it must be a keccak_256 hash value.
 
-`branch` is a list of nodes, or in this case a seq[BytesRange].
+`branch` is a list of nodes, or in this case a `seq[seq[byte]]`.
 A list? yes, the structure is stored along with the encoded node.
 Therefore a list is enough to reconstruct the entire trie/branch.
 
@@ -303,14 +300,14 @@ let
 
 trie.set(key1, "value1")
 trie.set(key2, "value2")
-doAssert trie.get(key1) == "value1".toRange
-doAssert trie.get(key2) == "value2".toRange
+doAssert trie.get(key1) == "value1".toBytes
+doAssert trie.get(key2) == "value2".toBytes
 
 trie.delete(key1)
-doAssert trie.get(key1) == zeroBytesRange
+doAssert trie.get(key1) == []
 
 trie.delete(key2)
-doAssert trie[key2] == zeroBytesRange
+doAssert trie[key2] == []
 ```
 
 Remember, `set` and `get` are trie operations. A single `set` operation may invoke

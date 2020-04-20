@@ -1,6 +1,5 @@
 import
-  eth/rlp/types, stew/ranges/bitranges,
-  trie_defs, binary, binaries, db, trie_utils
+  ./trie_defs, ./binary, ./binaries, ./db, ./trie_utils, ./trie_bitseq
 
 type
   DB = TrieDatabaseRef
@@ -8,10 +7,10 @@ type
   # TODO: replace the usages of this with regular asserts
   InvalidKeyError* = object of Defect
 
-template query(db: DB, nodeHash: TrieNodeKey): BytesRange =
-  db.get(nodeHash.toOpenArray).toRange
+template query(db: DB, nodeHash: TrieNodeKey): seq[byte] =
+  db.get(nodeHash)
 
-proc checkIfBranchExistImpl(db: DB; nodeHash: TrieNodeKey; keyPrefix: TrieBitRange): bool =
+proc checkIfBranchExistImpl(db: DB; nodeHash: TrieNodeKey; keyPrefix: TrieBitSeq): bool =
   if nodeHash == zeroHash:
     return false
 
@@ -37,14 +36,14 @@ proc checkIfBranchExistImpl(db: DB; nodeHash: TrieNodeKey; keyPrefix: TrieBitRan
     else:
       return checkIfBranchExistImpl(db, node.rightChild, keyPrefix.sliceToEnd(1))
 
-proc checkIfBranchExist*(db: DB; rootHash: BytesContainer | KeccakHash, keyPrefix: BytesContainer): bool =
+proc checkIfBranchExist*(db: DB; rootHash: TrieNodeKey, keyPrefix: openArray[byte]): bool =
   ## Given a key prefix, return whether this prefix is
   ## the prefix of an existing key in the trie.
   checkValidHashZ(rootHash)
-  var keyPrefixBits = bits MutByteRange(keyPrefix.toRange)
-  checkIfBranchExistImpl(db, toRange(rootHash), keyPrefixBits)
+  var keyPrefixBits = bits keyPrefix
+  checkIfBranchExistImpl(db, rootHash, keyPrefixBits)
 
-proc getBranchImpl(db: DB; nodeHash: TrieNodeKey, keyPath: TrieBitRange, output: var seq[BytesRange]) =
+proc getBranchImpl(db: DB; nodeHash: TrieNodeKey, keyPath: TrieBitSeq, output: var seq[seq[byte]]) =
   if nodeHash == zeroHash: return
 
   let nodeVal = db.query(nodeHash)
@@ -76,14 +75,14 @@ proc getBranchImpl(db: DB; nodeHash: TrieNodeKey, keyPath: TrieBitRange, output:
     else:
       getBranchImpl(db, node.rightChild, keyPath.sliceToEnd(1), output)
 
-proc getBranch*(db: DB; rootHash: BytesContainer | KeccakHash; key: BytesContainer): seq[BytesRange] =
+proc getBranch*(db: DB; rootHash: seq[byte]; key: openArray[byte]): seq[seq[byte]] =
   ##     Get a long-format Merkle branch
   checkValidHashZ(rootHash)
   result = @[]
-  var keyBits = bits MutByteRange(key.toRange)
-  getBranchImpl(db, toRange(rootHash), keyBits, result)
+  var keyBits = bits key
+  getBranchImpl(db, rootHash, keyBits, result)
 
-proc isValidBranch*(branch: seq[BytesRange], rootHash: BytesContainer | KeccakHash, key, value: BytesContainer): bool =
+proc isValidBranch*(branch: seq[seq[byte]], rootHash: seq[byte], key, value: openArray[byte]): bool =
   checkValidHashZ(rootHash)
   # branch must not be empty
   doAssert(branch.len != 0)
@@ -92,18 +91,18 @@ proc isValidBranch*(branch: seq[BytesRange], rootHash: BytesContainer | KeccakHa
   for node in branch:
     doAssert(node.len != 0)
     let nodeHash = keccakHash(node)
-    db.put(nodeHash.toOpenArray, node.toOpenArray)
+    db.put(nodeHash.data, node)
 
   var trie = initBinaryTrie(db, rootHash)
-  result = trie.get(key) == toRange(value)
+  result = trie.get(key) == value
 
-proc getTrieNodesImpl(db: DB; nodeHash: TrieNodeKey, output: var seq[BytesRange]): bool =
+proc getTrieNodesImpl(db: DB; nodeHash: TrieNodeKey, output: var seq[seq[byte]]): bool =
   ## Get full trie of a given root node
 
   if nodeHash.isZeroHash(): return false
 
-  var nodeVal: BytesRange
-  if nodeHash.toOpenArray in db:
+  var nodeVal: seq[byte]
+  if nodeHash in db:
     nodeVal = db.query(nodeHash)
   else:
     return false
@@ -121,19 +120,19 @@ proc getTrieNodesImpl(db: DB; nodeHash: TrieNodeKey, output: var seq[BytesRange]
   of LEAF_TYPE:
     output.add nodeVal
 
-proc getTrieNodes*(db: DB; nodeHash: BytesContainer | KeccakHash): seq[BytesRange] =
+proc getTrieNodes*(db: DB; nodeHash: TrieNodeKey): seq[seq[byte]] =
   checkValidHashZ(nodeHash)
   result = @[]
-  discard getTrieNodesImpl(db, toRange(nodeHash), result)
+  discard getTrieNodesImpl(db, nodeHash, result)
 
-proc getWitnessImpl*(db: DB; nodeHash: TrieNodeKey; keyPath: TrieBitRange; output: var seq[BytesRange]) =
+proc getWitnessImpl*(db: DB; nodeHash: TrieNodeKey; keyPath: TrieBitSeq; output: var seq[seq[byte]]) =
   if keyPath.len == 0:
     if not getTrieNodesImpl(db, nodeHash, output): return
 
   if nodeHash.isZeroHash(): return
 
-  var nodeVal: BytesRange
-  if nodeHash.toOpenArray in db:
+  var nodeVal: seq[byte]
+  if nodeHash in db:
     nodeVal = db.query(nodeHash)
   else:
     return
@@ -157,7 +156,7 @@ proc getWitnessImpl*(db: DB; nodeHash: TrieNodeKey; keyPath: TrieBitRange; outpu
     else:
       getWitnessImpl(db, node.rightChild, keyPath.sliceToEnd(1), output)
 
-proc getWitness*(db: DB; nodeHash: BytesContainer | KeccakHash; key: BytesContainer): seq[BytesRange] =
+proc getWitness*(db: DB; nodeHash: TrieNodeKey; key: openArray[byte]): seq[seq[byte]] =
   ##  Get all witness given a keyPath prefix.
   ##  Include
   ##
@@ -165,5 +164,5 @@ proc getWitness*(db: DB; nodeHash: BytesContainer | KeccakHash; key: BytesContai
   ##  2. witness in the subtrie of the last node in keyPath
   checkValidHashZ(nodeHash)
   result = @[]
-  var keyBits = bits MutByteRange(key.toRange)
-  getWitnessImpl(db, toRange(nodeHash), keyBits, result)
+  var keyBits = bits key
+  getWitnessImpl(db, nodeHash, keyBits, result)

@@ -1,7 +1,7 @@
 {.used.}
 
 import
-  sets, unittest, strutils, sets,
+  sets, unittest, strutils, stew/byteutils,
   eth/trie/[db, binary, branches]
 
 suite "branches utils":
@@ -10,9 +10,9 @@ suite "branches utils":
     var db = newMemoryDB()
     var trie = initBinaryTrie(db)
 
-    trie.set("\x12\x34\x56\x78\x9a", "9a")
-    trie.set("\x12\x34\x56\x78\x9b", "9b")
-    trie.set("\x12\x34\x56\xff", "ff")
+    trie.set("\x12\x34\x56\x78\x9a".toBytes, "9a".toBytes)
+    trie.set("\x12\x34\x56\x78\x9b".toBytes, "9b".toBytes)
+    trie.set("\x12\x34\x56\xff".toBytes, "ff".toBytes)
     trie
 
   const branchExistData = [
@@ -28,7 +28,7 @@ suite "branches utils":
     var trie = testTrie()
     var db = trie.getDB()
     for c in branchExistData:
-      let keyPrefix = c[0].toRange
+      let keyPrefix = c[0].toBytes
       let if_exist = c[1]
       check checkIfBranchExist(db, trie.getRootHash(), keyPrefix) == if_exist
 
@@ -45,7 +45,7 @@ suite "branches utils":
     var trie = testTrie()
     var db = trie.getDB()
     for c in branchData:
-      let key = c[0].toRange
+      let key = c[0].toBytes
       let keyValid = c[1]
 
       if keyValid:
@@ -83,15 +83,15 @@ suite "branches utils":
     (repeat('0', 32), @[])
   ]
 
-  proc toRanges(x: seq[string]): seq[BytesRange] =
-    result = newSeq[BytesRange](x.len)
-    for i, c in x: result[i] = toRange(c)
+  proc toRanges(x: seq[string]): seq[seq[byte]] =
+    result = newSeq[seq[byte]](x.len)
+    for i, c in x: result[i] = toBytes(c)
 
   test "get trie nodes":
     var trie = testTrie()
     var db = trie.getDB()
     for c in trieNodesData:
-      let root = c[0].toRange()
+      let root = c[0].toBytes()
       let nodes = toRanges(c[1])
       check toHashSet(nodes) == toHashSet(getTrieNodes(db, root))
 
@@ -135,7 +135,7 @@ suite "branches utils":
     var trie = testTrie()
     var db = trie.getDB()
     for c in witnessData:
-      let key   = c[0].toRange
+      let key   = c[0].toBytes
       let nodes = toRanges(c[1])
 
       if nodes.len != 0:

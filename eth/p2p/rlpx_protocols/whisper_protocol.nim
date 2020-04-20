@@ -167,7 +167,7 @@ p2pProtocol Whisper(version = whisperVersion,
     proc status(peer: Peer,
                 protocolVersion: uint,
                 powConverted: uint64,
-                bloom: Bytes,
+                bloom: seq[byte],
                 isLightNode: bool)
 
   proc messages(peer: Peer, envelopes: openarray[Envelope]) =
@@ -220,7 +220,7 @@ p2pProtocol Whisper(version = whisperVersion,
 
     peer.state.powRequirement = cast[float64](value)
 
-  proc bloomFilterExchange(peer: Peer, bloom: Bytes) =
+  proc bloomFilterExchange(peer: Peer, bloom: openArray[byte]) =
     if not peer.state.initialized:
       warn "Handshake not completed yet, discarding bloomFilterExchange"
       return
@@ -343,8 +343,8 @@ proc queueMessage(node: EthereumNode, msg: Message): bool =
 
 proc postMessage*(node: EthereumNode, pubKey = none[PublicKey](),
                   symKey = none[SymKey](), src = none[PrivateKey](),
-                  ttl: uint32, topic: Topic, payload: Bytes,
-                  padding = none[Bytes](), powTime = 1'f,
+                  ttl: uint32, topic: Topic, payload: seq[byte],
+                  padding = none[seq[byte]](), powTime = 1'f,
                   powTarget = defaultMinPow,
                   targetPeer = none[NodeId]()): bool =
   ## Post a message on the message queue which will be processed at the

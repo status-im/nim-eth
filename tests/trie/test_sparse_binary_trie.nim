@@ -1,8 +1,8 @@
 {.used.}
 
 import
-  unittest, random,
-  eth/trie/[trie_defs, db, sparse_binary, sparse_proofs],
+  unittest, random, stew/byteutils,
+  eth/trie/[db, sparse_binary, sparse_proofs],
   ./testutils
 
 suite "sparse binary trie":
@@ -21,14 +21,14 @@ suite "sparse binary trie":
   test "basic get":
     for c in kv_pairs:
       let x = trie.get(c.key)
-      let y = toRange(c.value)
+      let y = c.value
       check x == y
       trie.del(c.key)
 
     for c in kv_pairs:
       check trie.exists(c.key) == false
 
-    check trie.getRootHash() == keccakHash(emptyNodeHashes[0].toOpenArray, emptyNodeHashes[0].toOpenArray).toRange
+    check trie.getRootHash() == keccakHash(emptyNodeHashes[0].data, emptyNodeHashes[0].data).data
 
   test "single update set":
     random.shuffle(kv_pairs)
@@ -42,11 +42,11 @@ suite "sparse binary trie":
   test "single update get":
     for i in numbers:
       # If new value is the same as current value, skip the update
-      if toRange($i) == trie.get(kv_pairs[i].key):
+      if toBytes($i) == trie.get(kv_pairs[i].key):
         continue
       # Update
-      trie.set(kv_pairs[i].key, $i)
-      check trie.get(kv_pairs[i].key) == toRange($i)
+      trie.set(kv_pairs[i].key, toBytes($i))
+      check trie.get(kv_pairs[i].key) == toBytes($i)
       check trie.getRootHash() != prior_to_update_root
 
       # Un-update
@@ -56,7 +56,7 @@ suite "sparse binary trie":
   test "batch update with different update order":
     # First batch update
     for i in numbers:
-      trie.set(kv_pairs[i].key, $i)
+      trie.set(kv_pairs[i].key, toBytes($i))
 
     let batch_updated_root = trie.getRootHash()
 
@@ -70,14 +70,14 @@ suite "sparse binary trie":
     # Second batch update
     random.shuffle(numbers)
     for i in numbers:
-        trie.set(kv_pairs[i].key, $i)
+        trie.set(kv_pairs[i].key, toBytes($i))
 
     check trie.getRootHash() == batch_updated_root
 
   test "dictionary API":
     trie[kv_pairs[0].key] = kv_pairs[0].value
     let x = trie[kv_pairs[0].key]
-    let y = toRange(kv_pairs[0].value)
+    let y = kv_pairs[0].value
     check x == y
     check kv_pairs[0].key in trie
 
@@ -85,10 +85,10 @@ suite "sparse binary trie":
     db = newMemoryDB()
     trie = initSparseBinaryTrie(db)
     let
-      testKey    = toRange(kv_pairs[0].key)
-      testValue  = toRange(kv_pairs[0].value)
-      testKey2   = toRange(kv_pairs[1].key)
-      testValue2 = toRange(kv_pairs[1].value)
+      testKey    = kv_pairs[0].key
+      testValue  = kv_pairs[0].value
+      testKey2   = kv_pairs[1].key
+      testValue2 = kv_pairs[1].value
 
     trie.set(testKey, testValue)
     var root = trie.getRootHash()
@@ -102,11 +102,11 @@ suite "sparse binary trie":
     value = trie.get(testKey, root)
     check value == testValue
 
-  proc makeBadProof(size: int, width = 32): seq[BytesRange] =
-    let badProofStr = randList(string, randGen(width, width), randGen(size, size))
-    result = newSeq[BytesRange](size)
+  proc makeBadProof(size: int, width = 32): seq[seq[byte]] =
+    let badProofStr = randList(seq[byte], randGen(width, width), randGen(size, size))
+    result = newSeq[seq[byte]](size)
     for i in 0 ..< result.len:
-      result[i] = toRange(badProofStr[i])
+      result[i] = badProofStr[i]
 
   test "proofs":
     const
@@ -115,9 +115,9 @@ suite "sparse binary trie":
     let
       testKey   = kv_pairs[0].key
       badKey    = kv_pairs[1].key
-      testValue = "testValue"
-      testValue2 = "testValue2"
-      badValue  = "badValue"
+      testValue = "testValue".toBytes
+      testValue2 = "testValue2".toBytes
+      badValue  = "badValue".toBytes
       badProof  = makeBadProof(MaxBadProof)
 
     trie[testKey] = testValue
@@ -131,7 +131,7 @@ suite "sparse binary trie":
     let
       testKey2  = kv_pairs[2].key
       testKey3  = kv_pairs[3].key
-      defaultValue = zeroBytesRange
+      defaultValue = default(seq[byte])
 
     trie.set(testKey2, testValue)
     proof = trie.prove(testKey)
@@ -169,7 +169,7 @@ suite "sparse binary trie":
     check compactProof(badProof2).len == 0
     check compactProof(badProof3).len == 0
     check decompactProof(badProof3).len == 0
-    var zeroProof: seq[BytesRange]
+    var zeroProof: seq[seq[byte]]
     check decompactProof(zeroProof).len == 0
 
     proof = trie.proveCompact(testKey2)
@@ -202,23 +202,23 @@ suite "sparse binary trie":
 
   test "examples":
     let
-      key1 = "01234567890123456789"
-      key2 = "abcdefghijklmnopqrst"
+      key1 = "01234567890123456789".toBytes
+      key2 = "abcdefghijklmnopqrst".toBytes
 
-    trie.set(key1, "value1")
-    trie.set(key2, "value2")
-    check trie.get(key1) == "value1".toRange
-    check trie.get(key2) == "value2".toRange
+    trie.set(key1, "value1".toBytes)
+    trie.set(key2, "value2".toBytes)
+    check trie.get(key1) == "value1".toBytes
+    check trie.get(key2) == "value2".toBytes
 
     trie.del(key1)
-    check trie.get(key1) == zeroBytesRange
+    check trie.get(key1) == []
 
     trie.del(key2)
-    check trie[key2] == zeroBytesRange
+    check trie[key2] == []
 
     let
-      value1 = "hello world"
-      badValue = "bad value"
+      value1 = "hello world".toBytes
+      badValue = "bad value".toBytes
 
     trie[key1] = value1
     var proof = trie.prove(key1)

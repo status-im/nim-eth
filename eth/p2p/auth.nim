@@ -14,7 +14,7 @@
 
 import eth/[keys, rlp], nimcrypto
 import ecies
-import stew/[byteutils, endians2, results]
+import stew/[byteutils, endians2, objects, results]
 
 export results
 
@@ -362,9 +362,6 @@ proc decodeAuthMessageV4(h: var Handshake, m: openarray[byte]): AuthResult[void]
 
 proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AuthMessage.
-  var
-    nonce: Nonce
-
   let size = uint16.fromBytesBE(m)
   h.expectedLength = int(size) + 2
   if h.expectedLength > len(m):
@@ -374,7 +371,7 @@ proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthResult[voi
                   toa(m, 0, 2)).isErr:
     return err(EciesError)
   try:
-    var reader = rlpFromBytes(buffer.toRange())
+    var reader = rlpFromBytes(buffer)
     if not reader.isList() or reader.listLen() < 4:
       return err(InvalidAuth)
     if reader.listElem(0).blobLen != RawSignatureSize:
@@ -385,29 +382,28 @@ proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthResult[voi
       return err(InvalidAuth)
     if reader.listElem(3).blobLen != 1:
       return err(InvalidAuth)
-    var signatureBr = reader.listElem(0).toBytes()
-    var pubkeyBr = reader.listElem(1).toBytes()
-    var nonceBr = reader.listElem(2).toBytes()
-    var versionBr = reader.listElem(3).toBytes()
+    let
+      signatureBr = reader.listElem(0).toBytes()
+      pubkeyBr = reader.listElem(1).toBytes()
+      nonceBr = reader.listElem(2).toBytes()
+      versionBr = reader.listElem(3).toBytes()
 
-    let pubkey =
-      ? PublicKey.fromRaw(pubkeyBr.toOpenArray()).mapErrTo(InvalidPubKey)
-
-    copyMem(addr nonce[0], nonceBr.baseAddr, KeyLength)
+    let
+      signature = ? Signature.fromRaw(signatureBr).mapErrTo(SignatureError)
+      pubkey = ? PublicKey.fromRaw(pubkeyBr).mapErrTo(InvalidPubKey)
+      nonce = toArray(KeyLength, nonceBr)
 
     var secret = ? ecdhRaw(h.host.seckey, pubkey).mapErrTo(EcdhError)
 
     let xornonce = nonce xor secret.data
     secret.clear()
 
-    let signature =
-      ? Signature.fromRaw(signatureBr.toOpenArray()).mapErrTo(SignatureError)
     h.remoteEPubkey =
       ? recover(signature, SkMessage(data: xornonce)).mapErrTo(SignatureError)
 
     h.initiatorNonce = nonce
     h.remoteHPubkey = pubkey
-    h.version = cast[ptr byte](versionBr.baseAddr)[]
+    h.version = versionBr[0]
     ok()
   except CatchableError:
     err(RlpError)
@@ -424,7 +420,7 @@ proc decodeAckMessageEip8*(h: var Handshake, m: openarray[byte]): AuthResult[voi
                   toa(m, 0, 2)).isErr:
     return err(EciesError)
   try:
-    var reader = rlpFromBytes(buffer.toRange())
+    var reader = rlpFromBytes(buffer)
     if not reader.isList() or reader.listLen() < 3:
       return err(InvalidAck)
     if reader.listElem(0).blobLen != RawPublicKeySize:
@@ -433,14 +429,14 @@ proc decodeAckMessageEip8*(h: var Handshake, m: openarray[byte]): AuthResult[voi
       return err(InvalidAck)
     if reader.listElem(2).blobLen != 1:
       return err(InvalidAck)
-    let pubkeyBr = reader.listElem(0).toBytes()
-    let nonceBr = reader.listElem(1).toBytes()
-    let versionBr = reader.listElem(2).toBytes()
-    h.remoteEPubkey =
-      ? PublicKey.fromRaw(pubkeyBr.toOpenArray()).mapErrTo(InvalidPubKey)
+    let
+      pubkeyBr = reader.listElem(0).toBytes()
+      nonceBr = reader.listElem(1).toBytes()
+      versionBr = reader.listElem(2).toBytes()
 
-    copyMem(addr h.responderNonce[0], nonceBr.baseAddr, KeyLength)
-    h.version = cast[ptr byte](versionBr.baseAddr)[]
+    h.remoteEPubkey = ? PublicKey.fromRaw(pubkeyBr).mapErrTo(InvalidPubKey)
+    h.responderNonce = toArray(KeyLength, nonceBr)
+    h.version = versionBr[0]
 
     ok()
   except CatchableError:

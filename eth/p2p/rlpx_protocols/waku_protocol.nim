@@ -144,7 +144,7 @@ proc append*(rlpWriter: var RlpWriter, value: StatusOptions) =
 
   let bytes = list.finish()
 
-  rlpWriter.append(rlpFromBytes(bytes.toRange))
+  rlpWriter.append(rlpFromBytes(bytes))
 
 proc read*(rlp: var Rlp, T: typedesc[StatusOptions]): T =
   if not rlp.isList():
@@ -379,7 +379,7 @@ p2pProtocol Waku(version = wakuVersion,
 
 
   proc p2pRequestComplete(peer: Peer, requestId: Hash, lastEnvelopeHash: Hash,
-    cursor: Bytes) = discard
+    cursor: seq[byte]) = discard
     # TODO:
     # In the current specification the parameters are not wrapped in a regular
     # envelope as is done for the P2P Request packet. If we could alter this in
@@ -488,8 +488,8 @@ proc queueMessage(node: EthereumNode, msg: Message): bool =
 
 proc postMessage*(node: EthereumNode, pubKey = none[PublicKey](),
                   symKey = none[SymKey](), src = none[PrivateKey](),
-                  ttl: uint32, topic: Topic, payload: Bytes,
-                  padding = none[Bytes](), powTime = 1'f,
+                  ttl: uint32, topic: Topic, payload: seq[byte],
+                  padding = none[seq[byte]](), powTime = 1'f,
                   powTarget = defaultMinPow,
                   targetPeer = none[NodeId]()): bool =
   ## Post a message on the message queue which will be processed at the

@@ -52,7 +52,7 @@ proc packData*(payload: openArray[byte], pk: PrivateKey): seq[byte] =
 template sourceDir*: string = currentSourcePath.rsplit(DirSep, 1)[0]
 
 proc recvMsgMock*(msg: openArray[byte]): tuple[msgId: int, msgData: Rlp] =
-  var rlp = rlpFromBytes(@msg.toRange)
+  var rlp = rlpFromBytes(msg)
 
   let msgId = rlp.read(int32)
   return (msgId.int, rlp)
