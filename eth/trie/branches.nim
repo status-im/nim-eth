@@ -1,6 +1,5 @@
 import
-  stew/ranges/[bitranges, typedranges],
-  trie_defs, binary, binaries, db, trie_utils
+  ./trie_defs, ./binary, ./binaries, ./db, ./trie_utils, ./trie_bitseq
 
 type
   DB = TrieDatabaseRef
@@ -11,7 +10,7 @@ type
 template query(db: DB, nodeHash: TrieNodeKey): seq[byte] =
   db.get(nodeHash)
 
-proc checkIfBranchExistImpl(db: DB; nodeHash: TrieNodeKey; keyPrefix: TrieBitRange): bool =
+proc checkIfBranchExistImpl(db: DB; nodeHash: TrieNodeKey; keyPrefix: TrieBitSeq): bool =
   if nodeHash == zeroHash:
     return false
 
@@ -41,10 +40,10 @@ proc checkIfBranchExist*(db: DB; rootHash: TrieNodeKey, keyPrefix: openArray[byt
   ## Given a key prefix, return whether this prefix is
   ## the prefix of an existing key in the trie.
   checkValidHashZ(rootHash)
-  var keyPrefixBits = bits MutByteRange(@(keyPrefix).toRange)
+  var keyPrefixBits = bits keyPrefix
   checkIfBranchExistImpl(db, rootHash, keyPrefixBits)
 
-proc getBranchImpl(db: DB; nodeHash: TrieNodeKey, keyPath: TrieBitRange, output: var seq[seq[byte]]) =
+proc getBranchImpl(db: DB; nodeHash: TrieNodeKey, keyPath: TrieBitSeq, output: var seq[seq[byte]]) =
   if nodeHash == zeroHash: return
 
   let nodeVal = db.query(nodeHash)
@@ -80,7 +79,7 @@ proc getBranch*(db: DB; rootHash: seq[byte]; key: openArray[byte]): seq[seq[byte
   ##     Get a long-format Merkle branch
   checkValidHashZ(rootHash)
   result = @[]
-  var keyBits = bits MutByteRange(@(key).toRange)
+  var keyBits = bits key
   getBranchImpl(db, rootHash, keyBits, result)
 
 proc isValidBranch*(branch: seq[seq[byte]], rootHash: seq[byte], key, value: openArray[byte]): bool =
@@ -126,7 +125,7 @@ proc getTrieNodes*(db: DB; nodeHash: TrieNodeKey): seq[seq[byte]] =
   result = @[]
   discard getTrieNodesImpl(db, nodeHash, result)
 
-proc getWitnessImpl*(db: DB; nodeHash: TrieNodeKey; keyPath: TrieBitRange; output: var seq[seq[byte]]) =
+proc getWitnessImpl*(db: DB; nodeHash: TrieNodeKey; keyPath: TrieBitSeq; output: var seq[seq[byte]]) =
   if keyPath.len == 0:
     if not getTrieNodesImpl(db, nodeHash, output): return
 
@@ -165,5 +164,5 @@ proc getWitness*(db: DB; nodeHash: TrieNodeKey; key: openArray[byte]): seq[seq[b
   ##  2. witness in the subtrie of the last node in keyPath
   checkValidHashZ(nodeHash)
   result = @[]
-  var keyBits = bits MutByteRange(@(key).toRange)
+  var keyBits = bits key
   getWitnessImpl(db, nodeHash, keyBits, result)

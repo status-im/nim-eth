@@ -1,9 +1,9 @@
 import
-  stew/ranges/[typedranges, bitranges],
-  trie_defs, trie_utils, db, sparse_proofs
+  ./trie_bitseq,
+  ./trie_defs, ./trie_utils, ./db, ./sparse_proofs
 
 export
-  trie_utils, bitranges,
+  trie_utils, trie_bitseq,
   sparse_proofs.verifyProof
 
 type
@@ -56,7 +56,7 @@ proc getDB*(t: SparseBinaryTrie): auto = t.db
 proc getRootHash*(self: SparseBinaryTrie): seq[byte] {.inline.} =
   self.rootHash
 
-proc getAux(self: SparseBinaryTrie, path: BitRange, rootHash: openArray[byte]): seq[byte] =
+proc getAux(self: SparseBinaryTrie, path: TrieBitSeq, rootHash: openArray[byte]): seq[byte] =
   var nodeHash = @rootHash
   for targetBit in path:
     let value = self.db.get(nodeHash)
@@ -72,13 +72,13 @@ proc getAux(self: SparseBinaryTrie, path: BitRange, rootHash: openArray[byte]): 
 proc get*(self: SparseBinaryTrie, key: openArray[byte]): seq[byte] =
   ## gets a key from the tree.
   doAssert(key.len == pathByteLen)
-  let path = MutByteRange(@(key).toRange).bits
+  let path = bits key
   self.getAux(path, self.rootHash)
 
 proc get*(self: SparseBinaryTrie, key, rootHash: openArray[byte]): seq[byte] =
   ## gets a key from the tree at a specific root.
   doAssert(key.len == pathByteLen)
-  let path = MutByteRange(@(key).toRange).bits
+  let path = bits key
   self.getAux(path, rootHash)
 
 proc hashAndSave*(self: SparseBinaryTrie, node: openArray[byte]): seq[byte] =
@@ -91,7 +91,7 @@ proc hashAndSave*(self: SparseBinaryTrie, a, b: openArray[byte]): seq[byte] =
   self.db.put(result, value)
 
 proc setAux(self: var SparseBinaryTrie, value: openArray[byte],
-    path: BitRange, depth: int, nodeHash: openArray[byte]): seq[byte] =
+    path: TrieBitSeq, depth: int, nodeHash: openArray[byte]): seq[byte] =
   if depth == treeHeight:
     result = self.hashAndSave(value)
   else:
@@ -108,14 +108,14 @@ proc set*(self: var SparseBinaryTrie, key, value: openArray[byte]) =
   ## sets a new value for a key in the tree, returns the new root,
   ## and sets the new current root of the tree.
   doAssert(key.len == pathByteLen)
-  let path = MutByteRange(@(key).toRange).bits
+  let path = bits key
   self.rootHash = self.setAux(value, path, 0, self.rootHash)
 
 proc set*(self: var SparseBinaryTrie, key, value, rootHash: openArray[byte]): seq[byte] =
   ## sets a new value for a key in the tree at a specific root,
   ## and returns the new root.
   doAssert(key.len == pathByteLen)
-  let path = MutByteRange(@(key).toRange).bits
+  let path = bits key
   self.setAux(value, path, 0, rootHash)
 
 template exists*(self: SparseBinaryTrie, key: openArray[byte]): bool =
@@ -141,7 +141,7 @@ proc proveAux(self: SparseBinaryTrie, key, rootHash: openArray[byte], output: va
   var currVal = self.db.get(rootHash)
   if currVal.len == 0: return false
 
-  let path = MutByteRange(@(key).toRange).bits
+  let path = bits key
   for i, bit in path:
     if bit:
       # right side

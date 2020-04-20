@@ -1,5 +1,7 @@
 import
-  stew/ranges/[ptr_arith, bitranges, typedranges], trie_defs
+  sequtils,
+  stew/ranges/ptr_arith, trie_defs,
+  ./trie_bitseq
 
 type
   TrieNodeKind* = enum
@@ -8,12 +10,11 @@ type
     LEAF_TYPE = 2
 
   TrieNodeKey* = seq[byte]
-  TrieBitRange* = BitRange
 
   TrieNode* = object
     case kind*: TrieNodeKind
     of KV_TYPE:
-      keyPath*: TrieBitRange
+      keyPath*: TrieBitSeq
       child*: TrieNodeKey
     of BRANCH_TYPE:
       leftChild*: TrieNodeKey
@@ -25,13 +26,13 @@ type
   ValidationError* = object of CorruptedTrieDatabase
 
 # ----------------------------------------------
-template sliceToEnd*(r: TrieBitRange, index: int): TrieBitRange =
-  if r.len <= index: TrieBitRange() else: r[index .. ^1]
+template sliceToEnd*(r: TrieBitSeq, index: int): TrieBitSeq =
+  if r.len <= index: TrieBitSeq() else: r[index .. ^1]
 
-proc decodeToBinKeypath*(path: seq[byte]): TrieBitRange =
+proc decodeToBinKeypath*(path: seq[byte]): TrieBitSeq =
   ## Decodes bytes into a sequence of 0s and 1s
   ## Used in decoding key path of a KV-NODE
-  var path = MutByteRange(path.toRange).bits
+  var path = path.bits
   if path[0]:
     path = path[4..^1]
 
@@ -41,9 +42,9 @@ proc decodeToBinKeypath*(path: seq[byte]): TrieBitRange =
   bits = bits or path[3].int
 
   if path.len > 4:
-    result = path[4+((4 - bits) mod 4)..^1]
+    path[4+((4 - bits) mod 4)..^1]
   else:
-    result = BitRange()
+    TrieBitSeq()
 
 proc parseNode*(node: openArray[byte]): TrieNode =
   # Input: a serialized node
@@ -75,7 +76,7 @@ proc parseNode*(node: openArray[byte]): TrieNode =
     # Output: node type, value
     return TrieNode(kind: LEAF_TYPE, value: node[1..^1])
 
-proc encodeKVNode*(keyPath: TrieBitRange, childHash: TrieNodeKey): seq[byte] =
+proc encodeKVNode*(keyPath: TrieBitSeq, childHash: TrieNodeKey): seq[byte] =
   ## Serializes a key/value node
   if keyPath.len == 0:
     raise newException(ValidationError, "Key path can not be empty")
@@ -135,7 +136,7 @@ proc encodeLeafNode*(value: openArray[byte]): seq[byte] =
 
   result = LEAF_TYPE_PREFIX.concat(@value)
 
-proc getCommonPrefixLength*(a, b: TrieBitRange): int =
+proc getCommonPrefixLength*(a, b: TrieBitSeq): int =
   let len = min(a.len, b.len)
   for i in 0..<len:
     if a[i] != b[i]: return i

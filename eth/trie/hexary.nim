@@ -83,9 +83,9 @@ template keyToLocalBytes(db: DB, k: TrieNodeKey): seq[byte] =
 template extensionNodeKey(r: Rlp): auto =
   hexPrefixDecode r.listElem(0).toBytes
 
-proc getAux(db: DB, nodeRlp: Rlp, path: NibblesRange): seq[byte] {.gcsafe.}
+proc getAux(db: DB, nodeRlp: Rlp, path: NibblesSeq): seq[byte] {.gcsafe.}
 
-proc getAuxByHash(db: DB, node: TrieNodeKey, path: NibblesRange): seq[byte] =
+proc getAuxByHash(db: DB, node: TrieNodeKey, path: NibblesSeq): seq[byte] =
   var nodeRlp = rlpFromBytes keyToLocalBytes(db, node)
   return getAux(db, nodeRlp, path)
 
@@ -93,7 +93,7 @@ template getLookup(elem: untyped): untyped =
   if elem.isList: elem
   else: rlpFromBytes(get(db, elem.expectHash))
 
-proc getAux(db: DB, nodeRlp: Rlp, path: NibblesRange): seq[byte] =
+proc getAux(db: DB, nodeRlp: Rlp, path: NibblesSeq): seq[byte] =
   if not nodeRlp.hasData or nodeRlp.isEmpty:
     return
 
@@ -127,7 +127,7 @@ proc getAux(db: DB, nodeRlp: Rlp, path: NibblesRange): seq[byte] =
 proc get*(self: HexaryTrie; key: openArray[byte]): seq[byte] =
   return getAuxByHash(self.db, self.root, initNibbleRange(key))
 
-proc getKeysAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]]): seq[byte] =
+proc getKeysAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesSeq]]): seq[byte] =
   while stack.len > 0:
     let (nodeRlp, path) = stack.pop()
     if not nodeRlp.hasData or nodeRlp.isEmpty:
@@ -209,7 +209,7 @@ iterator values*(self: HexaryTrie): seq[byte] =
   while stack.len > 0:
     yield getValuesAux(self.db, stack)
 
-proc getPairsAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesRange]]): (seq[byte], seq[byte]) =
+proc getPairsAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesSeq]]): (seq[byte], seq[byte]) =
   while stack.len > 0:
     let (nodeRlp, path) = stack.pop()
     if not nodeRlp.hasData or nodeRlp.isEmpty:
@@ -313,7 +313,7 @@ template getNode(elem: untyped): untyped =
   if elem.isList: @(elem.rawData)
   else: get(db, elem.expectHash)
 
-proc getBranchAux(db: DB, node: openArray[byte], path: NibblesRange, output: var seq[seq[byte]]) =
+proc getBranchAux(db: DB, node: openArray[byte], path: NibblesSeq, output: var seq[seq[byte]]) =
   var nodeRlp = rlpFromBytes node
   if not nodeRlp.hasData or nodeRlp.isEmpty: return
 
@@ -362,7 +362,7 @@ proc appendAndSave(rlpWriter: var RlpWriter, data: openArray[byte], db: DB) =
 proc isTrieBranch(rlp: Rlp): bool =
   rlp.isList and (var len = rlp.listLen; len == 2 or len == 17)
 
-proc replaceValue(data: Rlp, key: NibblesRange, value: openArray[byte]): seq[byte] =
+proc replaceValue(data: Rlp, key: NibblesSeq, value: openArray[byte]): seq[byte] =
   if data.isEmpty:
     let prefix = hexPrefixEncode(key, true)
     return encodeList(prefix, value)
@@ -405,10 +405,10 @@ proc findSingleChild(r: Rlp; childPos: var byte): Rlp =
         return zeroBytesRlp
     inc i
 
-proc deleteAt(self: var HexaryTrie; origRlp: Rlp, key: NibblesRange): seq[byte] {.gcsafe.}
+proc deleteAt(self: var HexaryTrie; origRlp: Rlp, key: NibblesSeq): seq[byte] {.gcsafe.}
 
 proc deleteAux(self: var HexaryTrie; rlpWriter: var RlpWriter;
-               origRlp: Rlp; path: NibblesRange): bool =
+               origRlp: Rlp; path: NibblesSeq): bool =
   if origRlp.isEmpty:
     return false
 
@@ -446,7 +446,7 @@ proc mergeAndGraft(self: var HexaryTrie;
                    soleChild: Rlp, childPos: byte): seq[byte] =
   var output = initRlpList(2)
   if childPos == 16:
-    output.append hexPrefixEncode(zeroNibblesRange, true)
+    output.append hexPrefixEncode(NibblesSeq(), true)
   else:
     doAssert(not soleChild.isEmpty)
     output.append int(hexPrefixEncodeByte(childPos))
@@ -457,7 +457,7 @@ proc mergeAndGraft(self: var HexaryTrie;
     result = self.graft(rlpFromBytes(result))
 
 proc deleteAt(self: var HexaryTrie;
-              origRlp: Rlp, key: NibblesRange): seq[byte] =
+              origRlp: Rlp, key: NibblesSeq): seq[byte] =
   if origRlp.isEmpty:
     return
 
@@ -535,16 +535,16 @@ proc del*(self: var HexaryTrie; key: openArray[byte]) =
     self.root = self.db.dbPut(newRootBytes)
 
 proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
-             key: NibblesRange, value: openArray[byte],
+             key: NibblesSeq, value: openArray[byte],
              isInline = false): seq[byte] {.gcsafe.}
 
 proc mergeAt(self: var HexaryTrie, rlp: Rlp,
-             key: NibblesRange, value: openArray[byte],
+             key: NibblesSeq, value: openArray[byte],
              isInline = false): seq[byte] =
   self.mergeAt(rlp, rlp.rawData.keccak, key, value, isInline)
 
 proc mergeAtAux(self: var HexaryTrie, output: var RlpWriter, orig: Rlp,
-                key: NibblesRange, value: openArray[byte]) =
+                key: NibblesSeq, value: openArray[byte]) =
   var resolved = orig
   var isRemovable = false
   if not (orig.isList or orig.isEmpty):
@@ -555,7 +555,7 @@ proc mergeAtAux(self: var HexaryTrie, output: var RlpWriter, orig: Rlp,
   output.appendAndSave(b, self.db)
 
 proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
-             key: NibblesRange, value: openArray[byte],
+             key: NibblesSeq, value: openArray[byte],
              isInline = false): seq[byte] =
   template origWithNewValue: auto =
     self.prune(origHash.data)

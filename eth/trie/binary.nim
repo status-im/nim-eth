@@ -1,6 +1,6 @@
 import
-  stew/ranges/[typedranges, bitranges],
-  trie_defs, db, binaries, trie_utils
+  ./trie_bitseq,
+  ./trie_defs, ./db, ./binaries, ./trie_utils
 
 export
   trie_utils
@@ -38,7 +38,7 @@ template fetchNode(self: BinaryTrie, nodeHash: TrieNodeKey): TrieNode =
   doAssert(nodeHash.len == 32)
   parseNode self.db.get(nodeHash)
 
-proc getAux(self: BinaryTrie, nodeHash: TrieNodeKey, keyPath: TrieBitRange): seq[byte] =
+proc getAux(self: BinaryTrie, nodeHash: TrieNodeKey, keyPath: TrieBitSeq): seq[byte] =
   # Empty trie
   if isZeroHash(nodeHash):
     return
@@ -67,14 +67,14 @@ proc getAux(self: BinaryTrie, nodeHash: TrieNodeKey, keyPath: TrieBitRange): seq
       return self.getAux(node.leftChild, keyPath.sliceToEnd(1))
 
 proc get*(self: BinaryTrie, key: openArray[byte]): seq[byte] {.inline.} =
-  var keyBits = MutByteRange(@(key).toRange).bits
+  var keyBits = key.bits
   return self.getAux(self.rootHash, keyBits)
 
 proc hashAndSave*(self: BinaryTrie, node: openArray[byte]): TrieNodeKey =
   result = @(keccakHash(node).data)
   self.db.put(result, node)
 
-template saveKV(self: BinaryTrie, keyPath: TrieBitRange | bool, child: openArray[byte]): untyped =
+template saveKV(self: BinaryTrie, keyPath: TrieBitSeq | bool, child: openArray[byte]): untyped =
   self.hashAndsave(encodeKVNode(keyPath, child))
 
 template saveLeaf(self: BinaryTrie, value: openArray[byte]): untyped =
@@ -83,16 +83,16 @@ template saveLeaf(self: BinaryTrie, value: openArray[byte]): untyped =
 template saveBranch(self: BinaryTrie, L, R: openArray[byte]): untyped =
   self.hashAndsave(encodeBranchNode(L, R))
 
-proc setBranchNode(self: BinaryTrie, keyPath: TrieBitRange, node: TrieNode,
+proc setBranchNode(self: BinaryTrie, keyPath: TrieBitSeq, node: TrieNode,
   value: openArray[byte], deleteSubtrie = false): TrieNodeKey
-proc setKVNode(self: BinaryTrie, keyPath: TrieBitRange, nodeHash: TrieNodeKey,
+proc setKVNode(self: BinaryTrie, keyPath: TrieBitSeq, nodeHash: TrieNodeKey,
   node: TrieNode, value: openArray[byte], deleteSubtrie = false): TrieNodeKey
 
 const
   overrideErrorMsg =
     "Fail to set the value because the prefix of it's key is the same as existing key"
 
-proc setAux(self: BinaryTrie, nodeHash: TrieNodeKey, keyPath: TrieBitRange,
+proc setAux(self: BinaryTrie, nodeHash: TrieNodeKey, keyPath: TrieBitSeq,
   value: openArray[byte], deleteSubtrie = false): TrieNodeKey =
   ## If deleteSubtrie is set to True, what it will do is that it take in a keyPath
   ## and traverse til the end of keyPath, then delete the whole subtrie of that node.
@@ -135,10 +135,10 @@ proc set*(self: var BinaryTrie, key, value: openArray[byte]) {.inline.} =
   ## Sets the value at the given keyPath from the given node
   ## Key will be encoded into binary array format first.
 
-  var keyBits = bits MutByteRange(@(key).toRange)
+  var keyBits = key.bits
   self.rootHash = self.setAux(self.rootHash, keyBits, value)
 
-proc setBranchNode(self: BinaryTrie, keyPath: TrieBitRange, node: TrieNode,
+proc setBranchNode(self: BinaryTrie, keyPath: TrieBitSeq, node: TrieNode,
   value: openArray[byte], deleteSubtrie = false): TrieNodeKey =
   # Which child node to update? Depends on first bit in keyPath
   var newLeftChild, newRightChild: TrieNodeKey
@@ -169,7 +169,7 @@ proc setBranchNode(self: BinaryTrie, keyPath: TrieBitRange, node: TrieNode,
   else:
     result = self.saveBranch(newLeftChild, newRightChild)
 
-proc setKVNode(self: BinaryTrie, keyPath: TrieBitRange, nodeHash: TrieNodeKey,
+proc setKVNode(self: BinaryTrie, keyPath: TrieBitSeq, nodeHash: TrieNodeKey,
   node: TrieNode, value: openArray[byte], deleteSubtrie = false): TrieNodeKey =
   # keyPath prefixes match
   if deleteSubtrie:
@@ -256,7 +256,7 @@ template exists*(self: BinaryTrie, key: openArray[byte]): bool =
 
 proc delete*(self: var BinaryTrie, key: openArray[byte]) {.inline.} =
   ## Equals to setting the value to zeroBytesRange
-  var keyBits = bits MutByteRange(@(key).toRange)
+  var keyBits = key.bits
   self.rootHash = self.setAux(self.rootHash, keyBits, [])
 
 proc deleteSubtrie*(self: var BinaryTrie, key: openArray[byte]) {.inline.} =
@@ -264,7 +264,7 @@ proc deleteSubtrie*(self: var BinaryTrie, key: openArray[byte]) {.inline.} =
   ## Key will be encoded into binary array format first.
   ## It will call `setAux` with `deleteSubtrie` set to true.
 
-  var keyBits = bits MutByteRange(@(key).toRange)
+  var keyBits = key.bits
   self.rootHash = self.setAux(self.rootHash, keyBits, [], true)
 
 # Convenience

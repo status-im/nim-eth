@@ -2,11 +2,11 @@
 
 import
   unittest, strutils,
-  stew/ranges/bitranges, nimcrypto/[keccak, hash],
-  eth/trie/[binaries],
+  nimcrypto/[keccak, hash],
+  eth/trie/[binaries, trie_bitseq],
   ./testutils, stew/byteutils
 
-proc parseBitVector(x: string): BitRange =
+proc parseBitVector(x: string): TrieBitSeq =
   result = genBitVec(x.len)
   for i, c in x:
     result[i] = (c == '1')

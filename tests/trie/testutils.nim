@@ -1,6 +1,6 @@
 import
   random, sets,
-  stew/ranges/bitranges,
+  eth/trie/trie_bitseq,
   nimcrypto/[utils, sysrand]
 
 type
@@ -78,7 +78,7 @@ proc randKVPair*(keySize = 32): seq[KVPair] =
   for i in 0..<listLen:
     result[i] = KVPair(key: keys[i], value: vals[i])
 
-proc genBitVec*(len: int): BitRange =
+proc genBitVec*(len: int): TrieBitSeq =
   let k = ((len + 7) and (not 7)) shr 3
   var s = newSeq[byte](k)
   result = bits(s, len)

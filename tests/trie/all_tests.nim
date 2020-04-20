@@ -6,7 +6,7 @@ import
   test_examples,
   test_hexary_trie,
   test_json_suite,
-  test_nibbles,
   test_sparse_binary_trie,
   test_storage_backends,
-  test_transaction_db
+  test_transaction_db,
+  test_trie_bitseq

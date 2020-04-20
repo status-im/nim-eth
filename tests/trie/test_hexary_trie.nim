@@ -2,7 +2,7 @@
 
 import
   unittest, sequtils, os, stew/byteutils,
-  stew/ranges/typedranges, eth/trie/[hexary, db, trie_defs], nimcrypto/utils,
+  eth/trie/[hexary, db, trie_defs], nimcrypto/utils,
   ./testutils, algorithm, random
 
 from strutils import split

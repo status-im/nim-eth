@@ -9,7 +9,7 @@
 #
 
 import
-  algorithm, bitops, math, options, tables, times, chronicles, hashes,
+  algorithm, bitops, math, options, tables, times, chronicles, hashes, strutils,
   stew/[byteutils, endians2], metrics,
   nimcrypto/[bcmode, hash, keccak, rijndael, sysrand],
   eth/[keys, rlp, p2p], eth/p2p/ecies

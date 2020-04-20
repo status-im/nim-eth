@@ -1,6 +1,5 @@
 import
-  stew/ranges/[typedranges, bitranges],
-  trie_defs, trie_utils
+  ./trie_bitseq, ./trie_defs, /trie_utils
 
 const
   treeHeight* = 160
@@ -20,8 +19,7 @@ proc verifyProofAux*(proof: seq[seq[byte]], root, key, value: openArray[byte]): 
   doAssert(root.len == 32)
   doAssert(key.len == pathByteLen)
   var
-    key = @key
-    path = MutByteRange(key.toRange()).bits
+    path = bits key
     curHash = keccakHash(value)
 
   if proof.len != treeHeight: return false
@@ -40,7 +38,7 @@ proc verifyProofAux*(proof: seq[seq[byte]], root, key, value: openArray[byte]): 
 template verifyProof*(proof: seq[seq[byte]], root, key, value: openArray[byte]): bool =
   verifyProofAux(proof, root, key, value)
 
-proc count(b: BitRange, val: bool): int =
+proc count(b: TrieBitSeq, val: bool): int =
   for c in b:
     if c == val: inc result
 
@@ -49,8 +47,8 @@ proc compactProof*(proof: seq[seq[byte]]): seq[seq[byte]] =
   if proof.len != treeHeight: return
 
   var
-    data = newRange[byte](pathByteLen)
-    bits = MutByteRange(data.toRange).bits
+    data = newSeq[byte](pathByteLen)
+    bits = bits data
 
   result = @[]
   result.add @[]
@@ -60,13 +58,13 @@ proc compactProof*(proof: seq[seq[byte]]): seq[seq[byte]] =
       bits[i] = true
     else:
       result.add node
-  result[0] = data.toSeq
+  result[0] = bits.toBytes
 
 # decompactProof decompacts a proof, so that it can be used for VerifyProof.
 proc decompactProof*(proof: seq[seq[byte]]): seq[seq[byte]] =
   if proof.len == 0: return
   if proof[0].len != pathByteLen: return
-  let bits = MutByteRange(proof[0].toRange).bits
+  let bits = bits proof[0]
   if proof.len != bits.count(false) + 1: return
   result = newSeq[seq[byte]](treeHeight)
 
