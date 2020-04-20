@@ -1,5 +1,6 @@
 import
-  std/[algorithm, times, sequtils, bitops, random, sets], stint, chronicles,
+  std/[algorithm, times, sequtils, bitops, random, sets, options],
+  stint, chronicles,
   types, node
 
 type
@@ -174,11 +175,11 @@ proc addNode*(r: var RoutingTable, n: Node): Node =
     # Nothing added, ping evictionCandidate
     return evictionCandidate
 
-proc getNode*(r: RoutingTable, id: NodeId): Node =
+proc getNode*(r: RoutingTable, id: NodeId): Option[Node] =
   let b = r.bucketForNode(id)
   for n in b.nodes:
     if n.id == id:
-      return n
+      return some(n)
 
 proc contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
 

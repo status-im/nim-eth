@@ -61,7 +61,7 @@ proc addNode*(d: Protocol, enr: EnrUri) =
   doAssert(res)
   d.addNode newNode(r)
 
-proc getNode*(d: Protocol, id: NodeId): Node =
+proc getNode*(d: Protocol, id: NodeId): Option[Node] =
   d.routingTable.getNode(id)
 
 proc randomNodes*(d: Protocol, count: int): seq[Node] =
@@ -213,9 +213,7 @@ proc receive*(d: Protocol, a: Address, msg: openArray[byte]) {.gcsafe,
     var packet: Packet
     let decoded = d.codec.decodeEncrypted(sender, a, msg, authTag, node, packet)
     if decoded == DecodeStatus.Success:
-      if node.isNil:
-        node = d.routingTable.getNode(sender)
-      else:
+      if not node.isNil:
         # Not filling table with nodes without correct IP in the ENR
         if a.ip == node.address.ip:
           debug "Adding new node to routing table", node = $node,
@@ -232,7 +230,7 @@ proc receive*(d: Protocol, a: Address, msg: openArray[byte]) {.gcsafe,
         if d.awaitedPackets.take((sender, packet.reqId), waiter):
           waiter.complete(packet.some)
         else:
-          debug "TODO: handle packet: ", packet = packet.kind, origin = $node
+          debug "TODO: handle packet: ", packet = packet.kind, origin = a
     elif decoded == DecodeStatus.DecryptError:
       debug "Could not decrypt packet, respond with whoareyou",
         localNode = $d.localNode, address = a
@@ -417,6 +415,31 @@ proc lookupRandom*(d: Protocol): Future[seq[Node]]
   if randomBytes(addr id, sizeof(id)) != sizeof(id):
     raise newException(RandomSourceDepleted, "Could not randomize bytes")
   d.lookup(id)
+
+proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
+  ## Resolve a `Node` based on provided `NodeId`.
+  ##
+  ## This will first look in the own DHT. If the node is known, it will try to
+  ## contact if for newer information. If node is not known or it does not
+  ## reply, a lookup is done to see if it can find a (newer) record of the node
+  ## on the network.
+
+  let node = d.getNode(id)
+  if node.isSome():
+    let request = await d.findNode(node.get(), 0)
+
+    if request.len > 0:
+      return some(request[0])
+
+  let discovered = await d.lookup(id)
+  for n in discovered:
+    if n.id == id:
+      # TODO: Not getting any new seqNum here as in a lookup nodes in table with
+      # new seqNum don't get replaced.
+      if node.isSome() and node.get().record.seqNum >= n.record.seqNum:
+        return node
+      else:
+        return some(n)
 
 proc revalidateNode*(d: Protocol, n: Node)
     {.async, raises:[Defect, Exception].} = # TODO: Exception

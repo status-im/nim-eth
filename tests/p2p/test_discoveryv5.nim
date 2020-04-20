@@ -60,7 +60,9 @@ suite "Discovery v5 Tests":
     for i in 0..<1000:
       node.addNode(generateNode())
 
-    check node.getNode(targetNode.id) == targetNode
+    let n = node.getNode(targetNode.id)
+    require n.isSome()
+    check n.get() == targetNode
 
     await node.closeWait()
 
@@ -82,8 +84,10 @@ suite "Discovery v5 Tests":
     await node1.revalidateNode(bootnode.localNode)
     await node1.revalidateNode(node2.localNode)
 
-    check node1.getNode(bootnode.localNode.id) == bootnode.localNode
-    check node1.getNode(node2.localNode.id) == nil
+    let n = node1.getNode(bootnode.localNode.id)
+    require n.isSome()
+    check n.get() == bootnode.localNode
+    check node1.getNode(node2.localNode.id).isNone()
 
     await node1.closeWait()
 
@@ -310,3 +314,66 @@ suite "Discovery v5 Tests":
 
     for node in nodes:
       await node.closeWait()
+
+  asyncTest "Resolve target":
+    let
+      mainNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20301))
+      lookupNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20302))
+      targetKey = PrivateKey.random()[]
+      targetAddress = localAddress(20303)
+      targetNode = initDiscoveryNode(targetKey, targetAddress)
+      targetId = targetNode.localNode.id
+
+    var targetSeqNum = targetNode.localNode.record.seqNum
+
+    # Populate DHT with target through a ping. Next, close target and see
+    # if resolve works (only local lookup)
+    block:
+      let pong = await targetNode.ping(mainNode.localNode)
+      require pong.isSome()
+      await targetNode.closeWait()
+      let n = await mainNode.resolve(targetId)
+      require n.isSome()
+      check:
+        n.get().id == targetId
+        n.get().record.seqNum == targetSeqNum
+
+    # Bring target back online, update seqNum in ENR, check if we get the
+    # updated ENR.
+    block:
+      # TODO: need to add some logic to update ENRs properly
+      targetSeqNum.inc()
+      let r = enr.Record.init(targetSeqNum, targetKey,
+        some(targetAddress.ip), targetAddress.tcpPort, targetAddress.udpPort)
+      targetNode.localNode.record = r
+      targetNode.open()
+      let n = await mainNode.resolve(targetId)
+      require n.isSome()
+      check:
+        n.get().id == targetId
+        n.get().record.seqNum == targetSeqNum
+
+    # Update seqNum in ENR again, ping lookupNode to be added in DHT,
+    # close targetNode, resolve should lookup, check if we get updated ENR.
+    block:
+      targetSeqNum.inc()
+      let r = enr.Record.init(3, targetKey, some(targetAddress.ip),
+        targetAddress.tcpPort, targetAddress.udpPort)
+      targetNode.localNode.record = r
+      let pong = await targetNode.ping(lookupNode.localNode)
+      require pong.isSome()
+
+      await targetNode.closeWait()
+      # TODO: This step should eventually not be needed and ENRs with new seqNum
+      # should just get updated in the lookup.
+      await mainNode.revalidateNode(targetNode.localNode)
+
+      mainNode.addNode(lookupNode.localNode.record)
+      let n = await mainNode.resolve(targetId)
+      require n.isSome()
+      check:
+        n.get().id == targetId
+        n.get().record.seqNum == targetSeqNum
+
+    await mainNode.closeWait()
+    await lookupNode.closeWait()
