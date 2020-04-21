@@ -1,3 +1,77 @@
+# nim-eth - Node Discovery Protocol v5
+# Copyright (c) 2020 Status Research & Development GmbH
+# Licensed under either of
+#   * Apache License, version 2.0, (LICENSE-APACHEv2)
+#   * MIT license (LICENSE-MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+## Node Discovery Protocol v5
+##
+## Node discovery protocol implementation as per specification:
+## https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md
+##
+## This node discovery protocol implementation uses the same underlying
+## implementation of routing table as is also used for the discovery v4
+## implementation, which is the same or similar as the one described in the
+## original Kademlia paper:
+## https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
+##
+## This might not be the most optimal implementation for the node discovery
+## protocol v5. Why?
+##
+## The Kademlia paper describes an implementation that starts off from one
+## k-bucket, and keeps splitting the bucket as more nodes are discovered and
+## added. The bucket splits only on the part of the binary tree where our own
+## node its id belongs too (same prefix). Resulting eventually in a k-bucket per
+## logarithmic distance (log base2 distance). Well, not really, as nodes with
+## ids in the closer distance ranges will never be found. And because of this an
+## optimisation is done where buckets will also split sometimes even if the
+## nodes own id does not have the same prefix (this is to avoid creating highly
+## unbalanced branches which would require longer lookups).
+##
+## Now, some implementations take a more simplified approach. They just create
+## directly a bucket for each possible logarithmic distance (e.g. here 1->256).
+## Some implementations also don't create buckets with logarithmic distance
+## lower than a certain value (e.g. only 1/15th of the highest buckets),
+## because the closer to the node (the lower the distance), the less chance
+## there is to still find nodes.
+##
+## The discovery protocol v4 its `FindNode` call will request the k closest
+## nodes. As does original Kademlia. This effectively puts the work at the node
+## that gets the request. This node will have to check its buckets and gather
+## the closest. Some implementations go over all the nodes in all the buckets
+## for this (e.g. go-ethereum discovery v4). However, in our bucket splitting
+## approach, this search is improved.
+##
+## In the discovery protocol v5 the `FindNode` call is changed and now the
+## logarithmic distance is passed as parameter instead of the NodeId. And only
+## nodes that match that logarithmic distance are allowed to be returned.
+## This change was made to not put the trust at the requested node for selecting
+## the closest nodes. To counter a possible (mistaken) difference in
+## implementation, but more importantly for security reasons. See also:
+## https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#115-guard-against-kademlia-implementation-flaws
+##
+## The result is that in an implementation which just stores buckets per
+## logarithmic distance, it simply needs to return the right bucket. In our
+## split-bucket implementation, this cannot be done as such and thus the closest
+## neighbours search is still done. And to do this, a reverse calculation of an
+## id at given logarithmic distance is needed (which is why there is the
+## `idAtDistance` proc). Next, nodes with invalid distances need to be filtered
+## out to be compliant to the specification. This can most likely get further
+## optimised, but it sounds likely better to switch away from the split-bucket
+## approach. I believe that the main benefit it has is improved lookups
+## (due to no unbalanced branches), and it looks like this will be negated by
+## limiting the returned nodes to only the ones of the requested logarithmic
+## distance for the `FindNode` call.
+
+## This `FindNode` change in discovery v5 will also have an effect on the
+## efficiency of the network. Work will be moved from the receiver of
+## `FindNodes` to the requester. But this also means more network traffic,
+## as less nodes will potentially be passed around per `FindNode` call, and thus
+## more requests will be needed for a lookup (adding bandwidth and latency).
+## This might be a concern for mobile devices.
+
 import
   std/[tables, sets, options, math, random],
   json_serialization/std/net,
@@ -61,7 +135,7 @@ proc addNode*(d: Protocol, enr: EnrUri) =
   doAssert(res)
   d.addNode newNode(r)
 
-proc getNode*(d: Protocol, id: NodeId): Node =
+proc getNode*(d: Protocol, id: NodeId): Option[Node] =
   d.routingTable.getNode(id)
 
 proc randomNodes*(d: Protocol, count: int): seq[Node] =
@@ -213,9 +287,7 @@ proc receive*(d: Protocol, a: Address, msg: openArray[byte]) {.gcsafe,
     var packet: Packet
     let decoded = d.codec.decodeEncrypted(sender, a, msg, authTag, node, packet)
     if decoded == DecodeStatus.Success:
-      if node.isNil:
-        node = d.routingTable.getNode(sender)
-      else:
+      if not node.isNil:
         # Not filling table with nodes without correct IP in the ENR
         if a.ip == node.address.ip:
           debug "Adding new node to routing table", node = $node,
@@ -232,7 +304,7 @@ proc receive*(d: Protocol, a: Address, msg: openArray[byte]) {.gcsafe,
         if d.awaitedPackets.take((sender, packet.reqId), waiter):
           waiter.complete(packet.some)
         else:
-          debug "TODO: handle packet: ", packet = packet.kind, origin = $node
+          debug "TODO: handle packet: ", packet = packet.kind, origin = a
     elif decoded == DecodeStatus.DecryptError:
       debug "Could not decrypt packet, respond with whoareyou",
         localNode = $d.localNode, address = a
@@ -417,6 +489,31 @@ proc lookupRandom*(d: Protocol): Future[seq[Node]]
   if randomBytes(addr id, sizeof(id)) != sizeof(id):
     raise newException(RandomSourceDepleted, "Could not randomize bytes")
   d.lookup(id)
+
+proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
+  ## Resolve a `Node` based on provided `NodeId`.
+  ##
+  ## This will first look in the own DHT. If the node is known, it will try to
+  ## contact if for newer information. If node is not known or it does not
+  ## reply, a lookup is done to see if it can find a (newer) record of the node
+  ## on the network.
+
+  let node = d.getNode(id)
+  if node.isSome():
+    let request = await d.findNode(node.get(), 0)
+
+    if request.len > 0:
+      return some(request[0])
+
+  let discovered = await d.lookup(id)
+  for n in discovered:
+    if n.id == id:
+      # TODO: Not getting any new seqNum here as in a lookup nodes in table with
+      # new seqNum don't get replaced.
+      if node.isSome() and node.get().record.seqNum >= n.record.seqNum:
+        return node
+      else:
+        return some(n)
 
 proc revalidateNode*(d: Protocol, n: Node)
     {.async, raises:[Defect, Exception].} = # TODO: Exception

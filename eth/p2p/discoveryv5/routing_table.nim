@@ -1,5 +1,6 @@
 import
-  std/[algorithm, times, sequtils, bitops, random, sets], stint, chronicles,
+  std/[algorithm, times, sequtils, bitops, random, sets, options],
+  stint, chronicles,
   types, node
 
 type
@@ -174,11 +175,11 @@ proc addNode*(r: var RoutingTable, n: Node): Node =
     # Nothing added, ping evictionCandidate
     return evictionCandidate
 
-proc getNode*(r: RoutingTable, id: NodeId): Node =
+proc getNode*(r: RoutingTable, id: NodeId): Option[Node] =
   let b = r.bucketForNode(id)
   for n in b.nodes:
     if n.id == id:
-      return n
+      return some(n)
 
 proc contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
 
@@ -191,12 +192,15 @@ proc notFullBuckets(r: RoutingTable): seq[KBucket] =
 proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
   ## Return up to k neighbours of the given node.
   result = newSeqOfCap[Node](k * 2)
-  for bucket in r.bucketsByDistanceTo(id):
-    for n in bucket.nodesByDistanceTo(id):
-      result.add(n)
-      if result.len == k * 2:
-        break
+  block addNodes:
+    for bucket in r.bucketsByDistanceTo(id):
+      for n in bucket.nodesByDistanceTo(id):
+        result.add(n)
+        if result.len == k * 2:
+          break addNodes
 
+  # TODO: is this sort still needed? Can we get nodes closer from the "next"
+  # bucket?
   result = sortedByIt(result, it.distanceTo(id))
   if result.len > k:
     result.setLen(k)
@@ -209,9 +213,12 @@ proc idAtDistance*(id: NodeId, dist: uint32): NodeId =
   # zeroes and xor those` with the id.
   id xor (1.stuint(256) shl (dist.int - 1))
 
-proc neighboursAtDistance*(r: RoutingTable, distance: uint32, k: int = BUCKET_SIZE): seq[Node] =
-  # TODO: Filter out nodes with not exact distance here?
-  r.neighbours(idAtDistance(r.thisNode.id, distance), k)
+proc neighboursAtDistance*(r: RoutingTable, distance: uint32,
+    k: int = BUCKET_SIZE): seq[Node] =
+  result = r.neighbours(idAtDistance(r.thisNode.id, distance), k)
+  # This is a bit silly, first getting closest nodes then to only keep the ones
+  # that are exactly the requested distance.
+  keepIf(result, proc(n: Node): bool = logDist(n.id, r.thisNode.id) == distance)
 
 proc len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len
