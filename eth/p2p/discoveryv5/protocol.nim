@@ -1,3 +1,77 @@
+# nim-eth - Node Discovery Protocol v5
+# Copyright (c) 2020 Status Research & Development GmbH
+# Licensed under either of
+#   * Apache License, version 2.0, (LICENSE-APACHEv2)
+#   * MIT license (LICENSE-MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+## Node Discovery Protocol v5
+##
+## Node discovery protocol implementation as per specification:
+## https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md
+##
+## This node discovery protocol implementation uses the same underlying
+## implementation of routing table as is also used for the discovery v4
+## implementation, which is the same or similar as the one described in the
+## original Kademlia paper:
+## https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
+##
+## This might not be the most optimal implementation for the node discovery
+## protocol v5. Why?
+##
+## The Kademlia paper describes an implementation that starts off from one
+## k-bucket, and keeps splitting the bucket as more nodes are discovered and
+## added. The bucket splits only on the part of the binary tree where our own
+## node its id belongs too (same prefix). Resulting eventually in a k-bucket per
+## logarithmic distance (log base2 distance). Well, not really, as nodes with
+## ids in the closer distance ranges will never be found. And because of this an
+## optimisation is done where buckets will also split sometimes even if the
+## nodes own id does not have the same prefix (this is to avoid creating highly
+## unbalanced branches which would require longer lookups).
+##
+## Now, some implementations take a more simplified approach. They just create
+## directly a bucket for each possible logarithmic distance (e.g. here 1->256).
+## Some implementations also don't create buckets with logarithmic distance
+## lower than a certain value (e.g. only 1/15th of the highest buckets),
+## because the closer to the node (the lower the distance), the less chance
+## there is to still find nodes.
+##
+## The discovery protocol v4 its `FindNode` call will request the k closest
+## nodes. As does original Kademlia. This effectively puts the work at the node
+## that gets the request. This node will have to check its buckets and gather
+## the closest. Some implementations go over all the nodes in all the buckets
+## for this (e.g. go-ethereum discovery v4). However, in our bucket splitting
+## approach, this search is improved.
+##
+## In the discovery protocol v5 the `FindNode` call is changed and now the
+## logarithmic distance is passed as parameter instead of the NodeId. And only
+## nodes that match that logarithmic distance are allowed to be returned.
+## This change was made to not put the trust at the requested node for selecting
+## the closest nodes. To counter a possible (mistaken) difference in
+## implementation, but more importantly for security reasons. See also:
+## https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#115-guard-against-kademlia-implementation-flaws
+##
+## The result is that in an implementation which just stores buckets per
+## logarithmic distance, it simply needs to return the right bucket. In our
+## split-bucket implementation, this cannot be done as such and thus the closest
+## neighbours search is still done. And to do this, a reverse calculation of an
+## id at given logarithmic distance is needed (which is why there is the
+## `idAtDistance` proc). Next, nodes with invalid distances need to be filtered
+## out to be compliant to the specification. This can most likely get further
+## optimised, but it sounds likely better to switch away from the split-bucket
+## approach. I believe that the main benefit it has is improved lookups
+## (due to no unbalanced branches), and it looks like this will be negated by
+## limiting the returned nodes to only the ones of the requested logarithmic
+## distance for the `FindNode` call.
+
+## This `FindNode` change in discovery v5 will also have an effect on the
+## efficiency of the network. Work will be moved from the receiver of
+## `FindNodes` to the requester. But this also means more network traffic,
+## as less nodes will potentially be passed around per `FindNode` call, and thus
+## more requests will be needed for a lookup (adding bandwidth and latency).
+## This might be a concern for mobile devices.
+
 import
   std/[tables, sets, options, math, random],
   json_serialization/std/net,
