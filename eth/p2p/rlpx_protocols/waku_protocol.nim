@@ -60,7 +60,7 @@ declarePublicCounter dropped_duplicate_envelopes,
 
 const
   defaultQueueCapacity = 2048
-  wakuVersion* = 0 ## Waku version.
+  wakuVersion* = 1 ## Waku version.
   wakuVersionStr* = $wakuVersion ## Waku version.
   defaultMinPow* = 0.2'f64 ## The default minimum PoW requirement for this node.
   defaultMaxMsgSize* = 1024'u32 * 1024'u32 ## The current default and max
@@ -241,7 +241,7 @@ p2pProtocol Waku(version = wakuVersion,
       wakuNet = peer.networkState
       wakuPeer = peer.state
 
-    let list = StatusOptions(
+    let options = StatusOptions(
       powRequirement: some(wakuNet.config.powRequirement),
       bloomFilter: wakuNet.config.bloom,
       lightNode: some(wakuNet.config.isLightNode),
@@ -249,28 +249,18 @@ p2pProtocol Waku(version = wakuVersion,
       rateLimits: wakuNet.config.rateLimits,
       topicInterest: wakuNet.config.topics)
 
-    let m = await peer.status(wakuVersion, list,
+    let m = await peer.status(options,
       timeout = chronos.milliseconds(5000))
 
-    debug "Waku peer", peer, wakuVersion, peerWakuVersion = m.protocolVersion
-    # TODO: Can't do this check yet as current version is 0. Can activate this
-    # code on version 1.
-    # if m.protocolVersion >= wakuVersion:
-    #   # Continue if the version is the same or higher
-    #   debug "Waku peer", peer, wakuVersion, peerWakuVersion = m.protocolVersion
-    # else:
-    #   # This node needs to decide if compatibility remains with lower versions
-    #   raise newException(UselessPeerError, "Incompatible Waku version")
+    wakuPeer.powRequirement = m.options.powRequirement.get(defaultMinPow)
+    wakuPeer.bloom = m.options.bloomFilter.get(fullBloom())
 
-    wakuPeer.powRequirement = m.list.powRequirement.get(defaultMinPow)
-    wakuPeer.bloom = m.list.bloomFilter.get(fullBloom())
-
-    wakuPeer.isLightNode = m.list.lightNode.get(false)
+    wakuPeer.isLightNode = m.options.lightNode.get(false)
     if wakuPeer.isLightNode and wakuNet.config.isLightNode:
       # No sense in connecting two light nodes so we disconnect
       raise newException(UselessPeerError, "Two light nodes connected")
 
-    wakuPeer.topics = m.list.topicInterest
+    wakuPeer.topics = m.options.topicInterest
     if wakuPeer.topics.isSome():
       if wakuPeer.topics.get().len > topicInterestMax:
         raise newException(UselessPeerError, "Topic-interest is too large")
@@ -289,7 +279,7 @@ p2pProtocol Waku(version = wakuVersion,
     debug "Waku peer initialized", peer
 
   handshake:
-    proc status(peer: Peer, protocolVersion: uint, list: StatusOptions)
+    proc status(peer: Peer, options: StatusOptions)
 
   proc messages(peer: Peer, envelopes: openarray[Envelope]) =
     if not peer.state.initialized:
