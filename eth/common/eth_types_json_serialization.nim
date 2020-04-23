@@ -8,12 +8,6 @@ proc writeValue*(w: var JsonWriter, a: MDigest) {.inline.} =
 proc readValue*(r: var JsonReader, a: var MDigest) {.inline.} =
   a = fromHex(type(a), r.readValue(string))
 
-proc writeValue*(w: var JsonWriter, a: Port) {.inline.} =
-  w.writeValue uint16(a)
-
-proc readValue*(r: var JsonReader, a: var Port) {.inline.} =
-  a = Port r.readValue(uint16)
-
 proc writeValue*(w: var JsonWriter, value: StUint) {.inline.} =
   w.writeValue $value
 
