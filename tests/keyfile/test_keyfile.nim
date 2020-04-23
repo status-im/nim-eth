@@ -7,6 +7,8 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 
+{.used.}
+
 import eth/keys, eth/keyfile/[keyfile], json, os, unittest
 
 # Test vectors copied from

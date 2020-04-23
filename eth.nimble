@@ -21,21 +21,13 @@ proc runTest(path: string) =
   rmFile path
 
 proc runKeyfileTests() =
-  for filename in [
-      "test_keyfile",
-      "test_uuid",
-    ]:
-    runTest("tests/keyfile/" & filename)
+  runTest("tests/keyfile/all_tests")
 
 task test_keyfile, "run keyfile tests":
   runKeyfileTests()
 
 proc runKeysTests() =
-  for filename in [
-      "test_keys",
-      "test_private_public_key_consistency"
-    ]:
-    runTest("tests/keys/" & filename)
+  runTest("tests/keys/all_tests")
 
 task test_keys, "run keys tests":
   runKeysTests()
@@ -77,10 +69,15 @@ proc runTrieTests() =
 task test_trie, "run trie tests":
   runTrieTests()
 
+proc runDbTests() =
+  runTest("tests/db/all_tests")
+
+task test_db, "run db tests":
+  runDbTests()
+
 task test, "run tests":
   for filename in [
       "test_bloom",
-      "test_common",
     ]:
     runTest("tests/" & filename)
 
@@ -89,4 +86,4 @@ task test, "run tests":
   runP2pTests()
   runRlpTests()
   runTrieTests()
-
+  runDbTests()

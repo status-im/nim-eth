@@ -7,6 +7,8 @@
 #    distribution, for details about the copyright.
 #
 
+{.used.}
+
 import unittest
 import eth/keys
 import nimcrypto/hash, nimcrypto/keccak, nimcrypto/utils
