@@ -1,5 +1,5 @@
 import
-  unittest, chronos, sequtils, chronicles, tables, stint,
+  unittest, chronos, sequtils, chronicles, tables, stint, nimcrypto,
   eth/[keys, rlp], eth/p2p/enode, eth/trie/db,
   eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
@@ -26,8 +26,8 @@ proc randomPacket(tag: PacketTag): seq[byte] =
     authTag: AuthTag
     msg: array[44, byte]
 
-  randomBytes2(authTag)
-  randomBytes2(msg)
+  require randomBytes(authTag) == authTag.len
+  require randomBytes(msg) == msg.len
   result.add(tag)
   result.add(rlp.encode(authTag))
   result.add(msg)
@@ -98,7 +98,7 @@ suite "Discovery v5 Tests":
     let a = localAddress(20303)
 
     for i in 0 ..< 5:
-      randomBytes2(tag)
+      require randomBytes(tag) == tag.len
       node.receive(a, randomPacket(tag))
 
     # Checking different nodeIds but same address
