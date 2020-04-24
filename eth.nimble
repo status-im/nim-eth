@@ -13,7 +13,8 @@ requires "nim >= 1.2.0",
          "chronicles",
          "stew",
          "nat_traversal",
-         "metrics"
+         "metrics",
+         "sqlite3_abi"
 
 proc runTest(path: string) =
   echo "\nRunning: ", path
