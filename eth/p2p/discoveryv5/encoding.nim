@@ -190,19 +190,20 @@ proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
 
   return some(res)
 
-proc decodePacketBody(typ: byte,
-                      body: openarray[byte],
-                      res: var Packet):
-                      DecodeResult[void] {.raises:[Defect].} =
-  if typ < PacketKind.low.byte or typ > PacketKind.high.byte:
+proc decodePacketBody(body: openarray[byte]):
+    DecodeResult[Packet] {.raises:[Defect].} =
+  if body.len < 1:
     return err(PacketError)
 
-  let kind = cast[PacketKind](typ)
-  res = Packet(kind: kind)
-  var rlp = rlpFromBytes(body)
+  if body[0] < PacketKind.low.byte or body[0] > PacketKind.high.byte:
+    return err(PacketError)
+
+  let kind = cast[PacketKind](body[0])
+  var packet = Packet(kind: kind)
+  var rlp = rlpFromBytes(body.toOpenArray(1, body.high))
   if rlp.enterList:
     try:
-      res.reqId = rlp.read(RequestId)
+      packet.reqId = rlp.read(RequestId)
     except RlpError:
       return err(PacketError)
 
@@ -214,17 +215,17 @@ proc decodePacketBody(typ: byte,
     try:
       case kind
       of unused: return err(PacketError)
-      of ping: rlp.decode(res.ping)
-      of pong: rlp.decode(res.pong)
-      of findNode: rlp.decode(res.findNode)
-      of nodes: rlp.decode(res.nodes)
+      of ping: rlp.decode(packet.ping)
+      of pong: rlp.decode(packet.pong)
+      of findNode: rlp.decode(packet.findNode)
+      of nodes: rlp.decode(packet.nodes)
       of regtopic, ticket, regconfirmation, topicquery:
         # TODO: Implement support for topic advertisement
         return err(UnsupportedPacketType)
     except RlpError, ValueError:
       return err(PacketError)
 
-    ok()
+    ok(packet)
   else:
     err(PacketError)
 
@@ -270,8 +271,7 @@ proc decodeEncrypted*(c: var Codec,
                       fromAddr: Address,
                       input: openArray[byte],
                       authTag: var AuthTag,
-                      newNode: var Node,
-                      packet: var Packet): DecodeResult[void] =
+                      newNode: var Node): DecodeResult[Packet] =
   var r = rlpFromBytes(input.toOpenArray(tagSize, input.high))
   var auth: AuthHeader
 
@@ -335,12 +335,7 @@ proc decodeEncrypted*(c: var Codec,
     discard c.db.deleteKeys(fromId, fromAddr)
     return err(DecryptError)
 
-  let packetData = body.get()
-  if packetData.len > 1:
-    decodePacketBody(packetData[0],
-      packetData.toOpenArray(1, packetData.high), packet)
-  else:
-    err(PacketError)
+  decodePacketBody(body.get())
 
 proc newRequestId*(): Result[RequestId, cstring] {.raises:[].} =
   var id: RequestId

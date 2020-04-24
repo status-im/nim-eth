@@ -288,9 +288,9 @@ proc receive*(d: Protocol, a: Address, msg: openArray[byte]) {.gcsafe,
 
     var authTag: AuthTag
     var node: Node
-    var packet: Packet
-    let decoded = d.codec.decodeEncrypted(sender, a, msg, authTag, node, packet)
+    let decoded = d.codec.decodeEncrypted(sender, a, msg, authTag, node)
     if decoded.isOk:
+      let packet = decoded[]
       if not node.isNil:
         # Not filling table with nodes without correct IP in the ENR
         if a.ip == node.address.ip:
