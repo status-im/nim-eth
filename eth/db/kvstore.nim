@@ -19,6 +19,9 @@ export results
 type
   MemStoreRef* = ref object of RootObj
     records: Table[seq[byte], seq[byte]]
+      # TODO interaction with this table would benefit from heterogenous lookup
+      #      (see `@key` below)
+      #      https://github.com/nim-lang/Nim/issues/7457
 
   KvResult*[T] = Result[T, string]
 
@@ -37,23 +40,27 @@ type
     delProc: DelProc
     containsProc: ContainsProc
 
-template put*(db: KvStoreRef, key, val: openArray[byte]): KvResult[void] =
+template put*(dbParam: KvStoreRef, key, val: openArray[byte]): KvResult[void] =
   ## Store ``value`` at ``key`` - overwrites existing value if already present
+  let db = dbParam
   db.putProc(db.obj, key, val)
 
-template get*(db: KvStoreRef, key: openArray[byte], onData: untyped): KvResult[bool] =
+template get*(dbParam: KvStoreRef, key: openArray[byte], onData: untyped): KvResult[bool] =
   ## Retrive value at ``key`` and call ``onData`` with the value. The data is
   ## valid for the duration of the callback.
   ## ``onData``: ``proc(data: openArray[byte])``
   ## returns true if found and false otherwise.
+  let db = dbParam
   db.getProc(db.obj, key, onData)
 
-template del*(db: KvStoreRef, key: openArray[byte]): KvResult[void] =
+template del*(dbParam: KvStoreRef, key: openArray[byte]): KvResult[void] =
   ## Remove value at ``key`` from store - do nothing if the value is not present
+  let db = dbParam
   db.delProc(db.obj, key)
 
-template contains*(db: KvStoreRef, key: openArray[byte]): KvResult[bool] =
+template contains*(dbParam: KvStoreRef, key: openArray[byte]): KvResult[bool] =
   ## Return true iff ``key`` has a value in store
+  let db = dbParam
   db.containsProc(db.obj, key)
 
 proc putImpl[T](db: RootRef, key, val: openArray[byte]): KvResult[void] =
@@ -84,29 +91,21 @@ func kvStore*[T: RootRef](x: T): KvStoreRef =
   )
 
 proc get*(db: MemStoreRef, key: openArray[byte], onData: DataProc): KvResult[bool] =
-  let key = @key
-
-  db.records.withValue(key, v):
+  db.records.withValue(@key, v):
     onData(v[])
     return ok(true)
 
   ok(false)
 
 proc del*(db: MemStoreRef, key: openArray[byte]): KvResult[void] =
-  # TODO: This is quite inefficient and it won't be necessary once
-  # https://github.com/nim-lang/Nim/issues/7457 is developed.
-  let key = @key
-  db.records.del(key)
+  db.records.del(@key)
   ok()
 
 proc contains*(db: MemStoreRef, key: openArray[byte]): KvResult[bool] =
   ok(db.records.contains(@key))
 
 proc put*(db: MemStoreRef, key, val: openArray[byte]): KvResult[void] =
-  # TODO: This is quite inefficient and it won't be necessary once
-  # https://github.com/nim-lang/Nim/issues/7457 is developed.
-  let key = @key
-  db.records[key] = @val
+  db.records[@key] = @val
   ok()
 
 proc init*(T: type MemStoreRef): T =
