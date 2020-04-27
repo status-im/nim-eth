@@ -89,7 +89,7 @@ const
   alpha = 3 ## Kademlia concurrency factor
   lookupRequestLimit = 3
   findNodeResultLimit = 15 # applies in FINDNODE handler
-  maxNodesPerPacket = 3
+  maxNodesPerMessage = 3
   lookupInterval = 60.seconds ## Interval of launching a random lookup to
   ## populate the routing table. go-ethereum seems to do 3 runs every 30
   ## minutes. Trinity starts one every minute.
@@ -111,14 +111,14 @@ type
     db: Database
     routingTable: RoutingTable
     codec*: Codec
-    awaitedPackets: Table[(NodeId, RequestId), Future[Option[Packet]]]
+    awaitedMessages: Table[(NodeId, RequestId), Future[Option[Message]]]
     lookupLoop: Future[void]
     revalidateLoop: Future[void]
     bootstrapRecords*: seq[Record]
 
   PendingRequest = object
     node: Node
-    packet: seq[byte]
+    message: seq[byte]
 
   RandomSourceDepleted* = object of CatchableError
 
@@ -173,13 +173,13 @@ proc whoareyouMagic(toNode: NodeId): array[magicSize, byte] =
   for i, c in prefix: data[sizeof(toNode) + i] = byte(c)
   sha256.digest(data).data
 
-proc isWhoAreYou(d: Protocol, msg: openArray[byte]): bool =
-  if msg.len > d.whoareyouMagic.len:
-    result = d.whoareyouMagic == msg.toOpenArray(0, magicSize - 1)
+proc isWhoAreYou(d: Protocol, packet: openArray[byte]): bool =
+  if packet.len > d.whoareyouMagic.len:
+    result = d.whoareyouMagic == packet.toOpenArray(0, magicSize - 1)
 
-proc decodeWhoAreYou(d: Protocol, msg: openArray[byte]): Whoareyou =
+proc decodeWhoAreYou(d: Protocol, packet: openArray[byte]): Whoareyou =
   result = Whoareyou()
-  result[] = rlp.decode(msg.toOpenArray(magicSize, msg.high), WhoareyouObj)
+  result[] = rlp.decode(packet.toOpenArray(magicSize, packet.high), WhoareyouObj)
 
 proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthTag) =
   trace "sending who are you", to = $toNode, toAddress = $address
@@ -210,39 +210,39 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthT
 proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
     nodes: openarray[Node]) =
   proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address,
-      packet: NodesPacket, reqId: RequestId) {.nimcall.} =
-    let (data, _) = d.codec.encodeEncrypted(toId, toAddr,
-      encodePacket(packet, reqId), challenge = nil).tryGet()
+      message: NodesMessage, reqId: RequestId) {.nimcall.} =
+    let (data, _) = d.codec.encodePacket(toId, toAddr,
+      encodeMessage(message, reqId), challenge = nil).tryGet()
     d.send(toAddr, data)
 
-  var packet: NodesPacket
-  packet.total = ceil(nodes.len / maxNodesPerPacket).uint32
+  var message: NodesMessage
+  message.total = ceil(nodes.len / maxNodesPerMessage).uint32
 
   for i in 0 ..< nodes.len:
-    packet.enrs.add(nodes[i].record)
-    if packet.enrs.len == 3:
-      d.sendNodes(toId, toAddr, packet, reqId)
-      packet.enrs.setLen(0)
+    message.enrs.add(nodes[i].record)
+    if message.enrs.len == 3: # TODO: Uh, what is this?
+      d.sendNodes(toId, toAddr, message, reqId)
+      message.enrs.setLen(0)
 
-  if packet.enrs.len != 0:
-    d.sendNodes(toId, toAddr, packet, reqId)
+  if message.enrs.len != 0:
+    d.sendNodes(toId, toAddr, message, reqId)
 
 proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
-    ping: PingPacket, reqId: RequestId) =
+    ping: PingMessage, reqId: RequestId) =
   let a = fromAddr
-  var pong: PongPacket
+  var pong: PongMessage
   pong.enrSeq = ping.enrSeq
   pong.ip = case a.ip.family
     of IpAddressFamily.IPv4: @(a.ip.address_v4)
     of IpAddressFamily.IPv6: @(a.ip.address_v6)
   pong.port = a.udpPort.uint16
 
-  let (data, _) = d.codec.encodeEncrypted(fromId, fromAddr,
-    encodePacket(pong, reqId), challenge = nil).tryGet()
+  let (data, _) = d.codec.encodePacket(fromId, fromAddr,
+    encodeMessage(pong, reqId), challenge = nil).tryGet()
   d.send(fromAddr, data)
 
 proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
-    fn: FindNodePacket, reqId: RequestId) =
+    fn: FindNodeMessage, reqId: RequestId) =
   if fn.distance == 0:
     d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
   else:
@@ -250,7 +250,7 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
     d.sendNodes(fromId, fromAddr, reqId,
       d.routingTable.neighboursAtDistance(distance))
 
-proc receive*(d: Protocol, a: Address, msg: openArray[byte]) {.gcsafe,
+proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
   raises: [
     Defect,
     # TODO This is now coming from Chronos's callSoon
@@ -260,37 +260,37 @@ proc receive*(d: Protocol, a: Address, msg: openArray[byte]) {.gcsafe,
     IOError,
     TransportAddressError,
   ].} =
-  if msg.len < tagSize: # or magicSize, can be either
-    return # Invalid msg
+  if packet.len < tagSize: # or magicSize, can be either
+    return # Invalid packet
 
-  # debug "Packet received: ", length = msg.len
+  # debug "Packet received: ", length = packet.len
 
-  if d.isWhoAreYou(msg):
+  if d.isWhoAreYou(packet):
     trace "Received whoareyou", localNode = $d.localNode, address = a
-    let whoareyou = d.decodeWhoAreYou(msg)
+    let whoareyou = d.decodeWhoAreYou(packet)
     var pr: PendingRequest
     if d.pendingRequests.take(whoareyou.authTag, pr):
       let toNode = pr.node
       whoareyou.pubKey = toNode.node.pubkey # TODO: Yeah, rather ugly this.
       try:
-        let (data, _) = d.codec.encodeEncrypted(toNode.id, toNode.address,
-          pr.packet, challenge = whoareyou).tryGet()
+        let (data, _) = d.codec.encodePacket(toNode.id, toNode.address,
+          pr.message, challenge = whoareyou).tryGet()
         d.send(toNode, data)
       except RandomSourceDepleted:
-        debug "Failed to respond to a who-you-are msg " &
+        debug "Failed to respond to a who-you-are packet " &
               "due to randomness source depletion."
 
   else:
     var tag: array[tagSize, byte]
-    tag[0 .. ^1] = msg.toOpenArray(0, tagSize - 1)
+    tag[0 .. ^1] = packet.toOpenArray(0, tagSize - 1)
     let senderData = tag xor d.idHash
     let sender = readUintBE[256](senderData)
 
     var authTag: AuthTag
     var node: Node
-    let decoded = d.codec.decodeEncrypted(sender, a, msg, authTag, node)
+    let decoded = d.codec.decodePacket(sender, a, packet, authTag, node)
     if decoded.isOk:
-      let packet = decoded[]
+      let message = decoded[]
       if not node.isNil:
         # Not filling table with nodes without correct IP in the ENR
         if a.ip == node.address.ip:
@@ -298,24 +298,25 @@ proc receive*(d: Protocol, a: Address, msg: openArray[byte]) {.gcsafe,
             localNode = $d.localNode
           discard d.routingTable.addNode(node)
 
-      case packet.kind
+      case message.kind
       of ping:
-        d.handlePing(sender, a, packet.ping, packet.reqId)
+        d.handlePing(sender, a, message.ping, message.reqId)
       of findNode:
-        d.handleFindNode(sender, a, packet.findNode, packet.reqId)
+        d.handleFindNode(sender, a, message.findNode, message.reqId)
       else:
-        var waiter: Future[Option[Packet]]
-        if d.awaitedPackets.take((sender, packet.reqId), waiter):
-          waiter.complete(packet.some)
+        var waiter: Future[Option[Message]]
+        if d.awaitedMessages.take((sender, message.reqId), waiter):
+          waiter.complete(some(message))
         else:
-          debug "TODO: handle packet: ", packet = packet.kind, origin = a
+          trace "Timed out or unrequested message", message = message.kind,
+            origin = a
     elif decoded.error == DecodeError.DecryptError:
       debug "Could not decrypt packet, respond with whoareyou",
         localNode = $d.localNode, address = a
       # only sendingWhoareyou in case it is a decryption failure
       d.sendWhoareyou(a, sender, authTag)
-    elif decoded.error == DecodeError.UnsupportedPacketType:
-      # Still adding the node in case failure is because of unsupported packet.
+    elif decoded.error == DecodeError.UnsupportedMessage:
+      # Still adding the node in case failure is because of unsupported message.
       if not node.isNil:
         if a.ip == node.address.ip:
           debug "Adding new node to routing table", node = $node,
@@ -361,32 +362,32 @@ proc validIp(sender, address: IpAddress): bool =
 # TODO: This could be improved to do the clean-up immediatily in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
 # somewhere
-proc registerRequest(d: Protocol, n: Node, packet: seq[byte], nonce: AuthTag) =
-  let request = PendingRequest(node: n, packet: packet)
+proc registerRequest(d: Protocol, n: Node, message: seq[byte], nonce: AuthTag) =
+  let request = PendingRequest(node: n, message: message)
   if not d.pendingRequests.hasKeyOrPut(nonce, request):
     sleepAsync(responseTimeout).addCallback() do(data: pointer):
       d.pendingRequests.del(nonce)
 
-proc waitPacket(d: Protocol, fromNode: Node, reqId: RequestId): Future[Option[Packet]] =
-  result = newFuture[Option[Packet]]("waitPacket")
+proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId): Future[Option[Message]] =
+  result = newFuture[Option[Message]]("waitMessage")
   let res = result
   let key = (fromNode.id, reqId)
   sleepAsync(responseTimeout).addCallback() do(data: pointer):
-    d.awaitedPackets.del(key)
+    d.awaitedMessages.del(key)
     if not res.finished:
-      res.complete(none(Packet))
-  d.awaitedPackets[key] = result
+      res.complete(none(Message))
+  d.awaitedMessages[key] = result
 
 proc addNodesFromENRs(result: var seq[Node], enrs: openarray[Record]) =
   for r in enrs: result.add(newNode(r))
 
 proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId): Future[seq[Node]] {.async.} =
-  var op = await d.waitPacket(fromNode, reqId)
+  var op = await d.waitMessage(fromNode, reqId)
   if op.isSome and op.get.kind == nodes:
     result.addNodesFromENRs(op.get.nodes.enrs)
     let total = op.get.nodes.total
     for i in 1 ..< total:
-      op = await d.waitPacket(fromNode, reqId)
+      op = await d.waitMessage(fromNode, reqId)
       if op.isSome and op.get.kind == nodes:
         result.addNodesFromENRs(op.get.nodes.enrs)
       else:
@@ -395,27 +396,27 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId): Future[seq[Node]]
 proc sendPing(d: Protocol, toNode: Node): RequestId =
   let
     reqId = newRequestId().tryGet()
-    ping = PingPacket(enrSeq: d.localNode.record.seqNum)
-    packet = encodePacket(ping, reqId)
-    (data, nonce) = d.codec.encodeEncrypted(toNode.id, toNode.address, packet,
+    ping = PingMessage(enrSeq: d.localNode.record.seqNum)
+    message = encodeMessage(ping, reqId)
+    (data, nonce) = d.codec.encodePacket(toNode.id, toNode.address, message,
       challenge = nil).tryGet()
-  d.registerRequest(toNode, packet, nonce)
+  d.registerRequest(toNode, message, nonce)
   d.send(toNode, data)
   return reqId
 
-proc ping*(d: Protocol, toNode: Node): Future[Option[PongPacket]] {.async.} =
+proc ping*(d: Protocol, toNode: Node): Future[Option[PongMessage]] {.async.} =
   let reqId = d.sendPing(toNode)
-  let resp = await d.waitPacket(toNode, reqId)
+  let resp = await d.waitMessage(toNode, reqId)
 
   if resp.isSome() and resp.get().kind == pong:
     return some(resp.get().pong)
 
 proc sendFindNode(d: Protocol, toNode: Node, distance: uint32): RequestId =
   let reqId = newRequestId().tryGet()
-  let packet = encodePacket(FindNodePacket(distance: distance), reqId)
-  let (data, nonce) = d.codec.encodeEncrypted(toNode.id, toNode.address, packet,
+  let message = encodeMessage(FindNodeMessage(distance: distance), reqId)
+  let (data, nonce) = d.codec.encodePacket(toNode.id, toNode.address, message,
     challenge = nil).tryGet()
-  d.registerRequest(toNode, packet, nonce)
+  d.registerRequest(toNode, message, nonce)
 
   d.send(toNode, data)
   return reqId

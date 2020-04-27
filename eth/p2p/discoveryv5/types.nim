@@ -27,9 +27,9 @@ type
 
   Database* = ref object of RootRef
 
-  PacketKind* = enum
+  MessageKind* = enum
     # TODO This is needed only to make Nim 1.0.4 happy
-    #      Without it, the `PacketKind` type cannot be used as
+    #      Without it, the `MessageKind` type cannot be used as
     #      a discriminator in case objects.
     unused = 0x00
 
@@ -44,43 +44,43 @@ type
 
   RequestId* = uint64
 
-  PingPacket* = object
+  PingMessage* = object
     enrSeq*: uint64
 
-  PongPacket* = object
+  PongMessage* = object
     enrSeq*: uint64
     ip*: seq[byte]
     port*: uint16
 
-  FindNodePacket* = object
+  FindNodeMessage* = object
     distance*: uint32
 
-  NodesPacket* = object
+  NodesMessage* = object
     total*: uint32
     enrs*: seq[Record]
 
-  SomePacket* = PingPacket or PongPacket or FindNodePacket or NodesPacket
+  SomeMessage* = PingMessage or PongMessage or FindNodeMessage or NodesMessage
 
-  Packet* = object
+  Message* = object
     reqId*: RequestId
-    case kind*: PacketKind
+    case kind*: MessageKind
     of ping:
-      ping*: PingPacket
+      ping*: PingMessage
     of pong:
-      pong*: PongPacket
+      pong*: PongMessage
     of findnode:
-      findNode*: FindNodePacket
+      findNode*: FindNodeMessage
     of nodes:
-      nodes*: NodesPacket
+      nodes*: NodesMessage
     else:
       # TODO: Define the rest
       discard
 
-template packetKind*(T: typedesc[SomePacket]): PacketKind =
-  when T is PingPacket: ping
-  elif T is PongPacket: pong
-  elif T is FindNodePacket: findNode
-  elif T is NodesPacket: nodes
+template messageKind*(T: typedesc[SomeMessage]): MessageKind =
+  when T is PingMessage: ping
+  elif T is PongMessage: pong
+  elif T is FindNodeMessage: findNode
+  elif T is NodesMessage: nodes
 
 method storeKeys*(db: Database, id: NodeId, address: Address, r, w: AesKey):
     bool {.base, raises: [Defect].} = discard

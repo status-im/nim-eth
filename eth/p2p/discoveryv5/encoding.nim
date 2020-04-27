@@ -45,7 +45,7 @@ type
     HandshakeError,
     PacketError,
     DecryptError,
-    UnsupportedPacketType
+    UnsupportedMessage
 
   DecodeResult*[T] = Result[T, DecodeError]
   EncodeResult*[T] = Result[T, cstring]
@@ -90,12 +90,12 @@ proc encryptGCM*(key, nonce, pt, authData: openarray[byte]):
   ectx.getTag(result.toOpenArray(pt.len, result.high))
   ectx.clear()
 
-proc makeAuthHeader(c: Codec,
-                    toId: NodeID,
-                    nonce: array[gcmNonceSize, byte],
-                    handshakeSecrets: var HandshakeSecrets,
-                    challenge: Whoareyou):
-                    EncodeResult[seq[byte]] =
+proc encodeAuthHeader(c: Codec,
+                      toId: NodeID,
+                      nonce: array[gcmNonceSize, byte],
+                      handshakeSecrets: var HandshakeSecrets,
+                      challenge: Whoareyou):
+                      EncodeResult[seq[byte]] =
   var resp = AuthResponse(version: 5)
   let ln = c.localNode
 
@@ -132,10 +132,10 @@ proc packetTag(destNode, srcNode: NodeID): PacketTag {.raises:[].} =
     destidHash = sha256.digest(destId)
   result = srcId xor destidHash.data
 
-proc encodeEncrypted*(c: Codec,
+proc encodePacket*(c: Codec,
                       toId: NodeID,
                       toAddr: Address,
-                      packetData: seq[byte],
+                      message: seq[byte],
                       challenge: Whoareyou):
                       EncodeResult[(seq[byte], array[gcmNonceSize, byte])] =
   var nonce: array[gcmNonceSize, byte]
@@ -155,21 +155,19 @@ proc encodeEncrypted*(c: Codec,
     discard c.db.loadKeys(toId, toAddr, readKey, writeKey)
   else:
     var sec: HandshakeSecrets
-    headEnc = ? c.makeAuthHeader(toId, nonce, sec, challenge)
+    headEnc = ? c.encodeAuthHeader(toId, nonce, sec, challenge)
 
     writeKey = sec.writeKey
     # TODO: is it safe to ignore the error here?
     discard c.db.storeKeys(toId, toAddr, sec.readKey, sec.writeKey)
 
-  var body = packetData
   let tag = packetTag(toId, c.localNode.id)
 
-  var headBuf = newSeqOfCap[byte](tag.len + headEnc.len)
-  headBuf.add(tag)
-  headBuf.add(headEnc)
-
-  headBuf.add(encryptGCM(writeKey, nonce, body, tag))
-  ok((headBuf, nonce))
+  var packet = newSeqOfCap[byte](tag.len + headEnc.len)
+  packet.add(tag)
+  packet.add(headEnc)
+  packet.add(encryptGCM(writeKey, nonce, message, tag))
+  ok((packet, nonce))
 
 proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
     Option[seq[byte]] {.raises:[].} =
@@ -190,20 +188,20 @@ proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
 
   return some(res)
 
-proc decodePacketBody(body: openarray[byte]):
-    DecodeResult[Packet] {.raises:[Defect].} =
+proc decodeMessage(body: openarray[byte]):
+    DecodeResult[Message] {.raises:[Defect].} =
   if body.len < 1:
     return err(PacketError)
 
-  if body[0] < PacketKind.low.byte or body[0] > PacketKind.high.byte:
+  if body[0] < MessageKind.low.byte or body[0] > MessageKind.high.byte:
     return err(PacketError)
 
-  let kind = cast[PacketKind](body[0])
-  var packet = Packet(kind: kind)
+  let kind = cast[MessageKind](body[0])
+  var message = Message(kind: kind)
   var rlp = rlpFromBytes(body.toOpenArray(1, body.high))
   if rlp.enterList:
     try:
-      packet.reqId = rlp.read(RequestId)
+      message.reqId = rlp.read(RequestId)
     except RlpError:
       return err(PacketError)
 
@@ -215,17 +213,17 @@ proc decodePacketBody(body: openarray[byte]):
     try:
       case kind
       of unused: return err(PacketError)
-      of ping: rlp.decode(packet.ping)
-      of pong: rlp.decode(packet.pong)
-      of findNode: rlp.decode(packet.findNode)
-      of nodes: rlp.decode(packet.nodes)
+      of ping: rlp.decode(message.ping)
+      of pong: rlp.decode(message.pong)
+      of findNode: rlp.decode(message.findNode)
+      of nodes: rlp.decode(message.nodes)
       of regtopic, ticket, regconfirmation, topicquery:
         # TODO: Implement support for topic advertisement
-        return err(UnsupportedPacketType)
+        return err(UnsupportedMessage)
     except RlpError, ValueError:
       return err(PacketError)
 
-    ok(packet)
+    ok(message)
   else:
     err(PacketError)
 
@@ -266,12 +264,12 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
   except KeyError, ValueError:
     err(HandshakeError)
 
-proc decodeEncrypted*(c: var Codec,
+proc decodePacket*(c: var Codec,
                       fromId: NodeID,
                       fromAddr: Address,
                       input: openArray[byte],
                       authTag: var AuthTag,
-                      newNode: var Node): DecodeResult[Packet] =
+                      newNode: var Node): DecodeResult[Message] =
   var r = rlpFromBytes(input.toOpenArray(tagSize, input.high))
   var auth: AuthHeader
 
@@ -327,15 +325,15 @@ proc decodeEncrypted*(c: var Codec,
 
   let headSize = tagSize + r.position
 
-  let body = decryptGCM(
+  let message = decryptGCM(
     readKey, auth.auth,
     input.toOpenArray(headSize, input.high),
     input.toOpenArray(0, tagSize - 1))
-  if body.isNone():
+  if message.isNone():
     discard c.db.deleteKeys(fromId, fromAddr)
     return err(DecryptError)
 
-  decodePacketBody(body.get())
+  decodeMessage(message.get())
 
 proc newRequestId*(): Result[RequestId, cstring] {.raises:[].} =
   var id: RequestId
@@ -347,10 +345,10 @@ proc newRequestId*(): Result[RequestId, cstring] {.raises:[].} =
 proc numFields(T: typedesc): int {.raises:[].} =
   for k, v in fieldPairs(default(T)): inc result
 
-proc encodePacket*[T: SomePacket](p: T, reqId: RequestId):
+proc encodeMessage*[T: SomeMessage](p: T, reqId: RequestId):
     seq[byte] {.raises:[].} =
   result = newSeqOfCap[byte](64)
-  result.add(packetKind(T).ord)
+  result.add(messageKind(T).ord)
 
   const sz = numFields(T)
   var writer = initRlpList(sz + 1)
