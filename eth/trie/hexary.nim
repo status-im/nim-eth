@@ -564,7 +564,7 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
   if orig.isEmpty:
     return origWithNewValue()
 
-  doAssert orig.isTrieBranch
+  doAssert orig.isTrieBranch, $orig
   if orig.listLen == 2:
     let (isLeaf, k) = orig.extensionNodeKey
     var origValue = orig.listElem(1)

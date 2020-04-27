@@ -1,3 +1,5 @@
+{.used.}
+
 import unittest, eth/common, eth/rlp
 
 proc `==`(a, b: HashOrStatus): bool =
