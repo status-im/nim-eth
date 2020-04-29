@@ -35,7 +35,7 @@ proc randomPacket(tag: PacketTag): seq[byte] =
 proc generateNode(privKey = PrivateKey.random()[], port: int = 20302): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, some(parseIpAddress("127.0.0.1")),
-    port, port)
+    port, port).expect("Properly intialized private key")
   result = newNode(enr)
 
 proc nodeAtDistance(n: Node, d: uint32): Node =
@@ -344,7 +344,7 @@ suite "Discovery v5 Tests":
       # TODO: need to add some logic to update ENRs properly
       targetSeqNum.inc()
       let r = enr.Record.init(targetSeqNum, targetKey,
-        some(targetAddress.ip), targetAddress.tcpPort, targetAddress.udpPort)
+        some(targetAddress.ip), targetAddress.tcpPort, targetAddress.udpPort)[]
       targetNode.localNode.record = r
       targetNode.open()
       let n = await mainNode.resolve(targetId)
@@ -358,7 +358,7 @@ suite "Discovery v5 Tests":
     block:
       targetSeqNum.inc()
       let r = enr.Record.init(3, targetKey, some(targetAddress.ip),
-        targetAddress.tcpPort, targetAddress.udpPort)
+        targetAddress.tcpPort, targetAddress.udpPort)[]
       targetNode.localNode.record = r
       let pong = await targetNode.ping(lookupNode.localNode)
       require pong.isSome()

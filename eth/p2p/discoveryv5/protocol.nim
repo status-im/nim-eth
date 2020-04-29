@@ -585,7 +585,8 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
     a = Address(ip: externalIp.get(IPv4_any()),
                 tcpPort: tcpPort, udpPort: udpPort)
     enode = ENode(pubkey: privKey.toPublicKey().tryGet(), address: a)
-    enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort, localEnrFields)
+    enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
+      localEnrFields).expect("Properly intialized private key")
     node = newNode(enode, enrRec)
 
   result = Protocol(

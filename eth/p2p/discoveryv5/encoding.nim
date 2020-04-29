@@ -170,7 +170,7 @@ proc encodePacket*(c: Codec,
   ok((packet, nonce))
 
 proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
-    Option[seq[byte]] {.raises:[].} =
+    Option[seq[byte]] =
   if ct.len <= gcmTagSize:
     debug "cipher is missing tag", len = ct.len
     return

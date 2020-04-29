@@ -3,6 +3,8 @@ import
   stint, chronicles,
   types, node
 
+{.push raises: [Defect].}
+
 type
   RoutingTable* = object
     thisNode: Node
@@ -19,11 +21,11 @@ const
   BITS_PER_HOP = 8
   ID_SIZE = 256
 
-proc distanceTo(n: Node, id: NodeId): UInt256 =
+proc distanceTo(n: Node, id: NodeId): UInt256 {.raises: [].} =
   ## Calculate the distance to a NodeId.
   n.id xor id
 
-proc logDist*(a, b: NodeId): uint32 =
+proc logDist*(a, b: NodeId): uint32 {.raises: [].} =
   ## Calculate the logarithmic distance between two `NodeId`s.
   ##
   ## According the specification, this is the log base 2 of the distance. But it
@@ -42,7 +44,7 @@ proc logDist*(a, b: NodeId): uint32 =
       break
   return uint32(a.len * 8 - lz)
 
-proc newKBucket(istart, iend: NodeId): KBucket =
+proc newKBucket(istart, iend: NodeId): KBucket {.raises: [].} =
   result.new()
   result.istart = istart
   result.iend = iend
@@ -53,13 +55,13 @@ proc midpoint(k: KBucket): NodeId =
   k.istart + (k.iend - k.istart) div 2.u256
 
 proc distanceTo(k: KBucket, id: NodeId): UInt256 = k.midpoint xor id
-proc nodesByDistanceTo(k: KBucket, id: NodeId): seq[Node] =
+proc nodesByDistanceTo(k: KBucket, id: NodeId): seq[Node] {.raises: [].} =
   sortedByIt(k.nodes, it.distanceTo(id))
 
-proc len(k: KBucket): int {.inline.} = k.nodes.len
-proc head(k: KBucket): Node {.inline.} = k.nodes[0]
+proc len(k: KBucket): int {.inline, raises: [].} = k.nodes.len
+proc head(k: KBucket): Node {.inline, raises: [].} = k.nodes[0]
 
-proc add(k: KBucket, n: Node): Node =
+proc add(k: KBucket, n: Node): Node {.raises: [].} =
   ## Try to add the given node to this bucket.
 
   ## If the node is already present, it is moved to the tail of the list, and we return nil.
@@ -82,7 +84,7 @@ proc add(k: KBucket, n: Node): Node =
     return k.head
   return nil
 
-proc removeNode(k: KBucket, n: Node) =
+proc removeNode(k: KBucket, n: Node) {.raises: [].} =
   let i = k.nodes.find(n)
   if i != -1: k.nodes.delete(i)
 
@@ -98,12 +100,10 @@ proc split(k: KBucket): tuple[lower, upper: KBucket] =
     let bucket = if node.id <= splitid: result.lower else: result.upper
     bucket.replacementCache.add(node)
 
-proc inRange(k: KBucket, n: Node): bool {.inline.} =
+proc inRange(k: KBucket, n: Node): bool {.inline, raises: [].} =
   k.istart <= n.id and n.id <= k.iend
 
-proc isFull(k: KBucket): bool = k.len == BUCKET_SIZE
-
-proc contains(k: KBucket, n: Node): bool = n in k.nodes
+proc contains(k: KBucket, n: Node): bool {.raises: [].} = n in k.nodes
 
 proc binaryGetBucketForNode(buckets: openarray[KBucket],
                             id: NodeId): KBucket {.inline.} =
@@ -116,8 +116,10 @@ proc binaryGetBucketForNode(buckets: openarray[KBucket],
     if bucket.istart <= id and id <= bucket.iend:
       result = bucket
 
+  # TODO: Is this really an error that should occur? Feels a lot like a work-
+  # around to another problem. Set to Defect for now.
   if result.isNil:
-    raise newException(ValueError, "No bucket found for node with id " & $id)
+    raise (ref Defect)(msg: "No bucket found for node with id " & $id)
 
 proc computeSharedPrefixBits(nodes: openarray[Node]): int =
   ## Count the number of prefix bits shared by all nodes.
@@ -138,7 +140,7 @@ proc computeSharedPrefixBits(nodes: openarray[Node]): int =
 
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
-proc init*(r: var RoutingTable, thisNode: Node) {.inline.} =
+proc init*(r: var RoutingTable, thisNode: Node) {.inline, raises: [].} =
   r.thisNode = thisNode
   r.buckets = @[newKBucket(0.u256, high(Uint256))]
   randomize() # for later `randomNodes` selection
@@ -186,9 +188,6 @@ proc contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
 proc bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
   sortedByIt(r.buckets, it.distanceTo(id))
 
-proc notFullBuckets(r: RoutingTable): seq[KBucket] =
-  r.buckets.filterIt(not it.isFull)
-
 proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
   ## Return up to k neighbours of the given node.
   result = newSeqOfCap[Node](k * 2)
@@ -205,7 +204,7 @@ proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
   if result.len > k:
     result.setLen(k)
 
-proc idAtDistance*(id: NodeId, dist: uint32): NodeId =
+proc idAtDistance*(id: NodeId, dist: uint32): NodeId {.raises: [].} =
   ## Calculate the "lowest" `NodeId` for given logarithmic distance.
   ## A logarithmic distance obviously covers a whole range of distances and thus
   ## potential `NodeId`s.
@@ -220,10 +219,10 @@ proc neighboursAtDistance*(r: RoutingTable, distance: uint32,
   # that are exactly the requested distance.
   keepIf(result, proc(n: Node): bool = logDist(n.id, r.thisNode.id) == distance)
 
-proc len*(r: RoutingTable): int =
+proc len*(r: RoutingTable): int {.raises: [].} =
   for b in r.buckets: result += b.len
 
-proc moveRight[T](arr: var openarray[T], a, b: int) {.inline.} =
+proc moveRight[T](arr: var openarray[T], a, b: int) {.inline, raises: [].} =
   ## In `arr` move elements in range [a, b] right by 1.
   var t: T
   shallowCopy(t, arr[b + 1])
@@ -241,7 +240,7 @@ proc setJustSeen*(r: RoutingTable, n: Node) =
   b.nodes[0] = n
   b.lastUpdated = epochTime()
 
-proc nodeToRevalidate*(r: RoutingTable): Node {.raises:[].} =
+proc nodeToRevalidate*(r: RoutingTable): Node {.raises: [].} =
   var buckets = r.buckets
   shuffle(buckets)
   # TODO: Should we prioritize less-recently-updated buckets instead?
