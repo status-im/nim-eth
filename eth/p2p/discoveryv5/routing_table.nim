@@ -21,11 +21,11 @@ const
   BITS_PER_HOP = 8
   ID_SIZE = 256
 
-proc distanceTo(n: Node, id: NodeId): UInt256 {.raises: [].} =
+proc distanceTo(n: Node, id: NodeId): UInt256 =
   ## Calculate the distance to a NodeId.
   n.id xor id
 
-proc logDist*(a, b: NodeId): uint32 {.raises: [].} =
+proc logDist*(a, b: NodeId): uint32 =
   ## Calculate the logarithmic distance between two `NodeId`s.
   ##
   ## According the specification, this is the log base 2 of the distance. But it
@@ -44,7 +44,7 @@ proc logDist*(a, b: NodeId): uint32 {.raises: [].} =
       break
   return uint32(a.len * 8 - lz)
 
-proc newKBucket(istart, iend: NodeId): KBucket {.raises: [].} =
+proc newKBucket(istart, iend: NodeId): KBucket =
   result.new()
   result.istart = istart
   result.iend = iend
@@ -55,13 +55,13 @@ proc midpoint(k: KBucket): NodeId =
   k.istart + (k.iend - k.istart) div 2.u256
 
 proc distanceTo(k: KBucket, id: NodeId): UInt256 = k.midpoint xor id
-proc nodesByDistanceTo(k: KBucket, id: NodeId): seq[Node] {.raises: [].} =
+proc nodesByDistanceTo(k: KBucket, id: NodeId): seq[Node] =
   sortedByIt(k.nodes, it.distanceTo(id))
 
-proc len(k: KBucket): int {.inline, raises: [].} = k.nodes.len
-proc head(k: KBucket): Node {.inline, raises: [].} = k.nodes[0]
+proc len(k: KBucket): int {.inline.} = k.nodes.len
+proc head(k: KBucket): Node {.inline.} = k.nodes[0]
 
-proc add(k: KBucket, n: Node): Node {.raises: [].} =
+proc add(k: KBucket, n: Node): Node =
   ## Try to add the given node to this bucket.
 
   ## If the node is already present, it is moved to the tail of the list, and we return nil.
@@ -84,7 +84,7 @@ proc add(k: KBucket, n: Node): Node {.raises: [].} =
     return k.head
   return nil
 
-proc removeNode(k: KBucket, n: Node) {.raises: [].} =
+proc removeNode(k: KBucket, n: Node) =
   let i = k.nodes.find(n)
   if i != -1: k.nodes.delete(i)
 
@@ -100,10 +100,10 @@ proc split(k: KBucket): tuple[lower, upper: KBucket] =
     let bucket = if node.id <= splitid: result.lower else: result.upper
     bucket.replacementCache.add(node)
 
-proc inRange(k: KBucket, n: Node): bool {.inline, raises: [].} =
+proc inRange(k: KBucket, n: Node): bool {.inline.} =
   k.istart <= n.id and n.id <= k.iend
 
-proc contains(k: KBucket, n: Node): bool {.raises: [].} = n in k.nodes
+proc contains(k: KBucket, n: Node): bool = n in k.nodes
 
 proc binaryGetBucketForNode(buckets: openarray[KBucket],
                             id: NodeId): KBucket {.inline.} =
@@ -140,7 +140,7 @@ proc computeSharedPrefixBits(nodes: openarray[Node]): int =
 
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
-proc init*(r: var RoutingTable, thisNode: Node) {.inline, raises: [].} =
+proc init*(r: var RoutingTable, thisNode: Node) {.inline.} =
   r.thisNode = thisNode
   r.buckets = @[newKBucket(0.u256, high(Uint256))]
   randomize() # for later `randomNodes` selection
@@ -204,7 +204,7 @@ proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
   if result.len > k:
     result.setLen(k)
 
-proc idAtDistance*(id: NodeId, dist: uint32): NodeId {.raises: [].} =
+proc idAtDistance*(id: NodeId, dist: uint32): NodeId =
   ## Calculate the "lowest" `NodeId` for given logarithmic distance.
   ## A logarithmic distance obviously covers a whole range of distances and thus
   ## potential `NodeId`s.
@@ -219,10 +219,10 @@ proc neighboursAtDistance*(r: RoutingTable, distance: uint32,
   # that are exactly the requested distance.
   keepIf(result, proc(n: Node): bool = logDist(n.id, r.thisNode.id) == distance)
 
-proc len*(r: RoutingTable): int {.raises: [].} =
+proc len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len
 
-proc moveRight[T](arr: var openarray[T], a, b: int) {.inline, raises: [].} =
+proc moveRight[T](arr: var openarray[T], a, b: int) {.inline.} =
   ## In `arr` move elements in range [a, b] right by 1.
   var t: T
   shallowCopy(t, arr[b + 1])
@@ -240,7 +240,7 @@ proc setJustSeen*(r: RoutingTable, n: Node) =
   b.nodes[0] = n
   b.lastUpdated = epochTime()
 
-proc nodeToRevalidate*(r: RoutingTable): Node {.raises: [].} =
+proc nodeToRevalidate*(r: RoutingTable): Node =
   var buckets = r.buckets
   shuffle(buckets)
   # TODO: Should we prioritize less-recently-updated buckets instead?

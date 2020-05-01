@@ -80,7 +80,7 @@ proc makeEnrAux(seqNum: uint64, pk: PrivateKey,
     cmp(a[0], b[0])
 
   proc append(w: var RlpWriter, seqNum: uint64,
-      pairs: openarray[(string, Field)]): seq[byte] {.raises: [].} =
+      pairs: openarray[(string, Field)]): seq[byte] =
     w.append(seqNum)
     for (k, v) in pairs:
       w.append(k)
@@ -139,7 +139,7 @@ proc init*(T: type Record, seqNum: uint64,
   fields.add extraFields
   makeEnrAux(seqNum, pk, fields)
 
-proc getField(r: Record, name: string, field: var Field): bool {.raises: [].} =
+proc getField(r: Record, name: string, field: var Field): bool =
   # It might be more correct to do binary search,
   # as the fields are sorted, but it's unlikely to
   # make any difference in reality.
@@ -152,7 +152,7 @@ proc requireKind(f: Field, kind: FieldKind) {.raises: [ValueError].} =
   if f.kind != kind:
     raise newException(ValueError, "Wrong field kind")
 
-proc get*(r: Record, key: string, T: type): T {.raises: [ValueError].} =
+proc get*(r: Record, key: string, T: type): T {.raises: [ValueError, Defect].} =
   var f: Field
   if r.getField(key, f):
     when T is SomeInteger:
@@ -183,14 +183,14 @@ proc get*(r: Record, key: string, T: type): T {.raises: [ValueError].} =
   else:
     raise newException(KeyError, "Key not found in ENR: " & key)
 
-proc get*(r: Record, T: type PublicKey): Option[T] {.raises: [Defect].} =
+proc get*(r: Record, T: type PublicKey): Option[T] =
   var pubkeyField: Field
   if r.getField("secp256k1", pubkeyField) and pubkeyField.kind == kBytes:
     let pk = PublicKey.fromRaw(pubkeyField.bytes)
     if pk.isOk:
       return some pk[]
 
-proc tryGet*(r: Record, key: string, T: type): Option[T] {.raises: [].} =
+proc tryGet*(r: Record, key: string, T: type): Option[T] =
   try:
     return some get(r, key, T)
   except CatchableError:
@@ -312,12 +312,12 @@ proc fromURI*(r: var Record, s: string): bool =
 template fromURI*(r: var Record, url: EnrUri): bool =
   fromURI(r, string(url))
 
-proc toBase64*(r: Record): string {.raises: [].} =
+proc toBase64*(r: Record): string =
   result = Base64Url.encode(r.raw)
 
-proc toURI*(r: Record): string {.raises: [].} = "enr:" & r.toBase64
+proc toURI*(r: Record): string = "enr:" & r.toBase64
 
-proc `$`(f: Field): string {.raises: [].} =
+proc `$`(f: Field): string =
   case f.kind
   of kNum:
     $f.num
@@ -326,7 +326,7 @@ proc `$`(f: Field): string {.raises: [].} =
   of kString:
     "\"" & f.str & "\""
 
-proc `$`*(r: Record): string {.raises: [].} =
+proc `$`*(r: Record): string =
   result = "("
   var first = true
   for (k, v) in r.pairs:
@@ -347,5 +347,5 @@ proc read*(rlp: var Rlp, T: typedesc[Record]):
     raise newException(ValueError, "Could not deserialize")
   rlp.skipElem()
 
-proc append*(rlpWriter: var RlpWriter, value: Record) {.raises: [].} =
+proc append*(rlpWriter: var RlpWriter, value: Record) =
   rlpWriter.appendRawBytes(value.raw)

@@ -42,19 +42,19 @@ type
     response*: seq[byte]
 
   DecodeError* = enum
-    HandshakeError,
-    PacketError,
-    DecryptError,
-    UnsupportedMessage
+    HandshakeError = "discv5: handshake failed"
+    PacketError = "discv5: invalid packet",
+    DecryptError = "discv5: decryption failed",
+    UnsupportedMessage = "discv5: unsupported message"
 
   DecodeResult*[T] = Result[T, DecodeError]
   EncodeResult*[T] = Result[T, cstring]
 
 proc mapErrTo[T, E](r: Result[T, E], v: static DecodeError):
-    DecodeResult[T] {.raises:[].} =
+    DecodeResult[T] =
   r.mapErr(proc (e: E): DecodeError = v)
 
-proc idNonceHash(nonce, ephkey: openarray[byte]): MDigest[256] {.raises:[].} =
+proc idNonceHash(nonce, ephkey: openarray[byte]): MDigest[256] =
   var ctx: sha256
   ctx.init()
   ctx.update(idNoncePrefix)
@@ -81,8 +81,7 @@ proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
   hkdf(sha256, eph.data, idNonce, info, toOpenArray(res, 0, sizeof(secrets) - 1))
   ok(secrets)
 
-proc encryptGCM*(key, nonce, pt, authData: openarray[byte]):
-    seq[byte] {.raises:[].} =
+proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
   var ectx: GCM[aes128]
   ectx.init(key, nonce, authData)
   result = newSeq[byte](pt.len + gcmTagSize)
@@ -93,9 +92,8 @@ proc encryptGCM*(key, nonce, pt, authData: openarray[byte]):
 proc encodeAuthHeader(c: Codec,
                       toId: NodeID,
                       nonce: array[gcmNonceSize, byte],
-                      handshakeSecrets: var HandshakeSecrets,
                       challenge: Whoareyou):
-                      EncodeResult[seq[byte]] =
+                      EncodeResult[(seq[byte], HandshakeSecrets)] =
   var resp = AuthResponse(version: 5)
   let ln = c.localNode
 
@@ -108,24 +106,24 @@ proc encodeAuthHeader(c: Codec,
     ephKeys.pubkey.toRaw)
   resp.signature = signature.toRaw
 
-  handshakeSecrets = ? deriveKeys(ln.id, toId, ephKeys.seckey, challenge.pubKey,
+  let secrets = ? deriveKeys(ln.id, toId, ephKeys.seckey, challenge.pubKey,
     challenge.idNonce)
 
   let respRlp = rlp.encode(resp)
 
   var zeroNonce: array[gcmNonceSize, byte]
-  let respEnc = encryptGCM(handshakeSecrets.authRespKey, zeroNonce, respRLP, [])
+  let respEnc = encryptGCM(secrets.authRespKey, zeroNonce, respRLP, [])
 
   let header = AuthHeader(auth: nonce, idNonce: challenge.idNonce,
     scheme: authSchemeName, ephemeralKey: ephKeys.pubkey.toRaw,
     response: respEnc)
-  ok(rlp.encode(header))
+  ok((rlp.encode(header), secrets))
 
-proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] {.raises:[].} =
+proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =
   for i in 0 .. a.high:
     result[i] = a[i] xor b[i]
 
-proc packetTag(destNode, srcNode: NodeID): PacketTag {.raises:[].} =
+proc packetTag(destNode, srcNode: NodeID): PacketTag =
   let
     destId = destNode.toByteArrayBE()
     srcId = srcNode.toByteArrayBE()
@@ -135,7 +133,7 @@ proc packetTag(destNode, srcNode: NodeID): PacketTag {.raises:[].} =
 proc encodePacket*(c: Codec,
                       toId: NodeID,
                       toAddr: Address,
-                      message: seq[byte],
+                      message: openarray[byte],
                       challenge: Whoareyou):
                       EncodeResult[(seq[byte], array[gcmNonceSize, byte])] =
   var nonce: array[gcmNonceSize, byte]
@@ -154,12 +152,12 @@ proc encodePacket*(c: Codec,
     # yet. That's fine, we will be responded with whoareyou.
     discard c.db.loadKeys(toId, toAddr, readKey, writeKey)
   else:
-    var sec: HandshakeSecrets
-    headEnc = ? c.encodeAuthHeader(toId, nonce, sec, challenge)
+    var secrets: HandshakeSecrets
+    (headEnc, secrets) = ? c.encodeAuthHeader(toId, nonce, challenge)
 
-    writeKey = sec.writeKey
+    writeKey = secrets.writeKey
     # TODO: is it safe to ignore the error here?
-    discard c.db.storeKeys(toId, toAddr, sec.readKey, sec.writeKey)
+    discard c.db.storeKeys(toId, toAddr, secrets.readKey, secrets.writeKey)
 
   let tag = packetTag(toId, c.localNode.id)
 
@@ -335,18 +333,17 @@ proc decodePacket*(c: var Codec,
 
   decodeMessage(message.get())
 
-proc newRequestId*(): Result[RequestId, cstring] {.raises:[].} =
+proc newRequestId*(): Result[RequestId, cstring] =
   var id: RequestId
   if randomBytes(addr id, sizeof(id)) != sizeof(id):
     err("Could not randomize bytes")
   else:
     ok(id)
 
-proc numFields(T: typedesc): int {.raises:[].} =
+proc numFields(T: typedesc): int =
   for k, v in fieldPairs(default(T)): inc result
 
-proc encodeMessage*[T: SomeMessage](p: T, reqId: RequestId):
-    seq[byte] {.raises:[].} =
+proc encodeMessage*[T: SomeMessage](p: T, reqId: RequestId): seq[byte] =
   result = newSeqOfCap[byte](64)
   result.add(messageKind(T).ord)
 

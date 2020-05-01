@@ -48,16 +48,16 @@ proc newNode*(r: Record): Node =
                 record: r)
 
 proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.toRaw)
-proc `==`*(a, b: Node): bool {.raises: [].} =
+proc `==`*(a, b: Node): bool =
   (a.isNil and b.isNil) or
     (not a.isNil and not b.isNil and a.node.pubkey == b.node.pubkey)
 
-proc address*(n: Node): Address {.inline, raises: [].} = n.node.address
+proc address*(n: Node): Address {.inline.} = n.node.address
 
-proc updateEndpoint*(n: Node, a: Address) {.inline, raises: [].} =
+proc updateEndpoint*(n: Node, a: Address) {.inline.} =
   n.node.address = a
 
-proc `$`*(n: Node): string {.raises: [].} =
+proc `$`*(n: Node): string =
   if n == nil:
     "Node[local]"
   else:
