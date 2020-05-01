@@ -3,6 +3,8 @@ import
   stint, chronicles,
   types, node
 
+{.push raises: [Defect].}
+
 type
   RoutingTable* = object
     thisNode: Node
@@ -101,8 +103,6 @@ proc split(k: KBucket): tuple[lower, upper: KBucket] =
 proc inRange(k: KBucket, n: Node): bool {.inline.} =
   k.istart <= n.id and n.id <= k.iend
 
-proc isFull(k: KBucket): bool = k.len == BUCKET_SIZE
-
 proc contains(k: KBucket, n: Node): bool = n in k.nodes
 
 proc binaryGetBucketForNode(buckets: openarray[KBucket],
@@ -116,8 +116,10 @@ proc binaryGetBucketForNode(buckets: openarray[KBucket],
     if bucket.istart <= id and id <= bucket.iend:
       result = bucket
 
+  # TODO: Is this really an error that should occur? Feels a lot like a work-
+  # around to another problem. Set to Defect for now.
   if result.isNil:
-    raise newException(ValueError, "No bucket found for node with id " & $id)
+    raise (ref Defect)(msg: "No bucket found for node with id " & $id)
 
 proc computeSharedPrefixBits(nodes: openarray[Node]): int =
   ## Count the number of prefix bits shared by all nodes.
@@ -186,9 +188,6 @@ proc contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
 proc bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
   sortedByIt(r.buckets, it.distanceTo(id))
 
-proc notFullBuckets(r: RoutingTable): seq[KBucket] =
-  r.buckets.filterIt(not it.isFull)
-
 proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
   ## Return up to k neighbours of the given node.
   result = newSeqOfCap[Node](k * 2)
@@ -241,7 +240,7 @@ proc setJustSeen*(r: RoutingTable, n: Node) =
   b.nodes[0] = n
   b.lastUpdated = epochTime()
 
-proc nodeToRevalidate*(r: RoutingTable): Node {.raises:[].} =
+proc nodeToRevalidate*(r: RoutingTable): Node =
   var buckets = r.buckets
   shuffle(buckets)
   # TODO: Should we prioritize less-recently-updated buckets instead?

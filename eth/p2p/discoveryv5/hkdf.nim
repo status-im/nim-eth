@@ -1,9 +1,10 @@
 import nimcrypto
 
-proc hkdf*(HashType: typedesc, secret, salt, info: openarray[byte], output: var openarray[byte]) =
+proc hkdf*(HashType: typedesc, ikm, salt, info: openarray[byte],
+    output: var openarray[byte]) =
   var ctx: HMAC[HashType]
   ctx.init(salt)
-  ctx.update(secret)
+  ctx.update(ikm)
   let prk = ctx.finish().data
   const hashLen = HashType.bits div 8
 

@@ -1,5 +1,5 @@
 import
-  unittest, chronos, sequtils, chronicles, tables, stint,
+  unittest, chronos, sequtils, chronicles, tables, stint, nimcrypto,
   eth/[keys, rlp], eth/p2p/enode, eth/trie/db,
   eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
@@ -26,8 +26,8 @@ proc randomPacket(tag: PacketTag): seq[byte] =
     authTag: AuthTag
     msg: array[44, byte]
 
-  randomBytes2(authTag)
-  randomBytes2(msg)
+  require randomBytes(authTag) == authTag.len
+  require randomBytes(msg) == msg.len
   result.add(tag)
   result.add(rlp.encode(authTag))
   result.add(msg)
@@ -35,7 +35,7 @@ proc randomPacket(tag: PacketTag): seq[byte] =
 proc generateNode(privKey = PrivateKey.random()[], port: int = 20302): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, some(parseIpAddress("127.0.0.1")),
-    port, port)
+    port, port).expect("Properly intialized private key")
   result = newNode(enr)
 
 proc nodeAtDistance(n: Node, d: uint32): Node =
@@ -98,7 +98,7 @@ suite "Discovery v5 Tests":
     let a = localAddress(20303)
 
     for i in 0 ..< 5:
-      randomBytes2(tag)
+      require randomBytes(tag) == tag.len
       node.receive(a, randomPacket(tag))
 
     # Checking different nodeIds but same address
@@ -344,7 +344,7 @@ suite "Discovery v5 Tests":
       # TODO: need to add some logic to update ENRs properly
       targetSeqNum.inc()
       let r = enr.Record.init(targetSeqNum, targetKey,
-        some(targetAddress.ip), targetAddress.tcpPort, targetAddress.udpPort)
+        some(targetAddress.ip), targetAddress.tcpPort, targetAddress.udpPort)[]
       targetNode.localNode.record = r
       targetNode.open()
       let n = await mainNode.resolve(targetId)
@@ -358,7 +358,7 @@ suite "Discovery v5 Tests":
     block:
       targetSeqNum.inc()
       let r = enr.Record.init(3, targetKey, some(targetAddress.ip),
-        targetAddress.tcpPort, targetAddress.udpPort)
+        targetAddress.tcpPort, targetAddress.udpPort)[]
       targetNode.localNode.record = r
       let pong = await targetNode.ping(lookupNode.localNode)
       require pong.isSome()

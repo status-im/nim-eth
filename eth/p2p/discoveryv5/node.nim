@@ -2,6 +2,8 @@ import
   std/[net, hashes], nimcrypto, stint, chronicles,
   types, enr, eth/keys, ../enode
 
+{.push raises: [Defect].}
+
 type
   Node* = ref object
     node*: ENode
@@ -11,20 +13,12 @@ type
 proc toNodeId*(pk: PublicKey): NodeId =
   readUintBE[256](keccak256.digest(pk.toRaw()).data)
 
-proc newNode*(enode: ENode): Node =
-  Node(node: enode,
-       id: enode.pubkey.toNodeId())
-
+# TODO: Lets not allow to create a node where enode info is not in sync with the
+# record
 proc newNode*(enode: ENode, r: Record): Node =
   Node(node: enode,
        id: enode.pubkey.toNodeId(),
        record: r)
-
-proc newNode*(uriString: string): Node =
-  newNode ENode.fromString(uriString).tryGet()
-
-proc newNode*(pk: PublicKey, address: Address): Node =
-  newNode ENode(pubkey: pk, address: address)
 
 proc newNode*(r: Record): Node =
   # TODO: Handle IPv6
@@ -37,26 +31,31 @@ proc newNode*(r: Record): Node =
     a = Address(ip: IpAddress(family: IpAddressFamily.IPv4,
                               address_v4: ipBytes),
                 udpPort: Port udpPort)
-  except KeyError:
+  except KeyError, ValueError:
     # TODO: This will result in a 0.0.0.0 address. Might introduce more bugs.
     # Maybe we shouldn't allow the creation of Node from Record without IP.
     # Will need some refactor though.
     discard
 
-  let pk = PublicKey.fromRaw(r.get("secp256k1", seq[byte]))
-  if pk.isErr:
-    warn "Could not recover public key", err = pk.error
+  let pk = r.get(PublicKey)
+  if pk.isNone():
+    warn "Could not recover public key from ENR"
     return
 
-  result = newNode(ENode(pubkey: pk[], address: a))
-  result.record = r
+  let enode = ENode(pubkey: pk.get(), address: a)
+  result = Node(node: enode,
+                id: enode.pubkey.toNodeId(),
+                record: r)
 
 proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.toRaw)
-proc `==`*(a, b: Node): bool = (a.isNil and b.isNil) or (not a.isNil and not b.isNil and a.node.pubkey == b.node.pubkey)
+proc `==`*(a, b: Node): bool =
+  (a.isNil and b.isNil) or
+    (not a.isNil and not b.isNil and a.node.pubkey == b.node.pubkey)
 
 proc address*(n: Node): Address {.inline.} = n.node.address
 
-proc updateEndpoint*(n: Node, a: Address) {.inline.} = n.node.address = a
+proc updateEndpoint*(n: Node, a: Address) {.inline.} =
+  n.node.address = a
 
 proc `$`*(n: Node): string =
   if n == nil:

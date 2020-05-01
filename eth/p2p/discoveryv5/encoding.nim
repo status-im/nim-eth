@@ -1,8 +1,10 @@
 import
-  std/[tables, options], nimcrypto, stint, chronicles,
+  std/[tables, options], nimcrypto, stint, chronicles, stew/results,
   types, node, enr, hkdf, ../enode, eth/[rlp, keys]
 
 export keys
+
+{.push raises: [Defect].}
 
 const
   idNoncePrefix = "discovery-id-nonce"
@@ -14,7 +16,6 @@ const
   ## with
 
 type
-
   PacketTag* = array[tagSize, byte]
 
   AuthResponse = object
@@ -40,21 +41,18 @@ type
     ephemeralKey*: array[64, byte]
     response*: seq[byte]
 
-  RandomSourceDepleted* = object of CatchableError
+  DecodeError* = enum
+    HandshakeError = "discv5: handshake failed"
+    PacketError = "discv5: invalid packet",
+    DecryptError = "discv5: decryption failed",
+    UnsupportedMessage = "discv5: unsupported message"
 
-  DecodeStatus* = enum
-    Success,
-    HandshakeError,
-    PacketError,
-    DecryptError
+  DecodeResult*[T] = Result[T, DecodeError]
+  EncodeResult*[T] = Result[T, cstring]
 
-proc randomBytes2*(v: var openarray[byte]) =
-  # TODO if this is called randomBytes it breaks calling the real randomBytes
-  #      in other modules... sigh, nim modules and global namespaces...
-  #      ideally, a new random library will take the place of both these proc's
-  #      in as setting without exceptions for such low-level constructs..
-  if randomBytes(v) != v.len:
-    raise newException(RandomSourceDepleted, "Could not randomize bytes")
+proc mapErrTo[T, E](r: Result[T, E], v: static DecodeError):
+    DecodeResult[T] =
+  r.mapErr(proc (e: E): DecodeError = v)
 
 proc idNonceHash(nonce, ephkey: openarray[byte]): MDigest[256] =
   var ctx: sha256
@@ -64,29 +62,24 @@ proc idNonceHash(nonce, ephkey: openarray[byte]): MDigest[256] =
   ctx.update(ephkey)
   ctx.finish()
 
-proc signIDNonce*(c: Codec, idNonce, ephKey: openarray[byte]): SignatureNR =
-  let sig = signNR(c.privKey, idNonceHash(idNonce, ephKey))
-  if sig.isErr:
-    raise newException(CatchableError, "Could not sign idNonce")
-  sig[]
+proc signIDNonce*(privKey: PrivateKey, idNonce, ephKey: openarray[byte]):
+    Result[SignatureNR, cstring] =
+  signNR(privKey, idNonceHash(idNonce, ephKey))
 
 proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
-    idNonce: openarray[byte], result: var HandshakeSecrets) =
-  let eph = ecdhRawFull(priv, pub)
-  if eph.isErr:
-    raise newException(CatchableError, "ecdhRawFull failed")
+    idNonce: openarray[byte]): Result[HandshakeSecrets, cstring] =
+  let eph = ? ecdhRawFull(priv, pub)
 
-  # TODO: Unneeded allocation here
   var info = newSeqOfCap[byte](idNoncePrefix.len + 32 * 2)
   for i, c in keyAgreementPrefix: info.add(byte(c))
   info.add(n1.toByteArrayBE())
   info.add(n2.toByteArrayBE())
 
-  # echo "EPH: ", eph.data.toHex, " idNonce: ", challenge.idNonce.toHex, "info: ", info.toHex
-
-  static: assert(sizeof(result) == aesKeySize * 3)
-  var res = cast[ptr UncheckedArray[byte]](addr result)
-  hkdf(sha256, eph[].data, idNonce, info, toOpenArray(res, 0, sizeof(result) - 1))
+  var secrets: HandshakeSecrets
+  static: assert(sizeof(secrets) == aesKeySize * 3)
+  var res = cast[ptr UncheckedArray[byte]](addr secrets)
+  hkdf(sha256, eph.data, idNonce, info, toOpenArray(res, 0, sizeof(secrets) - 1))
+  ok(secrets)
 
 proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
   var ectx: GCM[aes128]
@@ -96,49 +89,57 @@ proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
   ectx.getTag(result.toOpenArray(pt.len, result.high))
   ectx.clear()
 
-proc makeAuthHeader(c: Codec, toId: NodeID, nonce: array[gcmNonceSize, byte],
-                    handshakeSecrets: var HandshakeSecrets,
-                    challenge: Whoareyou): seq[byte] =
+proc encodeAuthHeader(c: Codec,
+                      toId: NodeID,
+                      nonce: array[gcmNonceSize, byte],
+                      challenge: Whoareyou):
+                      EncodeResult[(seq[byte], HandshakeSecrets)] =
   var resp = AuthResponse(version: 5)
   let ln = c.localNode
 
+  # TODO: What goes over the wire now in case of no updated ENR?
   if challenge.recordSeq < ln.record.seqNum:
     resp.record = ln.record
 
-  let ephKeys = KeyPair.random().tryGet()
+  let ephKeys = ? KeyPair.random()
+  let signature = ? signIDNonce(c.privKey, challenge.idNonce,
+    ephKeys.pubkey.toRaw)
+  resp.signature = signature.toRaw
 
-  resp.signature = c.signIDNonce(challenge.idNonce, ephKeys.pubkey.toRaw).toRaw
-
-  deriveKeys(ln.id, toId, ephKeys.seckey, challenge.pubKey, challenge.idNonce,
-    handshakeSecrets)
+  let secrets = ? deriveKeys(ln.id, toId, ephKeys.seckey, challenge.pubKey,
+    challenge.idNonce)
 
   let respRlp = rlp.encode(resp)
 
   var zeroNonce: array[gcmNonceSize, byte]
-  let respEnc = encryptGCM(handshakeSecrets.authRespKey, zeroNonce, respRLP, [])
+  let respEnc = encryptGCM(secrets.authRespKey, zeroNonce, respRLP, [])
 
   let header = AuthHeader(auth: nonce, idNonce: challenge.idNonce,
-    scheme: authSchemeName, ephemeralKey: ephKeys.pubkey.toRaw, response: respEnc)
-  rlp.encode(header)
+    scheme: authSchemeName, ephemeralKey: ephKeys.pubkey.toRaw,
+    response: respEnc)
+  ok((rlp.encode(header), secrets))
 
 proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =
   for i in 0 .. a.high:
     result[i] = a[i] xor b[i]
 
 proc packetTag(destNode, srcNode: NodeID): PacketTag =
-  let destId = destNode.toByteArrayBE()
-  let srcId = srcNode.toByteArrayBE()
-  let destidHash = sha256.digest(destId)
+  let
+    destId = destNode.toByteArrayBE()
+    srcId = srcNode.toByteArrayBE()
+    destidHash = sha256.digest(destId)
   result = srcId xor destidHash.data
 
-proc encodeEncrypted*(c: Codec,
+proc encodePacket*(c: Codec,
                       toId: NodeID,
                       toAddr: Address,
-                      packetData: seq[byte],
+                      message: openarray[byte],
                       challenge: Whoareyou):
-                      (seq[byte], array[gcmNonceSize, byte]) =
+                      EncodeResult[(seq[byte], array[gcmNonceSize, byte])] =
   var nonce: array[gcmNonceSize, byte]
-  randomBytes2(nonce)
+  if randomBytes(nonce) != nonce.len:
+    return err("Could not randomize bytes")
+
   var headEnc: seq[byte]
 
   var writeKey: AesKey
@@ -151,22 +152,20 @@ proc encodeEncrypted*(c: Codec,
     # yet. That's fine, we will be responded with whoareyou.
     discard c.db.loadKeys(toId, toAddr, readKey, writeKey)
   else:
-    var sec: HandshakeSecrets
-    headEnc = c.makeAuthHeader(toId, nonce, sec, challenge)
+    var secrets: HandshakeSecrets
+    (headEnc, secrets) = ? c.encodeAuthHeader(toId, nonce, challenge)
 
-    writeKey = sec.writeKey
+    writeKey = secrets.writeKey
     # TODO: is it safe to ignore the error here?
-    discard c.db.storeKeys(toId, toAddr, sec.readKey, sec.writeKey)
+    discard c.db.storeKeys(toId, toAddr, secrets.readKey, secrets.writeKey)
 
-  var body = packetData
   let tag = packetTag(toId, c.localNode.id)
 
-  var headBuf = newSeqOfCap[byte](tag.len + headEnc.len)
-  headBuf.add(tag)
-  headBuf.add(headEnc)
-
-  headBuf.add(encryptGCM(writeKey, nonce, body, tag))
-  return (headBuf, nonce)
+  var packet = newSeqOfCap[byte](tag.len + headEnc.len)
+  packet.add(tag)
+  packet.add(headEnc)
+  packet.add(encryptGCM(writeKey, nonce, message, tag))
+  ok((packet, nonce))
 
 proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
     Option[seq[byte]] =
@@ -187,62 +186,67 @@ proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
 
   return some(res)
 
-type
-  DecodePacketResult = enum
-    decodingSuccessful
-    invalidPacketPayload
-    invalidPacketType
-    unsupportedPacketType
+proc decodeMessage(body: openarray[byte]):
+    DecodeResult[Message] {.raises:[Defect].} =
+  if body.len < 1:
+    return err(PacketError)
 
-proc decodePacketBody(typ: byte,
-                      body: openarray[byte],
-                      res: var Packet): DecodePacketResult =
-  if typ < PacketKind.low.byte or typ > PacketKind.high.byte:
-    return invalidPacketType
+  if body[0] < MessageKind.low.byte or body[0] > MessageKind.high.byte:
+    return err(PacketError)
 
-  let kind = cast[PacketKind](typ)
-  res = Packet(kind: kind)
-  var rlp = rlpFromBytes(body)
+  let kind = cast[MessageKind](body[0])
+  var message = Message(kind: kind)
+  var rlp = rlpFromBytes(body.toOpenArray(1, body.high))
   if rlp.enterList:
-    res.reqId = rlp.read(RequestId)
+    try:
+      message.reqId = rlp.read(RequestId)
+    except RlpError:
+      return err(PacketError)
 
-    proc decode[T](rlp: var Rlp, v: var T) {.inline, nimcall.} =
+    proc decode[T](rlp: var Rlp, v: var T)
+        {.inline, nimcall, raises:[RlpError, ValueError, Defect].} =
       for k, v in v.fieldPairs:
         v = rlp.read(typeof(v))
 
-    case kind
-    of unused: return invalidPacketPayload
-    of ping: rlp.decode(res.ping)
-    of pong: rlp.decode(res.pong)
-    of findNode: rlp.decode(res.findNode)
-    of nodes: rlp.decode(res.nodes)
-    of regtopic, ticket, regconfirmation, topicquery:
-      # TODO Implement these packet types
-      return unsupportedPacketType
+    try:
+      case kind
+      of unused: return err(PacketError)
+      of ping: rlp.decode(message.ping)
+      of pong: rlp.decode(message.pong)
+      of findNode: rlp.decode(message.findNode)
+      of nodes: rlp.decode(message.nodes)
+      of regtopic, ticket, regconfirmation, topicquery:
+        # TODO: Implement support for topic advertisement
+        return err(UnsupportedMessage)
+    except RlpError, ValueError:
+      return err(PacketError)
 
-    return decodingSuccessful
+    ok(message)
   else:
-    return invalidPacketPayload
+    err(PacketError)
 
 proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
-    challenge: Whoareyou, secrets: var HandshakeSecrets, newNode: var Node): bool =
+    challenge: Whoareyou, secrets: var HandshakeSecrets, newNode: var Node):
+    DecodeResult[void] {.raises:[Defect].} =
   if head.scheme != authSchemeName:
     warn "Unknown auth scheme"
-    return false
+    return err(HandshakeError)
 
-  var ephKey = PublicKey.fromRaw(head.ephemeralKey)
-  if ephKey.isErr:
-    return false
+  let ephKey = ? PublicKey.fromRaw(head.ephemeralKey).mapErrTo(HandshakeError)
 
-  deriveKeys(fromId, c.localNode.id, c.privKey, ephKey[], challenge.idNonce,
-    secrets)
+  secrets = ? deriveKeys(fromId, c.localNode.id, c.privKey, ephKey,
+    challenge.idNonce).mapErrTo(HandshakeError)
 
   var zeroNonce: array[gcmNonceSize, byte]
   let respData = decryptGCM(secrets.authRespKey, zeroNonce, head.response, [])
   if respData.isNone():
-    return false
+    return err(HandshakeError)
 
-  let authResp = rlp.decode(respData.get(), AuthResponse)
+  var authResp: AuthResponse
+  try:
+    authResp = rlp.decode(respData.get(), AuthResponse)
+  except RlpError, ValueError:
+    return err(HandshakeError)
   # TODO:
   # 1. Should allow for not having an ENR included, solved for now by sending
   # whoareyou with always recordSeq of 0
@@ -252,16 +256,18 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
   # More TODO:
   # This will also not work if ENR does not contain an IP address or if the
   # IP address is out of date and doesn't match current UDP end point
-  newNode = newNode(authResp.record)
-  return true
+  try:
+    newNode = newNode(authResp.record)
+    ok()
+  except KeyError, ValueError:
+    err(HandshakeError)
 
-proc decodeEncrypted*(c: var Codec,
+proc decodePacket*(c: var Codec,
                       fromId: NodeID,
                       fromAddr: Address,
                       input: openArray[byte],
                       authTag: var AuthTag,
-                      newNode: var Node,
-                      packet: var Packet): DecodeStatus =
+                      newNode: var Node): DecodeResult[Message] =
   var r = rlpFromBytes(input.toOpenArray(tagSize, input.high))
   var auth: AuthHeader
 
@@ -270,23 +276,27 @@ proc decodeEncrypted*(c: var Codec,
 
   if r.isList:
     # Handshake - rlp list indicates auth-header
-    auth = r.read(AuthHeader)
+    try:
+      auth = r.read(AuthHeader)
+    except RlpError:
+      return err(PacketError)
     authTag = auth.auth
 
     let key = HandShakeKey(nodeId: fromId, address: $fromAddr)
     let challenge = c.handshakes.getOrDefault(key)
     if challenge.isNil:
       trace "Decoding failed (no challenge)"
-      return HandshakeError
+      return err(HandshakeError)
 
     if auth.idNonce != challenge.idNonce:
       trace "Decoding failed (different nonce)"
-      return HandshakeError
+      return err(HandshakeError)
 
     var sec: HandshakeSecrets
-    if not c.decodeAuthResp(fromId, auth, challenge, sec, newNode):
+    if c.decodeAuthResp(fromId, auth, challenge, sec, newNode).isErr:
       trace "Decoding failed (bad auth)"
-      return HandshakeError
+      return err(HandshakeError)
+
     c.handshakes.del(key)
 
     # For an incoming handshake, we are not sure the address in the ENR is there
@@ -299,50 +309,43 @@ proc decodeEncrypted*(c: var Codec,
     # TODO: is it safe to ignore the error here?
     discard c.db.storeKeys(fromId, fromAddr, sec.readKey, sec.writeKey)
     readKey = sec.readKey
-
   else:
     # Message packet or random packet - rlp bytes (size 12) indicates auth-tag
-    authTag = r.read(AuthTag)
+    try:
+      authTag = r.read(AuthTag)
+    except RlpError:
+      return err(PacketError)
     auth.auth = authTag
     var writeKey: AesKey
     if not c.db.loadKeys(fromId, fromAddr, readKey, writeKey):
       trace "Decoding failed (no keys)"
-      return DecryptError
-      # doAssert(false, "TODO: HANDLE ME!")
+      return err(DecryptError)
 
   let headSize = tagSize + r.position
 
-  let body = decryptGCM(
+  let message = decryptGCM(
     readKey, auth.auth,
     input.toOpenArray(headSize, input.high),
     input.toOpenArray(0, tagSize - 1))
-  if body.isNone():
+  if message.isNone():
     discard c.db.deleteKeys(fromId, fromAddr)
-    return DecryptError
+    return err(DecryptError)
 
-  let packetData = body.get()
-  if packetData.len > 1:
-    let status = decodePacketBody(packetData[0],
-      packetData.toOpenArray(1, packetData.high), packet)
-    if status == decodingSuccessful:
-      return Success
-    else:
-      debug "Failed to decode discovery packet", reason = status
-      return PacketError
+  decodeMessage(message.get())
+
+proc newRequestId*(): Result[RequestId, cstring] =
+  var id: RequestId
+  if randomBytes(addr id, sizeof(id)) != sizeof(id):
+    err("Could not randomize bytes")
   else:
-    return PacketError
-
-proc newRequestId*(): RequestId =
-  if randomBytes(addr result, sizeof(result)) != sizeof(result):
-    raise newException(RandomSourceDepleted, "Could not randomize bytes")
+    ok(id)
 
 proc numFields(T: typedesc): int =
   for k, v in fieldPairs(default(T)): inc result
 
-proc encodePacket*[T: SomePacket](p: T, reqId: RequestId): seq[byte] =
+proc encodeMessage*[T: SomeMessage](p: T, reqId: RequestId): seq[byte] =
   result = newSeqOfCap[byte](64)
-  result.add(packetKind(T).ord)
-  # result.add(rlp.encode(p))
+  result.add(messageKind(T).ord)
 
   const sz = numFields(T)
   var writer = initRlpList(sz + 1)
@@ -350,6 +353,3 @@ proc encodePacket*[T: SomePacket](p: T, reqId: RequestId): seq[byte] =
   for k, v in fieldPairs(p):
     writer.append(v)
   result.add(writer.finish())
-
-proc encodePacket*[T: SomePacket](p: T): seq[byte] =
-  encodePacket(p, newRequestId())

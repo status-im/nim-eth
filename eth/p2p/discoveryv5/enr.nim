@@ -8,6 +8,8 @@ import
 
 export options
 
+{.push raises: [Defect].}
+
 const
   maxEnrSize = 300
   minRlpListLen = 4 # for signature, seqId, "id" key, id
@@ -47,6 +49,8 @@ type
     of kBytes:
       bytes: seq[byte]
 
+  EnrResult*[T] = Result[T, cstring]
+
 template toField[T](v: T): Field =
   when T is string:
     Field(kind: kString, str: v)
@@ -59,20 +63,24 @@ template toField[T](v: T): Field =
   else:
     {.error: "Unsupported field type".}
 
-proc makeEnrAux(seqNum: uint64, pk: PrivateKey, pairs: openarray[(string, Field)]): Record =
-  result.pairs = @pairs
-  result.seqNum = seqNum
+proc makeEnrAux(seqNum: uint64, pk: PrivateKey,
+    pairs: openarray[(string, Field)]): EnrResult[Record] =
+  var record: Record
+  record.pairs = @pairs
+  record.seqNum = seqNum
 
-  let pubkey = pk.toPublicKey().tryGet()
+  let pubkey = ? pk.toPublicKey()
 
-  result.pairs.add(("id", Field(kind: kString, str: "v4")))
-  result.pairs.add(("secp256k1", Field(kind: kBytes, bytes: @(pubkey.toRawCompressed()))))
+  record.pairs.add(("id", Field(kind: kString, str: "v4")))
+  record.pairs.add(("secp256k1",
+    Field(kind: kBytes, bytes: @(pubkey.toRawCompressed()))))
 
   # Sort by key
-  result.pairs.sort() do(a, b: (string, Field)) -> int:
+  record.pairs.sort() do(a, b: (string, Field)) -> int:
     cmp(a[0], b[0])
 
-  proc append(w: var RlpWriter, seqNum: uint64, pairs: openarray[(string, Field)]): seq[byte] =
+  proc append(w: var RlpWriter, seqNum: uint64,
+      pairs: openarray[(string, Field)]): seq[byte] =
     w.append(seqNum)
     for (k, v) in pairs:
       w.append(k)
@@ -83,19 +91,20 @@ proc makeEnrAux(seqNum: uint64, pk: PrivateKey, pairs: openarray[(string, Field)
     w.finish()
 
   let toSign = block:
-    var w = initRlpList(result.pairs.len * 2 + 1)
-    w.append(seqNum, result.pairs)
+    var w = initRlpList(record.pairs.len * 2 + 1)
+    w.append(seqNum, record.pairs)
 
-  let sig = signNR(pk, toSign)
-  if sig.isErr:
-    raise newException(CatchableError, "Could not sign ENR (internal error)")
+  let sig = ? signNR(pk, toSign)
 
-  result.raw = block:
-    var w = initRlpList(result.pairs.len * 2 + 2)
-    w.append(sig[].toRaw())
-    w.append(seqNum, result.pairs)
+  record.raw = block:
+    var w = initRlpList(record.pairs.len * 2 + 2)
+    w.append(sig.toRaw())
+    w.append(seqNum, record.pairs)
 
-macro initRecord*(seqNum: uint64, pk: PrivateKey, pairs: untyped{nkTableConstr}): untyped =
+  ok(record)
+
+macro initRecord*(seqNum: uint64, pk: PrivateKey,
+    pairs: untyped{nkTableConstr}): untyped =
   for c in pairs:
     c.expectKind(nnkExprColonExpr)
     c[1] = newCall(bindSym"toField", c[1])
@@ -110,7 +119,8 @@ proc init*(T: type Record, seqNum: uint64,
                            pk: PrivateKey,
                            ip: Option[IpAddress],
                            tcpPort, udpPort: Port,
-                           extraFields: openarray[FieldPair] = []): T =
+                           extraFields: openarray[FieldPair] = []):
+                           EnrResult[T] =
   var fields = newSeq[FieldPair]()
 
   if ip.isSome():
@@ -138,11 +148,11 @@ proc getField(r: Record, name: string, field: var Field): bool =
       field = v
       return true
 
-proc requireKind(f: Field, kind: FieldKind) =
+proc requireKind(f: Field, kind: FieldKind) {.raises: [ValueError].} =
   if f.kind != kind:
     raise newException(ValueError, "Wrong field kind")
 
-proc get*(r: Record, key: string, T: type): T =
+proc get*(r: Record, key: string, T: type): T {.raises: [ValueError, Defect].} =
   var f: Field
   if r.getField(key, f):
     when T is SomeInteger:
@@ -173,7 +183,7 @@ proc get*(r: Record, key: string, T: type): T =
   else:
     raise newException(KeyError, "Key not found in ENR: " & key)
 
-proc get*(r: Record, T: type PublicKey): Option[T] {.raises: [Defect].} =
+proc get*(r: Record, T: type PublicKey): Option[T] =
   var pubkeyField: Field
   if r.getField("secp256k1", pubkeyField) and pubkeyField.kind == kBytes:
     let pk = PublicKey.fromRaw(pubkeyField.bytes)
@@ -205,7 +215,8 @@ proc toTypedRecord*(r: Record): Option[TypedRecord] =
 
     return some(tr)
 
-proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]): bool =
+proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]):
+    bool =
   let publicKey = r.get(PublicKey)
   if publicKey.isSome:
     let sig = SignatureNR.fromRaw(sigData)
@@ -213,7 +224,7 @@ proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]):
       var h = keccak256.digest(content)
       return verify(sig[], h, publicKey.get)
 
-proc verifySignature(r: Record): bool =
+proc verifySignature(r: Record): bool {.raises: [RlpError, Defect].} =
   var rlp = rlpFromBytes(r.raw)
   let sz = rlp.listLen
   if not rlp.enterList:
@@ -236,7 +247,7 @@ proc verifySignature(r: Record): bool =
       # Unknown Identity Scheme
       discard
 
-proc fromBytesAux(r: var Record): bool =
+proc fromBytesAux(r: var Record): bool {.raises: [RlpError, Defect].} =
   if r.raw.len > maxEnrSize:
     return false
 
@@ -275,7 +286,7 @@ proc fromBytesAux(r: var Record): bool =
   verifySignature(r)
 
 proc fromBytes*(r: var Record, s: openarray[byte]): bool =
-  # Loads ENR from rlp-encoded bytes, and validated the signature.
+  ## Loads ENR from rlp-encoded bytes, and validated the signature.
   r.raw = @s
   try:
     result = fromBytesAux(r)
@@ -283,7 +294,8 @@ proc fromBytes*(r: var Record, s: openarray[byte]): bool =
     discard
 
 proc fromBase64*(r: var Record, s: string): bool =
-  # Loads ENR from base64-encoded rlp-encoded bytes, and validated the signature.
+  ## Loads ENR from base64-encoded rlp-encoded bytes, and validated the
+  ## signature.
   try:
     r.raw = Base64Url.decode(s)
     result = fromBytesAux(r)
@@ -291,7 +303,8 @@ proc fromBase64*(r: var Record, s: string): bool =
     discard
 
 proc fromURI*(r: var Record, s: string): bool =
-  # Loads ENR from its text encoding: base64-encoded rlp-encoded bytes, prefixed with "enr:".
+  ## Loads ENR from its text encoding: base64-encoded rlp-encoded bytes,
+  ## prefixed with "enr:".
   const prefix = "enr:"
   if s.startsWith(prefix):
     result = r.fromBase64(s[prefix.len .. ^1])
@@ -328,7 +341,8 @@ proc `$`*(r: Record): string =
 
 proc `==`*(a, b: Record): bool = a.raw == b.raw
 
-proc read*(rlp: var Rlp, T: typedesc[Record]): T {.inline.} =
+proc read*(rlp: var Rlp, T: typedesc[Record]):
+    T {.inline, raises:[RlpError, ValueError, Defect].} =
   if not result.fromBytes(rlp.rawData):
     raise newException(ValueError, "Could not deserialize")
   rlp.skipElem()
