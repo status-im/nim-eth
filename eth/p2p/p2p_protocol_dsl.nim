@@ -1,6 +1,6 @@
 import
   options, sequtils,
-  stew/shims/macros, chronos, faststreams/output_stream
+  stew/shims/macros, chronos, faststreams/outputs
 
 type
   MessageKind* = enum
