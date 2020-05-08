@@ -3,8 +3,8 @@
 {.push raises: [Defect].}
 
 import
-  os,
-  sqlite3_abi,
+  os, tables, times,
+  chronicles, metrics, sqlite3_abi,
   ./kvstore
 
 export kvstore
@@ -162,3 +162,35 @@ proc init*(
     delStmt: delStmt,
     containsStmt: containsStmt
   ))
+
+when defined(metrics):
+  type Sqlite3Info = ref object of Gauge
+
+  proc newSqlite3Info*(name: string, help: string, registry = defaultRegistry): Sqlite3Info {.raises: [Exception].} =
+    validateName(name)
+    result = Sqlite3Info(name: name,
+                        help: help,
+                        typ: "gauge",
+                        creationThreadId: getThreadId())
+    result.register(registry)
+
+  var sqlite3Info* {.global.} = newSqlite3Info("sqlite3_info", "SQLite3 info")
+
+  method collect*(collector: Sqlite3Info): Metrics =
+    result = initOrderedTable[Labels, seq[Metric]]()
+    result[@[]] = @[]
+    var
+      timestamp = getTime().toMilliseconds()
+      currentMem, highwaterMem: cint
+
+    if (let res = sqlite3_status(SQLITE_STATUS_MEMORY_USED, currentMem.addr, highwaterMem.addr, 0); res != SQLITE_OK):
+      error "SQLite3 error", msg = sqlite3_errstr(res)
+    else:
+      result[@[]] = @[
+        Metric(
+          name: "sqlite3_memory_used_bytes",
+          value: currentMem.float64,
+          timestamp: timestamp,
+        ),
+      ]
+
