@@ -3,8 +3,8 @@
 {.push raises: [Defect].}
 
 import
-  os, tables, times,
-  chronicles, metrics, sqlite3_abi,
+  os,
+  sqlite3_abi,
   ./kvstore
 
 export kvstore
@@ -164,6 +164,9 @@ proc init*(
   ))
 
 when defined(metrics):
+  import tables, times,
+        chronicles, metrics
+
   type Sqlite3Info = ref object of Gauge
 
   proc newSqlite3Info*(name: string, help: string, registry = defaultRegistry): Sqlite3Info {.raises: [Exception].} =
@@ -179,11 +182,10 @@ when defined(metrics):
   method collect*(collector: Sqlite3Info): Metrics =
     result = initOrderedTable[Labels, seq[Metric]]()
     result[@[]] = @[]
-    var
-      timestamp = getTime().toMilliseconds()
-      currentMem, highwaterMem: cint
+    let timestamp = getTime().toMilliseconds()
+    var currentMem, highwaterMem: int64
 
-    if (let res = sqlite3_status(SQLITE_STATUS_MEMORY_USED, currentMem.addr, highwaterMem.addr, 0); res != SQLITE_OK):
+    if (let res = sqlite3_status64(SQLITE_STATUS_MEMORY_USED, currentMem.addr, highwaterMem.addr, 0); res != SQLITE_OK):
       error "SQLite3 error", msg = sqlite3_errstr(res)
     else:
       result[@[]] = @[
