@@ -104,6 +104,7 @@ type
     NetworkType*: NimNode
     SerializationFormat*: NimNode
     ResponderType*: NimNode
+    RequestResultsWrapper*: NimNode
     ReqIdType*: NimNode
 
     registerProtocol*: NimNode
@@ -438,6 +439,21 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
 proc identWithExportMarker*(msg: Message): NimNode =
   newTree(nnkPostfix, ident("*"), msg.ident)
 
+proc requestResultType*(msg: Message): NimNode =
+  let
+    protocol = msg.protocol
+    backend = protocol.backend
+    responseRec = msg.response.recName
+
+  var wrapperType = backend.RequestResultsWrapper
+  if wrapperType != nil:
+    if eqIdent(wrapperType, "void"):
+      return responseRec
+    else:
+      return newTree(nnkBracketExpr, wrapperType, responseRec)
+  else:
+    return newTree(nnkBracketExpr, Option, responseRec)
+
 proc createSendProc*(msg: Message,
                      procType = nnkProcDef,
                      isRawSender = false,
@@ -507,7 +523,7 @@ proc createSendProc*(msg: Message,
   def[3][0] = if procType == nnkMacroDef:
                 ident "untyped"
               elif msg.kind == msgRequest and not isRawSender:
-                Fut(Opt(msg.response.recName))
+                Fut(msg.requestResultType)
               elif msg.kind == msgHandshake and not isRawSender:
                 Fut(msg.recName)
               else:
