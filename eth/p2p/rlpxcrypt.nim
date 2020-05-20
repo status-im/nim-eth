@@ -12,7 +12,7 @@
 
 {.push raises: [Defect].}
 
-import stew/ranges/stackarrays, nimcrypto, stew/results
+import nimcrypto, stew/results
 from auth import ConnectionSecret
 
 export results
