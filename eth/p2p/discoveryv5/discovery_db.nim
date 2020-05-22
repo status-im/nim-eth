@@ -1,6 +1,8 @@
 import
   std/net,
-  eth/trie/db, types, ../enode
+  eth/trie/db, types, node
+
+{.push raises: [Defect].}
 
 type
   DiscoveryDB* = ref object of Database
@@ -22,13 +24,16 @@ proc makeKey(id: NodeId, address: Address): array[keySize, byte] =
   copyMem(addr result[1], unsafeAddr id, sizeof(id))
   case address.ip.family
   of IpAddressFamily.IpV4:
-    copyMem(addr result[sizeof(id) + 1], unsafeAddr address.ip.address_v4, sizeof(address.ip.address_v4))
+    copyMem(addr result[sizeof(id) + 1], unsafeAddr address.ip.address_v4,
+      sizeof(address.ip.address_v4))
   of IpAddressFamily.IpV6:
-    copyMem(addr result[sizeof(id) + 1], unsafeAddr address.ip.address_v6, sizeof(address.ip.address_v6))
-  copyMem(addr result[sizeof(id) + 1 + sizeof(address.ip.address_v6)], unsafeAddr address.udpPort, sizeof(address.udpPort))
+    copyMem(addr result[sizeof(id) + 1], unsafeAddr address.ip.address_v6,
+      sizeof(address.ip.address_v6))
+  copyMem(addr result[sizeof(id) + 1 + sizeof(address.ip.address_v6)],
+    unsafeAddr address.port, sizeof(address.port))
 
 method storeKeys*(db: DiscoveryDB, id: NodeId, address: Address, r, w: AesKey):
-    bool {.raises: [Defect].} =
+    bool =
   try:
     var value: array[sizeof(r) + sizeof(w), byte]
     value[0 .. 15] = r
@@ -38,8 +43,8 @@ method storeKeys*(db: DiscoveryDB, id: NodeId, address: Address, r, w: AesKey):
   except CatchableError:
     return false
 
-method loadKeys*(db: DiscoveryDB, id: NodeId, address: Address, r, w: var AesKey):
-    bool {.raises: [Defect].} =
+method loadKeys*(db: DiscoveryDB, id: NodeId, address: Address,
+    r, w: var AesKey): bool =
   try:
     let res = db.backend.get(makeKey(id, address))
     if res.len != sizeof(r) + sizeof(w):
@@ -50,8 +55,7 @@ method loadKeys*(db: DiscoveryDB, id: NodeId, address: Address, r, w: var AesKey
   except CatchableError:
     return false
 
-method deleteKeys*(db: DiscoveryDB, id: NodeId, address: Address):
-    bool {.raises: [Defect].} =
+method deleteKeys*(db: DiscoveryDB, id: NodeId, address: Address): bool =
   try:
     db.backend.del(makeKey(id, address))
     return true

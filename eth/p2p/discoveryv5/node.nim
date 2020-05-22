@@ -1,64 +1,59 @@
 import
-  std/[net, hashes], nimcrypto, stint, chronicles,
-  types, enr, eth/keys, ../enode
+  std/[net, hashes], nimcrypto, stint, chronos,
+  eth/keys, enr
 
 {.push raises: [Defect].}
 
 type
+  NodeId* = UInt256
+
+  Address* = object
+    ip*: IpAddress
+    port*: Port
+
   Node* = ref object
-    node*: ENode
     id*: NodeId
+    pubkey*: PublicKey
+    address*: Option[Address]
     record*: Record
 
 proc toNodeId*(pk: PublicKey): NodeId =
   readUintBE[256](keccak256.digest(pk.toRaw()).data)
 
-# TODO: Lets not allow to create a node where enode info is not in sync with the
-# record
-proc newNode*(enode: ENode, r: Record): Node =
-  Node(node: enode,
-       id: enode.pubkey.toNodeId(),
-       record: r)
-
-proc newNode*(r: Record): Node =
+proc newNode*(r: Record): Result[Node, cstring] =
   # TODO: Handle IPv6
-  var a: Address
-  try:
-    let
-      ipBytes = r.get("ip", array[4, byte])
-      udpPort = r.get("udp", uint16)
-
-    a = Address(ip: IpAddress(family: IpAddressFamily.IPv4,
-                              address_v4: ipBytes),
-                udpPort: Port udpPort)
-  except KeyError, ValueError:
-    # TODO: This will result in a 0.0.0.0 address. Might introduce more bugs.
-    # Maybe we shouldn't allow the creation of Node from Record without IP.
-    # Will need some refactor though.
-    discard
 
   let pk = r.get(PublicKey)
+  # This check is redundant as the deserialisation of `Record` will already fail
+  # at `verifySignature` if there is no public key
   if pk.isNone():
-    warn "Could not recover public key from ENR"
-    return
+    return err("Could not recover public key from ENR")
 
-  let enode = ENode(pubkey: pk.get(), address: a)
-  result = Node(node: enode,
-                id: enode.pubkey.toNodeId(),
-                record: r)
+  let tr = ? r.toTypedRecord()
+  if tr.ip.isSome() and tr.udp.isSome():
+    let
+      ip = IpAddress(family: IpAddressFamily.IPv4, address_v4: tr.ip.get())
+      a = Address(ip: ip, port: Port(tr.udp.get()))
 
-proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.toRaw)
+    ok(Node(id: pk.get().toNodeId(), pubkey: pk.get() , record: r,
+       address: some(a)))
+  else:
+    ok(Node(id: pk.get().toNodeId(), pubkey: pk.get(), record: r,
+       address: none(Address)))
+
+proc hash*(n: Node): hashes.Hash = hash(n.pubkey.toRaw)
 proc `==`*(a, b: Node): bool =
   (a.isNil and b.isNil) or
-    (not a.isNil and not b.isNil and a.node.pubkey == b.node.pubkey)
+    (not a.isNil and not b.isNil and a.pubkey == b.pubkey)
 
-proc address*(n: Node): Address {.inline.} = n.node.address
-
-proc updateEndpoint*(n: Node, a: Address) {.inline.} =
-  n.node.address = a
+proc `$`*(a: Address): string =
+  result.add($a.ip)
+  result.add(":" & $a.port)
 
 proc `$`*(n: Node): string =
   if n == nil:
-    "Node[local]"
+    "Node[uninitialized]"
+  elif n.address.isNone():
+    "Node[unaddressable]"
   else:
-    "Node[" & $n.node.address.ip & ":" & $n.node.address.udpPort & "]"
+    "Node[" & $n.address.get().ip & ":" & $n.address.get().port & "]"

@@ -76,11 +76,13 @@ import
   std/[tables, sets, options, math, random],
   json_serialization/std/net,
   stew/[byteutils, endians2], chronicles, chronos, stint,
-  eth/[rlp, keys], ../enode, types, encoding, node, routing_table, enr
+  eth/[rlp, keys], types, encoding, node, routing_table, enr
 
 import nimcrypto except toHex
 
 export options
+
+{.push raises: [Defect].}
 
 logScope:
   topics = "discv5"
@@ -122,20 +124,22 @@ type
 
   RandomSourceDepleted* = object of CatchableError
 
-proc addNode*(d: Protocol, node: Node) =
-  discard d.routingTable.addNode(node)
+proc addNode*(d: Protocol, node: Node): bool =
+  if node.address.isSome():
+    # Only add nodes with an address to the routing table
+    discard d.routingTable.addNode(node)
+    return true
 
-template addNode*(d: Protocol, enode: ENode) =
-  addNode d, newNode(enode)
+proc addNode*(d: Protocol, r: Record): bool =
+  let node = newNode(r)
+  if node.isOk():
+    return d.addNode(node[])
 
-template addNode*(d: Protocol, r: Record) =
-  addNode d, newNode(r)
-
-proc addNode*(d: Protocol, enr: EnrUri) =
+proc addNode*(d: Protocol, enr: EnrUri): bool =
   var r: Record
   let res = r.fromUri(enr)
-  doAssert(res)
-  d.addNode newNode(r)
+  if res:
+    return d.addNode(r)
 
 proc getNode*(d: Protocol, id: NodeId): Option[Node] =
   d.routingTable.getNode(id)
@@ -152,15 +156,28 @@ func privKey*(d: Protocol): lent PrivateKey =
   d.privateKey
 
 proc send(d: Protocol, a: Address, data: seq[byte]) =
-  # debug "Sending bytes", amount = data.len, to = a
-  let ta = initTAddress(a.ip, a.udpPort)
-  let f = d.transp.sendTo(ta, data)
-  f.callback = proc(data: pointer) {.gcsafe.} =
-    if f.failed:
-      debug "Discovery send failed", msg = f.readError.msg
+  let ta = initTAddress(a.ip, a.port)
+  try:
+    let f = d.transp.sendTo(ta, data)
+    f.callback = proc(data: pointer) {.gcsafe.} =
+      if f.failed:
+        # Could be `TransportError` in case the transport is already closed.
+        # Or could be `TransportOsError` in case of a socket error.
+        # In the latter case this would probably mostly occur if the network
+        # interface underneath gets disconnected or similar.
+        # TODO: Should this kind of error be propagated upwards? Probably, but
+        # it should not stop the process as that would reset the discovery
+        # progress in case there is even a small window of no connection.
+        debug "Discovery send failed", msg = f.readError.msg
+  except Exception as e:
+    # General exception still being raised from Chronos.
+    if e of Defect:
+      raise (ref Defect)(e)
+    else: doAssert(false)
 
 proc send(d: Protocol, n: Node, data: seq[byte]) =
-  d.send(n.node.address, data)
+  doAssert(n.address.isSome())
+  d.send(n.address.get(), data)
 
 proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =
   for i in 0 .. a.high:
@@ -177,11 +194,13 @@ proc isWhoAreYou(d: Protocol, packet: openArray[byte]): bool =
   if packet.len > d.whoareyouMagic.len:
     result = d.whoareyouMagic == packet.toOpenArray(0, magicSize - 1)
 
-proc decodeWhoAreYou(d: Protocol, packet: openArray[byte]): Whoareyou =
+proc decodeWhoAreYou(d: Protocol, packet: openArray[byte]):
+    Whoareyou {.raises: [RlpError].} =
   result = Whoareyou()
   result[] = rlp.decode(packet.toOpenArray(magicSize, packet.high), WhoareyouObj)
 
-proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthTag) =
+proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId,
+    authTag: AuthTag) {.raises: [RandomSourceDepleted, Exception].} =
   trace "sending who are you", to = $toNode, toAddress = $address
   let challenge = Whoareyou(authTag: authTag, recordSeq: 0)
 
@@ -208,19 +227,23 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId, authTag: AuthT
     d.send(address, data)
 
 proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
-    nodes: openarray[Node]) =
+    nodes: openarray[Node]) {.raises: [ValueError, Defect].} =
   proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address,
-      message: NodesMessage, reqId: RequestId) {.nimcall.} =
+      message: NodesMessage, reqId: RequestId)
+      {.nimcall, raises: [ValueError, Defect].} =
     let (data, _) = d.codec.encodePacket(toId, toAddr,
       encodeMessage(message, reqId), challenge = nil).tryGet()
     d.send(toAddr, data)
 
   var message: NodesMessage
+  # TODO: Do the total calculation based on the max UDP packet size we want to
+  # send and the ENR size of all (max 16) nodes.
+  # Which UDP packet size to take? 1280? 576?
   message.total = ceil(nodes.len / maxNodesPerMessage).uint32
 
   for i in 0 ..< nodes.len:
     message.enrs.add(nodes[i].record)
-    if message.enrs.len == 3: # TODO: Uh, what is this?
+    if message.enrs.len == maxNodesPerMessage:
       d.sendNodes(toId, toAddr, message, reqId)
       message.enrs.setLen(0)
 
@@ -228,21 +251,21 @@ proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
     d.sendNodes(toId, toAddr, message, reqId)
 
 proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
-    ping: PingMessage, reqId: RequestId) =
+    ping: PingMessage, reqId: RequestId) {.raises: [ValueError, Defect].} =
   let a = fromAddr
   var pong: PongMessage
   pong.enrSeq = ping.enrSeq
   pong.ip = case a.ip.family
     of IpAddressFamily.IPv4: @(a.ip.address_v4)
     of IpAddressFamily.IPv6: @(a.ip.address_v6)
-  pong.port = a.udpPort.uint16
+  pong.port = a.port.uint16
 
   let (data, _) = d.codec.encodePacket(fromId, fromAddr,
     encodeMessage(pong, reqId), challenge = nil).tryGet()
   d.send(fromAddr, data)
 
 proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
-    fn: FindNodeMessage, reqId: RequestId) =
+    fn: FindNodeMessage, reqId: RequestId) {.raises: [ValueError, Defect].} =
   if fn.distance == 0:
     d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
   else:
@@ -258,7 +281,6 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
     # TODO All of these should probably be handled here
     RlpError,
     IOError,
-    TransportAddressError,
   ].} =
   if packet.len < tagSize: # or magicSize, can be either
     return # Invalid packet
@@ -271,14 +293,12 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
     var pr: PendingRequest
     if d.pendingRequests.take(whoareyou.authTag, pr):
       let toNode = pr.node
-      whoareyou.pubKey = toNode.node.pubkey # TODO: Yeah, rather ugly this.
-      try:
-        let (data, _) = d.codec.encodePacket(toNode.id, toNode.address,
-          pr.message, challenge = whoareyou).tryGet()
-        d.send(toNode, data)
-      except RandomSourceDepleted:
-        debug "Failed to respond to a who-you-are packet " &
-              "due to randomness source depletion."
+      whoareyou.pubKey = toNode.pubkey # TODO: Yeah, rather ugly this.
+      doAssert(toNode.address.isSome())
+
+      let (data, _) = d.codec.encodePacket(toNode.id, toNode.address.get(),
+        pr.message, challenge = whoareyou).tryGet()
+      d.send(toNode, data)
 
   else:
     var tag: array[tagSize, byte]
@@ -293,10 +313,11 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
       let message = decoded[]
       if not node.isNil:
         # Not filling table with nodes without correct IP in the ENR
-        if a.ip == node.address.ip:
+        # TODO: Should we care about this???
+        if node.address.isSome() and a == node.address.get():
           debug "Adding new node to routing table", node = $node,
             localNode = $d.localNode
-          discard d.routingTable.addNode(node)
+          discard d.addNode(node)
 
       case message.kind
       of ping:
@@ -318,31 +339,58 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
     elif decoded.error == DecodeError.UnsupportedMessage:
       # Still adding the node in case failure is because of unsupported message.
       if not node.isNil:
-        if a.ip == node.address.ip:
+        # Not filling table with nodes without correct IP in the ENR
+        # TODO: Should we care about this???s
+        if node.address.isSome() and a == node.address.get():
           debug "Adding new node to routing table", node = $node,
             localNode = $d.localNode
-          discard d.routingTable.addNode(node)
+          discard d.addNode(node)
     # elif decoded.error == DecodeError.PacketError:
       # Not adding this node as from our perspective it is sending rubbish.
 
-proc processClient(transp: DatagramTransport,
-                   raddr: TransportAddress): Future[void] {.async, gcsafe.} =
-  var proto = getUserData[Protocol](transp)
+# TODO: Not sure why but need to pop the raises here as it is apparently not
+# enough to put it in the raises pragma of `processClient` and other async procs.
+{.pop.}
+proc processClient(transp: DatagramTransport, raddr: TransportAddress):
+    Future[void] {.async, gcsafe, raises: [Exception, Defect].} =
+  let proto = getUserData[Protocol](transp)
+  var a: Address
+  var buf = newSeq[byte]()
+
   try:
-    # TODO: Maybe here better to use `peekMessage()` to avoid allocation,
-    # but `Bytes` object is just a simple seq[byte], and `ByteRange` object
-    # do not support custom length.
-    var buf = transp.getMessage()
-    let a = Address(ip: raddr.address, udpPort: raddr.port, tcpPort: raddr.port)
+    a = Address(ip: raddr.address, port: raddr.port)
+  except ValueError:
+    # This should not be possible considering we bind to an IP address.
+    error "Not a valid IpAddress"
+    return
+
+  try:
+    # TODO: should we use `peekMessage()` to avoid allocation?
+    # TODO: This can still raise general `Exception` while it probably should
+    # only give TransportOsError.
+    buf = transp.getMessage()
+  except TransportOsError as e:
+    # This is likely to be local network connection issues.
+    error "Transport getMessage error", exception = e.name, msg = e.msg
+  except Exception as e:
+    if e of Defect:
+      raise (ref Defect)(e)
+    else: doAssert(false)
+
+  try:
     proto.receive(a, buf)
   except RlpError as e:
     debug "Receive failed", exception = e.name, msg = e.msg
-  # TODO: what else can be raised? Figure this out and be more restrictive?
+  # TODO: what else can be raised? Figure this out and be more restrictive.
   except CatchableError as e:
     debug "Receive failed", exception = e.name, msg = e.msg,
       stacktrace = e.getStackTrace()
+  except Exception as e:
+    if e of Defect:
+      raise (ref Defect)(e)
+    else: doAssert(false)
 
-proc validIp(sender, address: IpAddress): bool =
+proc validIp(sender, address: IpAddress): bool {.raises: [Defect].} =
   let
     s = initTAddress(sender, Port(0))
     a = initTAddress(address, Port(0))
@@ -368,7 +416,8 @@ proc registerRequest(d: Protocol, n: Node, message: seq[byte], nonce: AuthTag) =
     sleepAsync(responseTimeout).addCallback() do(data: pointer):
       d.pendingRequests.del(nonce)
 
-proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId): Future[Option[Message]] =
+proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
+    Future[Option[Message]] =
   result = newFuture[Option[Message]]("waitMessage")
   let res = result
   let key = (fromNode.id, reqId)
@@ -379,9 +428,13 @@ proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId): Future[Option[M
   d.awaitedMessages[key] = result
 
 proc addNodesFromENRs(result: var seq[Node], enrs: openarray[Record]) =
-  for r in enrs: result.add(newNode(r))
+  for r in enrs:
+    let node = newNode(r)
+    if node.isOk():
+      result.add(node[])
 
-proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId): Future[seq[Node]] {.async.} =
+proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
+    Future[seq[Node]] {.async.} =
   var op = await d.waitMessage(fromNode, reqId)
   if op.isSome and op.get.kind == nodes:
     result.addNodesFromENRs(op.get.nodes.enrs)
@@ -394,12 +447,13 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId): Future[seq[Node]]
         break
 
 proc sendPing(d: Protocol, toNode: Node): RequestId =
+  doAssert(toNode.address.isSome())
   let
     reqId = newRequestId().tryGet()
     ping = PingMessage(enrSeq: d.localNode.record.seqNum)
     message = encodeMessage(ping, reqId)
-    (data, nonce) = d.codec.encodePacket(toNode.id, toNode.address, message,
-      challenge = nil).tryGet()
+    (data, nonce) = d.codec.encodePacket(toNode.id, toNode.address.get(),
+    message, challenge = nil).tryGet()
   d.registerRequest(toNode, message, nonce)
   d.send(toNode, data)
   return reqId
@@ -412,22 +466,26 @@ proc ping*(d: Protocol, toNode: Node): Future[Option[PongMessage]] {.async.} =
     return some(resp.get().pong)
 
 proc sendFindNode(d: Protocol, toNode: Node, distance: uint32): RequestId =
+  doAssert(toNode.address.isSome())
   let reqId = newRequestId().tryGet()
   let message = encodeMessage(FindNodeMessage(distance: distance), reqId)
-  let (data, nonce) = d.codec.encodePacket(toNode.id, toNode.address, message,
-    challenge = nil).tryGet()
+  let (data, nonce) = d.codec.encodePacket(toNode.id, toNode.address.get(),
+    message, challenge = nil).tryGet()
   d.registerRequest(toNode, message, nonce)
 
   d.send(toNode, data)
   return reqId
 
-proc findNode*(d: Protocol, toNode: Node, distance: uint32): Future[seq[Node]] {.async.} =
+proc findNode*(d: Protocol, toNode: Node, distance: uint32):
+    Future[seq[Node]] {.async.} =
   let reqId = sendFindNode(d, toNode, distance)
   let nodes = await d.waitNodes(toNode, reqId)
 
   for n in nodes:
-    if validIp(toNode.address.ip, n.address.ip):
+    if n.address.isSome() and
+        validIp(toNode.address.get().ip, n.address.get().ip):
       result.add(n)
+    # TODO: Check ports
 
 proc lookupDistances(target, dest: NodeId): seq[uint32] =
   let td = logDist(target, dest)
@@ -440,7 +498,8 @@ proc lookupDistances(target, dest: NodeId): seq[uint32] =
       result.add(td - i)
     inc i
 
-proc lookupWorker(d: Protocol, destNode: Node, target: NodeId): Future[seq[Node]] {.async.} =
+proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
+    Future[seq[Node]] {.async.} =
   let dists = lookupDistances(target, destNode.id)
   var i = 0
   while i < lookupRequestLimit and result.len < findNodeResultLimit:
@@ -544,7 +603,8 @@ proc revalidateNode*(d: Protocol, n: Node)
       # This might be to direct, so we could keep these longer. But better
       # would be to simply not remove the nodes immediatly but only after x
       # amount of failures.
-      discard d.codec.db.deleteKeys(n.id, n.address)
+      doAssert(n.address.isSome())
+      discard d.codec.db.deleteKeys(n.id, n.address.get())
     else:
       debug "Revalidation of bootstrap node failed", enr = toURI(n.record)
 
@@ -573,21 +633,20 @@ proc lookupLoop(d: Protocol) {.async.} =
 
       nodes = await d.lookupRandom()
       trace "Discovered nodes in random lookup", nodes = $nodes
+      trace "Total nodes in routing table", total = d.routingTable.len()
       await sleepAsync(lookupInterval)
   except CancelledError:
     trace "lookupLoop canceled"
 
+{.push raises: [Defect].}
 proc newProtocol*(privKey: PrivateKey, db: Database,
                   externalIp: Option[IpAddress], tcpPort, udpPort: Port,
                   localEnrFields: openarray[FieldPair] = [],
                   bootstrapRecords: openarray[Record] = []): Protocol =
   let
-    a = Address(ip: externalIp.get(IPv4_any()),
-                tcpPort: tcpPort, udpPort: udpPort)
-    enode = ENode(pubkey: privKey.toPublicKey().tryGet(), address: a)
     enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
       localEnrFields).expect("Properly intialized private key")
-    node = newNode(enode, enrRec)
+    node = newNode(enrRec).expect("Properly initialized node")
 
   result = Protocol(
     privateKey: privKey,
@@ -600,16 +659,17 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
 
   result.routingTable.init(node)
 
+{.pop.}
 proc open*(d: Protocol) =
   info "Starting discovery node", node = $d.localNode,
     uri = toURI(d.localNode.record)
   # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(IPv4_any(), d.localNode.node.address.udpPort)
+  let ta = initTAddress(IPv4_any(), Port(d.localNode.address.get().port))
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
   for record in d.bootstrapRecords:
     debug "Adding bootstrap node", uri = toURI(record)
-    d.addNode(record)
+    discard d.addNode(record)
 
 proc start*(d: Protocol) =
   # Might want to move these to a separate proc if this turns out to be needed.

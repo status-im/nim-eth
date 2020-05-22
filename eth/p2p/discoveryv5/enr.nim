@@ -4,7 +4,7 @@
 import
   net, strutils, macros, algorithm, options,
   nimcrypto, stew/base64,
-  eth/[rlp, keys], ../enode
+  eth/[rlp, keys]
 
 export options
 
@@ -193,10 +193,10 @@ proc get*(r: Record, T: type PublicKey): Option[T] =
 proc tryGet*(r: Record, key: string, T: type): Option[T] =
   try:
     return some get(r, key, T)
-  except CatchableError:
+  except ValueError:
     discard
 
-proc toTypedRecord*(r: Record): Option[TypedRecord] =
+proc toTypedRecord*(r: Record): EnrResult[TypedRecord] =
   let id = r.tryGet("id", string)
   if id.isSome:
     var tr: TypedRecord
@@ -213,7 +213,9 @@ proc toTypedRecord*(r: Record): Option[TypedRecord] =
     readField udp
     readField udp6
 
-    return some(tr)
+    ok(tr)
+  else:
+    err("Record without id field")
 
 proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]):
     bool =
@@ -290,7 +292,7 @@ proc fromBytes*(r: var Record, s: openarray[byte]): bool =
   r.raw = @s
   try:
     result = fromBytesAux(r)
-  except CatchableError:
+  except RlpError:
     discard
 
 proc fromBase64*(r: var Record, s: string): bool =
@@ -299,7 +301,7 @@ proc fromBase64*(r: var Record, s: string): bool =
   try:
     r.raw = Base64Url.decode(s)
     result = fromBytesAux(r)
-  except CatchableError:
+  except RlpError, Base64Error:
     discard
 
 proc fromURI*(r: var Record, s: string): bool =
@@ -344,6 +346,8 @@ proc `==`*(a, b: Record): bool = a.raw == b.raw
 proc read*(rlp: var Rlp, T: typedesc[Record]):
     T {.inline, raises:[RlpError, ValueError, Defect].} =
   if not result.fromBytes(rlp.rawData):
+    # TODO: This could also just be an invalid signature, would be cleaner to
+    # split of RLP deserialisation errors from this.
     raise newException(ValueError, "Could not deserialize")
   rlp.skipElem()
 

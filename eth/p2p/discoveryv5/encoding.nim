@@ -1,6 +1,6 @@
 import
-  std/[tables, options], nimcrypto, stint, chronicles, stew/results,
-  types, node, enr, hkdf, ../enode, eth/[rlp, keys]
+  std/[tables, options], nimcrypto, stint, chronicles, chronos, stew/results,
+  types, node, enr, hkdf, eth/[rlp, keys]
 
 export keys
 
@@ -42,7 +42,7 @@ type
     response*: seq[byte]
 
   DecodeError* = enum
-    HandshakeError = "discv5: handshake failed"
+    HandshakeError = "discv5: handshake failed",
     PacketError = "discv5: invalid packet",
     DecryptError = "discv5: decryption failed",
     UnsupportedMessage = "discv5: unsupported message"
@@ -253,14 +253,9 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
   # 2. Should verify ENR and check for correct id in case an ENR is included
   # 3. Should verify id nonce signature
 
-  # More TODO:
-  # This will also not work if ENR does not contain an IP address or if the
-  # IP address is out of date and doesn't match current UDP end point
-  try:
-    newNode = newNode(authResp.record)
-    ok()
-  except KeyError, ValueError:
-    err(HandshakeError)
+  # Node returned might not have an address or not a valid address
+  newNode = ? newNode(authResp.record).mapErrTo(HandshakeError)
+  ok()
 
 proc decodePacket*(c: var Codec,
                       fromId: NodeID,
@@ -298,11 +293,6 @@ proc decodePacket*(c: var Codec,
       return err(HandshakeError)
 
     c.handshakes.del(key)
-
-    # For an incoming handshake, we are not sure the address in the ENR is there
-    # and if it is the real external IP, so we use the one we know from the
-    # UDP packet.
-    updateEndpoint(newNode, fromAddr)
 
     # Swap keys to match remote
     swap(sec.readKey, sec.writeKey)

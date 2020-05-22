@@ -1,6 +1,8 @@
 import
-  hashes, stint,
-  eth/[keys, rlp], ../enode, enr
+  hashes, stint, chronos,
+  eth/[keys, rlp], enr, node
+
+{.push raises: [Defect].}
 
 const
   authTagSize* = 12
@@ -8,7 +10,6 @@ const
   aesKeySize* = 128 div 8
 
 type
-  NodeId* = UInt256
   AuthTag* = array[authTagSize, byte]
   IdNonce* = array[idNonceSize, byte]
   AesKey* = array[aesKeySize, byte]
@@ -82,14 +83,14 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   elif T is FindNodeMessage: findNode
   elif T is NodesMessage: nodes
 
-method storeKeys*(db: Database, id: NodeId, address: Address, r, w: AesKey):
-    bool {.base, raises: [Defect].} = discard
+method storeKeys*(db: Database, id: NodeId, address: Address,
+    r, w: AesKey): bool {.base.} = discard
 
-method loadKeys*(db: Database, id: NodeId, address: Address, r, w: var AesKey):
-    bool {.base, raises: [Defect].} = discard
+method loadKeys*(db: Database, id: NodeId, address: Address,
+  r, w: var AesKey): bool {.base.} = discard
 
 method deleteKeys*(db: Database, id: NodeId, address: Address):
-    bool {.raises: [Defect].} = discard
+  bool {.base.} = discard
 
 proc toBytes*(id: NodeId): array[32, byte] {.inline.} =
   id.toByteArrayBE()

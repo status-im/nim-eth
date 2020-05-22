@@ -1,17 +1,20 @@
 import
   unittest, chronos, sequtils, chronicles, tables, stint, nimcrypto,
-  eth/[keys, rlp], eth/p2p/enode, eth/trie/db,
+  eth/[keys, rlp], eth/trie/db,
   eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./p2p_test_helper
+
+proc localAddress*(port: int): Address =
+  Address(ip: parseIpAddress("127.0.0.1"), port: Port(port))
 
 proc initDiscoveryNode*(privKey: PrivateKey, address: Address,
                         bootstrapRecords: openarray[Record] = []):
                         discv5_protocol.Protocol =
   var db = DiscoveryDB.init(newMemoryDB())
   result = newProtocol(privKey, db,
-                       some(parseIpAddress("127.0.0.1")),
-                       address.tcpPort, address.udpPort,
+                       some(address.ip),
+                       address.port, address.port,
                        bootstrapRecords = bootstrapRecords)
 
   result.open()
@@ -36,7 +39,7 @@ proc generateNode(privKey = PrivateKey.random()[], port: int = 20302): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, some(parseIpAddress("127.0.0.1")),
     port, port).expect("Properly intialized private key")
-  result = newNode(enr)
+  result = newNode(enr).expect("Properly initialized node")
 
 proc nodeAtDistance(n: Node, d: uint32): Node =
   while true:
@@ -55,10 +58,10 @@ suite "Discovery v5 Tests":
       node = initDiscoveryNode(PrivateKey.random()[], localAddress(20302))
       targetNode = generateNode()
 
-    node.addNode(targetNode)
+    check node.addNode(targetNode)
 
     for i in 0..<1000:
-      node.addNode(generateNode())
+      discard node.addNode(generateNode())
 
     let n = node.getNode(targetNode.id)
     require n.isSome()
@@ -225,7 +228,7 @@ suite "Discovery v5 Tests":
 
     let nodes = nodesAtDistance(mainNode.localNode, dist, 10)
     for n in nodes:
-      mainNode.addNode(n)
+      discard mainNode.addNode(n)
 
     # Get ENR of the node itself
     var discovered =
@@ -255,7 +258,7 @@ suite "Discovery v5 Tests":
 
     let moreNodes = nodesAtDistance(mainNode.localNode, dist, 10)
     for n in moreNodes:
-      mainNode.addNode(n)
+      discard mainNode.addNode(n)
 
     # Full bucket
     discovered =
@@ -271,7 +274,7 @@ suite "Discovery v5 Tests":
 
     # Generate 1000 random nodes and add to our main node's routing table
     for i in 0..<1000:
-      mainNode.addNode(generateNode())
+      discard mainNode.addNode(generateNode())
 
     let
       neighbours = mainNode.neighbours(mainNode.localNode.id)
@@ -344,7 +347,7 @@ suite "Discovery v5 Tests":
       # TODO: need to add some logic to update ENRs properly
       targetSeqNum.inc()
       let r = enr.Record.init(targetSeqNum, targetKey,
-        some(targetAddress.ip), targetAddress.tcpPort, targetAddress.udpPort)[]
+        some(targetAddress.ip), targetAddress.port, targetAddress.port)[]
       targetNode.localNode.record = r
       targetNode.open()
       let n = await mainNode.resolve(targetId)
@@ -358,7 +361,7 @@ suite "Discovery v5 Tests":
     block:
       targetSeqNum.inc()
       let r = enr.Record.init(3, targetKey, some(targetAddress.ip),
-        targetAddress.tcpPort, targetAddress.udpPort)[]
+        targetAddress.port, targetAddress.port)[]
       targetNode.localNode.record = r
       let pong = await targetNode.ping(lookupNode.localNode)
       require pong.isSome()
@@ -368,7 +371,7 @@ suite "Discovery v5 Tests":
       # should just get updated in the lookup.
       await mainNode.revalidateNode(targetNode.localNode)
 
-      mainNode.addNode(lookupNode.localNode.record)
+      check mainNode.addNode(lookupNode.localNode.record)
       let n = await mainNode.resolve(targetId)
       require n.isSome()
       check:
