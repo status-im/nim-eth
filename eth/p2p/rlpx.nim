@@ -643,7 +643,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       # assumes there is one outstanding request at a time (if there are
       # multiple requests we'll resolve them in FIFO order).
       let registerRequestCall = newCall(registerRequest, peerVar,
-                                                         msg.timeoutParam[0],
+                                                         timeoutVar,
                                                          resultIdent,
                                                          responseMsgId)
       if hasReqId:
@@ -695,7 +695,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
 
     let
       awaitUserHandler = msg.genAwaitUserHandler(receivedMsg, userHandlerParams)
-      thunkName = ident(msgName & "_thunk")
+      thunkName = ident(msgName & "Thunk")
 
     msg.defineThunk quote do:
       proc `thunkName`(`peerVar`: `Peer`, _: int, data: Rlp) {.async, gcsafe.} =
