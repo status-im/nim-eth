@@ -289,16 +289,23 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
 
   if d.isWhoAreYou(packet):
     trace "Received whoareyou", localNode = $d.localNode, address = a
-    let whoareyou = d.decodeWhoAreYou(packet)
+    var whoareyou: WhoAreYou
+    try:
+      whoareyou = d.decodeWhoAreYou(packet)
+    except RlpError:
+      debug "Invalid WhoAreYou packet, decoding failed"
+      return
+
     var pr: PendingRequest
     if d.pendingRequests.take(whoareyou.authTag, pr):
       let toNode = pr.node
       whoareyou.pubKey = toNode.pubkey # TODO: Yeah, rather ugly this.
       doAssert(toNode.address.isSome())
-
       let (data, _) = d.codec.encodePacket(toNode.id, toNode.address.get(),
         pr.message, challenge = whoareyou).tryGet()
       d.send(toNode, data)
+    else:
+      debug "Timed out or unrequested WhoAreYou packet"
 
   else:
     var tag: array[tagSize, byte]
@@ -446,39 +453,28 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
       else:
         break
 
-proc sendPing(d: Protocol, toNode: Node): RequestId =
+proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T): RequestId =
   doAssert(toNode.address.isSome())
   let
     reqId = newRequestId().tryGet()
-    ping = PingMessage(enrSeq: d.localNode.record.seqNum)
-    message = encodeMessage(ping, reqId)
+    message = encodeMessage(m, reqId)
     (data, nonce) = d.codec.encodePacket(toNode.id, toNode.address.get(),
-    message, challenge = nil).tryGet()
+      message, challenge = nil).tryGet()
   d.registerRequest(toNode, message, nonce)
   d.send(toNode, data)
   return reqId
 
 proc ping*(d: Protocol, toNode: Node): Future[Option[PongMessage]] {.async.} =
-  let reqId = d.sendPing(toNode)
+  let reqId = d.sendMessage(toNode,
+    PingMessage(enrSeq: d.localNode.record.seqNum))
   let resp = await d.waitMessage(toNode, reqId)
 
   if resp.isSome() and resp.get().kind == pong:
     return some(resp.get().pong)
 
-proc sendFindNode(d: Protocol, toNode: Node, distance: uint32): RequestId =
-  doAssert(toNode.address.isSome())
-  let reqId = newRequestId().tryGet()
-  let message = encodeMessage(FindNodeMessage(distance: distance), reqId)
-  let (data, nonce) = d.codec.encodePacket(toNode.id, toNode.address.get(),
-    message, challenge = nil).tryGet()
-  d.registerRequest(toNode, message, nonce)
-
-  d.send(toNode, data)
-  return reqId
-
 proc findNode*(d: Protocol, toNode: Node, distance: uint32):
     Future[seq[Node]] {.async.} =
-  let reqId = sendFindNode(d, toNode, distance)
+  let reqId = d.sendMessage(toNode, FindNodeMessage(distance: distance))
   let nodes = await d.waitNodes(toNode, reqId)
 
   for n in nodes:

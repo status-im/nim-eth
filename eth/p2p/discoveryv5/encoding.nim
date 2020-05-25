@@ -1,5 +1,5 @@
 import
-  std/[tables, options], nimcrypto, stint, chronicles, chronos, stew/results,
+  std/[tables, options], nimcrypto, stint, chronicles, stew/results,
   types, node, enr, hkdf, eth/[rlp, keys]
 
 export keys
