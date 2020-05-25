@@ -122,6 +122,8 @@ type
     node: Node
     message: seq[byte]
 
+  DiscResult*[T] = Result[T, cstring]
+
   RandomSourceDepleted* = object of CatchableError
 
 proc addNode*(d: Protocol, node: Node): bool =
@@ -168,6 +170,9 @@ proc send(d: Protocol, a: Address, data: seq[byte]) =
         # TODO: Should this kind of error be propagated upwards? Probably, but
         # it should not stop the process as that would reset the discovery
         # progress in case there is even a small window of no connection.
+        # One case that needs this error available upwards is when revalidating
+        # nodes. Else the revalidation might end up clearing the routing tabl
+        # because of ping failures due to own network connection failure.
         debug "Discovery send failed", msg = f.readError.msg
   except Exception as e:
     # General exception still being raised from Chronos.
@@ -200,12 +205,13 @@ proc decodeWhoAreYou(d: Protocol, packet: openArray[byte]):
   result[] = rlp.decode(packet.toOpenArray(magicSize, packet.high), WhoareyouObj)
 
 proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId,
-    authTag: AuthTag) {.raises: [RandomSourceDepleted, Exception].} =
+    authTag: AuthTag): DiscResult[void] {.raises: [Exception, Defect].} =
   trace "sending who are you", to = $toNode, toAddress = $address
   let challenge = Whoareyou(authTag: authTag, recordSeq: 0)
 
   if randomBytes(challenge.idNonce) != challenge.idNonce.len:
-    raise newException(RandomSourceDepleted, "Could not randomize bytes")
+    return err("Could not randomize bytes")
+
   # If there is already a handshake going on for this nodeid then we drop this
   # new one. Handshake will get cleaned up after `handshakeTimeout`.
   # If instead overwriting the handshake would be allowed, the handshake timeout
@@ -214,10 +220,10 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId,
   # a loop.
   # Use toNode + address to make it more difficult for an attacker to occupy
   # the handshake of another node.
-
   let key = HandShakeKey(nodeId: toNode, address: $address)
   if not d.codec.handshakes.hasKeyOrPut(key, challenge):
     sleepAsync(handshakeTimeout).addCallback() do(data: pointer):
+    # raises: [Exception]
       # TODO: should we still provide cancellation in case handshake completes
       # correctly?
       d.codec.handshakes.del(key)
@@ -225,15 +231,18 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId,
     var data = @(whoareyouMagic(toNode))
     data.add(rlp.encode(challenge[]))
     d.send(address, data)
+    ok()
+  else:
+    err("NodeId already has ongoing handshake")
 
 proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
-    nodes: openarray[Node]) {.raises: [ValueError, Defect].} =
+    nodes: openarray[Node]): DiscResult[void] =
   proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address,
-      message: NodesMessage, reqId: RequestId)
-      {.nimcall, raises: [ValueError, Defect].} =
-    let (data, _) = d.codec.encodePacket(toId, toAddr,
-      encodeMessage(message, reqId), challenge = nil).tryGet()
+      message: NodesMessage, reqId: RequestId): DiscResult[void] {.nimcall.} =
+    let (data, _) = ? d.codec.encodePacket(toId, toAddr,
+      encodeMessage(message, reqId), challenge = nil)
     d.send(toAddr, data)
+    ok()
 
   var message: NodesMessage
   # TODO: Do the total calculation based on the max UDP packet size we want to
@@ -244,14 +253,19 @@ proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
   for i in 0 ..< nodes.len:
     message.enrs.add(nodes[i].record)
     if message.enrs.len == maxNodesPerMessage:
-      d.sendNodes(toId, toAddr, message, reqId)
+      let res = d.sendNodes(toId, toAddr, message, reqId)
+      if res.isErr: # TODO: is there something nicer for this?
+        return res
       message.enrs.setLen(0)
 
   if message.enrs.len != 0:
-    d.sendNodes(toId, toAddr, message, reqId)
+    let res = d.sendNodes(toId, toAddr, message, reqId)
+    if res.isErr: # TODO: is there something nicer for this?
+      return res
+  ok()
 
 proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
-    ping: PingMessage, reqId: RequestId) {.raises: [ValueError, Defect].} =
+    ping: PingMessage, reqId: RequestId): DiscResult[void] =
   let a = fromAddr
   var pong: PongMessage
   pong.enrSeq = ping.enrSeq
@@ -260,27 +274,27 @@ proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
     of IpAddressFamily.IPv6: @(a.ip.address_v6)
   pong.port = a.port.uint16
 
-  let (data, _) = d.codec.encodePacket(fromId, fromAddr,
-    encodeMessage(pong, reqId), challenge = nil).tryGet()
+  let (data, _) = ? d.codec.encodePacket(fromId, fromAddr,
+    encodeMessage(pong, reqId), challenge = nil)
+
   d.send(fromAddr, data)
+  ok()
 
 proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
-    fn: FindNodeMessage, reqId: RequestId) {.raises: [ValueError, Defect].} =
+    fn: FindNodeMessage, reqId: RequestId): DiscResult[void] =
   if fn.distance == 0:
-    d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
+    result = d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
   else:
     let distance = min(fn.distance, 256)
-    d.sendNodes(fromId, fromAddr, reqId,
+    result = d.sendNodes(fromId, fromAddr, reqId,
       d.routingTable.neighboursAtDistance(distance))
 
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
   raises: [
     Defect,
-    # TODO This is now coming from Chronos's callSoon
-    Exception,
-    # TODO All of these should probably be handled here
-    RlpError,
-    IOError,
+    # This just comes now from a future.complete() and `sendWhoareyou` which
+    # has it because of `sleepAsync` with `addCallback`
+    Exception
   ].} =
   if packet.len < tagSize: # or magicSize, can be either
     return # Invalid packet
@@ -301,8 +315,14 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
       let toNode = pr.node
       whoareyou.pubKey = toNode.pubkey # TODO: Yeah, rather ugly this.
       doAssert(toNode.address.isSome())
-      let (data, _) = d.codec.encodePacket(toNode.id, toNode.address.get(),
-        pr.message, challenge = whoareyou).tryGet()
+      let encoded = d.codec.encodePacket(toNode.id, toNode.address.get(),
+        pr.message, challenge = whoareyou)
+      # TODO: Perhaps just expect here? Or raise Defect in `encodePacket`?
+      # if this occurs there is an issue with the system anyhow?
+      if encoded.isErr:
+        warn "Not enough randomness to encode packet"
+        return
+      let (data, _) = encoded[]
       d.send(toNode, data)
     else:
       debug "Timed out or unrequested WhoAreYou packet"
@@ -328,13 +348,15 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
 
       case message.kind
       of ping:
-        d.handlePing(sender, a, message.ping, message.reqId)
+        if d.handlePing(sender, a, message.ping, message.reqId).isErr:
+          debug "Sending Pong message failed"
       of findNode:
-        d.handleFindNode(sender, a, message.findNode, message.reqId)
+        if d.handleFindNode(sender, a, message.findNode, message.reqId).isErr:
+          debug "Sending Nodes message failed"
       else:
         var waiter: Future[Option[Message]]
         if d.awaitedMessages.take((sender, message.reqId), waiter):
-          waiter.complete(some(message))
+          waiter.complete(some(message)) # raises: [Exception]
         else:
           trace "Timed out or unrequested message", message = message.kind,
             origin = a
@@ -342,7 +364,8 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
       debug "Could not decrypt packet, respond with whoareyou",
         localNode = $d.localNode, address = a
       # only sendingWhoareyou in case it is a decryption failure
-      d.sendWhoareyou(a, sender, authTag)
+      if d.sendWhoareyou(a, sender, authTag).isErr:
+        trace "Sending WhoAreYou packet failed"
     elif decoded.error == DecodeError.UnsupportedMessage:
       # Still adding the node in case failure is because of unsupported message.
       if not node.isNil:
@@ -386,12 +409,6 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
 
   try:
     proto.receive(a, buf)
-  except RlpError as e:
-    debug "Receive failed", exception = e.name, msg = e.msg
-  # TODO: what else can be raised? Figure this out and be more restrictive.
-  except CatchableError as e:
-    debug "Receive failed", exception = e.name, msg = e.msg,
-      stacktrace = e.getStackTrace()
   except Exception as e:
     if e of Defect:
       raise (ref Defect)(e)
