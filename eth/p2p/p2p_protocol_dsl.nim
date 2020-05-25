@@ -951,7 +951,7 @@ proc genCode*(p: P2PProtocol): NimNode =
 
     # The protocol run-time data is available as a pseudo-field
     # (e.g. `p2p.protocolInfo`)
-    template protocolInfo*(P: type `protocolName`): auto = `protocolInfoVar`
+    template protocolInfo*(`PROTO`: type `protocolName`): auto = `protocolInfoVar`
 
   result.add p.outSendProcs,
              p.outRecvProcs,
