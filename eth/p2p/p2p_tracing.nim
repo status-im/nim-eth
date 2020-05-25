@@ -3,7 +3,7 @@ const tracingEnabled = defined(p2pdump)
 when tracingEnabled:
   import
     typetraits,
-    json_serialization, chronicles #, chronicles_tail/configuration
+    json_serialization, chronicles, chronicles_tail/configuration
 
   export
     # XXX: Nim visibility rules get in the way here.
@@ -16,7 +16,7 @@ when tracingEnabled:
     # TODO: File this as an issue
 
   logStream p2pMessages[json[file(p2p_messages.json,truncate)]]
-  # p2pMessages.useTailPlugin "p2p_tracing_ctail_plugin.nim"
+  p2pMessages.useTailPlugin "p2p_tracing_ctail_plugin.nim"
 
   template logRecord(eventName: static[string], args: varargs[untyped]) =
     p2pMessages.log LogLevel.NONE, eventName, topics = "p2pdump", args
