@@ -1,5 +1,5 @@
 import
-  std/net,
+  std/net, stint, stew/endians2,
   eth/trie/db, types, node
 
 {.push raises: [Defect].}
@@ -21,16 +21,16 @@ const keySize = 1 + # unique triedb prefix (kNodeToKeys)
 
 proc makeKey(id: NodeId, address: Address): array[keySize, byte] =
   result[0] = byte(kNodeToKeys)
-  copyMem(addr result[1], unsafeAddr id, sizeof(id))
+  var pos = 1
+  result[pos ..< pos+sizeof(id)] = toBytes(id)
+  pos.inc(sizeof(id))
   case address.ip.family
   of IpAddressFamily.IpV4:
-    copyMem(addr result[sizeof(id) + 1], unsafeAddr address.ip.address_v4,
-      sizeof(address.ip.address_v4))
+    result[pos ..< pos+sizeof(address.ip.address_v4)] = address.ip.address_v4
   of IpAddressFamily.IpV6:
-    copyMem(addr result[sizeof(id) + 1], unsafeAddr address.ip.address_v6,
-      sizeof(address.ip.address_v6))
-  copyMem(addr result[sizeof(id) + 1 + sizeof(address.ip.address_v6)],
-    unsafeAddr address.port, sizeof(address.port))
+    result[pos..< pos+sizeof(address.ip.address_v6)] = address.ip.address_v6
+  pos.inc(sizeof(address.ip.address_v6))
+  result[pos ..< pos+sizeof(address.port)] = toBytes(address.port.uint16)
 
 method storeKeys*(db: DiscoveryDB, id: NodeId, address: Address, r, w: AesKey):
     bool =

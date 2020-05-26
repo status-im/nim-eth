@@ -42,9 +42,9 @@ type
     response*: seq[byte]
 
   DecodeError* = enum
-    HandshakeError = "discv5: handshake failed",
-    PacketError = "discv5: invalid packet",
-    DecryptError = "discv5: decryption failed",
+    HandshakeError = "discv5: handshake failed"
+    PacketError = "discv5: invalid packet"
+    DecryptError = "discv5: decryption failed"
     UnsupportedMessage = "discv5: unsupported message"
 
   DecodeResult*[T] = Result[T, DecodeError]

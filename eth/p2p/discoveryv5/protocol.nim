@@ -175,7 +175,7 @@ proc send(d: Protocol, a: Address, data: seq[byte]) =
         # because of ping failures due to own network connection failure.
         debug "Discovery send failed", msg = f.readError.msg
   except Exception as e:
-    # General exception still being raised from Chronos.
+    # TODO: General exception still being raised from Chronos.
     if e of Defect:
       raise (ref Defect)(e)
     else: doAssert(false)
@@ -364,8 +364,9 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
       debug "Could not decrypt packet, respond with whoareyou",
         localNode = $d.localNode, address = a
       # only sendingWhoareyou in case it is a decryption failure
-      if d.sendWhoareyou(a, sender, authTag).isErr:
-        trace "Sending WhoAreYou packet failed"
+      let res = d.sendWhoareyou(a, sender, authTag)
+      if res.isErr():
+        trace "Sending WhoAreYou packet failed", err = res.error
     elif decoded.error == DecodeError.UnsupportedMessage:
       # Still adding the node in case failure is because of unsupported message.
       if not node.isNil:
