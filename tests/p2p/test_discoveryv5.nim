@@ -79,7 +79,7 @@ suite "Discovery v5 Tests":
       pong1 = await discv5_protocol.ping(node1, bootnode.localNode)
       pong2 = await discv5_protocol.ping(node1, node2.localNode)
 
-    check pong1.isSome() and pong2.isSome()
+    check pong1.isOk() and pong2.isOk()
 
     await bootnode.closeWait()
     await node2.closeWait()
@@ -233,28 +233,32 @@ suite "Discovery v5 Tests":
     # Get ENR of the node itself
     var discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, 0)
+    require discovered.isOk
     check:
-      discovered.len == 1
-      discovered[0] == mainNode.localNode
+      discovered[].len == 1
+      discovered[][0] == mainNode.localNode
 
     # Get ENRs of nodes added at provided logarithmic distance
     discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, dist)
-    check discovered.len == 10
+    require discovered.isOk
+    check discovered[].len == 10
     for n in nodes:
-      check discovered.contains(n)
+      check discovered[].contains(n)
 
     # Too high logarithmic distance, caps at 256
     discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, 4294967295'u32)
+    require discovered.isOk
     check:
-      discovered.len == 1
-      discovered[0] == testNode.localNode
+      discovered[].len == 1
+      discovered[][0] == testNode.localNode
 
     # Empty bucket
     discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, 254)
-    check discovered.len == 0
+    require discovered.isOk
+    check discovered[].len == 0
 
     let moreNodes = nodesAtDistance(mainNode.localNode, dist, 10)
     for n in moreNodes:
@@ -263,7 +267,8 @@ suite "Discovery v5 Tests":
     # Full bucket
     discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, dist)
-    check discovered.len == 16
+    require discovered.isOk
+    check discovered[].len == 16
 
     await mainNode.closeWait()
     await testNode.closeWait()
@@ -289,7 +294,8 @@ suite "Discovery v5 Tests":
       discovered = await discv5_protocol.findNode(testNode, mainNode.localNode,
         closestDistance)
 
-    check closest in discovered
+    require discovered.isOk
+    check closest in discovered[]
 
     await mainNode.closeWait()
     await testNode.closeWait()
@@ -333,7 +339,7 @@ suite "Discovery v5 Tests":
     # if resolve works (only local lookup)
     block:
       let pong = await targetNode.ping(mainNode.localNode)
-      require pong.isSome()
+      require pong.isOk()
       await targetNode.closeWait()
       let n = await mainNode.resolve(targetId)
       require n.isSome()
@@ -364,7 +370,7 @@ suite "Discovery v5 Tests":
         targetAddress.port, targetAddress.port)[]
       targetNode.localNode.record = r
       let pong = await targetNode.ping(lookupNode.localNode)
-      require pong.isSome()
+      require pong.isOk()
 
       await targetNode.closeWait()
       # TODO: This step should eventually not be needed and ENRs with new seqNum

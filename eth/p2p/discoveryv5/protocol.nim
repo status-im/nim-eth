@@ -124,8 +124,6 @@ type
 
   DiscResult*[T] = Result[T, cstring]
 
-  RandomSourceDepleted* = object of CatchableError
-
 proc addNode*(d: Protocol, node: Node): bool =
   if node.address.isSome():
     # Only add nodes with an address to the routing table
@@ -163,8 +161,8 @@ proc send(d: Protocol, a: Address, data: seq[byte]) =
     let f = d.transp.sendTo(ta, data)
     f.callback = proc(data: pointer) {.gcsafe.} =
       if f.failed:
-        # Could be `TransportError` in case the transport is already closed.
-        # Or could be `TransportOsError` in case of a socket error.
+        # Could be `TransportUseClosedError` in case the transport is already
+        # closed, or could be `TransportOsError` in case of a socket error.
         # In the latter case this would probably mostly occur if the network
         # interface underneath gets disconnected or similar.
         # TODO: Should this kind of error be propagated upwards? Probably, but
@@ -222,8 +220,8 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId,
   # the handshake of another node.
   let key = HandShakeKey(nodeId: toNode, address: $address)
   if not d.codec.handshakes.hasKeyOrPut(key, challenge):
+    # TODO: raises: [Exception]
     sleepAsync(handshakeTimeout).addCallback() do(data: pointer):
-    # raises: [Exception]
       # TODO: should we still provide cancellation in case handshake completes
       # correctly?
       d.codec.handshakes.del(key)
@@ -283,10 +281,10 @@ proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
 proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
     fn: FindNodeMessage, reqId: RequestId): DiscResult[void] =
   if fn.distance == 0:
-    result = d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
+    d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
   else:
     let distance = min(fn.distance, 256)
-    result = d.sendNodes(fromId, fromAddr, reqId,
+    d.sendNodes(fromId, fromAddr, reqId,
       d.routingTable.neighboursAtDistance(distance))
 
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
@@ -356,12 +354,12 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
       else:
         var waiter: Future[Option[Message]]
         if d.awaitedMessages.take((sender, message.reqId), waiter):
-          waiter.complete(some(message)) # raises: [Exception]
+          waiter.complete(some(message)) # TODO: raises: [Exception]
         else:
           trace "Timed out or unrequested message", message = message.kind,
             origin = a
     elif decoded.error == DecodeError.DecryptError:
-      debug "Could not decrypt packet, respond with whoareyou",
+      trace "Could not decrypt packet, respond with whoareyou",
         localNode = $d.localNode, address = a
       # only sendingWhoareyou in case it is a decryption failure
       let res = d.sendWhoareyou(a, sender, authTag)
@@ -382,6 +380,11 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
 # TODO: Not sure why but need to pop the raises here as it is apparently not
 # enough to put it in the raises pragma of `processClient` and other async procs.
 {.pop.}
+# Next, below there is no more effort done in catching the general `Exception`
+# as async procs always require `Exception` in the raises pragma, see also:
+# https://github.com/status-im/nim-chronos/issues/98
+# So I don't bother for now and just add them in the raises pragma until this
+# gets fixed.
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
     Future[void] {.async, gcsafe, raises: [Exception, Defect].} =
   let proto = getUserData[Protocol](transp)
@@ -435,73 +438,95 @@ proc validIp(sender, address: IpAddress): bool {.raises: [Defect].} =
 # TODO: This could be improved to do the clean-up immediatily in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
 # somewhere
-proc registerRequest(d: Protocol, n: Node, message: seq[byte], nonce: AuthTag) =
+proc registerRequest(d: Protocol, n: Node, message: seq[byte], nonce: AuthTag)
+    {.raises: [Exception, Defect].} =
   let request = PendingRequest(node: n, message: message)
   if not d.pendingRequests.hasKeyOrPut(nonce, request):
+    # TODO: raises: [Exception]
     sleepAsync(responseTimeout).addCallback() do(data: pointer):
       d.pendingRequests.del(nonce)
 
 proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
-    Future[Option[Message]] =
+    Future[Option[Message]] {.raises: [Exception, Defect].} =
   result = newFuture[Option[Message]]("waitMessage")
   let res = result
   let key = (fromNode.id, reqId)
+  # TODO: raises: [Exception]
   sleepAsync(responseTimeout).addCallback() do(data: pointer):
     d.awaitedMessages.del(key)
     if not res.finished:
-      res.complete(none(Message))
+      res.complete(none(Message)) # TODO: raises: [Exception]
   d.awaitedMessages[key] = result
 
-proc addNodesFromENRs(result: var seq[Node], enrs: openarray[Record]) =
+proc addNodesFromENRs(result: var seq[Node], enrs: openarray[Record])
+    {.raises: [Defect].} =
   for r in enrs:
     let node = newNode(r)
     if node.isOk():
       result.add(node[])
 
 proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
-    Future[seq[Node]] {.async.} =
+    Future[DiscResult[seq[Node]]] {.async, raises: [Exception, Defect].} =
   var op = await d.waitMessage(fromNode, reqId)
   if op.isSome and op.get.kind == nodes:
-    result.addNodesFromENRs(op.get.nodes.enrs)
+    var res = newSeq[Node]()
+    res.addNodesFromENRs(op.get.nodes.enrs)
     let total = op.get.nodes.total
     for i in 1 ..< total:
       op = await d.waitMessage(fromNode, reqId)
       if op.isSome and op.get.kind == nodes:
-        result.addNodesFromENRs(op.get.nodes.enrs)
+        res.addNodesFromENRs(op.get.nodes.enrs)
       else:
         break
+    return ok(res)
+  else:
+    return err("Nodes message not received in time")
 
-proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T): RequestId =
+
+proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
+    DiscResult[RequestId] {.raises: [Exception, Defect].} =
   doAssert(toNode.address.isSome())
   let
-    reqId = newRequestId().tryGet()
+    reqId = ? newRequestId()
     message = encodeMessage(m, reqId)
-    (data, nonce) = d.codec.encodePacket(toNode.id, toNode.address.get(),
-      message, challenge = nil).tryGet()
+    (data, nonce) = ? d.codec.encodePacket(toNode.id, toNode.address.get(),
+      message, challenge = nil)
   d.registerRequest(toNode, message, nonce)
   d.send(toNode, data)
-  return reqId
+  return ok(reqId)
 
-proc ping*(d: Protocol, toNode: Node): Future[Option[PongMessage]] {.async.} =
+proc ping*(d: Protocol, toNode: Node):
+    Future[DiscResult[PongMessage]] {.async, raises: [Exception, Defect].} =
   let reqId = d.sendMessage(toNode,
     PingMessage(enrSeq: d.localNode.record.seqNum))
-  let resp = await d.waitMessage(toNode, reqId)
+  if reqId.isErr:
+    return err(reqId.error)
+  let resp = await d.waitMessage(toNode, reqId[])
 
   if resp.isSome() and resp.get().kind == pong:
-    return some(resp.get().pong)
+    return ok(resp.get().pong)
+  else:
+    return err("Pong message not received in time")
 
 proc findNode*(d: Protocol, toNode: Node, distance: uint32):
-    Future[seq[Node]] {.async.} =
+    Future[DiscResult[seq[Node]]] {.async, raises: [Exception, Defect].} =
   let reqId = d.sendMessage(toNode, FindNodeMessage(distance: distance))
-  let nodes = await d.waitNodes(toNode, reqId)
+  if reqId.isErr:
+    return err(reqId.error)
+  let nodes = await d.waitNodes(toNode, reqId[])
 
-  for n in nodes:
-    if n.address.isSome() and
-        validIp(toNode.address.get().ip, n.address.get().ip):
-      result.add(n)
+  if nodes.isOk:
+    var res = newSeq[Node]()
+    for n in nodes[]:
+      if n.address.isSome() and
+          validIp(toNode.address.get().ip, n.address.get().ip):
+        res.add(n)
     # TODO: Check ports
+    return ok(res)
+  else:
+    return err(nodes.error)
 
-proc lookupDistances(target, dest: NodeId): seq[uint32] =
+proc lookupDistances(target, dest: NodeId): seq[uint32] {.raises: [Defect].} =
   let td = logDist(target, dest)
   result.add(td)
   var i = 1'u32
@@ -513,20 +538,22 @@ proc lookupDistances(target, dest: NodeId): seq[uint32] =
     inc i
 
 proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
-    Future[seq[Node]] {.async.} =
+    Future[seq[Node]] {.async, raises: [Exception, Defect].} =
   let dists = lookupDistances(target, destNode.id)
   var i = 0
   while i < lookupRequestLimit and result.len < findNodeResultLimit:
-    # TODO: Handle failures
     let r = await d.findNode(destNode, dists[i])
-    # TODO: I guess it makes sense to limit here also to `findNodeResultLimit`?
-    result.add(r)
+    # TODO: Handle failures better. E.g. stop on different failures than timeout
+    if r.isOk:
+      # TODO: I guess it makes sense to limit here also to `findNodeResultLimit`?
+      result.add(r[])
     inc i
 
   for n in result:
     discard d.routingTable.addNode(n)
 
-proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
+proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
+    {.async, raises: [Exception, Defect].} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # TODO: Sort the returned nodes on distance
@@ -562,14 +589,16 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
         if result.len < BUCKET_SIZE:
           result.add(n)
 
-proc lookupRandom*(d: Protocol): Future[seq[Node]]
-    {.raises:[RandomSourceDepleted, Defect, Exception].} =
+proc lookupRandom*(d: Protocol): Future[DiscResult[seq[Node]]]
+    {.async, raises:[Exception, Defect].} =
   var id: NodeId
   if randomBytes(addr id, sizeof(id)) != sizeof(id):
-    raise newException(RandomSourceDepleted, "Could not randomize bytes")
-  d.lookup(id)
+    return err("Could not randomize bytes")
 
-proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
+  return ok(await d.lookup(id))
+
+proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]]
+    {.async, raises: [Exception, Defect].} =
   ## Resolve a `Node` based on provided `NodeId`.
   ##
   ## This will first look in the own DHT. If the node is known, it will try to
@@ -581,8 +610,9 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
   if node.isSome():
     let request = await d.findNode(node.get(), 0)
 
-    if request.len > 0:
-      return some(request[0])
+    # TODO: Handle failures better. E.g. stop on different failures than timeout
+    if request.isOk() and request[].len > 0:
+      return some(request[][0])
 
   let discovered = await d.lookup(id)
   for n in discovered:
@@ -595,11 +625,11 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
         return some(n)
 
 proc revalidateNode*(d: Protocol, n: Node)
-    {.async, raises:[Defect, Exception].} = # TODO: Exception
+    {.async, raises: [Exception, Defect].} = # TODO: Exception
   trace "Ping to revalidate node", node = $n
   let pong = await d.ping(n)
 
-  if pong.isSome():
+  if pong.isOK():
     if pong.get().enrSeq > n.record.seqNum:
       # TODO: Request new ENR
       discard
@@ -607,6 +637,8 @@ proc revalidateNode*(d: Protocol, n: Node)
     d.routingTable.setJustSeen(n)
     trace "Revalidated node", node = $n
   else:
+    # TODO: Handle failures better. E.g. don't remove nodes on different
+    # failures than timeout
     # For now we never remove bootstrap nodes. It might make sense to actually
     # do so and to retry them only in case we drop to a really low amount of
     # peers in the DHT
@@ -622,11 +654,9 @@ proc revalidateNode*(d: Protocol, n: Node)
     else:
       debug "Revalidation of bootstrap node failed", enr = toURI(n.record)
 
-proc revalidateLoop(d: Protocol) {.async.} =
+proc revalidateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
+  # TODO: General Exception raised.
   try:
-    # TODO: We need to handle actual errors still, which might just allow to
-    # continue the loop. However, currently `revalidateNode` raises a general
-    # `Exception` making this rather hard.
     while true:
       await sleepAsync(rand(10 * 1000).milliseconds)
       let n = d.routingTable.nodeToRevalidate()
@@ -637,26 +667,29 @@ proc revalidateLoop(d: Protocol) {.async.} =
   except CancelledError:
     trace "revalidateLoop canceled"
 
-proc lookupLoop(d: Protocol) {.async.} =
-  ## TODO: Same story as for `revalidateLoop`
+proc lookupLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
+  # TODO: General Exception raised.
   try:
     while true:
       # lookup self (neighbour nodes)
-      var nodes = await d.lookup(d.localNode.id)
-      trace "Discovered nodes in self lookup", nodes = $nodes
+      let selfLookup = await d.lookup(d.localNode.id)
+      trace "Discovered nodes in self lookup", nodes = $selfLookup
 
-      nodes = await d.lookupRandom()
-      trace "Discovered nodes in random lookup", nodes = $nodes
-      trace "Total nodes in routing table", total = d.routingTable.len()
+      let randomLookup = await d.lookupRandom()
+      if randomLookup.isOK:
+        trace "Discovered nodes in random lookup", nodes = $randomLookup[]
+        trace "Total nodes in routing table", total = d.routingTable.len()
+      else:
+        trace "random lookup failed", err = randomLookup.error
       await sleepAsync(lookupInterval)
   except CancelledError:
     trace "lookupLoop canceled"
 
-{.push raises: [Defect].}
 proc newProtocol*(privKey: PrivateKey, db: Database,
                   externalIp: Option[IpAddress], tcpPort, udpPort: Port,
                   localEnrFields: openarray[FieldPair] = [],
-                  bootstrapRecords: openarray[Record] = []): Protocol =
+                  bootstrapRecords: openarray[Record] = []):
+                  Protocol {.raises: [Defect].} =
   let
     enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
       localEnrFields).expect("Properly intialized private key")
@@ -673,24 +706,24 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
 
   result.routingTable.init(node)
 
-{.pop.}
-proc open*(d: Protocol) =
+proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   info "Starting discovery node", node = $d.localNode,
     uri = toURI(d.localNode.record)
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(IPv4_any(), Port(d.localNode.address.get().port))
+  # TODO: raises `OSError` and `IOSelectorsException`, the latter which is
+  # object of Exception. In Nim devel this got changed to CatchableError.
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
   for record in d.bootstrapRecords:
     debug "Adding bootstrap node", uri = toURI(record)
     discard d.addNode(record)
 
-proc start*(d: Protocol) =
-  # Might want to move these to a separate proc if this turns out to be needed.
+proc start*(d: Protocol) {.raises: [Exception, Defect].} =
   d.lookupLoop = lookupLoop(d)
   d.revalidateLoop = revalidateLoop(d)
 
-proc close*(d: Protocol) =
+proc close*(d: Protocol) {.raises: [Exception, Defect].} =
   doAssert(not d.transp.closed)
 
   debug "Closing discovery node", node = $d.localNode
@@ -698,11 +731,10 @@ proc close*(d: Protocol) =
     d.revalidateLoop.cancel()
   if not d.lookupLoop.isNil:
     d.lookupLoop.cancel()
-  # TODO: unsure if close can't create issues in the not awaited cancellations
-  # above
+
   d.transp.close()
 
-proc closeWait*(d: Protocol) {.async.} =
+proc closeWait*(d: Protocol) {.async, raises: [Exception, Defect].} =
   doAssert(not d.transp.closed)
 
   debug "Closing discovery node", node = $d.localNode
