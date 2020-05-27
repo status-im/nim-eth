@@ -242,6 +242,10 @@ proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
     d.send(toAddr, data)
     ok()
 
+  if nodes.len == 0:
+    # In case of 0 nodes, a reply is still needed
+    return d.sendNodes(toId, toAddr, NodesMessage(total: 1, enrs: @[]), reqId)
+
   var message: NodesMessage
   # TODO: Do the total calculation based on the max UDP packet size we want to
   # send and the ENR size of all (max 16) nodes.

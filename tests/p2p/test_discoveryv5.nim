@@ -29,8 +29,8 @@ proc randomPacket(tag: PacketTag): seq[byte] =
     authTag: AuthTag
     msg: array[44, byte]
 
-  require randomBytes(authTag) == authTag.len
-  require randomBytes(msg) == msg.len
+  check randomBytes(authTag) == authTag.len
+  check randomBytes(msg) == msg.len
   result.add(tag)
   result.add(rlp.encode(authTag))
   result.add(msg)
@@ -64,7 +64,7 @@ suite "Discovery v5 Tests":
       discard node.addNode(generateNode())
 
     let n = node.getNode(targetNode.id)
-    require n.isSome()
+    check n.isSome()
     check n.get() == targetNode
 
     await node.closeWait()
@@ -88,9 +88,10 @@ suite "Discovery v5 Tests":
     await node1.revalidateNode(node2.localNode)
 
     let n = node1.getNode(bootnode.localNode.id)
-    require n.isSome()
-    check n.get() == bootnode.localNode
-    check node1.getNode(node2.localNode.id).isNone()
+    check:
+      n.isSome()
+      n.get() == bootnode.localNode
+      node1.getNode(node2.localNode.id).isNone()
 
     await node1.closeWait()
 
@@ -101,7 +102,7 @@ suite "Discovery v5 Tests":
     let a = localAddress(20303)
 
     for i in 0 ..< 5:
-      require randomBytes(tag) == tag.len
+      check randomBytes(tag) == tag.len
       node.receive(a, randomPacket(tag))
 
     # Checking different nodeIds but same address
@@ -233,15 +234,15 @@ suite "Discovery v5 Tests":
     # Get ENR of the node itself
     var discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, 0)
-    require discovered.isOk
     check:
+      discovered.isOk
       discovered[].len == 1
       discovered[][0] == mainNode.localNode
 
     # Get ENRs of nodes added at provided logarithmic distance
     discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, dist)
-    require discovered.isOk
+    check discovered.isOk
     check discovered[].len == 10
     for n in nodes:
       check discovered[].contains(n)
@@ -249,15 +250,15 @@ suite "Discovery v5 Tests":
     # Too high logarithmic distance, caps at 256
     discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, 4294967295'u32)
-    require discovered.isOk
     check:
+      discovered.isOk
       discovered[].len == 1
       discovered[][0] == testNode.localNode
 
     # Empty bucket
     discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, 254)
-    require discovered.isOk
+    check discovered.isOk
     check discovered[].len == 0
 
     let moreNodes = nodesAtDistance(mainNode.localNode, dist, 10)
@@ -267,7 +268,7 @@ suite "Discovery v5 Tests":
     # Full bucket
     discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, dist)
-    require discovered.isOk
+    check discovered.isOk
     check discovered[].len == 16
 
     await mainNode.closeWait()
@@ -294,7 +295,7 @@ suite "Discovery v5 Tests":
       discovered = await discv5_protocol.findNode(testNode, mainNode.localNode,
         closestDistance)
 
-    require discovered.isOk
+    check discovered.isOk
     check closest in discovered[]
 
     await mainNode.closeWait()
@@ -339,11 +340,11 @@ suite "Discovery v5 Tests":
     # if resolve works (only local lookup)
     block:
       let pong = await targetNode.ping(mainNode.localNode)
-      require pong.isOk()
+      check pong.isOk()
       await targetNode.closeWait()
       let n = await mainNode.resolve(targetId)
-      require n.isSome()
       check:
+        n.isSome()
         n.get().id == targetId
         n.get().record.seqNum == targetSeqNum
 
@@ -357,8 +358,8 @@ suite "Discovery v5 Tests":
       targetNode.localNode.record = r
       targetNode.open()
       let n = await mainNode.resolve(targetId)
-      require n.isSome()
       check:
+        n.isSome()
         n.get().id == targetId
         n.get().record.seqNum == targetSeqNum
 
@@ -370,7 +371,7 @@ suite "Discovery v5 Tests":
         targetAddress.port, targetAddress.port)[]
       targetNode.localNode.record = r
       let pong = await targetNode.ping(lookupNode.localNode)
-      require pong.isOk()
+      check pong.isOk()
 
       await targetNode.closeWait()
       # TODO: This step should eventually not be needed and ENRs with new seqNum
@@ -379,8 +380,8 @@ suite "Discovery v5 Tests":
 
       check mainNode.addNode(lookupNode.localNode.record)
       let n = await mainNode.resolve(targetId)
-      require n.isSome()
       check:
+        n.isSome()
         n.get().id == targetId
         n.get().record.seqNum == targetSeqNum
 

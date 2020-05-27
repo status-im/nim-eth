@@ -169,7 +169,7 @@ suite "Discovery v5 Cryptographic Primitives":
       privKey = PrivateKey.fromHex(localSecretKey)[]
       signature = signIDNonce(privKey, hexToByteArray[idNonceSize](idNonce),
         hexToByteArray[64](ephemeralKey))
-    require signature.isOK()
+    check signature.isOK()
     check signature[].toRaw() == hexToByteArray[64](idNonceSig)
 
   test "Encryption/Decryption":
