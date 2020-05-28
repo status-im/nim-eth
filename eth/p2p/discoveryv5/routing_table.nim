@@ -1,7 +1,7 @@
 import
   std/[algorithm, times, sequtils, bitops, random, sets, options],
   stint, chronicles,
-  types, node
+  node
 
 {.push raises: [Defect].}
 
