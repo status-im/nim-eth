@@ -107,6 +107,7 @@ type
     transp: DatagramTransport
     localNode*: Node
     privateKey: PrivateKey
+    bindAddress: Address ## UDP binding address
     whoareyouMagic: array[magicSize, byte]
     idHash: array[32, byte]
     pendingRequests: Table[AuthTag, PendingRequest]
@@ -692,8 +693,14 @@ proc lookupLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
 proc newProtocol*(privKey: PrivateKey, db: Database,
                   externalIp: Option[IpAddress], tcpPort, udpPort: Port,
                   localEnrFields: openarray[FieldPair] = [],
-                  bootstrapRecords: openarray[Record] = []):
+                  bootstrapRecords: openarray[Record] = [],
+                  bindIp = IPv4_any()):
                   Protocol {.raises: [Defect].} =
+  # TODO: Tried adding bindPort = udpPort as parameter but that gave
+  # "Error: internal error: environment misses: udpPort" in nim-beacon-chain.
+  # Anyhow, nim-beacon-chain would also require some changes to support port
+  # remapping through NAT and this API is also subject to change once we
+  # introduce support for ipv4 + ipv6 binding/listening.
   let
     enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
       localEnrFields).expect("Properly intialized private key")
@@ -703,6 +710,7 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
     privateKey: privKey,
     db: db,
     localNode: node,
+    bindAddress: Address(ip: bindIp, port: udpPort),
     whoareyouMagic: whoareyouMagic(node.id),
     idHash: sha256.digest(node.id.toByteArrayBE).data,
     codec: Codec(localNode: node, privKey: privKey, db: db),
@@ -712,9 +720,9 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
 
 proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   info "Starting discovery node", node = $d.localNode,
-    uri = toURI(d.localNode.record)
+    uri = toURI(d.localNode.record), bindAddress = d.bindAddress
   # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(IPv4_any(), Port(d.localNode.address.get().port))
+  let ta = initTAddress(d.bindAddress.ip, d.bindAddress.port)
   # TODO: raises `OSError` and `IOSelectorsException`, the latter which is
   # object of Exception. In Nim devel this got changed to CatchableError.
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
