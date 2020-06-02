@@ -14,7 +14,8 @@ requires "nim >= 1.2.0",
          "stew",
          "nat_traversal",
          "metrics",
-         "sqlite3_abi"
+         "sqlite3_abi",
+         "confutils"
 
 proc runTest(path: string) =
   echo "\nRunning: ", path
