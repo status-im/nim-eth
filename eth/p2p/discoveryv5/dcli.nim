@@ -37,16 +37,20 @@ type
       discard
     of ping:
       pingTarget* {.
+        argument
         desc: "ENR URI of the node to a send ping message"
         name: "node" .}: Node
     of findnode:
-      findNodeTarget* {.
-        desc: "ENR URI of the node to send a findNode message"
-        name: "node" .}: Node
       distance* {.
         defaultValue: 255
         desc: "Distance parameter for the findNode message"
         name: "distance" .}: uint32
+      # TODO: Order here matters as else the help message does not show all the
+      # information, see: https://github.com/status-im/nim-confutils/issues/15
+      findNodeTarget* {.
+        argument
+        desc: "ENR URI of the node to send a findNode message"
+        name: "node" .}: Node
 
 proc parseCmdArg*(T: type enr.Record, p: TaintedString): T =
   if not fromURI(result, p):
