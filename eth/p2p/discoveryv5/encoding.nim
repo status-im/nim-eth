@@ -89,7 +89,7 @@ proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
   ectx.getTag(result.toOpenArray(pt.len, result.high))
   ectx.clear()
 
-proc encodeAuthHeader(c: Codec,
+proc encodeAuthHeader*(c: Codec,
                       toId: NodeID,
                       nonce: array[gcmNonceSize, byte],
                       challenge: Whoareyou):
@@ -225,7 +225,7 @@ proc decodeMessage(body: openarray[byte]):
   else:
     err(PacketError)
 
-proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
+proc decodeAuthResp*(c: Codec, fromId: NodeId, head: AuthHeader,
     challenge: Whoareyou, newNode: var Node):
     DecodeResult[HandshakeSecrets] {.raises:[Defect].} =
   if head.scheme != authSchemeName:
