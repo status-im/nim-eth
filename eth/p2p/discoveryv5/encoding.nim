@@ -244,18 +244,26 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
 
   var authResp: AuthResponse
   try:
+    # Signature check of record happens in decode.
     authResp = rlp.decode(respData.get(), AuthResponse)
   except RlpError, ValueError:
     return err(HandshakeError)
   # TODO:
-  # 1. Should allow for not having an ENR included, solved for now by sending
+  # Should allow for not having an ENR included, solved for now by sending
   # whoareyou with always recordSeq of 0
-  # 2. Should verify ENR and check for correct id in case an ENR is included
-  # 3. Should verify id nonce signature
 
   # Node returned might not have an address or not a valid address
   newNode = ? newNode(authResp.record).mapErrTo(HandshakeError)
-  ok()
+  if newNode.id != fromId:
+    return err(HandshakeError)
+
+  # Verify the id-nonce-sig
+  let sig = ? SignatureNR.fromRaw(authResp.signature).mapErrTo(HandshakeError)
+  let h = idNonceHash(head.idNonce, head.ephemeralKey)
+  if verify(sig, h, newNode.pubkey):
+    ok()
+  else:
+    err(HandshakeError)
 
 proc decodePacket*(c: var Codec,
                       fromId: NodeID,
