@@ -89,7 +89,7 @@ proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
   ectx.getTag(result.toOpenArray(pt.len, result.high))
   ectx.clear()
 
-proc encodeAuthHeader(c: Codec,
+proc encodeAuthHeader*(c: Codec,
                       toId: NodeID,
                       nonce: array[gcmNonceSize, byte],
                       challenge: Whoareyou):
@@ -225,16 +225,16 @@ proc decodeMessage(body: openarray[byte]):
   else:
     err(PacketError)
 
-proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
-    challenge: Whoareyou, secrets: var HandshakeSecrets, newNode: var Node):
-    DecodeResult[void] {.raises:[Defect].} =
+proc decodeAuthResp*(c: Codec, fromId: NodeId, head: AuthHeader,
+    challenge: Whoareyou, newNode: var Node):
+    DecodeResult[HandshakeSecrets] {.raises:[Defect].} =
   if head.scheme != authSchemeName:
     warn "Unknown auth scheme"
     return err(HandshakeError)
 
   let ephKey = ? PublicKey.fromRaw(head.ephemeralKey).mapErrTo(HandshakeError)
 
-  secrets = ? deriveKeys(fromId, c.localNode.id, c.privKey, ephKey,
+  let secrets = ? deriveKeys(fromId, c.localNode.id, c.privKey, ephKey,
     challenge.idNonce).mapErrTo(HandshakeError)
 
   var zeroNonce: array[gcmNonceSize, byte]
@@ -244,18 +244,26 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
 
   var authResp: AuthResponse
   try:
+    # Signature check of record happens in decode.
     authResp = rlp.decode(respData.get(), AuthResponse)
   except RlpError, ValueError:
     return err(HandshakeError)
   # TODO:
-  # 1. Should allow for not having an ENR included, solved for now by sending
+  # Should allow for not having an ENR included, solved for now by sending
   # whoareyou with always recordSeq of 0
-  # 2. Should verify ENR and check for correct id in case an ENR is included
-  # 3. Should verify id nonce signature
 
   # Node returned might not have an address or not a valid address
   newNode = ? newNode(authResp.record).mapErrTo(HandshakeError)
-  ok()
+  if newNode.id != fromId:
+    return err(HandshakeError)
+
+  # Verify the id-nonce-sig
+  let sig = ? SignatureNR.fromRaw(authResp.signature).mapErrTo(HandshakeError)
+  let h = idNonceHash(head.idNonce, head.ephemeralKey)
+  if verify(sig, h, newNode.pubkey):
+    ok(secrets)
+  else:
+    err(HandshakeError)
 
 proc decodePacket*(c: var Codec,
                       fromId: NodeID,
@@ -287,10 +295,11 @@ proc decodePacket*(c: var Codec,
       trace "Decoding failed (different nonce)"
       return err(HandshakeError)
 
-    var sec: HandshakeSecrets
-    if c.decodeAuthResp(fromId, auth, challenge, sec, newNode).isErr:
-      trace "Decoding failed (bad auth)"
+    let secrets = c.decodeAuthResp(fromId, auth, challenge, newNode)
+    if secrets.isErr:
+      trace "Decoding failed (invalid auth response)"
       return err(HandshakeError)
+    var sec = secrets[]
 
     c.handshakes.del(key)
 

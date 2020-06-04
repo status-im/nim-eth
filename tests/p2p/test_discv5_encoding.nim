@@ -1,6 +1,6 @@
 import
-  unittest, options, sequtils, stew/byteutils, stint,
-  eth/[rlp, keys] , eth/p2p/discoveryv5/[types, encoding, enr]
+  unittest, options, sequtils, net, stew/byteutils, stint,
+  eth/[rlp, keys] , eth/p2p/discoveryv5/[types, encoding, enr, node]
 
 # According to test vectors:
 # https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire-test-vectors.md
@@ -229,3 +229,28 @@ suite "Discovery v5 Additional":
     # invalid tag/data itself
     invalidCipher = repeat(byte(4), gcmTagSize + 1)
     check decryptGCM(encryptionKey, nonce, invalidCipher, ad).isNone()
+
+  test "AuthHeader encode/decode":
+    let
+      privKey = PrivateKey.random()[]
+      enrRec = enr.Record.init(1, privKey, none(IpAddress), Port(9000),
+        Port(9000)).expect("Properly intialized private key")
+      node = newNode(enrRec).expect("Properly initialized record")
+      nonce = hexToByteArray[authTagSize]("0x27b5af763c446acd2749fe8e")
+      pubKey = PrivateKey.random()[].toPublicKey()[]
+      nodeId = pubKey.toNodeId()
+      idNonce = hexToByteArray[idNonceSize](
+        "0xa77e3aa0c144ae7c0a3af73692b7d6e5b7a2fdc0eda16e8d5e6cb0d08e88dd04")
+      whoareyou = Whoareyou(idNonce: idNonce, recordSeq: 0, pubKey: pubKey)
+      c = Codec(localNode: node, privKey: privKey)
+
+    let (auth, _) = c.encodeAuthHeader(nodeId, nonce, whoareyou)[]
+    var rlp = rlpFromBytes(auth)
+    let authHeader = rlp.read(AuthHeader)
+    var newNode: Node
+    let secrets = c.decodeAuthResp(privKey.toPublicKey()[].toNodeId(),
+      authHeader, whoareyou, newNode)
+
+    # TODO: Test cases with invalid nodeId and invalid signature, the latter
+    # is in the current code structure rather difficult and would need some
+    # helper proc.
