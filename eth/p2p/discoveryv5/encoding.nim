@@ -226,15 +226,15 @@ proc decodeMessage(body: openarray[byte]):
     err(PacketError)
 
 proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
-    challenge: Whoareyou, secrets: var HandshakeSecrets, newNode: var Node):
-    DecodeResult[void] {.raises:[Defect].} =
+    challenge: Whoareyou, newNode: var Node):
+    DecodeResult[HandshakeSecrets] {.raises:[Defect].} =
   if head.scheme != authSchemeName:
     warn "Unknown auth scheme"
     return err(HandshakeError)
 
   let ephKey = ? PublicKey.fromRaw(head.ephemeralKey).mapErrTo(HandshakeError)
 
-  secrets = ? deriveKeys(fromId, c.localNode.id, c.privKey, ephKey,
+  let secrets = ? deriveKeys(fromId, c.localNode.id, c.privKey, ephKey,
     challenge.idNonce).mapErrTo(HandshakeError)
 
   var zeroNonce: array[gcmNonceSize, byte]
@@ -261,7 +261,7 @@ proc decodeAuthResp(c: Codec, fromId: NodeId, head: AuthHeader,
   let sig = ? SignatureNR.fromRaw(authResp.signature).mapErrTo(HandshakeError)
   let h = idNonceHash(head.idNonce, head.ephemeralKey)
   if verify(sig, h, newNode.pubkey):
-    ok()
+    ok(secrets)
   else:
     err(HandshakeError)
 
@@ -295,10 +295,11 @@ proc decodePacket*(c: var Codec,
       trace "Decoding failed (different nonce)"
       return err(HandshakeError)
 
-    var sec: HandshakeSecrets
-    if c.decodeAuthResp(fromId, auth, challenge, sec, newNode).isErr:
-      trace "Decoding failed (bad auth)"
+    let secrets = c.decodeAuthResp(fromId, auth, challenge, newNode)
+    if secrets.isErr:
+      trace "Decoding failed (invalid auth response)"
       return err(HandshakeError)
+    var sec = secrets[]
 
     c.handshakes.del(key)
 
