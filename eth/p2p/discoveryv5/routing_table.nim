@@ -11,10 +11,18 @@ type
     buckets: seq[KBucket]
 
   KBucket = ref object
-    istart, iend: NodeId
-    nodes: seq[Node]
-    replacementCache: seq[Node]
-    lastUpdated: float # epochTime
+    istart, iend: NodeId ## Range of NodeIds this KBucket covers. This is not a
+    ## simple logarithmic distance as buckets can be split over a prefix that
+    ## does not cover the `thisNode` id.
+    nodes: seq[Node] ## Node entries of the KBucket. Sorted according to last
+    ## time seen. First entry (head) is considered the most recently seen node
+    ## and the last entry (tail) is considered the least recently seen node.
+    ## Here "seen" means a successful request-response. This can also not have
+    ## occured yet.
+    replacementCache: seq[Node] ## Nodes that could not be added to the `nodes`
+    ## seq as it is full and without stale nodes.
+    lastUpdated: float ## epochTime of last update to the KBucket
+    # TODO: Should this update be about changes made only in `nodes`?
 
 const
   BUCKET_SIZE* = 16
@@ -60,36 +68,46 @@ proc nodesByDistanceTo(k: KBucket, id: NodeId): seq[Node] =
   sortedByIt(k.nodes, it.distanceTo(id))
 
 proc len(k: KBucket): int {.inline.} = k.nodes.len
-proc head(k: KBucket): Node {.inline.} = k.nodes[0]
+proc tail(k: KBucket): Node {.inline.} = k.nodes[high(k.nodes)]
 
 proc add(k: KBucket, n: Node): Node =
   ## Try to add the given node to this bucket.
-
-  ## If the node is already present, it is moved to the tail of the list, and
-  ## nil is returned.
-
+  ##
+  ## If the node is already present, nothing is done, as the node should only
+  ## be moved in case of a new succesful request-reponse.
+  ##
   ## If the node is not already present and the bucket has fewer than k entries,
-  ## it is inserted at the tail of the list, and nil is returned.
-
+  ## it is inserted as the last entry of the bucket (least recently seen node),
+  ## and nil is returned.
+  ##
   ## If the bucket is full, the node is added to the bucket's replacement cache
-  ## and the node at the head of the list (i.e. the least recently seen), which
+  ## and the node at the last entry of the bucket (least recently seen), which
   ## should be evicted if it fails to respond to a ping, is returned.
-
-  ## If the replacement cache is also full, the node at the head of the
-  ## list is returned. The new node is nowhere stored and thus lost.
-  k.lastUpdated = epochTime()
+  ##
+  ## If the replacement cache is also full, the node at the last entry of the
+  ## bucket is returned. The new node is nowhere stored and thus lost.
+  ##
+  ## Reasoning here is that adding nodes will happen for a big part from
+  ## lookups, which do not necessarily return nodes that are (still) reachable.
+  ## So, more trust is put in the own ordering and newly additions are added
+  ## as least recently seen (in fact they are never seen yet from this node its
+  ## perspective).
+  ## However, in discovery v5 it can be that a node is added after a incoming
+  ## request, and considering a handshake that needs to be done, it is likely
+  ## that this node is reachable. An additional `addSeen` proc could be created
+  ## for this,
+  k.lastUpdated = epochTime() # TODO: only when an actual update is done?
   let nodeIdx = k.nodes.find(n)
   if nodeIdx != -1:
-    k.nodes.delete(nodeIdx)
-    k.nodes.add(n)
+    return nil
   elif k.len < BUCKET_SIZE:
     k.nodes.add(n)
+    return nil
   elif k.replacementCache.len < REPLACEMENT_CACHE_SIZE:
     k.replacementCache.add(n)
-    return k.head
+    return k.tail
   else:
-    return k.head
-  return nil
+    return k.tail
 
 proc removeNode(k: KBucket, n: Node) =
   let i = k.nodes.find(n)
@@ -238,13 +256,14 @@ proc moveRight[T](arr: var openarray[T], a, b: int) {.inline.} =
   shallowCopy(arr[a], t)
 
 proc setJustSeen*(r: RoutingTable, n: Node) =
-  # Move `n` to front of its bucket
+  ## Move `n` to the head (most recently seen) of its bucket.
   let b = r.bucketForNode(n.id)
   let idx = b.nodes.find(n)
+  # TODO: This assert might be troublesome if we start using it for every
+  # message response & then ping a node that is not in our table (e.g. in tests)
   doAssert(idx >= 0)
   if idx != 0:
     b.nodes.moveRight(0, idx - 1)
-  b.nodes[0] = n
   b.lastUpdated = epochTime()
 
 proc nodeToRevalidate*(r: RoutingTable): Node =
@@ -267,10 +286,16 @@ proc randomNodes*(r: RoutingTable, maxAmount: int,
   result = newSeqOfCap[Node](maxAmount)
   var seen = initHashSet[Node]()
 
-  # This is a rather inneficient way of randomizing nodes from all buckets, but even if we
+  # This is a rather inefficient way of randomizing nodes from all buckets, but even if we
   # iterate over all nodes in the routing table, the time it takes would still be
   # insignificant compared to the time it takes for the network roundtrips when connecting
   # to nodes.
+  # However, "time it takes" might not be relevant, as there might be no point
+  # in providing more `randomNodes` as the routing table might not have anything
+  # new to provide. And there is no way for the calling code to know this. So
+  # while it will take less total time compared to e.g. an (async)
+  # randomLookup, the time might be wasted as all nodes are possibly seen
+  # already.
   while len(seen) < maxAmount:
     # TODO: Is it important to get a better random source for these sample calls?
     let bucket = sample(r.buckets)
