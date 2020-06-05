@@ -2,7 +2,8 @@
 # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-778.md
 
 import
-  net, strutils, macros, algorithm, options,
+  strutils, macros, algorithm, options,
+  stew/shims/net,
   nimcrypto, stew/base64,
   eth/[rlp, keys]
 
@@ -117,7 +118,7 @@ template toFieldPair*(key: string, value: auto): FieldPair =
 
 proc init*(T: type Record, seqNum: uint64,
                            pk: PrivateKey,
-                           ip: Option[IpAddress],
+                           ip: Option[ValidIpAddress],
                            tcpPort, udpPort: Port,
                            extraFields: openarray[FieldPair] = []):
                            EnrResult[T] =
