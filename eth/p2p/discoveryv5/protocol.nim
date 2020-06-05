@@ -74,7 +74,7 @@
 
 import
   std/[tables, sets, options, math, random],
-  json_serialization/std/net,
+  stew/shims/net as stewNet, json_serialization/std/net,
   stew/[byteutils, endians2], chronicles, chronos, stint,
   eth/[rlp, keys], types, encoding, node, routing_table, enr
 
@@ -691,7 +691,7 @@ proc lookupLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
     trace "lookupLoop canceled"
 
 proc newProtocol*(privKey: PrivateKey, db: Database,
-                  externalIp: Option[IpAddress], tcpPort, udpPort: Port,
+                  externalIp: Option[ValidIpAddress], tcpPort, udpPort: Port,
                   localEnrFields: openarray[FieldPair] = [],
                   bootstrapRecords: openarray[Record] = [],
                   bindIp = IPv4_any()):
