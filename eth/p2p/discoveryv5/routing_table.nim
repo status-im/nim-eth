@@ -18,6 +18,7 @@ type
 
 const
   BUCKET_SIZE* = 16
+  REPLACEMENT_CACHE_SIZE* = 8
   BITS_PER_HOP = 8
   ID_SIZE = 256
 
@@ -64,14 +65,18 @@ proc head(k: KBucket): Node {.inline.} = k.nodes[0]
 proc add(k: KBucket, n: Node): Node =
   ## Try to add the given node to this bucket.
 
-  ## If the node is already present, it is moved to the tail of the list, and we return nil.
+  ## If the node is already present, it is moved to the tail of the list, and
+  ## nil is returned.
 
-  ## If the node is not already present and the bucket has fewer than k entries, it is inserted
-  ## at the tail of the list, and we return nil.
+  ## If the node is not already present and the bucket has fewer than k entries,
+  ## it is inserted at the tail of the list, and nil is returned.
 
-  ## If the bucket is full, we add the node to the bucket's replacement cache and return the
-  ## node at the head of the list (i.e. the least recently seen), which should be evicted if it
-  ## fails to respond to a ping.
+  ## If the bucket is full, the node is added to the bucket's replacement cache
+  ## and the node at the head of the list (i.e. the least recently seen), which
+  ## should be evicted if it fails to respond to a ping, is returned.
+
+  ## If the replacement cache is also full, the node at the head of the
+  ## list is returned. The new node is nowhere stored and thus lost.
   k.lastUpdated = epochTime()
   let nodeIdx = k.nodes.find(n)
   if nodeIdx != -1:
@@ -79,8 +84,10 @@ proc add(k: KBucket, n: Node): Node =
     k.nodes.add(n)
   elif k.len < BUCKET_SIZE:
     k.nodes.add(n)
-  else:
+  elif k.replacementCache.len < REPLACEMENT_CACHE_SIZE:
     k.replacementCache.add(n)
+    return k.head
+  else:
     return k.head
   return nil
 
