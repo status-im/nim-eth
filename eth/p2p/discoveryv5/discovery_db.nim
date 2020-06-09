@@ -1,5 +1,5 @@
 import
-  std/net, stint, stew/endians2,
+  stint, stew/endians2, stew/shims/net,
   eth/trie/db, types, node
 
 {.push raises: [Defect].}

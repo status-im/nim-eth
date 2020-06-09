@@ -393,15 +393,17 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
     Future[void] {.async, gcsafe, raises: [Exception, Defect].} =
   let proto = getUserData[Protocol](transp)
-  var a: Address
+  var ip: IpAddress
   var buf = newSeq[byte]()
 
   try:
-    a = Address(ip: raddr.address, port: raddr.port)
+    ip = raddr.address()
   except ValueError:
     # This should not be possible considering we bind to an IP address.
     error "Not a valid IpAddress"
     return
+
+  let a = Address(ip: ValidIpAddress.init(ip), port: raddr.port)
 
   try:
     # TODO: should we use `peekMessage()` to avoid allocation?
@@ -710,7 +712,7 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
     privateKey: privKey,
     db: db,
     localNode: node,
-    bindAddress: Address(ip: bindIp, port: udpPort),
+    bindAddress: Address(ip: ValidIpAddress.init(bindIp), port: udpPort),
     whoareyouMagic: whoareyouMagic(node.id),
     idHash: sha256.digest(node.id.toByteArrayBE).data,
     codec: Codec(localNode: node, privKey: privKey, db: db),

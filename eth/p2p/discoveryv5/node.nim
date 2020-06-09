@@ -1,5 +1,5 @@
 import
-  std/[net, hashes], nimcrypto, stint, chronos,
+  std/hashes, nimcrypto, stint, chronos, stew/shims/net,
   eth/keys, enr
 
 {.push raises: [Defect].}
@@ -8,7 +8,7 @@ type
   NodeId* = UInt256
 
   Address* = object
-    ip*: IpAddress
+    ip*: ValidIpAddress
     port*: Port
 
   Node* = ref object
@@ -32,7 +32,8 @@ proc newNode*(r: Record): Result[Node, cstring] =
   let tr = ? r.toTypedRecord()
   if tr.ip.isSome() and tr.udp.isSome():
     let
-      ip = IpAddress(family: IpAddressFamily.IPv4, address_v4: tr.ip.get())
+      ip = ValidIpAddress.init(
+        IpAddress(family: IpAddressFamily.IPv4, address_v4: tr.ip.get()))
       a = Address(ip: ip, port: Port(tr.udp.get()))
 
     ok(Node(id: pk.get().toNodeId(), pubkey: pk.get() , record: r,

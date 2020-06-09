@@ -1,12 +1,12 @@
 import
   unittest, chronos, sequtils, chronicles, tables, stint, nimcrypto,
-  eth/[keys, rlp], eth/trie/db,
+  stew/shims/net, eth/[keys, rlp], eth/trie/db,
   eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./p2p_test_helper
 
 proc localAddress*(port: int): Address =
-  Address(ip: parseIpAddress("127.0.0.1"), port: Port(port))
+  Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
 
 proc initDiscoveryNode*(privKey: PrivateKey, address: Address,
                         bootstrapRecords: openarray[Record] = []):
@@ -37,7 +37,7 @@ proc randomPacket(tag: PacketTag): seq[byte] =
 
 proc generateNode(privKey = PrivateKey.random()[], port: int = 20302): Node =
   let port = Port(port)
-  let enr = enr.Record.init(1, privKey, some(parseIpAddress("127.0.0.1")),
+  let enr = enr.Record.init(1, privKey, some(ValidIpAddress.init("127.0.0.1")),
     port, port).expect("Properly intialized private key")
   result = newNode(enr).expect("Properly initialized node")
 
