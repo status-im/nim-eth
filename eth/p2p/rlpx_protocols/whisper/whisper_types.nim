@@ -199,6 +199,7 @@ proc encryptAesGcm(plain: openarray[byte], key: SymKey,
   gcm.encrypt(plain, result)
   var tag: array[gcmTagLen, byte]
   gcm.getTag(tag)
+  gcm.clear()
   result.add tag
   result.add iv
 
@@ -217,6 +218,7 @@ proc decryptAesGcm(cipher: openarray[byte], key: SymKey): Option[seq[byte]] =
   gcm.decrypt(cipher[0 ..< ^(gcmIVLen + gcmTagLen)], res)
   var tag2: array[gcmTagLen, byte]
   gcm.getTag(tag2)
+  gcm.clear()
 
   if tag != tag2:
     debug "cipher tag mismatch", len = cipher.len, tag, tag2
