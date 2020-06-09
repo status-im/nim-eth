@@ -17,18 +17,10 @@ import
 logScope:
   topics = "whisper_types"
 
-declarePublicCounter valid_envelopes,
+declarePublicCounter envelopes_valid,
   "Received & posted valid envelopes"
-declarePublicCounter dropped_benign_duplicate_envelopes,
-  "Dropped benign duplicate envelopes"
-declarePublicCounter dropped_expired_envelopes,
-  "Dropped envelopes because expired"
-declarePublicCounter dropped_from_future_envelopes,
-  "Dropped envelopes because of future timestamp"
-declarePublicCounter dropped_full_queue_new_envelopes,
-  "New valid envelopes dropped because of full queue"
-declarePublicCounter dropped_full_queue_old_envelopes,
-  "Old valid envelopes dropped because of full queue"
+declarePublicCounter envelopes_dropped,
+  "Dropped envelopes", labels = ["reason"]
 
 const
   flagsLen = 1 ## payload flags field length, bytes
@@ -411,15 +403,15 @@ proc decode*(data: openarray[byte], dst = none[PrivateKey](),
 
 proc valid*(self: Envelope, now = epochTime()): bool =
   if self.expiry.float64 < now: # expired
-    dropped_expired_envelopes.inc()
+    envelopes_dropped.inc(labelValues = ["expired"])
     return false
   if self.ttl <= 0: # this would invalidate pow calculation
-    dropped_expired_envelopes.inc()
+    envelopes_dropped.inc(labelValues = ["expired"])
     return false
 
   let created = self.expiry - self.ttl
   if created.float64 > (now + 2.0): # created in the future
-    dropped_from_future_envelopes.inc()
+    envelopes_dropped.inc(labelValues = ["future_timestamp"])
     return false
 
   return true
@@ -556,10 +548,10 @@ proc add*(self: var Queue, msg: Message): bool =
 
   # check for duplicate before pruning
   if self.itemHashes.contains(msg.hash):
-    dropped_benign_duplicate_envelopes.inc()
+    envelopes_dropped.inc(labelValues = ["benign_duplicate"])
     return false
   else:
-    valid_envelopes.inc()
+    envelopes_valid.inc()
     if self.items.len >= self.capacity:
       self.prune() # Only prune if needed
 
@@ -570,12 +562,12 @@ proc add*(self: var Queue, msg: Message): bool =
         if last.pow > msg.pow or
           (last.pow == msg.pow and last.env.expiry > msg.env.expiry):
           # The new message has less pow or will expire earlier - drop it
-          dropped_full_queue_new_envelopes.inc()
+          envelopes_dropped.inc(labelValues = ["full_queue_new"])
           return false
 
         self.items.del(self.items.len() - 1)
         self.itemHashes.excl(last.hash)
-        dropped_full_queue_old_envelopes.inc()
+        envelopes_dropped.inc(labelValues = ["full_queue_old"])
 
     self.itemHashes.incl(msg.hash)
     self.items.insert(msg, self.items.lowerBound(msg, cmpPow))

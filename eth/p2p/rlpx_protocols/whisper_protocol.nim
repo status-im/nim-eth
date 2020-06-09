@@ -42,15 +42,6 @@ export
 logScope:
   topics = "whisper"
 
-declarePublicCounter dropped_low_pow_envelopes,
-  "Dropped envelopes because of too low PoW"
-declarePublicCounter dropped_too_large_envelopes,
-  "Dropped envelopes because larger than maximum allowed size"
-declarePublicCounter dropped_bloom_filter_mismatch_envelopes,
-  "Dropped envelopes because not matching with bloom filter"
-declarePublicCounter dropped_duplicate_envelopes,
-  "Dropped duplicate envelopes"
-
 const
   defaultQueueCapacity = 2048
   whisperVersion* = 6 ## Whisper version.
@@ -87,17 +78,17 @@ proc allowed*(msg: Message, config: WhisperConfig): bool =
   # Check max msg size, already happens in RLPx but there is a specific shh
   # max msg size which should always be < RLPx max msg size
   if msg.size > config.maxMsgSize:
-    dropped_too_large_envelopes.inc()
+    envelopes_dropped.inc(labelValues = ["too_large"])
     warn "Message size too large", size = msg.size
     return false
 
   if msg.pow < config.powRequirement:
-    dropped_low_pow_envelopes.inc()
+    envelopes_dropped.inc(labelValues = ["low_pow"])
     warn "Message PoW too low", pow = msg.pow, minPow = config.powRequirement
     return false
 
   if not bloomFilterMatch(config.bloom, msg.bloom):
-    dropped_bloom_filter_mismatch_envelopes.inc()
+    envelopes_dropped.inc(labelValues = ["bloom_filter_mismatch"])
     warn "Message does not match node bloom filter"
     return false
 
@@ -202,7 +193,7 @@ p2pProtocol Whisper(version = whisperVersion,
       # this node to a peer and that same message arriving from that peer (after
       # it was received from another peer) here.
       if peer.state.received.containsOrIncl(msg.hash):
-        dropped_duplicate_envelopes.inc()
+        envelopes_dropped.inc(labelValues = ["duplicate"])
         trace "Peer sending duplicate messages", peer, hash = $msg.hash
         # await peer.disconnect(SubprotocolReason)
         continue
