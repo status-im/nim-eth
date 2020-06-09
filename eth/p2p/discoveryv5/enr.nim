@@ -3,8 +3,7 @@
 
 import
   strutils, macros, algorithm, options,
-  stew/shims/net,
-  nimcrypto, stew/base64,
+  stew/shims/net, nimcrypto, stew/base64,
   eth/[rlp, keys]
 
 export options

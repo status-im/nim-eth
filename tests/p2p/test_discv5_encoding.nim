@@ -1,5 +1,5 @@
 import
-  unittest, options, sequtils, net, stew/byteutils, stint,
+  unittest, options, sequtils, stint, stew/byteutils, stew/shims/net,
   eth/[rlp, keys] , eth/p2p/discoveryv5/[types, encoding, enr, node]
 
 # According to test vectors:
@@ -233,7 +233,7 @@ suite "Discovery v5 Additional":
   test "AuthHeader encode/decode":
     let
       privKey = PrivateKey.random()[]
-      enrRec = enr.Record.init(1, privKey, none(IpAddress), Port(9000),
+      enrRec = enr.Record.init(1, privKey, none(ValidIpAddress), Port(9000),
         Port(9000)).expect("Properly intialized private key")
       node = newNode(enrRec).expect("Properly initialized record")
       nonce = hexToByteArray[authTagSize]("0x27b5af763c446acd2749fe8e")
