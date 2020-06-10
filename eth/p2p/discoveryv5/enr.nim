@@ -217,6 +217,14 @@ proc toTypedRecord*(r: Record): EnrResult[TypedRecord] =
   else:
     err("Record without id field")
 
+proc contains*(r: Record, fp: (string, seq[byte])): bool =
+  # TODO: use FieldPair for this, but that is a bit cumbersome. Perhaps the
+  # `get` call can be improved to make this easier.
+  let field = r.tryGet(fp[0], seq[byte])
+  if field.isSome():
+    if field.get() == fp[1]:
+      return true
+
 proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]):
     bool =
   let publicKey = r.get(PublicKey)
