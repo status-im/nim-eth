@@ -1,6 +1,6 @@
 import
   sequtils, options, strutils, chronos, chronicles, chronicles/topics_registry,
-  stew/byteutils, confutils,
+  stew/byteutils, stew/shims/net, confutils,
   eth/keys, eth/trie/db, eth/net/nat,
   eth/p2p/discoveryv5/[protocol, discovery_db, enr, node]
 
@@ -76,7 +76,7 @@ proc parseCmdArg*(T: type Node, p: TaintedString): T =
 proc completeCmdArg*(T: type Node, val: TaintedString): seq[string] =
   return @[]
 
-proc setupNat(conf: DiscoveryConf): tuple[ip: Option[IpAddress],
+proc setupNat(conf: DiscoveryConf): tuple[ip: Option[ValidIpAddress],
                                           tcpPort: Port,
                                           udpPort: Port] {.gcsafe.} =
   # defaults
@@ -96,15 +96,16 @@ proc setupNat(conf: DiscoveryConf): tuple[ip: Option[IpAddress],
     else:
       if conf.nat.startsWith("extip:") and isIpAddress(conf.nat[6..^1]):
         # any required port redirection is assumed to be done by hand
-        result.ip = some(parseIpAddress(conf.nat[6..^1]))
+        result.ip = some(ValidIpAddress.init(conf.nat[6..^1]))
         nat = NatNone
       else:
         error "not a valid NAT mechanism, nor a valid IP address", value = conf.nat
         quit(QuitFailure)
 
   if nat != NatNone:
-    result.ip = getExternalIP(nat)
-    if result.ip.isSome:
+    let extIp = getExternalIP(nat)
+    if extIP.isSome:
+      result.ip = some(ValidIpAddress.init extIp.get)
       let extPorts = ({.gcsafe.}:
         redirectPorts(tcpPort = result.tcpPort,
                       udpPort = result.udpPort,

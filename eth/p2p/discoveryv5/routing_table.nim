@@ -248,25 +248,28 @@ proc nodeToRevalidate*(r: RoutingTable): Node =
     if b.len > 0:
       return b.nodes[^1]
 
-proc randomNodes*(r: RoutingTable, count: int): seq[Node] =
-  var count = count
+proc randomNodes*(r: RoutingTable, maxAmount: int,
+    pred: proc(x: Node): bool {.gcsafe, noSideEffect.} = nil): seq[Node] =
+  var maxAmount = maxAmount
   let sz = r.len
-  if count > sz:
-    debug  "Looking for peers", requested = count, present = sz
-    count = sz
+  if maxAmount > sz:
+    debug  "Less peers in routing table than maximum requested",
+      requested = maxAmount, present = sz
+    maxAmount = sz
 
-  result = newSeqOfCap[Node](count)
+  result = newSeqOfCap[Node](maxAmount)
   var seen = initHashSet[Node]()
 
   # This is a rather inneficient way of randomizing nodes from all buckets, but even if we
   # iterate over all nodes in the routing table, the time it takes would still be
   # insignificant compared to the time it takes for the network roundtrips when connecting
   # to nodes.
-  while len(seen) < count:
+  while len(seen) < maxAmount:
     # TODO: Is it important to get a better random source for these sample calls?
     let bucket = sample(r.buckets)
     if bucket.nodes.len != 0:
       let node = sample(bucket.nodes)
       if node notin seen:
-        result.add(node)
         seen.incl(node)
+        if pred.isNil() or node.pred:
+          result.add(node)

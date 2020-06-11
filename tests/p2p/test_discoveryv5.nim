@@ -9,13 +9,15 @@ proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
 
 proc initDiscoveryNode*(privKey: PrivateKey, address: Address,
-                        bootstrapRecords: openarray[Record] = []):
+                        bootstrapRecords: openarray[Record] = [],
+                        localEnrFields: openarray[FieldPair] = []):
                         discv5_protocol.Protocol =
   var db = DiscoveryDB.init(newMemoryDB())
   result = newProtocol(privKey, db,
                        some(address.ip),
                        address.port, address.port,
-                       bootstrapRecords = bootstrapRecords)
+                       bootstrapRecords = bootstrapRecords,
+                       localEnrFields = localEnrFields)
 
   result.open()
 
@@ -35,10 +37,11 @@ proc randomPacket(tag: PacketTag): seq[byte] =
   result.add(rlp.encode(authTag))
   result.add(msg)
 
-proc generateNode(privKey = PrivateKey.random()[], port: int = 20302): Node =
+proc generateNode(privKey = PrivateKey.random()[], port: int = 20302,
+    localEnrFields: openarray[FieldPair] = []): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, some(ValidIpAddress.init("127.0.0.1")),
-    port, port).expect("Properly intialized private key")
+    port, port, localEnrFields).expect("Properly intialized private key")
   result = newNode(enr).expect("Properly initialized node")
 
 proc nodeAtDistance(n: Node, d: uint32): Node =
@@ -386,4 +389,26 @@ suite "Discovery v5 Tests":
         n.get().record.seqNum == targetSeqNum
 
     await mainNode.closeWait()
+    await lookupNode.closeWait()
+
+  asyncTest "Random nodes with enr field filter":
+    let
+      lookupNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20301))
+      targetFieldPair = toFieldPair("test", @[byte 1,2,3,4])
+      targetNode = generateNode(localEnrFields = [targetFieldPair])
+      otherFieldPair = toFieldPair("test", @[byte 1,2,3,4,5])
+      otherNode = generateNode(localEnrFields = [otherFieldPair])
+      anotherNode = generateNode()
+
+    check:
+      lookupNode.addNode(targetNode)
+      lookupNode.addNode(otherNode)
+      lookupNode.addNode(anotherNode)
+
+    let discovered = lookupNode.randomNodes(10)
+    check discovered.len == 3
+    let discoveredFiltered = lookupNode.randomNodes(10,
+      ("test", @[byte 1,2,3,4]))
+    check discoveredFiltered.len == 1 and discoveredFiltered.contains(targetNode)
+
     await lookupNode.closeWait()

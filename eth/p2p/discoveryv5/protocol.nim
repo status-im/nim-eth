@@ -145,8 +145,21 @@ proc addNode*(d: Protocol, enr: EnrUri): bool =
 proc getNode*(d: Protocol, id: NodeId): Option[Node] =
   d.routingTable.getNode(id)
 
-proc randomNodes*(d: Protocol, count: int): seq[Node] =
-  d.routingTable.randomNodes(count)
+proc randomNodes*(d: Protocol, maxAmount: int): seq[Node] =
+  ## Get a `maxAmount` of random nodes from the local routing table.
+  d.routingTable.randomNodes(maxAmount)
+
+proc randomNodes*(d: Protocol, maxAmount: int,
+    pred: proc(x: Node): bool {.gcsafe, noSideEffect.}): seq[Node] =
+  ## Get a `maxAmount` of random nodes from the local routing table with the
+  ## `pred` predicate function applied as filter on the nodes selected.
+  d.routingTable.randomNodes(maxAmount, pred)
+
+proc randomNodes*(d: Protocol, maxAmount: int,
+  enrField: (string, seq[byte])): seq[Node] =
+  ## Get a `maxAmount` of random nodes from the local routing table. The
+  ## the nodes selected are filtered by provided `enrField`.
+  d.randomNodes(maxAmount, proc(x: Node): bool = x.record.contains(enrField))
 
 proc neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
   d.routingTable.neighbours(id, k)
@@ -598,6 +611,8 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
 
 proc lookupRandom*(d: Protocol): Future[DiscResult[seq[Node]]]
     {.async, raises:[Exception, Defect].} =
+  ## Perform a lookup for a random target, return the closest n nodes to the
+  ## target. Maximum value for n is `BUCKET_SIZE`.
   var id: NodeId
   if randomBytes(addr id, sizeof(id)) != sizeof(id):
     return err("Could not randomize bytes")
