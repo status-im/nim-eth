@@ -150,7 +150,7 @@ proc randomNodes*(d: Protocol, maxAmount: int): seq[Node] =
   d.routingTable.randomNodes(maxAmount)
 
 proc randomNodes*(d: Protocol, maxAmount: int,
-    pred: proc(x: Node): bool {.closure.}): seq[Node] =
+    pred: proc(x: Node): bool {.gcsafe, noSideEffect.}): seq[Node] =
   ## Get a `maxAmount` of random nodes from the local routing table with the
   ## `pred` predicate function applied as filter on the nodes selected.
   d.routingTable.randomNodes(maxAmount, pred)
@@ -611,6 +611,8 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
 
 proc lookupRandom*(d: Protocol): Future[DiscResult[seq[Node]]]
     {.async, raises:[Exception, Defect].} =
+  ## Perform a lookup for a random target, return the closest n nodes to the
+  ## target. Maximum value for n is `BUCKET_SIZE`.
   var id: NodeId
   if randomBytes(addr id, sizeof(id)) != sizeof(id):
     return err("Could not randomize bytes")

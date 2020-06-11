@@ -31,9 +31,7 @@ proc newNode*(r: Record): Result[Node, cstring] =
 
   let tr = ? r.toTypedRecord()
   if tr.ip.isSome() and tr.udp.isSome():
-    let
-      ip = ValidIpAddress.init(ipv4(tr.ip.get()))
-      a = Address(ip: ip, port: Port(tr.udp.get()))
+    let a = Address(ip: ipv4(tr.ip.get()), port: Port(tr.udp.get()))
 
     ok(Node(id: pk.get().toNodeId(), pubkey: pk.get() , record: r,
        address: some(a)))

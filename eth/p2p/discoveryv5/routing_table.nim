@@ -249,7 +249,7 @@ proc nodeToRevalidate*(r: RoutingTable): Node =
       return b.nodes[^1]
 
 proc randomNodes*(r: RoutingTable, maxAmount: int,
-    pred: proc(x: Node): bool {.closure.} = nil): seq[Node] =
+    pred: proc(x: Node): bool {.gcsafe, noSideEffect.} = nil): seq[Node] =
   var maxAmount = maxAmount
   let sz = r.len
   if maxAmount > sz:
