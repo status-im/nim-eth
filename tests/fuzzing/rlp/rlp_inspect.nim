@@ -1,4 +1,6 @@
-import chronicles, eth/rlp, ../fuzztest
+import
+  testutils/fuzzing, chronicles,
+  eth/rlp
 
 test:
   try:
