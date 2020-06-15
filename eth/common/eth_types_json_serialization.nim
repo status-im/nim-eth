@@ -2,11 +2,16 @@ import
   times, net,
   json_serialization, nimcrypto/[hash, utils], eth_types
 
-proc writeValue*(w: var JsonWriter, a: MDigest) {.inline.} =
+{.push raises: [SerializationError, IOError, Defect].}
+
+proc writeValue*(w: var JsonWriter, a: MDigest) =
   w.writeValue a.data.toHex(true)
 
 proc readValue*(r: var JsonReader, a: var MDigest) {.inline.} =
-  a = fromHex(type(a), r.readValue(string))
+  try:
+    a = fromHex(type(a), r.readValue(string))
+  except ValueError:
+    raiseUnexpectedValue(r, "Hex string expected")
 
 proc writeValue*(w: var JsonWriter, value: StUint) {.inline.} =
   w.writeValue $value
