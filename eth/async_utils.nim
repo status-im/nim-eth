@@ -18,3 +18,20 @@ template traceAwaitErrors*(fut: FutureBase) =
   yield f
   if not f.error.isNil:
     catchOrQuit f.error[]
+
+template awaitWithTimeout*[T](operation: Future[T],
+                              deadline: Future[void],
+                              onTimeout: untyped): T =
+  let f = operation
+  await f or deadline
+  if not f.finished:
+    cancel f
+    onTimeout
+  else:
+    f.read
+
+template awaitWithTimeout*[T](operation: Future[T],
+                              timeout: Duration,
+                              onTimeout: untyped): T =
+  awaitWithTimeout(operation, sleepAsync(timeout), onTimeout)
+
