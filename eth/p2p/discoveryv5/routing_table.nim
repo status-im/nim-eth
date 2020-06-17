@@ -9,6 +9,14 @@ type
   RoutingTable* = object
     thisNode: Node
     buckets: seq[KBucket]
+    bitsPerHop: int ## This value indicates how many bits (at minimum) you get
+    ## closer to finding your target per query. Practically, it tells you also
+    ## how often your "not in range" branch will split off. Setting this to 1
+    ## is the basic, non accelerated version, which will never split off the
+    ## not in range branch and which will result in log base2 n hops per lookup.
+    ## Setting it higher will increase the amount of splitting on a not in range
+    ## branch (thus holding more nodes with a better keyspace coverage) and this
+    ## will result in an improvement of log base(2^b) n hops per lookup.
 
   KBucket = ref object
     istart, iend: NodeId ## Range of NodeIds this KBucket covers. This is not a
@@ -27,7 +35,6 @@ type
 const
   BUCKET_SIZE* = 16
   REPLACEMENT_CACHE_SIZE* = 8
-  BITS_PER_HOP = 8
   ID_SIZE = 256
 
 proc distanceTo(n: Node, id: NodeId): UInt256 =
@@ -165,9 +172,10 @@ proc computeSharedPrefixBits(nodes: openarray[Node]): int =
 
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
-proc init*(r: var RoutingTable, thisNode: Node) {.inline.} =
+proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = 8) {.inline.} =
   r.thisNode = thisNode
   r.buckets = @[newKBucket(0.u256, high(Uint256))]
+  r.bitsPerHop = bitsPerHop
   randomize() # for later `randomNodes` selection
 
 proc splitBucket(r: var RoutingTable, index: int) =
@@ -189,13 +197,14 @@ proc addNode*(r: var RoutingTable, n: Node): Node =
   let bucket = r.bucketForNode(n.id)
   let evictionCandidate = bucket.add(n)
   if not evictionCandidate.isNil:
-    # Split if the bucket has the local node in its range or if the depth is not congruent
-    # to 0 mod BITS_PER_HOP
+    # Split if the bucket has the local node in its range or if the depth is not
+    # congruent to 0 mod `bitsPerHop`
 
     let depth = computeSharedPrefixBits(bucket.nodes)
     # TODO: Shouldn't the adding to replacement cache be done only if the bucket
     # doesn't get split?
-    if bucket.inRange(r.thisNode) or (depth mod BITS_PER_HOP != 0 and depth != ID_SIZE):
+    if bucket.inRange(r.thisNode) or
+        (depth mod r.bitsPerHop != 0 and depth != ID_SIZE):
       r.splitBucket(r.buckets.find(bucket))
       return r.addNode(n) # retry
 

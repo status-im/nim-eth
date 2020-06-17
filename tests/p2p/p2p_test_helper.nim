@@ -30,18 +30,6 @@ proc setupTestNode*(capabilities: varargs[ProtocolInfo, `protocolInfo`]): Ethere
   for capability in capabilities:
     result.addCapability capability
 
-template asyncTest*(name, body: untyped) =
-  test name:
-    proc scenario {.async.} = body
-    waitFor scenario()
-
-template procSuite*(name, body: untyped) =
-  proc suitePayload =
-    suite name:
-      body
-
-  suitePayload()
-
 proc packData*(payload: openArray[byte], pk: PrivateKey): seq[byte] =
   let
     payloadSeq = @payload

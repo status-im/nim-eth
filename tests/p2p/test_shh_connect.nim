@@ -8,8 +8,8 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  sequtils, options, unittest, tables, chronos, eth/[keys, p2p],
-  eth/p2p/rlpx_protocols/whisper_protocol, eth/p2p/peer_pool,
+  sequtils, options, tables, chronos, testutils/unittests,
+  eth/[keys, p2p], eth/p2p/rlpx_protocols/whisper_protocol, eth/p2p/peer_pool,
   ./p2p_test_helper
 
 proc resetMessageQueues(nodes: varargs[EthereumNode]) =
