@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Status Research & Development GmbH
+# Copyright (c) 2019-2020 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,7 +9,8 @@
 import
   options, os, strutils, times,
   stew/results, nat_traversal/[miniupnpc, natpmp],
-  chronicles, json_serialization/std/net
+  chronicles, json_serialization/std/net,
+  eth/common/utils
 
 type
   NatStrategy* = enum
@@ -152,6 +153,7 @@ var
   natCloseChan: Channel[bool]
 
 proc repeatPortMapping(args: PortMappingArgs) {.thread.} =
+  ignoreSignalsInThread()
   let
     (tcpPort, udpPort, description) = args
     interval = initDuration(seconds = PORT_MAPPING_INTERVAL)
@@ -180,10 +182,16 @@ proc repeatPortMapping(args: PortMappingArgs) {.thread.} =
 
 proc stopNatThread() {.noconv.} =
   # stop the thread
+
   natCloseChan.send(true)
   natThread.joinThread()
   natCloseChan.close()
+
   # delete our port mappings
+
+  # FIXME: if the initial port mapping failed because it already existed for the
+  # required external port, we should not delete it. It might have been set up
+  # by another program.
 
   # In Windows, a new thread is created for the signal handler, so we need to
   # initialise our threadvars again.
