@@ -69,7 +69,7 @@ proc pack(cmdId: CommandId, payload: openArray[byte], pk: PrivateKey): seq[byte]
 
   # TODO: There is a lot of unneeded allocations here
   let encodedData = @[cmdId.byte] & @payload
-  let signature = @(pk.sign(encodedData).tryGet().toRaw())
+  let signature = @(pk.sign(encodedData).toRaw())
   let msgHash = keccak256.digest(signature & encodedData)
   result = @(msgHash.data) & signature & encodedData
 
@@ -162,7 +162,7 @@ proc newDiscoveryProtocol*(privKey: PrivateKey, address: Address,
   result.address = address
   result.bootstrapNodes = newSeqOfCap[Node](bootstrapNodes.len)
   for n in bootstrapNodes: result.bootstrapNodes.add(newNode(n))
-  result.thisNode = newNode(privKey.toPublicKey().tryGet(), address)
+  result.thisNode = newNode(privKey.toPublicKey(), address)
   result.kademlia = newKademliaProtocol(result.thisNode, result)
 
 proc recvPing(d: DiscoveryProtocol, node: Node,

@@ -56,22 +56,22 @@ suite "ECC/ECDSA/ECDHE tests suite":
   test "Known private to known public keys (test data from Ethereum eth-keys)":
     for person in [alice, bob, eve]:
       let privkey = PrivateKey.fromHex(person[0])[]
-      var pubkeyHex = $privkey.toPublicKey()[]
+      var pubkeyHex = $privkey.toPublicKey()
       check:
         pubkeyHex == stripSpaces(person[1])
 
   test "Recover public key from message":
     for person in [alice, bob, eve]:
       let privkey = PrivateKey.fromHex(person[0])[]
-      let signature = privkey.sign(message)[]
+      let signature = privkey.sign(message)
       let recoveredKey = signature.recover(message)[]
       check:
-        $privkey.toPublicKey()[] == $recoveredKey
+        $privkey.toPublicKey() == $recoveredKey
 
   test "Signature serialization and deserialization":
     for person in [alice, bob, eve]:
       let privkey = PrivateKey.fromHex(person[0])[]
-      let signature = privkey.sign(message)[]
+      let signature = privkey.sign(message)
       let expectSignature = Signature.fromHex(stripSpaces(person[2]))[]
       check:
         $signature == $expectSignature
@@ -79,26 +79,26 @@ suite "ECC/ECDSA/ECDHE tests suite":
   test "test_recover_from_signature_obj":
     var s = PrivateKey.fromHex(pkbytes)[]
     var mhash = keccak256.digest(message)
-    var signature = s.sign(message)[]
-    var p = recover(signature, mhash)
+    var signature = s.sign(message)
+    var p = recover(signature, mhash)[]
     check:
       s.toPublicKey() == p
 
   test "test_to_address_from_public_key":
     var s = PrivateKey.fromHex(pkbytes)[]
-    var chk = s.toPublicKey()[].toAddress()
+    var chk = s.toPublicKey().toAddress()
     var expect = "0x" & address
     check chk == expect
 
   test "test_to_canonical_address_from_public_key":
     var s = PrivateKey.fromHex(pkbytes)[]
-    var chk = s.toPublicKey()[].toCanonicalAddress()
+    var chk = s.toPublicKey().toCanonicalAddress()
     var expect = fromHex(stripSpaces(address))
     check compare(chk, expect) == true
 
   test "test_to_checksum_address_from_public_key":
     var s = PrivateKey.fromHex(pkbytes)[]
-    var chk = s.toPublicKey()[].toChecksumAddress()
+    var chk = s.toPublicKey().toChecksumAddress()
     var expect = "0x" & address
     check:
       chk.toLowerAscii() == expect
@@ -159,7 +159,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
       var s = PrivateKey.fromHex(privateKeys[i])[]
       var p = PublicKey.fromHex(stripSpaces(publicKeys[i]))[]
       let expect = fromHex(stripSpaces(sharedSecrets[i]))
-      let secret = ecdhRaw(s, p)[]
+      let secret = ecdhRaw(s, p)
       check:
         expect == secret.data
 
@@ -169,9 +169,9 @@ suite "ECC/ECDSA/ECDHE tests suite":
     var expectm = """
       8ac7e464348b85d9fdfc0a81f2fdc0bbbb8ee5fb3840de6ed60ad9372e718977"""
     var s = PrivateKey.fromRaw(keccak256.digest("ecdhAgree").data)[]
-    var p = s.toPublicKey()[]
+    var p = s.toPublicKey()
     let expect = fromHex(stripSpaces(expectm))
-    let secret = ecdhRaw(s, p)[]
+    let secret = ecdhRaw(s, p)
     check:
       expect == secret.data
 
@@ -188,7 +188,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
     var s = PrivateKey.fromHex(stripSpaces(s0))[]
     var p = PublicKey.fromHex(stripSpaces(p0))[]
     let expect = fromHex(stripSpaces(e0))
-    let secret = ecdhRaw(s, p)[]
+    let secret = ecdhRaw(s, p)
     check:
       compare(expect, secret.data) == true
 
@@ -206,7 +206,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
 
     var s = PrivateKey.fromRaw(keccak256.digest("sec").data)[]
     var m = keccak256.digest("msg")
-    var sig = sign(s, m)[]
+    var sig = sign(s, m)
     var sersig = sig.toRaw()
     var key = recover(sig, m)[]
     var serkey = key.toRaw()
@@ -219,8 +219,8 @@ suite "ECC/ECDSA/ECDHE tests suite":
     for i in 1..100:
       var m = PrivateKey.random()[].toRaw
       var s = PrivateKey.random()[]
-      var key = s.toPublicKey()[]
-      let sig = sign(s, m)[]
+      var key = s.toPublicKey()
+      let sig = sign(s, m)
       let rkey = recover(sig, m)[]
       check:
         key == rkey
@@ -229,7 +229,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
     # key create/recovery test
     for i in 1..100:
       var s = PrivateKey.random()[]
-      var key = s.toPublicKey()[]
+      var key = s.toPublicKey()
       let rkey = PublicKey.fromRaw(key.toRaw())[]
       check:
         key == rkey
@@ -238,21 +238,13 @@ suite "ECC/ECDSA/ECDHE tests suite":
     # ECDHE shared secret test
     for i in 1..100:
       var aliceSecret = PrivateKey.random()[]
-      var alicePublic = aliceSecret.toPublicKey()[]
+      var alicePublic = aliceSecret.toPublicKey()
       var bobSecret = PrivateKey.random()[]
-      var bobPublic = bobSecret.toPublicKey()[]
-      var secret1 = ecdhRaw(aliceSecret, bobPublic)[]
-      var secret2 = ecdhRaw(bobSecret, alicePublic)[]
+      var bobPublic = bobSecret.toPublicKey()
+      var secret1 = ecdhRaw(aliceSecret, bobPublic)
+      var secret2 = ecdhRaw(bobSecret, alicePublic)
       check:
         secret1 == secret2
-
-  test "verfiy() checks":
-    var seckey1: PrivateKey
-    var seckey2 = PrivateKey.random()[]
-
-    check:
-      seckey1.verify() == false
-      seckey2.verify() == true
 
   test "Compressed public keys":
     let pubkeyCompressed = "03CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258CD3138".toLowerAscii

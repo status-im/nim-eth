@@ -45,13 +45,13 @@ suite "Whisper payload":
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
-      privKey.toPublicKey()[] == decoded.get().src.get()
+      privKey.toPublicKey() == decoded.get().src.get()
       decoded.get().padding.get().len == 186 # 256 -1 -1 -3 -65
 
   test "should roundtrip with asymmetric encryption":
     let privKey = PrivateKey.random()[]
 
-    let payload = Payload(dst: some(privKey.toPublicKey()[]),
+    let payload = Payload(dst: some(privKey.toPublicKey()),
       payload: @[byte 0, 1, 2])
     let encoded = whisper.encode(payload)
 
@@ -93,7 +93,7 @@ suite "Whisper payload padding":
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
-      privKey.toPublicKey()[] == decoded.get().src.get()
+      privKey.toPublicKey() == decoded.get().src.get()
       decoded.get().padding.isSome()
       decoded.get().padding.get().len == 256 # as dataLen == 256
 
@@ -118,7 +118,7 @@ suite "Whisper payload padding":
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
-      privKey.toPublicKey()[] == decoded.get().src.get()
+      privKey.toPublicKey() == decoded.get().src.get()
       decoded.get().padding.isSome()
       decoded.get().padding.get().len == 1 # as dataLen == 255
 
@@ -156,7 +156,7 @@ suite "Whisper payload padding":
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
-      privKey.toPublicKey()[] == decoded.get().src.get()
+      privKey.toPublicKey() == decoded.get().src.get()
       decoded.get().padding.isSome()
       payload.padding.get() == decoded.get().padding.get()
 
@@ -171,7 +171,7 @@ suite "Whisper payload padding":
     check:
       decoded.isSome()
       payload.payload == decoded.get().payload
-      privKey.toPublicKey()[] == decoded.get().src.get()
+      privKey.toPublicKey() == decoded.get().src.get()
       decoded.get().padding.isNone()
 
 # example from https://github.com/paritytech/parity-ethereum/blob/93e1040d07e385d1219d00af71c46c720b0a1acf/whisper/src/message.rs#L439
@@ -302,7 +302,7 @@ suite "Whisper filter":
   test "should notify filter on message with asymmetric encryption":
     let privKey = PrivateKey.random()[]
     let topic = [byte 0, 0, 0, 0]
-    let msg = prepFilterTestMsg(pubKey = some(privKey.toPublicKey()[]),
+    let msg = prepFilterTestMsg(pubKey = some(privKey.toPublicKey()),
                                 topic = topic)
 
     var filters = initTable[string, Filter]()
@@ -323,7 +323,7 @@ suite "Whisper filter":
     let msg = prepFilterTestMsg(src = some(privKey), topic = topic)
 
     var filters = initTable[string, Filter]()
-    let filter = initFilter(src = some(privKey.toPublicKey()[]),
+    let filter = initFilter(src = some(privKey.toPublicKey()),
                            topics = @[topic])
     let filterId = filters.subscribeFilter(filter)
 

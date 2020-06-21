@@ -90,20 +90,20 @@ suite "Ethereum RLPx encryption/decryption test suite":
   proc newTestHandshake(flags: set[HandshakeFlag]): Handshake =
     if Initiator in flags:
       let pk = PrivateKey.fromHex(testValue("initiator_private_key"))[]
-      let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey()[])
+      let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey())
       result = Handshake.tryInit(kp, flags)[]
       let epki = testValue("initiator_ephemeral_private_key")
       result.ephemeral.seckey = PrivateKey.fromHex(epki)[]
-      result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()[]
+      result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()
       let nonce = fromHex(stripSpaces(testValue("initiator_nonce")))
       result.initiatorNonce[0..^1] = nonce[0..^1]
     elif Responder in flags:
       let pk = PrivateKey.fromHex(testValue("receiver_private_key"))[]
-      let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey()[])
+      let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey())
       result = Handshake.tryInit(kp, flags)[]
       let epkr = testValue("receiver_ephemeral_private_key")
       result.ephemeral.seckey = PrivateKey.fromHex(epkr)[]
-      result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()[]
+      result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()
       let nonce = fromHex(stripSpaces(testValue("receiver_nonce")))
       result.responderNonce[0..^1] = nonce[0..^1]
 

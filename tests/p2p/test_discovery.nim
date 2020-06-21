@@ -22,7 +22,7 @@ proc test() {.async.} =
       bootNodeKey = PrivateKey.fromHex(
         "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
       bootNodeAddr = localAddress(20301)
-      bootENode = ENode(pubkey: bootNodeKey.toPublicKey()[], address: bootNodeAddr)
+      bootENode = ENode(pubkey: bootNodeKey.toPublicKey(), address: bootNodeAddr)
       bootNode = await startDiscoveryNode(bootNodeKey, bootNodeAddr, @[])
 
     test "Discover nodes":

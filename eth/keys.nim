@@ -53,20 +53,18 @@ type
 proc random*(T: type PrivateKey): SkResult[T] =
   SkSecretKey.random().mapConvert(T)
 
-proc fromRaw*(T: type PrivateKey, data: openArray[byte]): SkResult[T] =
+func fromRaw*(T: type PrivateKey, data: openArray[byte]): SkResult[T] =
   SkSecretKey.fromRaw(data).mapConvert(T)
 
-proc fromHex*(T: type PrivateKey, data: string): SkResult[T] =
+func fromHex*(T: type PrivateKey, data: string): SkResult[T] =
   SkSecretKey.fromHex(data).mapConvert(T)
 
-proc toRaw*(seckey: PrivateKey): array[SkRawSecretKeySize, byte] {.borrow.}
+func toRaw*(seckey: PrivateKey): array[SkRawSecretKeySize, byte] =
+  SkSecretKey(seckey).toRaw()
 
-proc toPublicKey*(seckey: PrivateKey): SkResult[PublicKey] =
-  SkSecretKey(seckey).toPublicKey().mapConvert(PublicKey)
+func toPublicKey*(seckey: PrivateKey): PublicKey {.borrow.}
 
-proc verify*(seckey: PrivateKey): bool {.borrow.}
-
-proc fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
+func fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
   if data.len() == SkRawCompressedPublicKeySize:
     return SkPublicKey.fromRaw(data).mapConvert(PublicKey)
 
@@ -80,44 +78,42 @@ proc fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
 
   SkPublicKey.fromRaw(d).mapConvert(PublicKey)
 
-proc fromHex*(T: type PublicKey, data: string): SkResult[T] =
+func fromHex*(T: type PublicKey, data: string): SkResult[T] =
   T.fromRaw(? seq[byte].fromHex(data))
 
-proc toRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] =
+func toRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] =
   let tmp = SkPublicKey(pubkey).toRaw()
   copyMem(addr result[0], unsafeAddr tmp[1], 64)
 
-proc toRawCompressed*(pubkey: PublicKey): array[33, byte] {.borrow.}
+func toRawCompressed*(pubkey: PublicKey): array[33, byte] {.borrow.}
 
 proc random*(T: type KeyPair): SkResult[T] =
   let tmp = ?SkKeypair.random()
   ok(T(seckey: PrivateKey(tmp.seckey), pubkey: PublicKey(tmp.pubkey)))
 
-proc toKeyPair*(seckey: PrivateKey): SkResult[KeyPair] =
-  let
-    pubkey = seckey.toPublicKey()
-  pubkey and ok(KeyPair(seckey: seckey, pubkey: pubkey[]))
+func toKeyPair*(seckey: PrivateKey): KeyPair =
+  KeyPair(seckey: seckey, pubkey: seckey.toPublicKey())
 
-proc fromRaw*(T: type Signature, data: openArray[byte]): SkResult[T] =
+func fromRaw*(T: type Signature, data: openArray[byte]): SkResult[T] =
   SkRecoverableSignature.fromRaw(data).mapConvert(Signature)
 
-proc fromHex*(T: type Signature, data: string): SkResult[T] =
+func fromHex*(T: type Signature, data: string): SkResult[T] =
   T.fromRaw(? seq[byte].fromHex(data))
 
-proc toRaw*(sig: Signature): array[RawSignatureSize, byte] {.borrow.}
+func toRaw*(sig: Signature): array[RawSignatureSize, byte] {.borrow.}
 
-proc fromRaw*(T: type SignatureNR, data: openArray[byte]): SkResult[T] =
+func fromRaw*(T: type SignatureNR, data: openArray[byte]): SkResult[T] =
   SkSignature.fromRaw(data).mapConvert(SignatureNR)
 
-proc toRaw*(sig: SignatureNR): array[RawSignatureNRSize, byte] {.borrow.}
+func toRaw*(sig: SignatureNR): array[RawSignatureNRSize, byte] {.borrow.}
 
-proc toAddress*(pubkey: PublicKey, with0x = true): string =
+func toAddress*(pubkey: PublicKey, with0x = true): string =
   ## Convert public key to hexadecimal string address.
   var hash = keccak256.digest(pubkey.toRaw())
   result = if with0x: "0x" else: ""
   result.add(toHex(toOpenArray(hash.data, 12, len(hash.data) - 1)))
 
-proc toChecksumAddress*(pubkey: PublicKey, with0x = true): string =
+func toChecksumAddress*(pubkey: PublicKey, with0x = true): string =
   ## Convert public key to checksumable mixed-case address (EIP-55).
   result = if with0x: "0x" else: ""
   var hash1 = keccak256.digest(pubkey.toRaw())
@@ -134,7 +130,7 @@ proc toChecksumAddress*(pubkey: PublicKey, with0x = true): string =
         let ch = chr(ord(hhash1[i]) - ord('a') + ord('A'))
         result.add(ch)
 
-proc validateChecksumAddress*(a: string): bool =
+func validateChecksumAddress*(a: string): bool =
   ## Validate checksumable mixed-case address (EIP-55).
   var address = ""
   var check = "0x"
@@ -180,54 +176,50 @@ func `$`*(seckey: PrivateKey): string =
   ## Convert private key to hexadecimal string representation
   toHex(seckey.toRaw())
 
-proc `==`*(lhs, rhs: PublicKey): bool {.borrow.}
-proc `==`*(lhs, rhs: Signature): bool {.borrow.}
-proc `==`*(lhs, rhs: SignatureNR): bool {.borrow.}
+func `==`*(lhs, rhs: PublicKey): bool {.borrow.}
+func `==`*(lhs, rhs: Signature): bool {.borrow.}
+func `==`*(lhs, rhs: SignatureNR): bool {.borrow.}
 
-proc clear*(v: var PrivateKey) {.borrow.}
-proc clear*(v: var PublicKey) {.borrow.}
-proc clear*(v: var Signature) {.borrow.}
-proc clear*(v: var SignatureNR) {.borrow.}
-proc clear*(v: var KeyPair) =
+func clear*(v: var PrivateKey) {.borrow.}
+func clear*(v: var KeyPair) =
   v.seckey.clear()
-  v.pubkey.clear()
 
-proc clear*(v: var SharedSecret) = burnMem(v.data)
-proc clear*(v: var SharedSecretFull) = burnMem(v.data)
+func clear*(v: var SharedSecret) = burnMem(v.data)
+func clear*(v: var SharedSecretFull) = burnMem(v.data)
 
-proc sign*(seckey: PrivateKey, msg: SkMessage): SkResult[Signature] =
-  signRecoverable(SkSecretKey(seckey), msg).mapConvert(Signature)
+func sign*(seckey: PrivateKey, msg: SkMessage): Signature =
+  Signature(signRecoverable(SkSecretKey(seckey), msg))
 
-proc sign*(seckey: PrivateKey, msg: openArray[byte]): SkResult[Signature] =
+func sign*(seckey: PrivateKey, msg: openArray[byte]): Signature =
   let hash = keccak256.digest(msg)
   sign(seckey, hash)
 
-proc signNR*(seckey: PrivateKey, msg: SkMessage): SkResult[SignatureNR] =
-  sign(SkSecretKey(seckey), msg).mapConvert(SignatureNR)
+func signNR*(seckey: PrivateKey, msg: SkMessage): SignatureNR =
+  SignatureNR(sign(SkSecretKey(seckey), msg))
 
-proc signNR*(seckey: PrivateKey, msg: openArray[byte]): SkResult[SignatureNR] =
+func signNR*(seckey: PrivateKey, msg: openArray[byte]): SignatureNR =
   let hash = keccak256.digest(msg)
   signNR(seckey, hash)
 
-proc recover*(sig: Signature, msg: SkMessage): SkResult[PublicKey] =
+func recover*(sig: Signature, msg: SkMessage): SkResult[PublicKey] =
   recover(SkRecoverableSignature(sig), msg).mapConvert(PublicKey)
 
-proc recover*(sig: Signature, msg: openArray[byte]): SkResult[PublicKey] =
+func recover*(sig: Signature, msg: openArray[byte]): SkResult[PublicKey] =
   let hash = keccak256.digest(msg)
   recover(sig, hash)
 
-proc verify*(sig: SignatureNR, msg: SkMessage, key: PublicKey): bool =
+func verify*(sig: SignatureNR, msg: SkMessage, key: PublicKey): bool =
   verify(SkSignature(sig), msg, SkPublicKey(key))
 
-proc verify*(sig: SignatureNR, msg: openArray[byte], key: PublicKey): bool =
+func verify*(sig: SignatureNR, msg: openArray[byte], key: PublicKey): bool =
   let hash = keccak256.digest(msg)
   verify(sig, hash, key)
 
-proc ecdhRaw*(seckey: PrivateKey, pubkey: PublicKey): SkResult[SharedSecret] =
-  ecdhRaw(
-    SkSecretKey(seckey), SkPublicKey(pubkey)).map proc(v: auto): SharedSecret =
-      # Remove first byte!
-      copyMem(addr result.data[0], unsafeAddr(v.data[1]), sizeof(result))
+func ecdhRaw*(seckey: PrivateKey, pubkey: PublicKey): SharedSecret =
+  let tmp = ecdhRaw(SkSecretKey(seckey), SkPublicKey(pubkey))
 
-proc ecdhRawFull*(seckey: PrivateKey, pubkey: PublicKey): SkResult[SharedSecretFull] =
-  ecdhRaw(SkSecretKey(seckey), SkPublicKey(pubkey)).mapconvert(SharedSecretFull)
+  # Remove first byte!
+  copyMem(addr result.data[0], unsafeAddr(tmp.data[1]), sizeof(result))
+
+func ecdhRawFull*(seckey: PrivateKey, pubkey: PublicKey): SharedSecretFull =
+  SharedSecretFull(ecdhRaw(SkSecretKey(seckey), SkPublicKey(pubkey)))
