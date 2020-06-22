@@ -183,7 +183,7 @@ suite "Discovery v5 Tests":
     let targetId = toNodeId(PublicKey.fromHex(targetKey)[])
 
     for (key, d) in testValues:
-      let id = toNodeId(PrivateKey.fromHex(key)[].toPublicKey()[])
+      let id = toNodeId(PrivateKey.fromHex(key)[].toPublicKey())
       check logDist(targetId, id) == d
 
   test "Distance to id check":

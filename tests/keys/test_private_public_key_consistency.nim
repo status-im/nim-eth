@@ -19,7 +19,7 @@ suite "Testing private -> public key conversion":
     for person in [alice, bob, eve]:
       let
         privKey = PrivateKey.fromHex(person.privkey)[]
-        pubKey = privKey.toPublicKey()[]
+        pubKey = privKey.toPublicKey()
 
       check:
         # Compare as strings

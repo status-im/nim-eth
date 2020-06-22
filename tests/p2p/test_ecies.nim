@@ -70,7 +70,7 @@ suite "ECIES test suite":
     var decr = newSeq[byte](len(m))
     var shmac = [0x13'u8, 0x13'u8]
     var s = PrivateKey.random()[]
-    var p = s.toPublicKey()[]
+    var p = s.toPublicKey()
 
     eciesEncrypt(plain, encr, p).expect("encryption should succeed")
     eciesDecrypt(encr, decr, s).expect("decryption should succeed")

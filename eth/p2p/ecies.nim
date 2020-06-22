@@ -115,7 +115,7 @@ proc eciesEncrypt*(input: openarray[byte], output: var openarray[byte],
 
   var
     ephemeral = ? KeyPair.random().mapErrTo(RandomError)
-    secret = ? ecdhRaw(ephemeral.seckey, pubkey).mapErrTo(EcdhError)
+    secret = ecdhRaw(ephemeral.seckey, pubkey)
     material = kdf(secret.data)
 
   clear(secret)
@@ -184,7 +184,7 @@ proc eciesDecrypt*(input: openarray[byte],
 
   var
     pubkey = ? PublicKey.fromRaw(header.pubkey).mapErrTo(IncorrectKey)
-    secret = ? ecdhRaw(seckey, pubkey).mapErrTo(EcdhError)
+    secret = ecdhRaw(seckey, pubkey)
 
   var material = kdf(secret.data)
   burnMem(secret)

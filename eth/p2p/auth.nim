@@ -136,13 +136,12 @@ proc authMessagePreEIP8(h: var Handshake,
   outlen = 0
   let header = cast[ptr AuthMessageV4](addr buffer[0])
 
-  var secret = ? ecdhRaw(h.host.seckey, pubkey).mapErrTo(EcdhError)
+  var secret = ecdhRaw(h.host.seckey, pubkey)
   let xornonce = secret.data xor h.initiatorNonce
 
   secret.clear()
 
-  let signature = ? sign(
-    h.ephemeral.seckey, SkMessage(data: xornonce)).mapErrTo(SignatureError)
+  let signature = sign(h.ephemeral.seckey, SkMessage(data: xornonce))
 
   h.remoteHPubkey = pubkey
   header.signature = signature.toRaw()
@@ -178,13 +177,12 @@ proc authMessageEIP8(h: var Handshake,
   doAssert(EIP8 in h.flags)
   outlen = 0
   var
-    secret = ? ecdhRaw(h.host.seckey, pubkey).mapErrTo(EcdhError)
+    secret = ecdhRaw(h.host.seckey, pubkey)
     xornonce = secret.data xor h.initiatorNonce
 
   secret.clear()
 
-  let signature = ? sign(
-    h.ephemeral.seckey, SkMessage(data: xornonce)).mapErrTo(SignatureError)
+  let signature = sign(h.ephemeral.seckey, SkMessage(data: xornonce))
 
   h.remoteHPubkey = pubkey
   var payload = rlp.encodeList(signature.toRaw(),
@@ -348,7 +346,7 @@ proc decodeAuthMessageV4(h: var Handshake, m: openarray[byte]): AuthResult[void]
     pubkey = ? PublicKey.fromRaw(header.pubkey).mapErrTo(InvalidPubKey)
     signature = ? Signature.fromRaw(header.signature).mapErrTo(SignatureError)
 
-  var secret = ? ecdhRaw(h.host.seckey, pubkey).mapErrTo(EcdhError)
+  var secret = ecdhRaw(h.host.seckey, pubkey)
   let xornonce = secret.data xor header.nonce
 
   secret.clear()
@@ -393,7 +391,7 @@ proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthResult[voi
       pubkey = ? PublicKey.fromRaw(pubkeyBr).mapErrTo(InvalidPubKey)
       nonce = toArray(KeyLength, nonceBr)
 
-    var secret = ? ecdhRaw(h.host.seckey, pubkey).mapErrTo(EcdhError)
+    var secret = ecdhRaw(h.host.seckey, pubkey)
 
     let xornonce = nonce xor secret.data
     secret.clear()
@@ -495,7 +493,7 @@ proc getSecrets*(
     secret: ConnectionSecret
 
   # ecdhe-secret = ecdh.agree(ephemeral-privkey, remote-ephemeral-pubk)
-  var shsec = ? ecdhRaw(h.ephemeral.seckey, h.remoteEPubkey).mapErrTo(EcdhError)
+  var shsec = ecdhRaw(h.ephemeral.seckey, h.remoteEPubkey)
 
   # shared-secret = keccak(ecdhe-secret || keccak(nonce || initiator-nonce))
   ctx0.init()

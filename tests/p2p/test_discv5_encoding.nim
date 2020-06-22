@@ -136,8 +136,7 @@ suite "Discovery v5 Cryptographic Primitives":
       priv = PrivateKey.fromHex(secretKey)[]
     let eph = ecdhRawFull(priv, pub)
     check:
-      eph.isOk()
-      eph[].data == hexToSeqByte(sharedSecret)
+      eph.data == hexToSeqByte(sharedSecret)
 
   test "Key Derivation":
     # const
@@ -169,8 +168,7 @@ suite "Discovery v5 Cryptographic Primitives":
       privKey = PrivateKey.fromHex(localSecretKey)[]
       signature = signIDNonce(privKey, hexToByteArray[idNonceSize](idNonce),
         hexToByteArray[64](ephemeralKey))
-    check signature.isOK()
-    check signature[].toRaw() == hexToByteArray[64](idNonceSig)
+    check signature.toRaw() == hexToByteArray[64](idNonceSig)
 
   test "Encryption/Decryption":
     const
@@ -237,7 +235,7 @@ suite "Discovery v5 Additional":
         Port(9000)).expect("Properly intialized private key")
       node = newNode(enrRec).expect("Properly initialized record")
       nonce = hexToByteArray[authTagSize]("0x27b5af763c446acd2749fe8e")
-      pubKey = PrivateKey.random()[].toPublicKey()[]
+      pubKey = PrivateKey.random()[].toPublicKey()
       nodeId = pubKey.toNodeId()
       idNonce = hexToByteArray[idNonceSize](
         "0xa77e3aa0c144ae7c0a3af73692b7d6e5b7a2fdc0eda16e8d5e6cb0d08e88dd04")
@@ -248,7 +246,7 @@ suite "Discovery v5 Additional":
     var rlp = rlpFromBytes(auth)
     let authHeader = rlp.read(AuthHeader)
     var newNode: Node
-    let secrets = c.decodeAuthResp(privKey.toPublicKey()[].toNodeId(),
+    let secrets = c.decodeAuthResp(privKey.toPublicKey().toNodeId(),
       authHeader, whoareyou, newNode)
 
     # TODO: Test cases with invalid nodeId and invalid signature, the latter

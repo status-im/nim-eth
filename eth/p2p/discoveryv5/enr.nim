@@ -69,7 +69,7 @@ proc makeEnrAux(seqNum: uint64, pk: PrivateKey,
   record.pairs = @pairs
   record.seqNum = seqNum
 
-  let pubkey = ? pk.toPublicKey()
+  let pubkey = pk.toPublicKey()
 
   record.pairs.add(("id", Field(kind: kString, str: "v4")))
   record.pairs.add(("secp256k1",
@@ -94,7 +94,7 @@ proc makeEnrAux(seqNum: uint64, pk: PrivateKey,
     var w = initRlpList(record.pairs.len * 2 + 1)
     w.append(seqNum, record.pairs)
 
-  let sig = ? signNR(pk, toSign)
+  let sig = signNR(pk, toSign)
 
   record.raw = block:
     var w = initRlpList(record.pairs.len * 2 + 2)

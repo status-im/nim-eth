@@ -297,7 +297,7 @@ proc createKeyFileJson*(seckey: PrivateKey,
 
   ok(%*
     {
-      "address": (? seckey.toPublicKey().mapErrTo(IncorrectPrivateKey)).toAddress(false),
+      "address": seckey.toPublicKey().toAddress(false),
       "crypto": {
         "cipher": $cryptkind,
         "cipherparams": {

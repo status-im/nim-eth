@@ -292,11 +292,8 @@ proc encode*(self: Payload): Option[seq[byte]] =
 
   if self.src.isSome(): # Private key present - signature requested
     let sig = sign(self.src.get(), plain)
-    if sig.isErr:
-      notice "Signing message failed", err = sig.error
-      return
 
-    plain.add sig[].toRaw()
+    plain.add sig.toRaw()
 
   if self.dst.isSome(): # Asymmetric key present - encryption requested
     var res = newSeq[byte](eciesEncryptedLength(plain.len))
@@ -626,7 +623,7 @@ proc notify*(filters: var Filters, msg: Message) {.gcsafe.} =
      if filter.privateKey.isSome():
        keyHash = keccak256.digest(filter.privateKey.get().toRaw())
        # TODO: Get rid of the hash and just use pubkey to compare?
-       dst = some(toPublicKey(filter.privateKey.get()).tryGet())
+       dst = some(toPublicKey(filter.privateKey.get()))
      elif filter.symKey.isSome():
        keyHash = keccak256.digest(filter.symKey.get())
      # else:

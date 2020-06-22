@@ -63,12 +63,12 @@ proc idNonceHash(nonce, ephkey: openarray[byte]): MDigest[256] =
   ctx.finish()
 
 proc signIDNonce*(privKey: PrivateKey, idNonce, ephKey: openarray[byte]):
-    Result[SignatureNR, cstring] =
+    SignatureNR =
   signNR(privKey, idNonceHash(idNonce, ephKey))
 
 proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
-    idNonce: openarray[byte]): Result[HandshakeSecrets, cstring] =
-  let eph = ? ecdhRawFull(priv, pub)
+    idNonce: openarray[byte]): HandshakeSecrets =
+  let eph = ecdhRawFull(priv, pub)
 
   var info = newSeqOfCap[byte](idNoncePrefix.len + 32 * 2)
   for i, c in keyAgreementPrefix: info.add(byte(c))
@@ -79,7 +79,7 @@ proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
   static: assert(sizeof(secrets) == aesKeySize * 3)
   var res = cast[ptr UncheckedArray[byte]](addr secrets)
   hkdf(sha256, eph.data, idNonce, info, toOpenArray(res, 0, sizeof(secrets) - 1))
-  ok(secrets)
+  secrets
 
 proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
   var ectx: GCM[aes128]
@@ -102,11 +102,11 @@ proc encodeAuthHeader*(c: Codec,
     resp.record = ln.record
 
   let ephKeys = ? KeyPair.random()
-  let signature = ? signIDNonce(c.privKey, challenge.idNonce,
+  let signature = signIDNonce(c.privKey, challenge.idNonce,
     ephKeys.pubkey.toRaw)
   resp.signature = signature.toRaw
 
-  let secrets = ? deriveKeys(ln.id, toId, ephKeys.seckey, challenge.pubKey,
+  let secrets = deriveKeys(ln.id, toId, ephKeys.seckey, challenge.pubKey,
     challenge.idNonce)
 
   let respRlp = rlp.encode(resp)
@@ -234,8 +234,8 @@ proc decodeAuthResp*(c: Codec, fromId: NodeId, head: AuthHeader,
 
   let ephKey = ? PublicKey.fromRaw(head.ephemeralKey).mapErrTo(HandshakeError)
 
-  let secrets = ? deriveKeys(fromId, c.localNode.id, c.privKey, ephKey,
-    challenge.idNonce).mapErrTo(HandshakeError)
+  let secrets =
+    deriveKeys(fromId, c.localNode.id, c.privKey, ephKey, challenge.idNonce)
 
   var zeroNonce: array[gcmNonceSize, byte]
   let respData = decryptGCM(secrets.authRespKey, zeroNonce, head.response, [])
