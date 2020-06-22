@@ -153,7 +153,7 @@ proc binaryGetBucketForNode(buckets: openarray[KBucket],
   if result.isNil:
     raise (ref Defect)(msg: "No bucket found for node with id " & $id)
 
-proc computeSharedPrefixBits(nodes: openarray[Node]): int =
+proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
   ## Count the number of prefix bits shared by all nodes.
   if nodes.len < 2:
     return ID_SIZE
@@ -163,13 +163,14 @@ proc computeSharedPrefixBits(nodes: openarray[Node]): int =
 
   for i in 1 .. ID_SIZE:
     mask = mask or (one shl (ID_SIZE - i))
-    let reference = nodes[0].id and mask
+    let reference = nodes[0] and mask
     for j in 1 .. nodes.high:
-      if (nodes[j].id and mask) != reference: return i - 1
+      if (nodes[j] and mask) != reference: return i - 1
 
   for n in nodes:
-    echo n.id.toHex()
+    echo n.toHex()
 
+  # Reaching this would mean that all node ids are equal
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
 proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = 8) {.inline.} =
@@ -199,8 +200,10 @@ proc addNode*(r: var RoutingTable, n: Node): Node =
   if not evictionCandidate.isNil:
     # Split if the bucket has the local node in its range or if the depth is not
     # congruent to 0 mod `bitsPerHop`
-
-    let depth = computeSharedPrefixBits(bucket.nodes)
+    #
+    # Calculate the prefix shared by all nodes in the bucket's range, not the
+    # ones actually in the bucket.
+    let depth = computeSharedPrefixBits(@[bucket.istart, bucket.iend])
     # TODO: Shouldn't the adding to replacement cache be done only if the bucket
     # doesn't get split?
     if bucket.inRange(r.thisNode) or

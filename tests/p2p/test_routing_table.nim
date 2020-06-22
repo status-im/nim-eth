@@ -40,22 +40,28 @@ suite "Routing Table Tests":
     let node = generateNode()
     var table: RoutingTable
 
-    # bitsPerHop = 2, allow not in range branch to split once.
+    # bitsPerHop = 2, allow not in range branch to split once (2 buckets).
     table.init(node, 2)
 
-    # Add 16 nodes, distance 256
-    for i in 0..<BUCKET_SIZE:
-      check table.addNode(node.nodeAtDistance(256)) == nil
+    # Add 16 nodes, distance 256 from `node`, but all with 2 bits shared prefix
+    # among themselves.
+    let firstNode = node.nodeAtDistance(256)
+    check table.addNode(firstNode) == nil
+    for n in 1..<BUCKET_SIZE:
+      check table.addNode(firstNode.nodeAtDistance(254)) == nil
 
-    # Add another 32 nodes, to make the not in range branch split and be be sure
-    # both buckets are full.
-    # TODO: Could improve by adding specific nodes for one of the buckets.
-    for i in 0..<BUCKET_SIZE*2:
-      discard table.addNode(node.nodeAtDistance(256))
+    # Add 16 more nodes with only 1 bit shared prefix with previous 16. This
+    # should cause the initial bucket to split and and fill the second bucket
+    # with the 16 new entries.
+    for n in 0..<16:
+      check table.addNode(firstNode.nodeAtDistance(255)) == nil
 
-    # Adding another should fail as both buckets should be full and not be
-    # allowed to split another time
+    # Adding another should fail as both buckets will be full and not be
+    # allowed to split another time.
     check table.addNode(node.nodeAtDistance(256)) != nil
+    # And also when targetting one of the two specific buckets.
+    check table.addNode(firstNode.nodeAtDistance(255)) != nil
+    check table.addNode(firstNode.nodeAtDistance(254)) != nil
     # This add should be allowed as it is on the branch where the own node's id
     # id belongs to.
     check table.addNode(node.nodeAtDistance(255)) == nil
