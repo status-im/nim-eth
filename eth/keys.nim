@@ -66,7 +66,7 @@ func toPublicKey*(seckey: PrivateKey): PublicKey {.borrow.}
 
 func fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
   if data.len() == SkRawCompressedPublicKeySize:
-    return SkPublicKey.fromRaw(data).mapConvert(PublicKey)
+    return SkPublicKey.fromRaw(data).mapConvert(T)
 
   if len(data) < SkRawPublicKeySize - 1:
     return err(static(
@@ -76,7 +76,7 @@ func fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
   d[0] = 0x04'u8
   copyMem(addr d[1], unsafeAddr data[0], 64)
 
-  SkPublicKey.fromRaw(d).mapConvert(PublicKey)
+  SkPublicKey.fromRaw(d).mapConvert(T)
 
 func fromHex*(T: type PublicKey, data: string): SkResult[T] =
   T.fromRaw(? seq[byte].fromHex(data))
@@ -95,7 +95,7 @@ func toKeyPair*(seckey: PrivateKey): KeyPair =
   KeyPair(seckey: seckey, pubkey: seckey.toPublicKey())
 
 func fromRaw*(T: type Signature, data: openArray[byte]): SkResult[T] =
-  SkRecoverableSignature.fromRaw(data).mapConvert(Signature)
+  SkRecoverableSignature.fromRaw(data).mapConvert(T)
 
 func fromHex*(T: type Signature, data: string): SkResult[T] =
   T.fromRaw(? seq[byte].fromHex(data))
@@ -103,7 +103,7 @@ func fromHex*(T: type Signature, data: string): SkResult[T] =
 func toRaw*(sig: Signature): array[RawSignatureSize, byte] {.borrow.}
 
 func fromRaw*(T: type SignatureNR, data: openArray[byte]): SkResult[T] =
-  SkSignature.fromRaw(data).mapConvert(SignatureNR)
+  SkSignature.fromRaw(data).mapConvert(T)
 
 func toRaw*(sig: SignatureNR): array[RawSignatureNRSize, byte] {.borrow.}
 
