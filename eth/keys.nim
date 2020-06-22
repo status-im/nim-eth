@@ -88,7 +88,7 @@ func toRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] =
 func toRawCompressed*(pubkey: PublicKey): array[33, byte] {.borrow.}
 
 proc random*(T: type KeyPair): SkResult[T] =
-  let tmp = ?SkKeypair.random()
+  let tmp = ? SkKeypair.random()
   ok(T(seckey: PrivateKey(tmp.seckey), pubkey: PublicKey(tmp.pubkey)))
 
 func toKeyPair*(seckey: PrivateKey): KeyPair =
