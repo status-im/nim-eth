@@ -666,7 +666,7 @@ proc revalidateNode*(d: Protocol, n: Node)
     # peers in the DHT
     if n.record notin d.bootstrapRecords:
       trace "Revalidation of node failed, removing node", record = n.record
-      d.routingTable.removeNode(n)
+      d.routingTable.replaceNode(n)
       # Remove shared secrets when removing the node from routing table.
       # This might be to direct, so we could keep these longer. But better
       # would be to simply not remove the nodes immediatly but only after x
