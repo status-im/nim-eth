@@ -100,6 +100,30 @@ suite "Routing Table Tests":
       # This node should be removed
       check (table.getNode(bucketNodes[bucketNodes.high].id)).isNone()
 
+  test "Empty bucket":
+    let node = generateNode()
+    var table: RoutingTable
+
+    # bitsPerHop = 1 -> Split only the branch in range of own id
+    table.init(node, 1)
+
+    check table.nodeToRevalidate().isNil()
+
+    # try to replace not existing node
+    table.replaceNode(generateNode())
+    check table.len == 0
+
+    let addedNode = generateNode()
+    check table.addNode(addedNode) == nil
+    check table.len == 1
+
+    # try to replace not existing node
+    table.replaceNode(generateNode())
+    check table.len == 1
+
+    table.replaceNode(addedNode)
+    check table.len == 0
+
   test "Empty replacement cache":
     let node = generateNode()
     var table: RoutingTable
@@ -116,7 +140,37 @@ suite "Routing Table Tests":
     # This node should still be removed
     check (table.getNode(bucketNodes[bucketNodes.high].id)).isNone()
 
-  test "Double replacement":
+  test "Double add":
+    let node = generateNode()
+    var table: RoutingTable
+
+    # bitsPerHop = 1 -> Split only the branch in range of own id
+    table.init(node, 1)
+
+    let doubleNode = node.nodeAtDistance(256)
+    # Try to add the node twice
+    check table.addNode(doubleNode) == nil
+    check table.addNode(doubleNode) == nil
+
+    for n in 0..<BUCKET_SIZE-1:
+      check table.addNode(node.nodeAtDistance(256)) == nil
+
+    check table.addNode(node.nodeAtDistance(256)) != nil
+    # Check when adding again once the bucket is full
+    check table.addNode(doubleNode) == nil
+
+    # Test if its order is preserved, there is one node in replacement cache
+    # which is why we run `BUCKET_SIZE` times.
+    for n in 0..<BUCKET_SIZE:
+      table.replaceNode(table.nodeToRevalidate())
+
+    let result = table.getNode(doubleNode.id)
+    check:
+      result.isSome()
+      result.get() == doubleNode
+      table.len == 1
+
+  test "Double replacement add":
     let node = generateNode()
     var table: RoutingTable
 
@@ -145,3 +199,56 @@ suite "Routing Table Tests":
     block:
       # This node should be removed
       check (table.getNode(bucketNodes[bucketNodes.high].id)).isNone()
+
+  test "Just seen":
+    let node = generateNode()
+    var table: RoutingTable
+
+    # bitsPerHop = 1 -> Split only the branch in range of own id
+    table.init(node, 1)
+
+    # create a full bucket
+    let bucketNodes = node.nodesAtDistance(256, BUCKET_SIZE)
+    for n in bucketNodes:
+      check table.addNode(n) == nil
+
+    # swap seen order
+    for n in bucketNodes:
+      table.setJustSeen(n)
+
+    for n in bucketNodes:
+      table.replaceNode(table.nodeToRevalidate())
+      check (table.getNode(n.id)).isNone()
+
+  test "Just seen replacement":
+    let node = generateNode()
+    var table: RoutingTable
+
+    # bitsPerHop = 1 -> Split only the branch in range of own id
+    table.init(node, 1)
+
+    # create a full bucket
+    let bucketNodes = node.nodesAtDistance(256, BUCKET_SIZE)
+    for n in bucketNodes:
+      check table.addNode(n) == nil
+
+    # create a full replacement cache
+    let replacementNodes = node.nodesAtDistance(256, REPLACEMENT_CACHE_SIZE)
+    for n in replacementNodes:
+      check table.addNode(n) != nil
+
+    for i in countdown(replacementNodes.high, 0):
+      table.replaceNode(table.nodeToRevalidate())
+      table.setJustSeen(replacementNodes[i])
+
+    for n in replacementNodes:
+      let result = table.getNode(n.id)
+      check:
+        result.isSome()
+        result.get() == n
+
+    for i in 0..<int(BUCKET_SIZE/2):
+      let result = table.getNode(bucketNodes[i].id)
+      check:
+        result.isSome()
+        result.get() == bucketNodes[i]
