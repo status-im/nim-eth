@@ -141,7 +141,7 @@ iterator randomPeers*(node: EthereumNode, maxPeers: int): Peer =
     yield peers[i]
 
 proc randomPeer*(node: EthereumNode): Peer =
-  let peerIdx = random(node.peerPool.connectedNodes.len)
+  let peerIdx = rand(node.peerPool.connectedNodes.len)
   var i = 0
   for peer in node.peers:
     if i == peerIdx: return peer
