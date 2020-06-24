@@ -32,8 +32,7 @@ type
     replacementCache: seq[Node] ## Nodes that could not be added to the `nodes`
     ## seq as it is full and without stale nodes. This is practically a small
     ## LRU cache.
-    lastUpdated: float ## epochTime of last update to the KBucket
-    # TODO: Should this update be about changes made only in `nodes`?
+    lastUpdated: float ## epochTime of last update to `nodes` in the KBucket.
 
 const
   BUCKET_SIZE* = 16
@@ -103,7 +102,7 @@ proc add(k: KBucket, n: Node): Node =
   ## request, and considering a handshake that needs to be done, it is likely
   ## that this node is reachable. An additional `addSeen` proc could be created
   ## for this,
-  k.lastUpdated = epochTime() # TODO: only when an actual update is done?
+  k.lastUpdated = epochTime()
   let nodeIdx = k.nodes.find(n)
   if nodeIdx != -1:
     return nil
@@ -150,21 +149,19 @@ proc inRange(k: KBucket, n: Node): bool {.inline.} =
 
 proc contains(k: KBucket, n: Node): bool = n in k.nodes
 
-proc binaryGetBucketForNode(buckets: openarray[KBucket],
-                            id: NodeId): KBucket {.inline.} =
-  ## Given a list of ordered buckets, returns the bucket for a given node.
+proc binaryGetBucketForNode*(buckets: openarray[KBucket],
+                            id: NodeId): KBucket =
+  ## Given a list of ordered buckets, returns the bucket for a given `NodeId`.
+  ## Returns nil if no bucket in range for given `id` is found.
   let bucketPos = lowerBound(buckets, id) do(a: KBucket, b: NodeId) -> int:
     cmp(a.iend, b)
-  # Prevents edge cases where bisect_left returns an out of range index
+
+  # Prevent cases where `lowerBound` returns an out of range index e.g. at empty
+  # openarray, or when the id is out range for all buckets in the openarray.
   if bucketPos < buckets.len:
     let bucket = buckets[bucketPos]
     if bucket.istart <= id and id <= bucket.iend:
       result = bucket
-
-  # TODO: Is this really an error that should occur? Feels a lot like a work-
-  # around to another problem. Set to Defect for now.
-  if result.isNil:
-    raise (ref Defect)(msg: "No bucket found for node with id " & $id)
 
 proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
   ## Count the number of prefix bits shared by all nodes.
@@ -199,7 +196,9 @@ proc splitBucket(r: var RoutingTable, index: int) =
   r.buckets.insert(b, index + 1)
 
 proc bucketForNode(r: RoutingTable, id: NodeId): KBucket =
-  binaryGetBucketForNode(r.buckets, id)
+  result = binaryGetBucketForNode(r.buckets, id)
+  doAssert(not result.isNil(),
+    "Routing table should always cover the full id space")
 
 proc removeNode*(r: var RoutingTable, n: Node) =
   ## Remove the node `n` from the routing table.
@@ -294,7 +293,7 @@ proc neighboursAtDistance*(r: RoutingTable, distance: uint32,
 proc len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len
 
-proc moveRight[T](arr: var openarray[T], a, b: int) {.inline.} =
+proc moveRight[T](arr: var openarray[T], a, b: int) =
   ## In `arr` move elements in range [a, b] right by 1.
   var t: T
   shallowCopy(t, arr[b + 1])
@@ -304,19 +303,22 @@ proc moveRight[T](arr: var openarray[T], a, b: int) {.inline.} =
 
 proc setJustSeen*(r: RoutingTable, n: Node) =
   ## Move `n` to the head (most recently seen) of its bucket.
+  ## If `n` is not in the routing table, do nothing.
   let b = r.bucketForNode(n.id)
   let idx = b.nodes.find(n)
-  # TODO: This assert might be troublesome if we start using it for every
-  # message response & then ping a node that is not in our table (e.g. in tests)
-  doAssert(idx >= 0)
-  if idx != 0:
-    b.nodes.moveRight(0, idx - 1)
-  b.lastUpdated = epochTime()
+  if idx >= 0:
+    if idx != 0:
+      b.nodes.moveRight(0, idx - 1)
+    b.lastUpdated = epochTime()
 
 proc nodeToRevalidate*(r: RoutingTable): Node =
+  ## Return a node to revalidate. The least recently seen node from a random
+  ## bucket is selected.
   var buckets = r.buckets
   shuffle(buckets)
-  # TODO: Should we prioritize less-recently-updated buckets instead?
+  # TODO: Should we prioritize less-recently-updated buckets instead? Could use
+  # `lastUpdated` for this, but it would probably make more sense to only update
+  # that value on revalidation then and rename it to `lastValidated`.
   for b in buckets:
     if b.len > 0:
       return b.nodes[^1]
