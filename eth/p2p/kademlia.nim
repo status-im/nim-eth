@@ -496,9 +496,9 @@ proc randomNodes*(k: KademliaProtocol, count: int): seq[Node] =
   # insignificant compared to the time it takes for the network roundtrips when connecting
   # to nodes.
   while len(seen) < count:
-    let bucket = k.routing.buckets.rand()
+    let bucket = k.routing.buckets.sample()
     if bucket.nodes.len != 0:
-      let node = bucket.nodes.rand()
+      let node = bucket.nodes.sample()
       if node notin seen:
         result.add(node)
         seen.incl(node)
