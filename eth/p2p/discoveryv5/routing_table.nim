@@ -3,22 +3,40 @@ import
   stint, chronicles,
   node
 
+export options
+
 {.push raises: [Defect].}
 
 type
   RoutingTable* = object
     thisNode: Node
     buckets: seq[KBucket]
+    bitsPerHop: int ## This value indicates how many bits (at minimum) you get
+    ## closer to finding your target per query. Practically, it tells you also
+    ## how often your "not in range" branch will split off. Setting this to 1
+    ## is the basic, non accelerated version, which will never split off the
+    ## not in range branch and which will result in log base2 n hops per lookup.
+    ## Setting it higher will increase the amount of splitting on a not in range
+    ## branch (thus holding more nodes with a better keyspace coverage) and this
+    ## will result in an improvement of log base(2^b) n hops per lookup.
 
   KBucket = ref object
-    istart, iend: NodeId
-    nodes: seq[Node]
-    replacementCache: seq[Node]
-    lastUpdated: float # epochTime
+    istart, iend: NodeId ## Range of NodeIds this KBucket covers. This is not a
+    ## simple logarithmic distance as buckets can be split over a prefix that
+    ## does not cover the `thisNode` id.
+    nodes: seq[Node] ## Node entries of the KBucket. Sorted according to last
+    ## time seen. First entry (head) is considered the most recently seen node
+    ## and the last entry (tail) is considered the least recently seen node.
+    ## Here "seen" means a successful request-response. This can also not have
+    ## occured yet.
+    replacementCache: seq[Node] ## Nodes that could not be added to the `nodes`
+    ## seq as it is full and without stale nodes. This is practically a small
+    ## LRU cache.
+    lastUpdated: float ## epochTime of last update to `nodes` in the KBucket.
 
 const
   BUCKET_SIZE* = 16
-  BITS_PER_HOP = 8
+  REPLACEMENT_CACHE_SIZE* = 8
   ID_SIZE = 256
 
 proc distanceTo(n: Node, id: NodeId): UInt256 =
@@ -59,30 +77,56 @@ proc nodesByDistanceTo(k: KBucket, id: NodeId): seq[Node] =
   sortedByIt(k.nodes, it.distanceTo(id))
 
 proc len(k: KBucket): int {.inline.} = k.nodes.len
-proc head(k: KBucket): Node {.inline.} = k.nodes[0]
+proc tail(k: KBucket): Node {.inline.} = k.nodes[high(k.nodes)]
 
 proc add(k: KBucket, n: Node): Node =
   ## Try to add the given node to this bucket.
-
-  ## If the node is already present, it is moved to the tail of the list, and we return nil.
-
-  ## If the node is not already present and the bucket has fewer than k entries, it is inserted
-  ## at the tail of the list, and we return nil.
-
-  ## If the bucket is full, we add the node to the bucket's replacement cache and return the
-  ## node at the head of the list (i.e. the least recently seen), which should be evicted if it
-  ## fails to respond to a ping.
+  ##
+  ## If the node is already present, nothing is done, as the node should only
+  ## be moved in case of a new succesful request-reponse.
+  ##
+  ## If the node is not already present and the bucket has fewer than k entries,
+  ## it is inserted as the last entry of the bucket (least recently seen node),
+  ## and nil is returned.
+  ##
+  ## If the bucket is full, the node at the last entry of the bucket (least
+  ## recently seen), which should be evicted if it fails to respond to a ping,
+  ## is returned.
+  ##
+  ## Reasoning here is that adding nodes will happen for a big part from
+  ## lookups, which do not necessarily return nodes that are (still) reachable.
+  ## So, more trust is put in the own ordering and newly additions are added
+  ## as least recently seen (in fact they are never seen yet from this node its
+  ## perspective).
+  ## However, in discovery v5 it can be that a node is added after a incoming
+  ## request, and considering a handshake that needs to be done, it is likely
+  ## that this node is reachable. An additional `addSeen` proc could be created
+  ## for this,
   k.lastUpdated = epochTime()
   let nodeIdx = k.nodes.find(n)
   if nodeIdx != -1:
-    k.nodes.delete(nodeIdx)
-    k.nodes.add(n)
+    return nil
   elif k.len < BUCKET_SIZE:
     k.nodes.add(n)
+    return nil
   else:
+    return k.tail
+
+proc addReplacement(k: KBucket, n: Node) =
+  ## Add the node to the tail of the replacement cache of the KBucket.
+  ##
+  ## If the replacement cache is full, the oldest (first entry) node will be
+  ## removed. If the node is already in the replacement cache, it will be moved
+  ## to the tail.
+  let nodeIdx = k.replacementCache.find(n)
+  if nodeIdx != -1:
+    k.replacementCache.delete(nodeIdx)
     k.replacementCache.add(n)
-    return k.head
-  return nil
+  else:
+    doAssert(k.replacementCache.len <= REPLACEMENT_CACHE_SIZE)
+    if k.replacementCache.len == REPLACEMENT_CACHE_SIZE:
+      k.replacementCache.delete(0)
+    k.replacementCache.add(n)
 
 proc removeNode(k: KBucket, n: Node) =
   let i = k.nodes.find(n)
@@ -105,23 +149,21 @@ proc inRange(k: KBucket, n: Node): bool {.inline.} =
 
 proc contains(k: KBucket, n: Node): bool = n in k.nodes
 
-proc binaryGetBucketForNode(buckets: openarray[KBucket],
-                            id: NodeId): KBucket {.inline.} =
-  ## Given a list of ordered buckets, returns the bucket for a given node.
+proc binaryGetBucketForNode*(buckets: openarray[KBucket],
+                            id: NodeId): KBucket =
+  ## Given a list of ordered buckets, returns the bucket for a given `NodeId`.
+  ## Returns nil if no bucket in range for given `id` is found.
   let bucketPos = lowerBound(buckets, id) do(a: KBucket, b: NodeId) -> int:
     cmp(a.iend, b)
-  # Prevents edge cases where bisect_left returns an out of range index
+
+  # Prevent cases where `lowerBound` returns an out of range index e.g. at empty
+  # openarray, or when the id is out range for all buckets in the openarray.
   if bucketPos < buckets.len:
     let bucket = buckets[bucketPos]
     if bucket.istart <= id and id <= bucket.iend:
       result = bucket
 
-  # TODO: Is this really an error that should occur? Feels a lot like a work-
-  # around to another problem. Set to Defect for now.
-  if result.isNil:
-    raise (ref Defect)(msg: "No bucket found for node with id " & $id)
-
-proc computeSharedPrefixBits(nodes: openarray[Node]): int =
+proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
   ## Count the number of prefix bits shared by all nodes.
   if nodes.len < 2:
     return ID_SIZE
@@ -131,18 +173,20 @@ proc computeSharedPrefixBits(nodes: openarray[Node]): int =
 
   for i in 1 .. ID_SIZE:
     mask = mask or (one shl (ID_SIZE - i))
-    let reference = nodes[0].id and mask
+    let reference = nodes[0] and mask
     for j in 1 .. nodes.high:
-      if (nodes[j].id and mask) != reference: return i - 1
+      if (nodes[j] and mask) != reference: return i - 1
 
   for n in nodes:
-    echo n.id.toHex()
+    echo n.toHex()
 
+  # Reaching this would mean that all node ids are equal
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
-proc init*(r: var RoutingTable, thisNode: Node) {.inline.} =
+proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = 8) {.inline.} =
   r.thisNode = thisNode
   r.buckets = @[newKBucket(0.u256, high(Uint256))]
+  r.bitsPerHop = bitsPerHop
   randomize() # for later `randomNodes` selection
 
 proc splitBucket(r: var RoutingTable, index: int) =
@@ -152,30 +196,57 @@ proc splitBucket(r: var RoutingTable, index: int) =
   r.buckets.insert(b, index + 1)
 
 proc bucketForNode(r: RoutingTable, id: NodeId): KBucket =
-  binaryGetBucketForNode(r.buckets, id)
+  result = binaryGetBucketForNode(r.buckets, id)
+  doAssert(not result.isNil(),
+    "Routing table should always cover the full id space")
 
 proc removeNode*(r: var RoutingTable, n: Node) =
+  ## Remove the node `n` from the routing table.
   r.bucketForNode(n.id).removeNode(n)
 
 proc addNode*(r: var RoutingTable, n: Node): Node =
+  ## Try to add the node to the routing table.
+  ##
+  ## First, an attempt will be done to add the node to the bucket in its range.
+  ## If this fails, the bucket will be split if it is eligable for splitting.
+  ## If so, a new attempt will be done to add the node. If not, the node will be
+  ## added to the replacement cache.
   if n == r.thisNode:
     # warn "Trying to add ourselves to the routing table", node = n
     return
   let bucket = r.bucketForNode(n.id)
   let evictionCandidate = bucket.add(n)
   if not evictionCandidate.isNil:
-    # Split if the bucket has the local node in its range or if the depth is not congruent
-    # to 0 mod BITS_PER_HOP
-
-    let depth = computeSharedPrefixBits(bucket.nodes)
-    # TODO: Shouldn't the adding to replacement cache be done only if the bucket
-    # doesn't get split?
-    if bucket.inRange(r.thisNode) or (depth mod BITS_PER_HOP != 0 and depth != ID_SIZE):
+    # Split if the bucket has the local node in its range or if the depth is not
+    # congruent to 0 mod `bitsPerHop`
+    #
+    # Calculate the prefix shared by all nodes in the bucket's range, not the
+    # ones actually in the bucket.
+    let depth = computeSharedPrefixBits(@[bucket.istart, bucket.iend])
+    if bucket.inRange(r.thisNode) or
+        (depth mod r.bitsPerHop != 0 and depth != ID_SIZE):
       r.splitBucket(r.buckets.find(bucket))
-      return r.addNode(n) # retry
+      return r.addNode(n) # retry adding
+    else:
+      # When bucket doesn't get split the node is added to the replacement cache
+      bucket.addReplacement(n)
 
-    # Nothing added, ping evictionCandidate
-    return evictionCandidate
+      # Nothing added, return evictionCandidate
+      return evictionCandidate
+
+proc replaceNode*(r: var RoutingTable, n: Node) =
+  ## Replace node `n` with last entry in the replacement cache. If there are
+  ## no entries in the replacement cache, node `n` will simply be removed.
+  # TODO: Kademlia paper recommends here to not remove nodes if there are no
+  # replacements. However, that would require a bit more complexity in the
+  # revalidation as you don't want to try pinging that node all the time.
+  let b = r.bucketForNode(n.id)
+  let idx = b.nodes.find(n)
+  if idx != -1:
+    b.nodes.delete(idx)
+    if b.replacementCache.len > 0:
+      b.nodes.add(b.replacementCache[high(b.replacementCache)])
+      b.replacementCache.delete(high(b.replacementCache))
 
 proc getNode*(r: RoutingTable, id: NodeId): Option[Node] =
   let b = r.bucketForNode(id)
@@ -222,7 +293,7 @@ proc neighboursAtDistance*(r: RoutingTable, distance: uint32,
 proc len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len
 
-proc moveRight[T](arr: var openarray[T], a, b: int) {.inline.} =
+proc moveRight[T](arr: var openarray[T], a, b: int) =
   ## In `arr` move elements in range [a, b] right by 1.
   var t: T
   shallowCopy(t, arr[b + 1])
@@ -231,19 +302,23 @@ proc moveRight[T](arr: var openarray[T], a, b: int) {.inline.} =
   shallowCopy(arr[a], t)
 
 proc setJustSeen*(r: RoutingTable, n: Node) =
-  # Move `n` to front of its bucket
+  ## Move `n` to the head (most recently seen) of its bucket.
+  ## If `n` is not in the routing table, do nothing.
   let b = r.bucketForNode(n.id)
   let idx = b.nodes.find(n)
-  doAssert(idx >= 0)
-  if idx != 0:
-    b.nodes.moveRight(0, idx - 1)
-  b.nodes[0] = n
-  b.lastUpdated = epochTime()
+  if idx >= 0:
+    if idx != 0:
+      b.nodes.moveRight(0, idx - 1)
+    b.lastUpdated = epochTime()
 
 proc nodeToRevalidate*(r: RoutingTable): Node =
+  ## Return a node to revalidate. The least recently seen node from a random
+  ## bucket is selected.
   var buckets = r.buckets
   shuffle(buckets)
-  # TODO: Should we prioritize less-recently-updated buckets instead?
+  # TODO: Should we prioritize less-recently-updated buckets instead? Could use
+  # `lastUpdated` for this, but it would probably make more sense to only update
+  # that value on revalidation then and rename it to `lastValidated`.
   for b in buckets:
     if b.len > 0:
       return b.nodes[^1]
@@ -260,10 +335,16 @@ proc randomNodes*(r: RoutingTable, maxAmount: int,
   result = newSeqOfCap[Node](maxAmount)
   var seen = initHashSet[Node]()
 
-  # This is a rather inneficient way of randomizing nodes from all buckets, but even if we
+  # This is a rather inefficient way of randomizing nodes from all buckets, but even if we
   # iterate over all nodes in the routing table, the time it takes would still be
   # insignificant compared to the time it takes for the network roundtrips when connecting
   # to nodes.
+  # However, "time it takes" might not be relevant, as there might be no point
+  # in providing more `randomNodes` as the routing table might not have anything
+  # new to provide. And there is no way for the calling code to know this. So
+  # while it will take less total time compared to e.g. an (async)
+  # randomLookup, the time might be wasted as all nodes are possibly seen
+  # already.
   while len(seen) < maxAmount:
     # TODO: Is it important to get a better random source for these sample calls?
     let bucket = sample(r.buckets)

@@ -50,7 +50,8 @@ proc runP2pTests() =
       "test_protocol_handlers",
       "test_enr",
       "test_discoveryv5",
-      "test_discv5_encoding"
+      "test_discv5_encoding",
+      "test_routing_table"
     ]:
     runTest("tests/p2p/" & filename)
 

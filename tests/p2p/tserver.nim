@@ -8,7 +8,7 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  sequtils, strformat, options, unittest,
+  sequtils, strformat, options, testutils/unittests,
   chronicles, chronos, eth/[rlp, keys, p2p],
   eth/p2p/mock_peers
 

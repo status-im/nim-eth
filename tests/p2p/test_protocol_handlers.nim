@@ -8,7 +8,8 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  unittest, tables, chronos, eth/p2p,
+  tables, chronos, testutils/unittests,
+  eth/p2p,
   ./p2p_test_helper
 
 type
