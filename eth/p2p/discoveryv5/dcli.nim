@@ -1,6 +1,6 @@
 import
   sequtils, options, strutils, chronos, chronicles, chronicles/topics_registry,
-  stew/byteutils, stew/shims/net, confutils,
+  stew/byteutils, confutils, confutils/std/net, metrics,
   eth/keys, eth/trie/db, eth/net/nat,
   eth/p2p/discoveryv5/[protocol, discovery_db, enr, node]
 
@@ -29,6 +29,26 @@ type
       desc: "Specify method to use for determining public address. " &
             "Must be one of: any, none, upnp, pmp, extip:<IP>."
       defaultValue: "any" .}: string
+
+    nodeKey* {.
+      desc: "P2P node private key as hex.",
+      defaultValue: PrivateKey.random().expect("Properly intialized private key")
+      name: "nodekey" .}: PrivateKey
+
+    metricsEnabled* {.
+      defaultValue: false
+      desc: "Enable the metrics server."
+      name: "metrics" .}: bool
+
+    metricsAddress* {.
+      defaultValue: ValidIpAddress.init("127.0.0.1")
+      desc: "Listening address of the metrics server."
+      name: "metrics-address" .}: ValidIpAddress
+
+    metricsPort* {.
+      defaultValue: 8008
+      desc: "Listening HTTP port of the metrics server."
+      name: "metrics-port" .}: Port
 
     case cmd* {.
       command
@@ -76,6 +96,15 @@ proc parseCmdArg*(T: type Node, p: TaintedString): T =
 proc completeCmdArg*(T: type Node, val: TaintedString): seq[string] =
   return @[]
 
+proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T =
+  try:
+    result = PrivateKey.fromHex(string(p)).tryGet()
+  except CatchableError as e:
+    raise newException(ConfigurationError, "Invalid private key")
+
+proc completeCmdArg*(T: type PrivateKey, val: TaintedString): seq[string] =
+  return @[]
+
 proc setupNat(conf: DiscoveryConf): tuple[ip: Option[ValidIpAddress],
                                           tcpPort: Port,
                                           udpPort: Port] {.gcsafe.} =
@@ -116,13 +145,20 @@ proc setupNat(conf: DiscoveryConf): tuple[ip: Option[ValidIpAddress],
 proc run(config: DiscoveryConf) =
   let
     (ip, tcpPort, udpPort) = setupNat(config)
-    privKey = PrivateKey.random().expect("Properly intialized private key")
     ddb = DiscoveryDB.init(newMemoryDB())
     # TODO: newProtocol should allow for no tcpPort
-    d = newProtocol(privKey, ddb, ip, tcpPort, udpPort,
+    d = newProtocol(config.nodeKey, ddb, ip, tcpPort, udpPort,
       bootstrapRecords = config.bootnodes)
 
   d.open()
+
+  when defined(insecure):
+    if config.metricsEnabled:
+      let
+        address = config.metricsAddress
+        port = config.metricsPort
+      info "Starting metrics HTTP server", address, port
+      metrics.startHttpServer($address, port)
 
   case config.cmd
   of ping:

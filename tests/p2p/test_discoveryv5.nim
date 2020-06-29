@@ -183,7 +183,11 @@ procSuite "Discovery v5 Tests":
 
     let nodes = nodesAtDistance(mainNode.localNode, dist, 10)
     for n in nodes:
-      discard mainNode.addNode(n)
+      discard mainNode.addSeenNode(n) # for testing only!
+
+    # ping in one direction to add, ping in the other to update seen.
+    check (await testNode.ping(mainNode.localNode)).isOk()
+    check (await mainNode.ping(testNode.localNode)).isOk()
 
     # Get ENR of the node itself
     var discovered =
@@ -192,7 +196,6 @@ procSuite "Discovery v5 Tests":
       discovered.isOk
       discovered[].len == 1
       discovered[][0] == mainNode.localNode
-
     # Get ENRs of nodes added at provided logarithmic distance
     discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, dist)
@@ -217,7 +220,7 @@ procSuite "Discovery v5 Tests":
 
     let moreNodes = nodesAtDistance(mainNode.localNode, dist, 10)
     for n in moreNodes:
-      discard mainNode.addNode(n)
+      discard mainNode.addSeenNode(n) # for testing only!
 
     # Full bucket
     discovered =
@@ -234,7 +237,7 @@ procSuite "Discovery v5 Tests":
 
     # Generate 1000 random nodes and add to our main node's routing table
     for i in 0..<1000:
-      discard mainNode.addNode(generateNode())
+      discard mainNode.addSeenNode(generateNode()) # for testing only!
 
     let
       neighbours = mainNode.neighbours(mainNode.localNode.id)
@@ -267,6 +270,14 @@ procSuite "Discovery v5 Tests":
     for i in 1 ..< nodeCount:
       nodes.add(initDiscoveryNode(PrivateKey.random()[], localAddress(20301 + i),
         @[bootNode.localNode.record]))
+
+    # Make sure all nodes have "seen" each other by forcing pings
+    for n in nodes:
+      for t in nodes:
+        if n != t:
+          check (await n.ping(t.localNode)).isOk()
+
+    for i in 1 ..< nodeCount:
       nodes[i].start()
 
     for i in 0..<nodeCount-1:
@@ -305,12 +316,16 @@ procSuite "Discovery v5 Tests":
     # Bring target back online, update seqNum in ENR, check if we get the
     # updated ENR.
     block:
+      targetNode.open()
+      # ping to node again to add as it was removed after failed findNode in
+      # resolve in previous test block
+      let pong = await targetNode.ping(mainNode.localNode)
+      check pong.isOk()
       # TODO: need to add some logic to update ENRs properly
       targetSeqNum.inc()
       let r = enr.Record.init(targetSeqNum, targetKey,
         some(targetAddress.ip), targetAddress.port, targetAddress.port)[]
       targetNode.localNode.record = r
-      targetNode.open()
       let n = await mainNode.resolve(targetId)
       check:
         n.isSome()
@@ -321,18 +336,21 @@ procSuite "Discovery v5 Tests":
     # close targetNode, resolve should lookup, check if we get updated ENR.
     block:
       targetSeqNum.inc()
-      let r = enr.Record.init(3, targetKey, some(targetAddress.ip),
+      let r = enr.Record.init(targetSeqNum, targetKey, some(targetAddress.ip),
         targetAddress.port, targetAddress.port)[]
       targetNode.localNode.record = r
-      let pong = await targetNode.ping(lookupNode.localNode)
-      check pong.isOk()
 
+      # ping node so that its ENR gets added
+      check (await targetNode.ping(lookupNode.localNode)).isOk()
+      # ping node so that it becomes "seen" and thus will be forwarded on a
+      # findNode request
+      check (await lookupNode.ping(targetNode.localNode)).isOk()
       await targetNode.closeWait()
       # TODO: This step should eventually not be needed and ENRs with new seqNum
       # should just get updated in the lookup.
       await mainNode.revalidateNode(targetNode.localNode)
 
-      check mainNode.addNode(lookupNode.localNode.record)
+      check mainNode.addNode(lookupNode.localNode)
       let n = await mainNode.resolve(targetId)
       check:
         n.isSome()

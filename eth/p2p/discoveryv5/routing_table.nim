@@ -1,11 +1,14 @@
 import
   std/[algorithm, times, sequtils, bitops, random, sets, options],
-  stint, chronicles,
+  stint, chronicles, metrics,
   node
 
 export options
 
 {.push raises: [Defect].}
+
+declarePublicGauge routing_table_nodes,
+  "Discovery routing table nodes", labels = ["state"]
 
 type
   RoutingTable* = object
@@ -108,6 +111,7 @@ proc add(k: KBucket, n: Node): Node =
     return nil
   elif k.len < BUCKET_SIZE:
     k.nodes.add(n)
+    routing_table_nodes.inc()
     return nil
   else:
     return k.tail
@@ -130,7 +134,9 @@ proc addReplacement(k: KBucket, n: Node) =
 
 proc removeNode(k: KBucket, n: Node) =
   let i = k.nodes.find(n)
-  if i != -1: k.nodes.delete(i)
+  if i != -1:
+    k.nodes.delete(i)
+    routing_table_nodes.dec()
 
 proc split(k: KBucket): tuple[lower, upper: KBucket] =
   ## Split at the median id
@@ -139,7 +145,7 @@ proc split(k: KBucket): tuple[lower, upper: KBucket] =
   result.upper = newKBucket(splitid + 1.u256, k.iend)
   for node in k.nodes:
     let bucket = if node.id <= splitid: result.lower else: result.upper
-    discard bucket.add(node)
+    bucket.nodes.add(node)
   for node in k.replacementCache:
     let bucket = if node.id <= splitid: result.lower else: result.upper
     bucket.replacementCache.add(node)
@@ -243,9 +249,14 @@ proc replaceNode*(r: var RoutingTable, n: Node) =
   let b = r.bucketForNode(n.id)
   let idx = b.nodes.find(n)
   if idx != -1:
+    routing_table_nodes.dec()
+    if b.nodes[idx].seen:
+      routing_table_nodes.dec(labelValues = ["seen"])
     b.nodes.delete(idx)
+
     if b.replacementCache.len > 0:
       b.nodes.add(b.replacementCache[high(b.replacementCache)])
+      routing_table_nodes.inc()
       b.replacementCache.delete(high(b.replacementCache))
 
 proc getNode*(r: RoutingTable, id: NodeId): Option[Node] =
@@ -259,15 +270,18 @@ proc contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
 proc bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
   sortedByIt(r.buckets, it.distanceTo(id))
 
-proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
+proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
+    seenOnly = false): seq[Node] =
   ## Return up to k neighbours of the given node.
   result = newSeqOfCap[Node](k * 2)
   block addNodes:
     for bucket in r.bucketsByDistanceTo(id):
       for n in bucket.nodesByDistanceTo(id):
-        result.add(n)
-        if result.len == k * 2:
-          break addNodes
+        # Only provide actively seen nodes when `seenOnly` set
+        if not seenOnly or n.seen:
+          result.add(n)
+          if result.len == k * 2:
+            break addNodes
 
   # TODO: is this sort still needed? Can we get nodes closer from the "next"
   # bucket?
@@ -284,8 +298,8 @@ proc idAtDistance*(id: NodeId, dist: uint32): NodeId =
   id xor (1.stuint(256) shl (dist.int - 1))
 
 proc neighboursAtDistance*(r: RoutingTable, distance: uint32,
-    k: int = BUCKET_SIZE): seq[Node] =
-  result = r.neighbours(idAtDistance(r.thisNode.id, distance), k)
+    k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
+  result = r.neighbours(idAtDistance(r.thisNode.id, distance), k, seenOnly)
   # This is a bit silly, first getting closest nodes then to only keep the ones
   # that are exactly the requested distance.
   keepIf(result, proc(n: Node): bool = logDist(n.id, r.thisNode.id) == distance)
@@ -310,6 +324,10 @@ proc setJustSeen*(r: RoutingTable, n: Node) =
     if idx != 0:
       b.nodes.moveRight(0, idx - 1)
     b.lastUpdated = epochTime()
+
+    if not n.seen:
+      b.nodes[0].seen = true
+      routing_table_nodes.inc(labelValues = ["seen"])
 
 proc nodeToRevalidate*(r: RoutingTable): Node =
   ## Return a node to revalidate. The least recently seen node from a random

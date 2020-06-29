@@ -76,7 +76,7 @@ import
   std/[tables, sets, options, math, random],
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/[byteutils, endians2], chronicles, chronos, stint,
-  eth/[rlp, keys], types, encoding, node, routing_table, enr
+  eth/[rlp, keys, async_utils], types, encoding, node, routing_table, enr
 
 import nimcrypto except toHex
 
@@ -95,9 +95,11 @@ const
   lookupInterval = 60.seconds ## Interval of launching a random lookup to
   ## populate the routing table. go-ethereum seems to do 3 runs every 30
   ## minutes. Trinity starts one every minute.
+  revalidateMax = 1000 ## Revalidation of a peer is done between 0 and this
+  ## value in milliseconds
   handshakeTimeout* = 2.seconds ## timeout for the reply on the
   ## whoareyou message
-  responseTimeout* = 2.seconds ## timeout for the response of a request-response
+  responseTimeout* = 4.seconds ## timeout for the response of a request-response
   ## call
   magicSize = 32 ## size of the magic which is the start of the whoareyou
   ## message
@@ -303,7 +305,7 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
   else:
     let distance = min(fn.distance, 256)
     d.sendNodes(fromId, fromAddr, reqId,
-      d.routingTable.neighboursAtDistance(distance))
+      d.routingTable.neighboursAtDistance(distance, seenOnly = true))
 
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
   raises: [
@@ -455,6 +457,22 @@ proc validIp(sender, address: IpAddress): bool {.raises: [Defect].} =
   # https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
   return true
 
+proc replaceNode(d: Protocol, n: Node) =
+  if n.record notin d.bootstrapRecords:
+    d.routingTable.replaceNode(n)
+      # Remove shared secrets when removing the node from routing table.
+      # TODO: This might be to direct, so we could keep these longer. But better
+      # would be to simply not remove the nodes immediatly but use an LRU cache.
+      # Also because some shared secrets will be with nodes not eligable for
+      # the routing table, and these don't get deleted now, see issue:
+      # https://github.com/status-im/nim-eth/issues/242
+    discard d.codec.db.deleteKeys(n.id, n.address.get())
+  else:
+    # For now we never remove bootstrap nodes. It might make sense to actually
+    # do so and to retry them only in case we drop to a really low amount of
+    # peers in the routing table.
+    debug "Revalidation of bootstrap node failed", enr = toURI(n.record)
+
 # TODO: This could be improved to do the clean-up immediatily in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
 # somewhere
@@ -497,11 +515,11 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
       if op.isSome and op.get.kind == nodes:
         res.addNodesFromENRs(op.get.nodes.enrs)
       else:
+        # No error on this as we received some nodes.
         break
     return ok(res)
   else:
     return err("Nodes message not received in time")
-
 
 proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
     DiscResult[RequestId] {.raises: [Exception, Defect].} =
@@ -524,8 +542,10 @@ proc ping*(d: Protocol, toNode: Node):
   let resp = await d.waitMessage(toNode, reqId[])
 
   if resp.isSome() and resp.get().kind == pong:
+    d.routingTable.setJustSeen(toNode)
     return ok(resp.get().pong)
   else:
+    d.replaceNode(toNode)
     return err("Pong message not received in time")
 
 proc findNode*(d: Protocol, toNode: Node, distance: uint32):
@@ -538,12 +558,18 @@ proc findNode*(d: Protocol, toNode: Node, distance: uint32):
   if nodes.isOk:
     var res = newSeq[Node]()
     for n in nodes[]:
+      # Check if the node has an address and if the address is public or from
+      # the same local network or lo network as the sender. The latter allows
+      # for local testing.
+      # Any port is allowed, also the so called "well-known" ports.
       if n.address.isSome() and
           validIp(toNode.address.get().ip, n.address.get().ip):
         res.add(n)
-    # TODO: Check ports
+
+    d.routingTable.setJustSeen(toNode)
     return ok(res)
   else:
+    d.replaceNode(toNode)
     return err(nodes.error)
 
 proc lookupDistances(target, dest: NodeId): seq[uint32] {.raises: [Defect].} =
@@ -577,7 +603,8 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # TODO: Sort the returned nodes on distance
-  result = d.routingTable.neighbours(target, BUCKET_SIZE)
+  # Also use unseen nodes as a form of validation.
+  result = d.routingTable.neighbours(target, BUCKET_SIZE, seenOnly = false)
   var asked = initHashSet[NodeId]()
   asked.incl(d.localNode.id)
   var seen = asked
@@ -646,9 +673,10 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]]
       else:
         return some(n)
 
+  return node
+
 proc revalidateNode*(d: Protocol, n: Node)
     {.async, raises: [Exception, Defect].} = # TODO: Exception
-  trace "Ping to revalidate node", node = $n
   let pong = await d.ping(n)
 
   if pong.isOK():
@@ -656,47 +684,25 @@ proc revalidateNode*(d: Protocol, n: Node)
       # TODO: Request new ENR
       discard
 
-    d.routingTable.setJustSeen(n)
-    trace "Revalidated node", node = $n
-  else:
-    # TODO: Handle failures better. E.g. don't remove nodes on different
-    # failures than timeout
-    # For now we never remove bootstrap nodes. It might make sense to actually
-    # do so and to retry them only in case we drop to a really low amount of
-    # peers in the DHT
-    if n.record notin d.bootstrapRecords:
-      trace "Revalidation of node failed, removing node", record = n.record
-      d.routingTable.replaceNode(n)
-      # Remove shared secrets when removing the node from routing table.
-      # This might be to direct, so we could keep these longer. But better
-      # would be to simply not remove the nodes immediatly but only after x
-      # amount of failures.
-      doAssert(n.address.isSome())
-      discard d.codec.db.deleteKeys(n.id, n.address.get())
-    else:
-      debug "Revalidation of bootstrap node failed", enr = toURI(n.record)
-
 proc revalidateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   # TODO: General Exception raised.
   try:
+    randomize()
     while true:
-      await sleepAsync(rand(10 * 1000).milliseconds)
+      await sleepAsync(rand(revalidateMax).milliseconds)
       let n = d.routingTable.nodeToRevalidate()
       if not n.isNil:
-        # TODO: Should we do these in parallel and/or async to be certain of how
-        # often nodes are revalidated?
-        await d.revalidateNode(n)
+        traceAsyncErrors d.revalidateNode(n)
   except CancelledError:
     trace "revalidateLoop canceled"
 
 proc lookupLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   # TODO: General Exception raised.
   try:
+    # lookup self (neighbour nodes)
+    let selfLookup = await d.lookup(d.localNode.id)
+    trace "Discovered nodes in self lookup", nodes = $selfLookup
     while true:
-      # lookup self (neighbour nodes)
-      let selfLookup = await d.lookup(d.localNode.id)
-      trace "Discovered nodes in self lookup", nodes = $selfLookup
-
       let randomLookup = await d.lookupRandom()
       if randomLookup.isOK:
         trace "Discovered nodes in random lookup", nodes = $randomLookup[]
@@ -733,7 +739,7 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
     codec: Codec(localNode: node, privKey: privKey, db: db),
     bootstrapRecords: @bootstrapRecords)
 
-  result.routingTable.init(node)
+  result.routingTable.init(node, 5)
 
 proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   info "Starting discovery node", node = $d.localNode,
