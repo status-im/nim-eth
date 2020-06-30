@@ -408,30 +408,26 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
     Future[void] {.async, gcsafe, raises: [Exception, Defect].} =
   let proto = getUserData[Protocol](transp)
-  var ip: IpAddress
-  var buf = newSeq[byte]()
 
-  try:
-    ip = raddr.address()
-  except ValueError:
-    # This should not be possible considering we bind to an IP address.
-    error "Not a valid IpAddress"
-    return
+  # TODO: should we use `peekMessage()` to avoid allocation?
+  # TODO: This can still raise general `Exception` while it probably should
+  # only give TransportOsError.
+  let buf = try: transp.getMessage()
+            except TransportOsError as e:
+              # This is likely to be local network connection issues.
+              error "Transport getMessage", exception = e.name, msg = e.msg
+              return
+            except Exception as e:
+              if e of Defect:
+                raise (ref Defect)(e)
+              else: doAssert(false)
+              return # Make compiler happy
 
+  let ip = try: raddr.address()
+           except ValueError as e:
+             error "Not a valid IpAddress", exception = e.name, msg = e.msg
+             return
   let a = Address(ip: ValidIpAddress.init(ip), port: raddr.port)
-
-  try:
-    # TODO: should we use `peekMessage()` to avoid allocation?
-    # TODO: This can still raise general `Exception` while it probably should
-    # only give TransportOsError.
-    buf = transp.getMessage()
-  except TransportOsError as e:
-    # This is likely to be local network connection issues.
-    error "Transport getMessage error", exception = e.name, msg = e.msg
-  except Exception as e:
-    if e of Defect:
-      raise (ref Defect)(e)
-    else: doAssert(false)
 
   try:
     proto.receive(a, buf)
