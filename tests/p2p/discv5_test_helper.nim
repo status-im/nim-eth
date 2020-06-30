@@ -53,3 +53,8 @@ proc nodeAtDistance*(n: Node, d: uint32): Node =
 proc nodesAtDistance*(n: Node, d: uint32, amount: int): seq[Node] =
   for i in 0..<amount:
     result.add(nodeAtDistance(n, d))
+
+proc addSeenNode*(d: discv5_protocol.Protocol, n: Node): bool =
+  # Add it as a seen node, warning: for testing convenience only!
+  n.seen = true
+  d.addNode(n)

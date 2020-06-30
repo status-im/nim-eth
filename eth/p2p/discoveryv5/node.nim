@@ -16,6 +16,8 @@ type
     pubkey*: PublicKey
     address*: Option[Address]
     record*: Record
+    seen*: bool ## Indicates if there was at least one successful
+    ## request-response with this node.
 
 proc toNodeId*(pk: PublicKey): NodeId =
   readUintBE[256](keccak256.digest(pk.toRaw()).data)
