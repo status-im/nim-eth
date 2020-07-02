@@ -29,6 +29,9 @@ type
   Topic* = array[32, byte]
   # topic can be Hash256 or zero padded bytes array
 
+  ForkID* = tuple[crc: uint32, nextFork: uint64]
+  # EIP 2364/2124
+
   Account* = object
     nonce*:             AccountNonce
     balance*:           UInt256
@@ -399,3 +402,6 @@ method addTransactions*(db: AbstractChainDB, transactions: openarray[Transaction
 method persistBlocks*(db: AbstractChainDB, headers: openarray[BlockHeader], bodies: openarray[BlockBody]): ValidationResult {.base, gcsafe.} =
   notImplemented()
 
+method getForkId*(db: AbstractChainDB, n: BlockNumber): ForkID {.base, gcsafe.} =
+  # EIP 2364/2124
+  notImplemented()
