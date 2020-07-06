@@ -969,11 +969,12 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
   try:
     result.transport = await connect(ta)
     var handshake = Handshake.tryInit(
-      node.keys, {Initiator, EIP8}, node.baseProtocolVersion).tryGet()
+      node.rng[], node.keys, {Initiator, EIP8}, node.baseProtocolVersion).tryGet()
 
     var authMsg: array[AuthMessageMaxEIP8, byte]
     var authMsgLen = 0
-    authMessage(handshake, remote.node.pubkey, authMsg, authMsgLen).tryGet()
+    authMessage(
+      handshake, node.rng[], remote.node.pubkey, authMsg, authMsgLen).tryGet()
     var res = await result.transport.write(addr authMsg[0], authMsgLen)
     if res != authMsgLen:
       raisePeerDisconnected("Unexpected disconnect while authenticating",
@@ -1055,7 +1056,8 @@ proc rlpxAccept*(node: EthereumNode,
   result.transport = transport
   result.network = node
 
-  var handshake = HandShake.tryInit(node.keys, {auth.Responder}).tryGet
+  var handshake =
+    HandShake.tryInit(node.rng[], node.keys, {auth.Responder}).tryGet
 
   var ok = false
   try:
@@ -1078,7 +1080,7 @@ proc rlpxAccept*(node: EthereumNode,
 
     var ackMsg: array[AckMessageMaxEIP8, byte]
     var ackMsgLen: int
-    handshake.ackMessage(ackMsg, ackMsgLen).tryGet()
+    handshake.ackMessage(node.rng[], ackMsg, ackMsgLen).tryGet()
     var res = await transport.write(addr ackMsg[0], ackMsgLen)
     if res != ackMsgLen:
       raisePeerDisconnected("Unexpected disconnect while authenticating",

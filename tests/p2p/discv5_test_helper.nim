@@ -1,14 +1,16 @@
 import
-  testutils/unittests, stew/shims/net, nimcrypto,
+  testutils/unittests, stew/shims/net, bearssl,
   eth/[keys, rlp, trie/db],
   eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol
 
+var rng {.threadvar.}: ref BrHmacDrbgContext
+rng = newRng()
 
 proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
 
-proc initDiscoveryNode*(privKey: PrivateKey, address: Address,
+proc initDiscoveryNode*(rng: ref BrHmacDrbgContext, privKey: PrivateKey, address: Address,
                         bootstrapRecords: openarray[Record] = [],
                         localEnrFields: openarray[FieldPair] = []):
                         discv5_protocol.Protocol =
@@ -17,7 +19,7 @@ proc initDiscoveryNode*(privKey: PrivateKey, address: Address,
                        some(address.ip),
                        address.port, address.port,
                        bootstrapRecords = bootstrapRecords,
-                       localEnrFields = localEnrFields)
+                       localEnrFields = localEnrFields, rng = rng)
 
   result.open()
 
@@ -31,13 +33,13 @@ proc randomPacket*(tag: PacketTag): seq[byte] =
     authTag: AuthTag
     msg: array[44, byte]
 
-  check randomBytes(authTag) == authTag.len
-  check randomBytes(msg) == msg.len
+  brHmacDrbgGenerate(rng[], authTag)
+  brHmacDrbgGenerate(rng[], msg)
   result.add(tag)
   result.add(rlp.encode(authTag))
   result.add(msg)
 
-proc generateNode*(privKey = PrivateKey.random()[], port: int = 20302,
+proc generateNode*(privKey = PrivateKey.random(rng[]), port: int = 20302,
     localEnrFields: openarray[FieldPair] = []): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, some(ValidIpAddress.init("127.0.0.1")),

@@ -9,8 +9,8 @@
 #
 
 import
-  tables, hashes, times, algorithm, sets, sequtils, random,
-  chronos, eth/keys, chronicles, stint, nimcrypto,
+  tables, hashes, times, algorithm, sets, sequtils, bearssl, random,
+  chronos, eth/keys, chronicles, stint, nimcrypto/keccak,
   enode
 
 export sets # TODO: This should not be needed, but compilation fails otherwise
@@ -26,6 +26,7 @@ type
     pongFutures: Table[seq[byte], Future[bool]]
     pingFutures: Table[Node, Future[bool]]
     neighboursCallbacks: Table[Node, proc(n: seq[Node]) {.gcsafe.}]
+    rng: ref BrHmacDrbgContext
 
   NodeId* = UInt256
 
@@ -232,11 +233,14 @@ proc len(r: RoutingTable): int =
   for b in r.buckets: result += b.len
 
 proc newKademliaProtocol*[Wire](thisNode: Node,
-                                wire: Wire): KademliaProtocol[Wire] =
+                                wire: Wire, rng = newRng()): KademliaProtocol[Wire] =
+  doAssert rng != nil, "Need an RNG"
+
   result.new()
   result.thisNode = thisNode
   result.wire = wire
   result.routing.init(thisNode)
+  result.rng = rng
 
 proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async, gcsafe.}
 
@@ -408,7 +412,10 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
 
 proc lookupRandom*(k: KademliaProtocol): Future[seq[Node]] =
   var id: NodeId
-  discard randomBytes(addr id, id.sizeof)
+  var buf: array[sizeof(id), byte]
+  brHmacDrbgGenerate(k.rng[], buf)
+  copyMem(addr id, addr buf[0], sizeof(id))
+
   k.lookup(id)
 
 proc resolve*(k: KademliaProtocol, id: NodeId): Future[Node] {.async.} =

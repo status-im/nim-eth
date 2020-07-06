@@ -3,6 +3,8 @@ import
   nimcrypto/utils, stew/shims/net,
   eth/p2p/enode, eth/p2p/discoveryv5/enr, eth/keys
 
+let rng = newRng()
+
 suite "ENR":
   test "Serialization":
     var pk = PrivateKey.fromHex(
@@ -33,7 +35,7 @@ suite "ENR":
 
   test "Create from ENode address":
     let
-      keys = KeyPair.random()[]
+      keys = KeyPair.random(rng[])
       ip = ValidIpAddress.init("10.20.30.40")
       enr = Record.init(100, keys.seckey, some(ip), Port(9000), Port(9000), @[])[]
       typedEnr = get enr.toTypedRecord()
@@ -53,7 +55,7 @@ suite "ENR":
 
   test "ENR without address":
     let
-      keys = KeyPair.random()[]
+      keys = KeyPair.random(rng[])
       enr = Record.init(100, keys.seckey, none(ValidIpAddress), Port(9000), Port(9000))[]
       typedEnr = get enr.toTypedRecord()
 

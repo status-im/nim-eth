@@ -73,7 +73,7 @@
 ## This might be a concern for mobile devices.
 
 import
-  std/[tables, sets, options, math, random],
+  std/[tables, sets, options, math, random], bearssl,
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/[byteutils, endians2], chronicles, chronos, stint,
   eth/[rlp, keys, async_utils], types, encoding, node, routing_table, enr
@@ -120,6 +120,7 @@ type
     lookupLoop: Future[void]
     revalidateLoop: Future[void]
     bootstrapRecords*: seq[Record]
+    rng*: ref BrHmacDrbgContext
 
   PendingRequest = object
     node: Node
@@ -222,9 +223,7 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId,
     authTag: AuthTag): DiscResult[void] {.raises: [Exception, Defect].} =
   trace "sending who are you", to = $toNode, toAddress = $address
   let challenge = Whoareyou(authTag: authTag, recordSeq: 0)
-
-  if randomBytes(challenge.idNonce) != challenge.idNonce.len:
-    return err("Could not randomize bytes")
+  brHmacDrbgGenerate(d.rng[], challenge.idNonce)
 
   # If there is already a handshake going on for this nodeid then we drop this
   # new one. Handshake will get cleaned up after `handshakeTimeout`.
@@ -250,17 +249,18 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId,
     err("NodeId already has ongoing handshake")
 
 proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
-    nodes: openarray[Node]): DiscResult[void] =
+    nodes: openarray[Node]) =
   proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address,
-      message: NodesMessage, reqId: RequestId): DiscResult[void] {.nimcall.} =
-    let (data, _) = ? d.codec.encodePacket(toId, toAddr,
+      message: NodesMessage, reqId: RequestId) {.nimcall.} =
+    let (data, _) = encodePacket(
+      d.rng[], d.codec, toId, toAddr,
       encodeMessage(message, reqId), challenge = nil)
     d.send(toAddr, data)
-    ok()
 
   if nodes.len == 0:
     # In case of 0 nodes, a reply is still needed
-    return d.sendNodes(toId, toAddr, NodesMessage(total: 1, enrs: @[]), reqId)
+    d.sendNodes(toId, toAddr, NodesMessage(total: 1, enrs: @[]), reqId)
+    return
 
   var message: NodesMessage
   # TODO: Do the total calculation based on the max UDP packet size we want to
@@ -271,19 +271,14 @@ proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
   for i in 0 ..< nodes.len:
     message.enrs.add(nodes[i].record)
     if message.enrs.len == maxNodesPerMessage:
-      let res = d.sendNodes(toId, toAddr, message, reqId)
-      if res.isErr: # TODO: is there something nicer for this?
-        return res
+      d.sendNodes(toId, toAddr, message, reqId)
       message.enrs.setLen(0)
 
   if message.enrs.len != 0:
-    let res = d.sendNodes(toId, toAddr, message, reqId)
-    if res.isErr: # TODO: is there something nicer for this?
-      return res
-  ok()
+    d.sendNodes(toId, toAddr, message, reqId)
 
 proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
-    ping: PingMessage, reqId: RequestId): DiscResult[void] =
+    ping: PingMessage, reqId: RequestId) =
   let a = fromAddr
   var pong: PongMessage
   pong.enrSeq = ping.enrSeq
@@ -292,14 +287,13 @@ proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
     of IpAddressFamily.IPv6: @(a.ip.address_v6)
   pong.port = a.port.uint16
 
-  let (data, _) = ? d.codec.encodePacket(fromId, fromAddr,
+  let (data, _) = encodePacket(d.rng[], d.codec, fromId, fromAddr,
     encodeMessage(pong, reqId), challenge = nil)
 
   d.send(fromAddr, data)
-  ok()
 
 proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
-    fn: FindNodeMessage, reqId: RequestId): DiscResult[void] =
+    fn: FindNodeMessage, reqId: RequestId) =
   if fn.distance == 0:
     d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
   else:
@@ -333,14 +327,8 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
       let toNode = pr.node
       whoareyou.pubKey = toNode.pubkey # TODO: Yeah, rather ugly this.
       doAssert(toNode.address.isSome())
-      let encoded = d.codec.encodePacket(toNode.id, toNode.address.get(),
+      let (data, _) = encodePacket(d.rng[], d.codec, toNode.id, toNode.address.get(),
         pr.message, challenge = whoareyou)
-      # TODO: Perhaps just expect here? Or raise Defect in `encodePacket`?
-      # if this occurs there is an issue with the system anyhow?
-      if encoded.isErr:
-        warn "Not enough randomness to encode packet"
-        return
-      let (data, _) = encoded[]
       d.send(toNode, data)
     else:
       debug "Timed out or unrequested WhoAreYou packet"
@@ -366,11 +354,9 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
 
       case message.kind
       of ping:
-        if d.handlePing(sender, a, message.ping, message.reqId).isErr:
-          debug "Sending Pong message failed"
+        d.handlePing(sender, a, message.ping, message.reqId)
       of findNode:
-        if d.handleFindNode(sender, a, message.findNode, message.reqId).isErr:
-          debug "Sending Nodes message failed"
+        d.handleFindNode(sender, a, message.findNode, message.reqId)
       else:
         var waiter: Future[Option[Message]]
         if d.awaitedMessages.take((sender, message.reqId), waiter):
@@ -518,24 +504,22 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
     return err("Nodes message not received in time")
 
 proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
-    DiscResult[RequestId] {.raises: [Exception, Defect].} =
+    RequestId {.raises: [Exception, Defect].} =
   doAssert(toNode.address.isSome())
   let
-    reqId = ? newRequestId()
+    reqId = RequestId.init(d.rng[])
     message = encodeMessage(m, reqId)
-    (data, nonce) = ? d.codec.encodePacket(toNode.id, toNode.address.get(),
+    (data, nonce) = encodePacket(d.rng[], d.codec, toNode.id, toNode.address.get(),
       message, challenge = nil)
   d.registerRequest(toNode, message, nonce)
   d.send(toNode, data)
-  return ok(reqId)
+  return reqId
 
 proc ping*(d: Protocol, toNode: Node):
     Future[DiscResult[PongMessage]] {.async, raises: [Exception, Defect].} =
   let reqId = d.sendMessage(toNode,
     PingMessage(enrSeq: d.localNode.record.seqNum))
-  if reqId.isErr:
-    return err(reqId.error)
-  let resp = await d.waitMessage(toNode, reqId[])
+  let resp = await d.waitMessage(toNode, reqId)
 
   if resp.isSome() and resp.get().kind == pong:
     d.routingTable.setJustSeen(toNode)
@@ -547,9 +531,7 @@ proc ping*(d: Protocol, toNode: Node):
 proc findNode*(d: Protocol, toNode: Node, distance: uint32):
     Future[DiscResult[seq[Node]]] {.async, raises: [Exception, Defect].} =
   let reqId = d.sendMessage(toNode, FindNodeMessage(distance: distance))
-  if reqId.isErr:
-    return err(reqId.error)
-  let nodes = await d.waitNodes(toNode, reqId[])
+  let nodes = await d.waitNodes(toNode, reqId)
 
   if nodes.isOk:
     var res = newSeq[Node]()
@@ -632,15 +614,16 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
         if result.len < BUCKET_SIZE:
           result.add(n)
 
-proc lookupRandom*(d: Protocol): Future[DiscResult[seq[Node]]]
+proc lookupRandom*(d: Protocol): Future[seq[Node]]
     {.async, raises:[Exception, Defect].} =
   ## Perform a lookup for a random target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   var id: NodeId
-  if randomBytes(addr id, sizeof(id)) != sizeof(id):
-    return err("Could not randomize bytes")
+  var buf: array[sizeof(id), byte]
+  brHmacDrbgGenerate(d.rng[], buf)
+  copyMem(addr id, addr buf[0], sizeof(id))
 
-  return ok(await d.lookup(id))
+  return await d.lookup(id)
 
 proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]]
     {.async, raises: [Exception, Defect].} =
@@ -700,11 +683,8 @@ proc lookupLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
     trace "Discovered nodes in self lookup", nodes = $selfLookup
     while true:
       let randomLookup = await d.lookupRandom()
-      if randomLookup.isOK:
-        trace "Discovered nodes in random lookup", nodes = $randomLookup[]
-        trace "Total nodes in routing table", total = d.routingTable.len()
-      else:
-        trace "random lookup failed", err = randomLookup.error
+      trace "Discovered nodes in random lookup", nodes = $randomLookup
+      trace "Total nodes in routing table", total = d.routingTable.len()
       await sleepAsync(lookupInterval)
   except CancelledError:
     trace "lookupLoop canceled"
@@ -713,7 +693,7 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
                   externalIp: Option[ValidIpAddress], tcpPort, udpPort: Port,
                   localEnrFields: openarray[FieldPair] = [],
                   bootstrapRecords: openarray[Record] = [],
-                  bindIp = IPv4_any()):
+                  bindIp = IPv4_any(), rng = newRng()):
                   Protocol {.raises: [Defect].} =
   # TODO: Tried adding bindPort = udpPort as parameter but that gave
   # "Error: internal error: environment misses: udpPort" in nim-beacon-chain.
@@ -725,6 +705,9 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
       localEnrFields).expect("Properly intialized private key")
     node = newNode(enrRec).expect("Properly initialized node")
 
+  # TODO Consider whether this should be a Defect
+  doAssert rng != nil, "RNG initialization failed"
+
   result = Protocol(
     privateKey: privKey,
     db: db,
@@ -733,7 +716,8 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
     whoareyouMagic: whoareyouMagic(node.id),
     idHash: sha256.digest(node.id.toByteArrayBE).data,
     codec: Codec(localNode: node, privKey: privKey, db: db),
-    bootstrapRecords: @bootstrapRecords)
+    bootstrapRecords: @bootstrapRecords,
+    rng: rng)
 
   result.routingTable.init(node, 5)
 

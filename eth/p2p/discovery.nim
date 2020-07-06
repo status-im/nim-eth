@@ -10,7 +10,7 @@
 
 import
   times,
-  chronos, stint, nimcrypto, chronicles,
+  chronos, stint, nimcrypto/keccak, chronicles,
   eth/[keys, rlp],
   kademlia, enode,
   stew/[objects, results]
@@ -155,7 +155,7 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
   if nodes.len != 0: flush()
 
 proc newDiscoveryProtocol*(privKey: PrivateKey, address: Address,
-                           bootstrapNodes: openarray[ENode]
+                           bootstrapNodes: openarray[ENode], rng = newRng()
                            ): DiscoveryProtocol =
   result.new()
   result.privKey = privKey
@@ -163,7 +163,7 @@ proc newDiscoveryProtocol*(privKey: PrivateKey, address: Address,
   result.bootstrapNodes = newSeqOfCap[Node](bootstrapNodes.len)
   for n in bootstrapNodes: result.bootstrapNodes.add(newNode(n))
   result.thisNode = newNode(privKey.toPublicKey(), address)
-  result.kademlia = newKademliaProtocol(result.thisNode, result)
+  result.kademlia = newKademliaProtocol(result.thisNode, result, rng = rng)
 
 proc recvPing(d: DiscoveryProtocol, node: Node,
               msgHash: MDigest[256]) {.inline.} =

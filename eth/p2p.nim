@@ -9,7 +9,7 @@
 #
 
 import
-  tables, algorithm, random,
+  tables, algorithm, random, bearssl,
   chronos, chronos/timer, chronicles,
   eth/keys, eth/common/eth_types,
   eth/p2p/[kademlia, discovery, enode, peer_pool, rlpx],
@@ -38,7 +38,12 @@ proc newEthereumNode*(keys: KeyPair,
                       clientId = "nim-eth-p2p/0.2.0", # TODO: read this value from nimble somehow
                       addAllCapabilities = true,
                       useCompression: bool = false,
-                      minPeers = 10): EthereumNode =
+                      minPeers = 10,
+                      rng = newRng()): EthereumNode =
+
+  if rng == nil: # newRng could fail
+    raise (ref CatchableError)(msg: "Cannot initialize RNG")
+
   new result
   result.keys = keys
   result.networkId = networkId
@@ -47,6 +52,7 @@ proc newEthereumNode*(keys: KeyPair,
   result.capabilities.newSeq 0
   result.address = address
   result.connectionState = ConnectionState.None
+  result.rng = rng
 
   when useSnappy:
     result.protocolVersion = if useCompression: devp2pSnappyVersion

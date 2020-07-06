@@ -23,6 +23,8 @@ proc compare[A, B](x: openarray[A], y: openarray[B], s: int = 0): bool =
 template offsetOf(a, b): int =
   cast[int](cast[uint](unsafeAddr b) - cast[uint](unsafeAddr a))
 
+let rng = newRng()
+
 suite "ECIES test suite":
   test "ECIES structures alignment":
     var header: EciesHeader
@@ -69,17 +71,17 @@ suite "ECIES test suite":
     var encr = newSeq[byte](eciesEncryptedLength(len(m)))
     var decr = newSeq[byte](len(m))
     var shmac = [0x13'u8, 0x13'u8]
-    var s = PrivateKey.random()[]
+    var s = PrivateKey.random(rng[])
     var p = s.toPublicKey()
 
-    eciesEncrypt(plain, encr, p).expect("encryption should succeed")
+    eciesEncrypt(rng[], plain, encr, p).expect("encryption should succeed")
     eciesDecrypt(encr, decr, s).expect("decryption should succeed")
 
     check:
       # Without additional mac data
       equalMem(addr m[0], addr decr[0], len(m))
     # With additional mac data
-    eciesEncrypt(plain, encr, p, shmac).expect("encryption should succeed")
+    eciesEncrypt(rng[], plain, encr, p, shmac).expect("encryption should succeed")
     eciesDecrypt(encr, decr, s, shmac).expect("decryption should succeed")
 
     check:

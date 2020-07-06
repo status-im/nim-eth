@@ -199,6 +199,8 @@ const eip8data = [
    "0c7ec6340062cc46f5e9f1e3cf86f8c8c403c5a0964f5df0ebd34a75ddc86db5")
 ]
 
+let rng = newRng()
+
 proc testValue(s: string): string =
   for item in data:
     if item[0] == s:
@@ -212,26 +214,21 @@ proc testE8Value(s: string): string =
       break
 
 suite "Ethereum P2P handshake test suite":
-
   block:
     proc newTestHandshake(flags: set[HandshakeFlag]): Handshake =
       if Initiator in flags:
         let pk = PrivateKey.fromHex(testValue("initiator_private_key"))[]
-        let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey())
-        result = Handshake.tryInit(kp, flags)[]
+        result = Handshake.tryInit(rng[], pk.toKeyPair(), flags)[]
 
         let epki = testValue("initiator_ephemeral_private_key")
-        result.ephemeral.seckey = PrivateKey.fromHex(epki)[]
-        result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()
+        result.ephemeral = PrivateKey.fromHex(epki)[].toKeyPair()
         let nonce = fromHex(stripSpaces(testValue("initiator_nonce")))
         result.initiatorNonce[0..^1] = nonce[0..^1]
       elif Responder in flags:
         let pk = PrivateKey.fromHex(testValue("receiver_private_key"))[]
-        let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey())
-        result = Handshake.tryInit(kp, flags)[]
+        result = Handshake.tryInit(rng[], pk.toKeyPair(), flags)[]
         let epkr = testValue("receiver_ephemeral_private_key")
-        result.ephemeral.seckey = PrivateKey.fromHex(epkr)[]
-        result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()
+        result.ephemeral = PrivateKey.fromHex(epkr)[].toKeyPair()
         let nonce = fromHex(stripSpaces(testValue("receiver_nonce")))
         result.responderNonce[0..^1] = nonce[0..^1]
 
@@ -241,7 +238,7 @@ suite "Ethereum P2P handshake test suite":
       var m0 = newSeq[byte](initiator.authSize(false))
       var k0 = 0
       initiator.authMessage(
-        responder.host.pubkey, m0, k0, 0, false).expect("auth success")
+        rng[], responder.host.pubkey, m0, k0, 0, false).expect("auth success")
       var expect1 = fromHex(stripSpaces(testValue("auth_plaintext")))
       var expect2 = fromHex(stripSpaces(pyevmAuth))
       check:
@@ -257,7 +254,7 @@ suite "Ethereum P2P handshake test suite":
       let remoteHPubkey0 = initiator.host.pubkey
 
       initiator.authMessage(
-        responder.host.pubkey, m0, k0).expect("auth success")
+        rng[], responder.host.pubkey, m0, k0).expect("auth success")
       responder.decodeAuthMessage(m0).expect("decode success")
       check:
         responder.initiatorNonce[0..^1] == initiator.initiatorNonce[0..^1]
@@ -273,9 +270,9 @@ suite "Ethereum P2P handshake test suite":
       var k1 = 0
       var expect0 = fromHex(stripSpaces(testValue("authresp_plaintext")))
       initiator.authMessage(
-        responder.host.pubkey, m0, k0).expect("auth success")
+        rng[], responder.host.pubkey, m0, k0).expect("auth success")
       responder.decodeAuthMessage(m0).expect("decode success")
-      responder.ackMessage(m1, k1, 0, false).expect("ack success")
+      responder.ackMessage(rng[], m1, k1, 0, false).expect("ack success")
       check:
         m1 == expect0
         responder.initiatorNonce == initiator.initiatorNonce
@@ -289,9 +286,9 @@ suite "Ethereum P2P handshake test suite":
       var k1 = 0
 
       initiator.authMessage(
-        responder.host.pubkey, m0, k0).expect("auth success")
+        rng[], responder.host.pubkey, m0, k0).expect("auth success")
       responder.decodeAuthMessage(m0).expect("decode success")
-      responder.ackMessage(m1, k1).expect("ack success")
+      responder.ackMessage(rng[], m1, k1).expect("ack success")
       initiator.decodeAckMessage(m1).expect("decode success")
       let remoteEPubkey0 = responder.ephemeral.pubkey
       let remoteHPubkey0 = responder.host.pubkey
@@ -333,23 +330,18 @@ suite "Ethereum P2P handshake test suite":
     proc newTestHandshake(flags: set[HandshakeFlag]): Handshake =
       if Initiator in flags:
         let pk = PrivateKey.fromHex(testE8Value("initiator_private_key"))[]
-        let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey())
-        result = Handshake.tryInit(kp, flags)[]
+        result = Handshake.tryInit(rng[], pk.toKeyPair(), flags)[]
 
-        result.host.pubkey = result.host.seckey.toPublicKey()
         let esec = testE8Value("initiator_ephemeral_private_key")
-        result.ephemeral.seckey = PrivateKey.fromHex(esec)[]
-        result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()
+        result.ephemeral = PrivateKey.fromHex(esec)[].toKeyPair()
         let nonce = fromHex(stripSpaces(testE8Value("initiator_nonce")))
         result.initiatorNonce[0..^1] = nonce[0..^1]
       elif Responder in flags:
         let pk = PrivateKey.fromHex(testE8Value("receiver_private_key"))[]
-        let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey())
-        result = Handshake.tryInit(kp, flags)[]
+        result = Handshake.tryInit(rng[], pk.toKeyPair(), flags)[]
 
         let esec = testE8Value("receiver_ephemeral_private_key")
-        result.ephemeral.seckey = PrivateKey.fromHex(esec)[]
-        result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()
+        result.ephemeral = PrivateKey.fromHex(esec)[].toKeyPair()
         let nonce = fromHex(stripSpaces(testE8Value("receiver_nonce")))
         result.responderNonce[0..^1] = nonce[0..^1]
 
@@ -436,12 +428,12 @@ suite "Ethereum P2P handshake test suite":
         var k0 = 0
         var k1 = 0
         initiator.authMessage(
-          responder.host.pubkey, m0, k0).expect("auth success")
+          rng[], responder.host.pubkey, m0, k0).expect("auth success")
         m0.setLen(k0)
         responder.decodeAuthMessage(m0).expect("decode success")
         check (EIP8 in responder.flags) == true
         var m1 = newSeq[byte](responder.ackSize())
-        responder.ackMessage(m1, k1).expect("ack success")
+        responder.ackMessage(rng[], m1, k1).expect("ack success")
         m1.setLen(k1)
         initiator.decodeAckMessage(m1).expect("decode success")
         var csecInitiator = initiator.getSecrets(m0, m1).expect("secrets")
@@ -458,11 +450,11 @@ suite "Ethereum P2P handshake test suite":
         var k0 = 0
         var k1 = 0
         initiator.authMessage(
-          responder.host.pubkey, m0, k0).expect("auth success")
+          rng[], responder.host.pubkey, m0, k0).expect("auth success")
         m0.setLen(k0)
         responder.decodeAuthMessage(m0).expect("auth success")
         var m1 = newSeq[byte](responder.ackSize())
-        responder.ackMessage(m1, k1).expect("ack success")
+        responder.ackMessage(rng[], m1, k1).expect("ack success")
         m1.setLen(k1)
         initiator.decodeAckMessage(m1).expect("ack success")
 

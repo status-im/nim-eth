@@ -80,6 +80,8 @@ const data = [
       e7c301a0c05559f4c25db65e36820b4b909a226171a60ac6cb7beea09376d6d8""")
 ]
 
+let rng = newRng()
+
 proc testValue(s: string): string =
   for item in data:
     if item[0] == s:
@@ -90,20 +92,16 @@ suite "Ethereum RLPx encryption/decryption test suite":
   proc newTestHandshake(flags: set[HandshakeFlag]): Handshake =
     if Initiator in flags:
       let pk = PrivateKey.fromHex(testValue("initiator_private_key"))[]
-      let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey())
-      result = Handshake.tryInit(kp, flags)[]
+      result = Handshake.tryInit(rng[], pk.toKeyPair(), flags)[]
       let epki = testValue("initiator_ephemeral_private_key")
-      result.ephemeral.seckey = PrivateKey.fromHex(epki)[]
-      result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()
+      result.ephemeral = PrivateKey.fromHex(epki)[].toKeyPair()
       let nonce = fromHex(stripSpaces(testValue("initiator_nonce")))
       result.initiatorNonce[0..^1] = nonce[0..^1]
     elif Responder in flags:
       let pk = PrivateKey.fromHex(testValue("receiver_private_key"))[]
-      let kp = KeyPair(seckey: pk, pubkey: pk.toPublicKey())
-      result = Handshake.tryInit(kp, flags)[]
+      result = Handshake.tryInit(rng[], pk.toKeyPair(), flags)[]
       let epkr = testValue("receiver_ephemeral_private_key")
-      result.ephemeral.seckey = PrivateKey.fromHex(epkr)[]
-      result.ephemeral.pubkey = result.ephemeral.seckey.toPublicKey()
+      result.ephemeral = PrivateKey.fromHex(epkr)[].toKeyPair()
       let nonce = fromHex(stripSpaces(testValue("receiver_nonce")))
       result.responderNonce[0..^1] = nonce[0..^1]
 
@@ -174,12 +172,12 @@ suite "Ethereum RLPx encryption/decryption test suite":
     var m0 = newSeq[byte](initiator.authSize())
     var k0 = 0
     var k1 = 0
-    check initiator.authMessage(responder.host.pubkey,
+    check initiator.authMessage(rng[], responder.host.pubkey,
                                 m0, k0).isOk
     m0.setLen(k0)
     check responder.decodeAuthMessage(m0).isOk
     var m1 = newSeq[byte](responder.ackSize())
-    check responder.ackMessage(m1, k1).isOk
+    check responder.ackMessage(rng[], m1, k1).isOk
     m1.setLen(k1)
     check initiator.decodeAckMessage(m1).isOk
 

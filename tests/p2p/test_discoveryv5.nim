@@ -1,15 +1,18 @@
 import
   chronos, chronicles, tables, stint, nimcrypto, testutils/unittests,
-  stew/shims/net, eth/keys,
+  stew/shims/net, eth/keys, bearssl,
   eth/p2p/discoveryv5/[enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./discv5_test_helper
+
+var rng {.threadvar.}: ref BrHmacDrbgContext
+rng = newRng()
 
 procSuite "Discovery v5 Tests":
   asyncTest "GetNode":
     # TODO: This could be tested in just a routing table only context
     let
-      node = initDiscoveryNode(PrivateKey.random()[], localAddress(20302))
+      node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
       targetNode = generateNode()
 
     check node.addNode(targetNode)
@@ -25,10 +28,13 @@ procSuite "Discovery v5 Tests":
 
   asyncTest "Node deletion":
     let
-      bootnode = initDiscoveryNode(PrivateKey.random()[], localAddress(20301))
-      node1 = initDiscoveryNode(PrivateKey.random()[], localAddress(20302),
+      bootnode = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20301))
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302),
         @[bootnode.localNode.record])
-      node2 = initDiscoveryNode(PrivateKey.random()[], localAddress(20303),
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303),
         @[bootnode.localNode.record])
       pong1 = await discv5_protocol.ping(node1, bootnode.localNode)
       pong2 = await discv5_protocol.ping(node1, node2.localNode)
@@ -51,12 +57,13 @@ procSuite "Discovery v5 Tests":
 
 
   asyncTest "Handshake cleanup":
-    let node = initDiscoveryNode(PrivateKey.random()[], localAddress(20302))
+    let node = initDiscoveryNode(
+      rng, PrivateKey.random(rng[]), localAddress(20302))
     var tag: PacketTag
     let a = localAddress(20303)
 
     for i in 0 ..< 5:
-      check randomBytes(tag) == tag.len
+      brHmacDrbgGenerate(rng[], tag)
       node.receive(a, randomPacket(tag))
 
     # Checking different nodeIds but same address
@@ -70,7 +77,8 @@ procSuite "Discovery v5 Tests":
     await node.closeWait()
 
   asyncTest "Handshake different address":
-    let node = initDiscoveryNode(PrivateKey.random()[], localAddress(20302))
+    let node = initDiscoveryNode(
+      rng, PrivateKey.random(rng[]), localAddress(20302))
     var tag: PacketTag
 
     for i in 0 ..< 5:
@@ -82,7 +90,8 @@ procSuite "Discovery v5 Tests":
     await node.closeWait()
 
   asyncTest "Handshake duplicates":
-    let node = initDiscoveryNode(PrivateKey.random()[], localAddress(20302))
+    let node = initDiscoveryNode(
+      rng, PrivateKey.random(rng[]), localAddress(20302))
     var tag: PacketTag
     let a = localAddress(20303)
 
@@ -177,8 +186,8 @@ procSuite "Discovery v5 Tests":
         "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
       testNodeKey = PrivateKey.fromHex(
         "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")[]
-      mainNode = initDiscoveryNode(mainNodeKey, localAddress(20301))
-      testNode = initDiscoveryNode(testNodeKey, localAddress(20302))
+      mainNode = initDiscoveryNode(rng, mainNodeKey, localAddress(20301))
+      testNode = initDiscoveryNode(rng, testNodeKey, localAddress(20302))
       # logarithmic distance between mainNode and testNode is 256
 
     let nodes = nodesAtDistance(mainNode.localNode, dist, 10)
@@ -233,7 +242,8 @@ procSuite "Discovery v5 Tests":
 
   asyncTest "FindNode with test table":
 
-    let mainNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20301))
+    let mainNode =
+      initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301))
 
     # Generate 1000 random nodes and add to our main node's routing table
     for i in 0..<1000:
@@ -247,7 +257,8 @@ procSuite "Discovery v5 Tests":
     debug "Closest neighbour", closestDistance, id=closest.id.toHex()
 
     let
-      testNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20302),
+      testNode = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302),
         @[mainNode.localNode.record])
       discovered = await discv5_protocol.findNode(testNode, mainNode.localNode,
         closestDistance)
@@ -262,13 +273,14 @@ procSuite "Discovery v5 Tests":
     const
       nodeCount = 17
 
-    let bootNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20301))
+    let bootNode =
+      initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301))
     bootNode.start()
 
     var nodes = newSeqOfCap[discv5_protocol.Protocol](nodeCount)
     nodes.add(bootNode)
     for i in 1 ..< nodeCount:
-      nodes.add(initDiscoveryNode(PrivateKey.random()[], localAddress(20301 + i),
+      nodes.add(initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301 + i),
         @[bootNode.localNode.record]))
 
     # Make sure all nodes have "seen" each other by forcing pings
@@ -292,11 +304,13 @@ procSuite "Discovery v5 Tests":
 
   asyncTest "Resolve target":
     let
-      mainNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20301))
-      lookupNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20302))
-      targetKey = PrivateKey.random()[]
+      mainNode =
+        initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301))
+      lookupNode =
+        initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
+      targetKey = PrivateKey.random(rng[])
       targetAddress = localAddress(20303)
-      targetNode = initDiscoveryNode(targetKey, targetAddress)
+      targetNode = initDiscoveryNode(rng, targetKey, targetAddress)
       targetId = targetNode.localNode.id
 
     var targetSeqNum = targetNode.localNode.record.seqNum
@@ -362,7 +376,7 @@ procSuite "Discovery v5 Tests":
 
   asyncTest "Random nodes with enr field filter":
     let
-      lookupNode = initDiscoveryNode(PrivateKey.random()[], localAddress(20301))
+      lookupNode = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301))
       targetFieldPair = toFieldPair("test", @[byte 1,2,3,4])
       targetNode = generateNode(localEnrFields = [targetFieldPair])
       otherFieldPair = toFieldPair("test", @[byte 1,2,3,4,5])

@@ -52,11 +52,13 @@ p2pProtocol hah(version = 1,
   onPeerDisconnected do (peer: Peer, reason: DisconnectionReason) {.gcsafe.}:
     peer.networkState.count -= 1
 
+
 suite "Testing protocol handlers":
   asyncTest "Failing disconnection handler":
-    let bootENode = await setupBootNode()
-    var node1 = setupTestNode(abc, xyz)
-    var node2 = setupTestNode(abc, xyz)
+    let rng = newRng()
+
+    var node1 = setupTestNode(rng, abc, xyz)
+    var node2 = setupTestNode(rng, abc, xyz)
 
     node2.startListening()
     let peer = await node1.rlpxConnect(newNode(node2.toENode()))
@@ -71,8 +73,10 @@ suite "Testing protocol handlers":
       node1.protocolState(xyz).count == 0
 
   asyncTest "Failing connection handler":
-    var node1 = setupTestNode(hah)
-    var node2 = setupTestNode(hah)
+    let rng = newRng()
+
+    var node1 = setupTestNode(rng, hah)
+    var node2 = setupTestNode(rng, hah)
     node2.startListening()
     let peer = await node1.rlpxConnect(newNode(node2.toENode()))
     check:

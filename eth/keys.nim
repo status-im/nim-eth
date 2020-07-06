@@ -15,7 +15,7 @@
 {.push raises: [Defect].}
 
 import
-  secp256k1,
+  secp256k1, bearssl,
   nimcrypto/hash, nimcrypto/keccak,
   stew/[byteutils, objects, results], strformat
 
@@ -46,12 +46,29 @@ type
   SharedSecret* = object
     data*: array[KeyLength, byte]
 
-  KeyPair* = object
-    seckey*: PrivateKey
-    pubkey*: PublicKey
+  KeyPair* = distinct SkKeyPair
 
-proc random*(T: type PrivateKey): SkResult[T] =
-  SkSecretKey.random().mapConvert(T)
+template pubkey*(v: KeyPair): PublicKey = PublicKey(SkKeyPair(v).pubkey)
+template seckey*(v: KeyPair): PrivateKey = PrivateKey(SkKeyPair(v).seckey)
+
+proc newRng*(): ref BrHmacDrbgContext =
+  # You should only create one instance of the RNG per application / library
+  # Ref is used so that it can be shared between components
+  # TODO consider moving to bearssl
+  var
+    seeder = brPrngSeederSystem(nil)
+    rng = (ref BrHmacDrbgContext)()
+  brHmacDrbgInit(addr rng[], addr sha256Vtable, nil, 0)
+  if seeder(addr rng.vtable) == 0:
+    return nil
+  rng
+
+proc random*(T: type PrivateKey, rng: var BrHmacDrbgContext): T =
+  let rngPtr = unsafeAddr rng # doesn't escape
+  proc callRng(data: var openArray[byte]) =
+    brHmacDrbgGenerate(rngPtr[], data)
+
+  T(SkSecretKey.random(callRng))
 
 func fromRaw*(T: type PrivateKey, data: openArray[byte]): SkResult[T] =
   SkSecretKey.fromRaw(data).mapConvert(T)
@@ -87,12 +104,16 @@ func toRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] =
 
 func toRawCompressed*(pubkey: PublicKey): array[33, byte] {.borrow.}
 
-proc random*(T: type KeyPair): SkResult[T] =
-  let tmp = ? SkKeypair.random()
-  ok(T(seckey: PrivateKey(tmp.seckey), pubkey: PublicKey(tmp.pubkey)))
+proc random*(T: type KeyPair, rng: var BrHmacDrbgContext): T =
+  let seckey = SkSecretKey(PrivateKey.random(rng))
+  KeyPair(SkKeyPair(
+    seckey: seckey,
+    pubkey: seckey.toPublicKey()
+  ))
 
 func toKeyPair*(seckey: PrivateKey): KeyPair =
-  KeyPair(seckey: seckey, pubkey: seckey.toPublicKey())
+  KeyPair(SkKeyPair(
+    seckey: SkSecretKey(seckey), pubkey: SkSecretKey(seckey).toPublicKey()))
 
 func fromRaw*(T: type Signature, data: openArray[byte]): SkResult[T] =
   SkRecoverableSignature.fromRaw(data).mapConvert(T)
@@ -192,28 +213,28 @@ func sign*(seckey: PrivateKey, msg: SkMessage): Signature =
 
 func sign*(seckey: PrivateKey, msg: openArray[byte]): Signature =
   let hash = keccak256.digest(msg)
-  sign(seckey, hash)
+  sign(seckey, SkMessage(hash.data))
 
 func signNR*(seckey: PrivateKey, msg: SkMessage): SignatureNR =
   SignatureNR(sign(SkSecretKey(seckey), msg))
 
 func signNR*(seckey: PrivateKey, msg: openArray[byte]): SignatureNR =
   let hash = keccak256.digest(msg)
-  signNR(seckey, hash)
+  signNR(seckey, SkMessage(hash.data))
 
 func recover*(sig: Signature, msg: SkMessage): SkResult[PublicKey] =
   recover(SkRecoverableSignature(sig), msg).mapConvert(PublicKey)
 
 func recover*(sig: Signature, msg: openArray[byte]): SkResult[PublicKey] =
   let hash = keccak256.digest(msg)
-  recover(sig, hash)
+  recover(sig, SkMessage(hash.data))
 
 func verify*(sig: SignatureNR, msg: SkMessage, key: PublicKey): bool =
   verify(SkSignature(sig), msg, SkPublicKey(key))
 
 func verify*(sig: SignatureNR, msg: openArray[byte], key: PublicKey): bool =
   let hash = keccak256.digest(msg)
-  verify(sig, hash, key)
+  verify(sig, SkMessage(hash.data), key)
 
 func ecdhRaw*(seckey: PrivateKey, pubkey: PublicKey): SharedSecret =
   let tmp = ecdhRaw(SkSecretKey(seckey), SkPublicKey(pubkey))

@@ -12,7 +12,8 @@
 
 {.push raises: [Defect].}
 
-import eth/keys, nimcrypto/[rijndael, bcmode, hash, hmac, sysrand, sha2, utils]
+import bearssl
+import eth/keys, nimcrypto/[rijndael, bcmode, hash, hmac, sha2, utils]
 import stew/results
 
 export results
@@ -23,7 +24,6 @@ const
 type
   EciesError* = enum
     BufferOverrun   = "ecies: output buffer size is too small"
-    RandomError     = "ecies: could not obtain random data"
     EcdhError       = "ecies: ECDH shared secret could not be calculated"
     WrongHeader     = "ecies: header is incorrect"
     IncorrectKey    = "ecies: recovered public key is invalid"
@@ -92,8 +92,8 @@ proc kdf*(data: openarray[byte]): array[KeyLength, byte] {.noInit.} =
   ctx.clear() # clean ctx
   copyMem(addr result[0], addr storage[0], KeyLength)
 
-proc eciesEncrypt*(input: openarray[byte], output: var openarray[byte],
-                   pubkey: PublicKey,
+proc eciesEncrypt*(rng: var BrHmacDrbgContext, input: openarray[byte],
+                   output: var openarray[byte], pubkey: PublicKey,
                    sharedmac: openarray[byte] = emptyMac): EciesResult[void] =
   ## Encrypt data with ECIES method using given public key `pubkey`.
   ## ``input``     - input data
@@ -110,11 +110,11 @@ proc eciesEncrypt*(input: openarray[byte], output: var openarray[byte],
 
   if len(output) < eciesEncryptedLength(len(input)):
     return err(BufferOverrun)
-  if randomBytes(iv) != aes128.sizeBlock:
-    return err(RandomError)
+
+  brHmacDrbgGenerate(rng, iv)
 
   var
-    ephemeral = ? KeyPair.random().mapErrTo(RandomError)
+    ephemeral = KeyPair.random(rng)
     secret = ecdhRaw(ephemeral.seckey, pubkey)
     material = kdf(secret.data)
 
