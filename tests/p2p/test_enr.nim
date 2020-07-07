@@ -87,7 +87,7 @@ suite "ENR":
       let r = initRecord(1, pk, {"maxplus1": repeat(byte 2, 170),})
       check r.isErr()
 
-  test "ENR insert":
+  test "ENR update":
     let
       pk = PrivateKey.fromHex(
         "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
@@ -95,28 +95,31 @@ suite "ENR":
     var r = Record.init(1, pk, none(ValidIpAddress), Port(9000), Port(9000))[]
 
     block: # Insert new k:v pair, update of seqNum should occur.
-      let res = r.insertFieldPairs(pk, [newField])
+      let res = r.update(pk, [newField])
+      check res.isOk()
+      r = res[]
       check:
-        res.isOk()
         r.get("test", uint) == 123
         r.seqNum == 2
 
     block: # Insert same k:v pair, no update of seqNum should occur.
-      let res = r.insertFieldPairs(pk, [newField])
+      let res = r.update(pk, [newField])
+      check res.isOk()
+      r = res[]
       check:
-        res.isOk()
         r.get("test", uint) == 123
         r.seqNum == 2
 
     block: # Insert k:v pair with changed value, update of seqNum should occur.
       let updatedField = toFieldPair("test", 1234'u)
-      let res =  r.insertFieldPairs(pk, [updatedField])
+      let res = r.update(pk, [updatedField])
+      check res.isOk()
+      r = res[]
       check:
-        res.isOk()
         r.get("test", uint) == 1234
         r.seqNum == 3
 
-  test "ENR insert sorted":
+  test "ENR update sorted":
     let pk = PrivateKey.fromHex(
       "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
     var r = initRecord(123, pk, {"abc": 1234'u,
@@ -127,11 +130,11 @@ suite "ENR":
 
     let newField = toFieldPair("test", 123'u)
     let newField2 = toFieldPair("zzz", 123'u)
-    let res = r.insertFieldPairs(pk, [newField, newField2])
+    let res = r.update(pk, [newField, newField2])
     check res.isOk()
-    check $r == """(123: "abc", a12: 1, abc: 1234, id: "v4", secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, test: 123, z: 0x00, zzz: 123)"""
+    check $res[] == """(123: "abc", a12: 1, abc: 1234, id: "v4", secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, test: 123, z: 0x00, zzz: 123)"""
 
-  test "ENR insert size too big":
+  test "ENR update size too big":
     let pk = PrivateKey.fromHex(
       "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
 
@@ -139,10 +142,10 @@ suite "ENR":
     check r.isOk()
 
     let newField = toFieldPair("test", 123'u)
-    let res = r[].insertFieldPairs(pk, [newField])
+    let res = r[].update(pk, [newField])
     check res.isErr()
 
-  test "ENR insert invalid key":
+  test "ENR update invalid key":
     let pk = PrivateKey.fromHex(
       "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
 
@@ -152,5 +155,29 @@ suite "ENR":
     let
       wrongPk = PrivateKey.random(rng[])
       newField = toFieldPair("test", 123'u)
-      res = r[].insertFieldPairs(wrongPk, [newField])
+      res = r[].update(wrongPk, [newField])
     check res.isErr()
+
+  test "ENR update address":
+    let
+      pk = PrivateKey.fromHex(
+        "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
+    var r = Record.init(1, pk, none(ValidIpAddress), Port(9000), Port(9000))[]
+
+    block:
+      let res = r.update(pk, none(ValidIpAddress), Port(9000), Port(9000))
+      check res.isOk()
+      r = res[]
+      check:
+        r.get("tcp", uint) == 9000
+        r.get("udp", uint) == 9000
+        r.seqNum == 1
+
+    block:
+      let res = r.update(pk, none(ValidIpAddress), Port(9001), Port(9002))
+      check res.isOk()
+      r = res[]
+      check:
+        r.get("tcp", uint) == 9001
+        r.get("udp", uint) == 9002
+        r.seqNum == 2

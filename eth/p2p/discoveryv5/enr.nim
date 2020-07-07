@@ -227,8 +227,8 @@ proc find(r: Record, key: string): Option[int] =
     if k == key:
       return some(i)
 
-proc insertFieldPairs*(record: var Record, pk: PrivateKey,
-    fieldPairs: openarray[FieldPair]): EnrResult[bool] =
+proc update*(record: Record, pk: PrivateKey, fieldPairs: openarray[FieldPair]):
+    EnrResult[Record] =
   var r = record
 
   let pubkey = r.get(PublicKey)
@@ -255,16 +255,14 @@ proc insertFieldPairs*(record: var Record, pk: PrivateKey,
   if updated:
     r.seqNum.inc()
     r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
-    record = r
-    ok(true)
-  else:
-    ok(true)
 
-proc update*(r: var Record, pk: PrivateKey,
-                            ip: Option[ValidIpAddress],
-                            tcpPort, udpPort: Port,
-                            extraFields: openarray[FieldPair]):
-                            EnrResult[bool] =
+  ok(r)
+
+proc update*(r: Record, pk: PrivateKey,
+                        ip: Option[ValidIpAddress],
+                        tcpPort, udpPort: Port,
+                        extraFields: openarray[FieldPair] = []):
+                        EnrResult[Record] =
   var fields = newSeq[FieldPair]()
 
   if ip.isSome():
@@ -282,7 +280,7 @@ proc update*(r: var Record, pk: PrivateKey,
 
   fields.add extraFields
 
-  r.insertFieldPairs(pk, fields)
+  r.update(pk, fields)
 
 proc tryGet*(r: Record, key: string, T: type): Option[T] =
   try:

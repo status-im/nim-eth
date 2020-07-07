@@ -693,6 +693,7 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
                   externalIp: Option[ValidIpAddress], tcpPort, udpPort: Port,
                   localEnrFields: openarray[FieldPair] = [],
                   bootstrapRecords: openarray[Record] = [],
+                  previousEnr = none[enr.Record](),
                   bindIp = IPv4_any(), rng = newRng()):
                   Protocol {.raises: [Defect].} =
   # TODO: Tried adding bindPort = udpPort as parameter but that gave
@@ -701,10 +702,16 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
   # remapping through NAT and this API is also subject to change once we
   # introduce support for ipv4 + ipv6 binding/listening.
   let
-    # TODO: Defect or return a result on this call?
-    enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
-      localEnrFields).expect("Record within size limits")
-    node = newNode(enrRec).expect("Properly initialized node")
+    # TODO:
+    # - Defect as is now or return a result for enr errors?
+    # - In case incorrect key, allow for new enr based on new key (new node id)?
+    enr = if previousEnr.isSome():
+            previousEnr.get().update(privKey, externalIp, tcpPort, udpPort,
+              localEnrFields).expect("Record within size limits and correct key")
+          else:
+            enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
+              localEnrFields).expect("Record within size limits")
+    node = newNode(enr).expect("Properly initialized record")
 
   # TODO Consider whether this should be a Defect
   doAssert rng != nil, "RNG initialization failed"

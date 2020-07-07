@@ -54,7 +54,6 @@ procSuite "Discovery v5 Tests":
 
     await node1.closeWait()
 
-
   asyncTest "Handshake cleanup":
     let node = initDiscoveryNode(
       rng, PrivateKey.random(rng[]), localAddress(20302))
