@@ -18,10 +18,12 @@ proc resetMessageQueues(nodes: varargs[EthereumNode]) =
 
 let safeTTL = 5'u32
 let waitInterval = messageInterval + 150.milliseconds
+
 var rng {.threadvar.}: ref BrHmacDrbgContext
 rng = newRng()
 
 procSuite "Whisper connections":
+
   var node1 = setupTestNode(rng, Whisper)
   var node2 = setupTestNode(rng, Whisper)
   node2.startListening()
@@ -31,6 +33,7 @@ procSuite "Whisper connections":
       node1.peerPool.connectedNodes.len() == 1
 
   asyncTest "Filters with encryption and signing":
+    var tmp: BrHmacDrbgContext # Test mac compile issue
     let encryptKeyPair = KeyPair.random(rng[])
     let signKeyPair = KeyPair.random(rng[])
     var symKey: SymKey
