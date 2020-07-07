@@ -10,7 +10,7 @@
 
 import
   times,
-  chronos, stint, nimcrypto/keccak, chronicles,
+  chronos, stint, nimcrypto/keccak, chronicles, bearssl,
   eth/[keys, rlp],
   kademlia, enode,
   stew/[objects, results]

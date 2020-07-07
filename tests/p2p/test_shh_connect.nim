@@ -33,7 +33,6 @@ procSuite "Whisper connections":
       node1.peerPool.connectedNodes.len() == 1
 
   asyncTest "Filters with encryption and signing":
-    var tmp: BrHmacDrbgContext # Test mac compile issue
     let encryptKeyPair = KeyPair.random(rng[])
     let signKeyPair = KeyPair.random(rng[])
     var symKey: SymKey

@@ -21,7 +21,7 @@ import
 
 from nimcrypto/utils import burnMem
 
-export secp256k1, results
+export secp256k1, results, bearssl
 
 const
   KeyLength* = SkEcdhRawSecretSize - 1
