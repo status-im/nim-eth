@@ -461,7 +461,7 @@ proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
         result = checkedRlpRead(peer, nextMsgData, MsgType)
         logReceivedMsg(peer, result)
         return
-      except RlpError:
+      except rlp.RlpError:
         await peer.disconnectAndRaise(BreachOfProtocol,
                                       "Invalid RLPx message body")
 
