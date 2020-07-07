@@ -19,11 +19,8 @@ proc resetMessageQueues(nodes: varargs[EthereumNode]) =
 let safeTTL = 5'u32
 let waitInterval = messageInterval + 150.milliseconds
 
-var rng {.threadvar.}: ref BrHmacDrbgContext
-rng = newRng()
-
 procSuite "Whisper connections":
-
+  let rng = newRng()
   var node1 = setupTestNode(rng, Whisper)
   var node2 = setupTestNode(rng, Whisper)
   node2.startListening()
