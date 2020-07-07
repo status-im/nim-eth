@@ -8,7 +8,7 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  sequtils, options, tables, chronos, testutils/unittests,
+  sequtils, options, tables, chronos, testutils/unittests, bearssl,
   eth/[keys, p2p], eth/p2p/rlpx_protocols/whisper_protocol, eth/p2p/peer_pool,
   ./p2p_test_helper
 
@@ -20,8 +20,9 @@ let safeTTL = 5'u32
 let waitInterval = messageInterval + 150.milliseconds
 
 procSuite "Whisper connections":
-  var node1 = setupTestNode(Whisper)
-  var node2 = setupTestNode(Whisper)
+  let rng = newRng()
+  var node1 = setupTestNode(rng, Whisper)
+  var node2 = setupTestNode(rng, Whisper)
   node2.startListening()
   waitFor node1.peerPool.connectToNode(newNode(node2.toENode()))
   asyncTest "Two peers connected":
@@ -29,8 +30,8 @@ procSuite "Whisper connections":
       node1.peerPool.connectedNodes.len() == 1
 
   asyncTest "Filters with encryption and signing":
-    let encryptKeyPair = KeyPair.random()[]
-    let signKeyPair = KeyPair.random()[]
+    let encryptKeyPair = KeyPair.random(rng[])
+    let signKeyPair = KeyPair.random(rng[])
     var symKey: SymKey
     let topic = [byte 0x12, 0, 0, 0]
     var filters: seq[string] = @[]
@@ -294,7 +295,7 @@ procSuite "Whisper connections":
       node1.unsubscribeFilter(filter) == true
 
   asyncTest "Light node posting":
-    var ln1 = setupTestNode(Whisper)
+    var ln1 = setupTestNode(rng, Whisper)
     ln1.setLightNode(true)
 
     await ln1.peerPool.connectToNode(newNode(node2.toENode()))
@@ -313,8 +314,8 @@ procSuite "Whisper connections":
       ln1.protocolState(Whisper).queue.items.len == 0
 
   asyncTest "Connect two light nodes":
-    var ln1 = setupTestNode(Whisper)
-    var ln2 = setupTestNode(Whisper)
+    var ln1 = setupTestNode(rng, Whisper)
+    var ln2 = setupTestNode(rng, Whisper)
 
     ln1.setLightNode(true)
     ln2.setLightNode(true)

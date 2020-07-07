@@ -14,6 +14,8 @@ import eth/keys, eth/keyfile/[keyfile], json, os, unittest
 # Test vectors copied from
 # https://github.com/ethereum/tests/blob/develop/KeyStoreTests/basic_tests.json
 
+let rng = newRng()
+
 var TestVectors = [
   %*{
     "keyfile": {
@@ -114,7 +116,7 @@ suite "KeyFile test suite":
     check:
       seckey.error == KeyFileError.IncorrectMac
   test "Create/Save/Load test":
-    var seckey0 = PrivateKey.random()[]
+    var seckey0 = PrivateKey.random(rng[])
     let jobject = createKeyFileJson(seckey0, "randompassword")[]
 
     check:

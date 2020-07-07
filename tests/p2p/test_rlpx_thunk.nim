@@ -3,17 +3,14 @@ import
   eth/p2p, eth/p2p/rlpx_protocols/[whisper_protocol, eth_protocol],
   ../p2p/p2p_test_helper
 
+let rng = newRng()
+
 var
-  node1: EthereumNode
-  node2: EthereumNode
-  peer: Peer
-
-
-node1 = setupTestNode(eth, Whisper)
-node2 = setupTestNode(eth, Whisper)
+  node1 = setupTestNode(rng, eth, Whisper)
+  node2 = setupTestNode(rng, eth, Whisper)
 
 node2.startListening()
-peer = waitFor node1.rlpxConnect(newNode(node2.toENode()))
+var peer = waitFor node1.rlpxConnect(newNode(node2.toENode()))
 
 proc testThunk(payload: openArray[byte]) =
   var (msgId, msgData) = recvMsgMock(payload)

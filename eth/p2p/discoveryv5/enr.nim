@@ -232,7 +232,7 @@ proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]):
     let sig = SignatureNR.fromRaw(sigData)
     if sig.isOk:
       var h = keccak256.digest(content)
-      return verify(sig[], h, publicKey.get)
+      return verify(sig[], SkMessage(h.data), publicKey.get)
 
 proc verifySignature(r: Record): bool {.raises: [RlpError, Defect].} =
   var rlp = rlpFromBytes(r.raw)

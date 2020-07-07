@@ -1,5 +1,5 @@
 import
-  unittest, chronos, nimcrypto, strutils,
+  unittest, chronos, nimcrypto, strutils, bearssl,
   eth/[keys, p2p], eth/p2p/[discovery, enode]
 
 var nextPort = 30303
@@ -15,17 +15,13 @@ proc startDiscoveryNode*(privKey: PrivateKey, address: Address,
   result.open()
   await result.bootstrap()
 
-proc setupBootNode*(): Future[ENode] {.async.} =
-  let
-    bootNodeKey = KeyPair.random()[]
-    bootNodeAddr = localAddress(30301)
-    bootNode = await startDiscoveryNode(bootNodeKey.seckey, bootNodeAddr, @[])
-  result = ENode(pubkey: bootNodeKey.pubkey, address: bootNodeAddr)
-
-proc setupTestNode*(capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  let keys1 = KeyPair.random()[]
+proc setupTestNode*(
+    rng: ref BrHmacDrbgContext,
+    capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode {.gcsafe.} =
+  # Don't create new RNG every time in production code!
+  let keys1 = KeyPair.random(rng[])
   result = newEthereumNode(keys1, localAddress(nextPort), 1, nil,
-                           addAllCapabilities = false)
+                           addAllCapabilities = false, rng = rng)
   nextPort.inc
   for capability in capabilities:
     result.addCapability capability

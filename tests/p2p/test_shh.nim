@@ -11,10 +11,12 @@ import
   sequtils, options, unittest, tables, nimcrypto/hash,
   eth/[keys, rlp], eth/p2p/rlpx_protocols/whisper/whisper_types as whisper
 
+let rng = newRng()
+
 suite "Whisper payload":
   test "should roundtrip without keys":
     let payload = Payload(payload: @[byte 0, 1, 2])
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get())
     check:
@@ -26,7 +28,7 @@ suite "Whisper payload":
   test "should roundtrip with symmetric encryption":
     var symKey: SymKey
     let payload = Payload(symKey: some(symKey), payload: @[byte 0, 1, 2])
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get(), symKey = some(symKey))
     check:
@@ -36,10 +38,10 @@ suite "Whisper payload":
       decoded.get().padding.get().len == 251 # 256 -1 -1 -3
 
   test "should roundtrip with signature":
-    let privKey = PrivateKey.random()[]
+    let privKey = PrivateKey.random(rng[])
 
     let payload = Payload(src: some(privKey), payload: @[byte 0, 1, 2])
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get())
     check:
@@ -49,11 +51,11 @@ suite "Whisper payload":
       decoded.get().padding.get().len == 186 # 256 -1 -1 -3 -65
 
   test "should roundtrip with asymmetric encryption":
-    let privKey = PrivateKey.random()[]
+    let privKey = PrivateKey.random(rng[])
 
     let payload = Payload(dst: some(privKey.toPublicKey()),
       payload: @[byte 0, 1, 2])
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get(), dst = some(privKey))
     check:
@@ -74,7 +76,7 @@ suite "Whisper payload":
 suite "Whisper payload padding":
   test "should do max padding":
     let payload = Payload(payload: repeat(byte 1, 254))
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get())
     check:
@@ -84,10 +86,10 @@ suite "Whisper payload padding":
       decoded.get().padding.get().len == 256 # as dataLen == 256
 
   test "should do max padding with signature":
-    let privKey = PrivateKey.random()[]
+    let privKey = PrivateKey.random(rng[])
 
     let payload = Payload(src: some(privKey), payload: repeat(byte 1, 189))
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get())
     check:
@@ -99,7 +101,7 @@ suite "Whisper payload padding":
 
   test "should do min padding":
     let payload = Payload(payload: repeat(byte 1, 253))
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get())
     check:
@@ -109,10 +111,10 @@ suite "Whisper payload padding":
       decoded.get().padding.get().len == 1 # as dataLen == 255
 
   test "should do min padding with signature":
-    let privKey = PrivateKey.random()[]
+    let privKey = PrivateKey.random(rng[])
 
     let payload = Payload(src: some(privKey), payload: repeat(byte 1, 188))
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get())
     check:
@@ -125,7 +127,7 @@ suite "Whisper payload padding":
   test "should roundtrip custom padding":
     let payload = Payload(payload: repeat(byte 1, 10),
                           padding: some(repeat(byte 2, 100)))
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get())
     check:
@@ -138,7 +140,7 @@ suite "Whisper payload padding":
     let padding: seq[byte] = @[]
     let payload = Payload(payload: repeat(byte 1, 10),
                           padding: some(padding))
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get())
     check:
@@ -147,10 +149,10 @@ suite "Whisper payload padding":
       decoded.get().padding.isNone()
 
   test "should roundtrip custom padding with signature":
-    let privKey = PrivateKey.random()[]
+    let privKey = PrivateKey.random(rng[])
     let payload = Payload(src: some(privKey), payload: repeat(byte 1, 10),
                           padding: some(repeat(byte 2, 100)))
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get())
     check:
@@ -162,10 +164,10 @@ suite "Whisper payload padding":
 
   test "should roundtrip custom 0 padding with signature":
     let padding: seq[byte] = @[]
-    let privKey = PrivateKey.random()[]
+    let privKey = PrivateKey.random(rng[])
     let payload = Payload(src: some(privKey), payload: repeat(byte 1, 10),
                           padding: some(padding))
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
 
     let decoded = whisper.decode(encoded.get())
     check:
@@ -276,7 +278,7 @@ proc prepFilterTestMsg(pubKey = none[PublicKey](), symKey = none[SymKey](),
                        padding = none[seq[byte]]()): Message =
     let payload = Payload(dst: pubKey, symKey: symKey, src: src,
                           payload: @[byte 0, 1, 2], padding: padding)
-    let encoded = whisper.encode(payload)
+    let encoded = whisper.encode(rng[], payload)
     let env = Envelope(expiry: 1, ttl: 1, topic: topic, data: encoded.get(),
                        nonce: 0)
     result = initMessage(env)
@@ -289,7 +291,7 @@ suite "Whisper filter":
 
     var filters = initTable[string, Filter]()
     let filter = initFilter(symKey = some(symKey), topics = @[topic])
-    let filterId = filters.subscribeFilter(filter)
+    let filterId = subscribeFilter(rng[], filters, filter)
 
     notify(filters, msg)
 
@@ -300,14 +302,14 @@ suite "Whisper filter":
       messages[0].dst.isNone()
 
   test "should notify filter on message with asymmetric encryption":
-    let privKey = PrivateKey.random()[]
+    let privKey = PrivateKey.random(rng[])
     let topic = [byte 0, 0, 0, 0]
     let msg = prepFilterTestMsg(pubKey = some(privKey.toPublicKey()),
                                 topic = topic)
 
     var filters = initTable[string, Filter]()
     let filter = initFilter(privateKey = some(privKey), topics = @[topic])
-    let filterId = filters.subscribeFilter(filter)
+    let filterId = subscribeFilter(rng[], filters, filter)
 
     notify(filters, msg)
 
@@ -318,14 +320,14 @@ suite "Whisper filter":
       messages[0].dst.isSome()
 
   test "should notify filter on message with signature":
-    let privKey = PrivateKey.random()[]
+    let privKey = PrivateKey.random(rng[])
     let topic = [byte 0, 0, 0, 0]
     let msg = prepFilterTestMsg(src = some(privKey), topic = topic)
 
     var filters = initTable[string, Filter]()
     let filter = initFilter(src = some(privKey.toPublicKey()),
                            topics = @[topic])
-    let filterId = filters.subscribeFilter(filter)
+    let filterId = subscribeFilter(rng[], filters, filter)
 
     notify(filters, msg)
 
@@ -346,9 +348,9 @@ suite "Whisper filter":
 
     var filters = initTable[string, Filter]()
     let
-      filterId1 = filters.subscribeFilter(
+      filterId1 = subscribeFilter(rng[], filters,
                     initFilter(topics = @[topic], powReq = 0.014492753623188406))
-      filterId2 = filters.subscribeFilter(
+      filterId2 = subscribeFilter(rng[], filters,
                     initFilter(topics = @[topic], powReq = 0.014492753623188407))
 
     notify(filters, msg)
@@ -366,8 +368,8 @@ suite "Whisper filter":
 
     var filters = initTable[string, Filter]()
     let
-      filterId1 = filters.subscribeFilter(initFilter(topics = @[topic1]))
-      filterId2 = filters.subscribeFilter(initFilter(topics = @[topic2]))
+      filterId1 = subscribeFilter(rng[], filters, initFilter(topics = @[topic1]))
+      filterId2 = subscribeFilter(rng[], filters, initFilter(topics = @[topic2]))
 
     notify(filters, msg)
 

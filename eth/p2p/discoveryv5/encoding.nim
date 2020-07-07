@@ -1,6 +1,6 @@
 import
   std/[tables, options], nimcrypto, stint, chronicles, stew/results,
-  types, node, enr, hkdf, eth/[rlp, keys]
+  types, node, enr, hkdf, eth/[rlp, keys], bearssl
 
 export keys
 
@@ -64,7 +64,7 @@ proc idNonceHash(nonce, ephkey: openarray[byte]): MDigest[256] =
 
 proc signIDNonce*(privKey: PrivateKey, idNonce, ephKey: openarray[byte]):
     SignatureNR =
-  signNR(privKey, idNonceHash(idNonce, ephKey))
+  signNR(privKey, SkMessage(idNonceHash(idNonce, ephKey).data))
 
 proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
     idNonce: openarray[byte]): HandshakeSecrets =
@@ -89,11 +89,12 @@ proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
   ectx.getTag(result.toOpenArray(pt.len, result.high))
   ectx.clear()
 
-proc encodeAuthHeader*(c: Codec,
+proc encodeAuthHeader*(rng: var BrHmacDrbgContext,
+                      c: Codec,
                       toId: NodeID,
                       nonce: array[gcmNonceSize, byte],
                       challenge: Whoareyou):
-                      EncodeResult[(seq[byte], HandshakeSecrets)] =
+                      (seq[byte], HandshakeSecrets) =
   var resp = AuthResponse(version: 5)
   let ln = c.localNode
 
@@ -101,7 +102,7 @@ proc encodeAuthHeader*(c: Codec,
   if challenge.recordSeq < ln.record.seqNum:
     resp.record = ln.record
 
-  let ephKeys = ? KeyPair.random()
+  let ephKeys = KeyPair.random(rng)
   let signature = signIDNonce(c.privKey, challenge.idNonce,
     ephKeys.pubkey.toRaw)
   resp.signature = signature.toRaw
@@ -117,7 +118,7 @@ proc encodeAuthHeader*(c: Codec,
   let header = AuthHeader(auth: nonce, idNonce: challenge.idNonce,
     scheme: authSchemeName, ephemeralKey: ephKeys.pubkey.toRaw,
     response: respEnc)
-  ok((rlp.encode(header), secrets))
+  (rlp.encode(header), secrets)
 
 proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =
   for i in 0 .. a.high:
@@ -130,15 +131,16 @@ proc packetTag(destNode, srcNode: NodeID): PacketTag =
     destidHash = sha256.digest(destId)
   result = srcId xor destidHash.data
 
-proc encodePacket*(c: Codec,
-                      toId: NodeID,
-                      toAddr: Address,
-                      message: openarray[byte],
-                      challenge: Whoareyou):
-                      EncodeResult[(seq[byte], array[gcmNonceSize, byte])] =
+proc encodePacket*(
+    rng: var BrHmacDrbgContext,
+    c: Codec,
+    toId: NodeID,
+    toAddr: Address,
+    message: openarray[byte],
+    challenge: Whoareyou):
+    (seq[byte], array[gcmNonceSize, byte]) =
   var nonce: array[gcmNonceSize, byte]
-  if randomBytes(nonce) != nonce.len:
-    return err("Could not randomize bytes")
+  brHmacDrbgGenerate(rng, nonce)
 
   var headEnc: seq[byte]
 
@@ -153,7 +155,7 @@ proc encodePacket*(c: Codec,
     discard c.db.loadKeys(toId, toAddr, readKey, writeKey)
   else:
     var secrets: HandshakeSecrets
-    (headEnc, secrets) = ? c.encodeAuthHeader(toId, nonce, challenge)
+    (headEnc, secrets) = encodeAuthHeader(rng, c, toId, nonce, challenge)
 
     writeKey = secrets.writeKey
     # TODO: is it safe to ignore the error here?
@@ -165,7 +167,7 @@ proc encodePacket*(c: Codec,
   packet.add(tag)
   packet.add(headEnc)
   packet.add(encryptGCM(writeKey, nonce, message, tag))
-  ok((packet, nonce))
+  (packet, nonce)
 
 proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
     Option[seq[byte]] =
@@ -260,7 +262,7 @@ proc decodeAuthResp*(c: Codec, fromId: NodeId, head: AuthHeader,
   # Verify the id-nonce-sig
   let sig = ? SignatureNR.fromRaw(authResp.signature).mapErrTo(HandshakeError)
   let h = idNonceHash(head.idNonce, head.ephemeralKey)
-  if verify(sig, h, newNode.pubkey):
+  if verify(sig, SkMessage(h.data), newNode.pubkey):
     ok(secrets)
   else:
     err(HandshakeError)
@@ -332,12 +334,12 @@ proc decodePacket*(c: var Codec,
 
   decodeMessage(message.get())
 
-proc newRequestId*(): Result[RequestId, cstring] =
-  var id: RequestId
-  if randomBytes(addr id, sizeof(id)) != sizeof(id):
-    err("Could not randomize bytes")
-  else:
-    ok(id)
+proc init*(T: type RequestId, rng: var BrHmacDrbgContext): T =
+  var buf: array[sizeof(T), byte]
+  brHmacDrbgGenerate(rng, buf)
+  var id: T
+  copyMem(addr id, addr buf[0], sizeof(id))
+  id
 
 proc numFields(T: typedesc): int =
   for k, v in fieldPairs(default(T)): inc result

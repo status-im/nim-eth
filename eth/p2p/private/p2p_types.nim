@@ -1,5 +1,5 @@
 import
-  deques, tables,
+  deques, tables, bearssl,
   eth/[rlp, keys], chronos, eth/common/eth_types,
   ../enode, ../kademlia, ../discovery, ../rlpxcrypt
 
@@ -24,6 +24,7 @@ type
     discovery*: DiscoveryProtocol
     when useSnappy:
       protocolVersion*: uint
+    rng*: ref BrHmacDrbgContext
 
   Peer* = ref object
     remote*: Node

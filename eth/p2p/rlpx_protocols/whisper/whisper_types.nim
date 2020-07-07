@@ -9,9 +9,9 @@
 #
 
 import
-  algorithm, bitops, math, options, tables, times, chronicles, hashes, strutils,
-  stew/[byteutils, endians2], metrics,
-  nimcrypto/[bcmode, hash, keccak, rijndael, sysrand],
+  algorithm, bitops, math, options, tables, times, chronicles, hashes,
+  stew/[byteutils, endians2], metrics, bearssl,
+  nimcrypto/[bcmode, hash, keccak, rijndael],
   eth/[keys, rlp, p2p], eth/p2p/ecies
 
 logScope:
@@ -158,12 +158,10 @@ proc topicBloom*(topic: Topic): Bloom =
     doAssert idx <= 511
     result[idx div 8] = result[idx div 8] or byte(1 shl (idx and 7'u16))
 
-proc generateRandomID*(): string =
+proc generateRandomID*(rng: var BrHmacDrbgContext): string =
   var bytes: array[256 div 8, byte]
-  while true: # XXX: error instead of looping?
-    if randomBytes(bytes) == 256 div 8:
-      result = toHex(bytes)
-      break
+  brHmacDrbgGenerate(rng, bytes)
+  toHex(bytes)
 
 proc `or`(a, b: Bloom): Bloom =
   for i in 0..<a.len:
@@ -231,7 +229,7 @@ proc decryptAesGcm(cipher: openarray[byte], key: SymKey): Option[seq[byte]] =
 # simply because that makes it closer to EIP 627 - see also:
 # https://github.com/paritytech/parity-ethereum/issues/9652
 
-proc encode*(self: Payload): Option[seq[byte]] =
+proc encode*(rng: var BrHmacDrbgContext, self: Payload): Option[seq[byte]] =
   ## Encode a payload according so as to make it suitable to put in an Envelope
   ## The format follows EIP 627 - https://eips.ethereum.org/EIPS/eip-627
 
@@ -284,9 +282,7 @@ proc encode*(self: Payload): Option[seq[byte]] =
     plain.add self.padding.get()
   else:
     var padding = newSeq[byte](padLen)
-    if randomBytes(padding) != padLen:
-      notice "Generation of random padding failed"
-      return
+    brHmacDrbgGenerate(rng, padding)
 
     plain.add padding
 
@@ -297,7 +293,7 @@ proc encode*(self: Payload): Option[seq[byte]] =
 
   if self.dst.isSome(): # Asymmetric key present - encryption requested
     var res = newSeq[byte](eciesEncryptedLength(plain.len))
-    let err = eciesEncrypt(plain, res, self.dst.get())
+    let err = eciesEncrypt(rng, plain, res, self.dst.get())
     if err.isErr:
       notice "Encryption failed", err = err.error
       return
@@ -305,9 +301,7 @@ proc encode*(self: Payload): Option[seq[byte]] =
 
   if self.symKey.isSome(): # Symmetric key present - encryption requested
     var iv: array[gcmIVLen, byte]
-    if randomBytes(iv) != gcmIVLen:
-      notice "Generation of random IV failed"
-      return
+    brHmacDrbgGenerate(rng, iv)
 
     return some(encryptAesGcm(plain, self.symKey.get(), iv))
 
@@ -582,11 +576,12 @@ proc initFilter*(src = none[PublicKey](), privateKey = none[PrivateKey](),
   Filter(src: src, privateKey: privateKey, symKey: symKey, topics: topics,
          powReq: powReq, allowP2P: allowP2P, bloom: toBloom(topics))
 
-proc subscribeFilter*(filters: var Filters, filter: Filter,
-                      handler:FilterMsgHandler = nil): string =
+proc subscribeFilter*(
+    rng: var BrHmacDrbgContext, filters: var Filters, filter: Filter,
+    handler: FilterMsgHandler = nil): string =
   # NOTE: Should we allow a filter without a key? Encryption is mandatory in v6?
   # Check if asymmetric _and_ symmetric key? Now asymmetric just has precedence.
-  let id = generateRandomID()
+  let id = generateRandomID(rng)
   var filter = filter
   if handler.isNil():
     filter.queue = newSeqOfCap[ReceivedMessage](defaultFilterQueueCapacity)

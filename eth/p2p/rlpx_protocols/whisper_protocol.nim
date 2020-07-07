@@ -343,8 +343,8 @@ proc postMessage*(node: EthereumNode, pubKey = none[PublicKey](),
   ##
   ## NOTE: This call allows a post without encryption. If encryption is
   ## mandatory it should be enforced a layer up
-  let payload = encode(Payload(payload: payload, src: src, dst: pubKey,
-                               symKey: symKey, padding: padding))
+  let payload = encode(node.rng[], Payload(
+    payload: payload, src: src, dst: pubKey, symKey: symKey, padding: padding))
   if payload.isSome():
     var env = Envelope(expiry:epochTime().uint32 + ttl,
                        ttl: ttl, topic: topic, data: payload.get(), nonce: 0)
@@ -387,7 +387,8 @@ proc subscribeFilter*(node: EthereumNode, filter: Filter,
   ##
   ## NOTE: This call allows for a filter without decryption. If encryption is
   ## mandatory it should be enforced a layer up.
-  return node.protocolState(Whisper).filters.subscribeFilter(filter, handler)
+  return subscribeFilter(
+    node.rng[], node.protocolState(Whisper).filters, filter, handler)
 
 proc unsubscribeFilter*(node: EthereumNode, filterId: string): bool =
   ## Remove a previously subscribed filter.

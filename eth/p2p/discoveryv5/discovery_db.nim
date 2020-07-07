@@ -28,7 +28,7 @@ proc makeKey(id: NodeId, address: Address): array[keySize, byte] =
   of IpAddressFamily.IpV4:
     result[pos ..< pos+sizeof(address.ip.address_v4)] = address.ip.address_v4
   of IpAddressFamily.IpV6:
-    result[pos..< pos+sizeof(address.ip.address_v6)] = address.ip.address_v6
+    result[pos ..< pos+sizeof(address.ip.address_v6)] = address.ip.address_v6
   pos.inc(sizeof(address.ip.address_v6))
   result[pos ..< pos+sizeof(address.port)] = toBytes(address.port.uint16)
 

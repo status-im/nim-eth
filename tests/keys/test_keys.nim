@@ -10,7 +10,7 @@
 {.used.}
 
 import unittest
-import eth/keys
+import eth/keys, bearssl
 import nimcrypto/hash, nimcrypto/keccak, nimcrypto/utils
 from strutils import toLowerAscii
 
@@ -25,6 +25,7 @@ proc compare(x: openarray[byte], y: openarray[byte]): bool =
         break
 
 let message = "message".toBytes()
+let rng = newRng()
 
 const
   pkbytes = "58d23b55bc9cdce1f18c2500f40ff4ab7245df9a89505e9b1fa4851f623d241d"
@@ -80,7 +81,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
     var s = PrivateKey.fromHex(pkbytes)[]
     var mhash = keccak256.digest(message)
     var signature = s.sign(message)
-    var p = recover(signature, mhash)[]
+    var p = recover(signature, SkMessage(mhash.data))[]
     check:
       s.toPublicKey() == p
 
@@ -130,7 +131,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
 
   test "EIP-55 100 addresses":
     for i in 1..100:
-      var kp = KeyPair.random()[]
+      var kp = KeyPair.random(rng[])
       var chaddress = kp.pubkey.toChecksumAddress()
       var noaddress = kp.pubkey.toAddress()
       if noaddress != chaddress:
@@ -206,9 +207,9 @@ suite "ECC/ECDSA/ECDHE tests suite":
 
     var s = PrivateKey.fromRaw(keccak256.digest("sec").data)[]
     var m = keccak256.digest("msg")
-    var sig = sign(s, m)
+    var sig = sign(s, SkMessage(m.data))
     var sersig = sig.toRaw()
-    var key = recover(sig, m)[]
+    var key = recover(sig, SkMessage(m.data))[]
     var serkey = key.toRaw()
     check:
       compare(sersig, check1) == true
@@ -217,18 +218,19 @@ suite "ECC/ECDSA/ECDHE tests suite":
   test "ECDSA/100 signatures":
     # signature test
     for i in 1..100:
-      var m = PrivateKey.random()[].toRaw
-      var s = PrivateKey.random()[]
+      var m: array[32, byte]
+      brHmacDrbgGenerate(rng[], m)
+      var s = PrivateKey.random(rng[])
       var key = s.toPublicKey()
-      let sig = sign(s, m)
-      let rkey = recover(sig, m)[]
+      let sig = sign(s, SkMessage(m))
+      let rkey = recover(sig, SkMessage(m))[]
       check:
         key == rkey
 
   test "KEYS/100 create/recovery keys":
     # key create/recovery test
     for i in 1..100:
-      var s = PrivateKey.random()[]
+      var s = PrivateKey.random(rng[])
       var key = s.toPublicKey()
       let rkey = PublicKey.fromRaw(key.toRaw())[]
       check:
@@ -237,9 +239,9 @@ suite "ECC/ECDSA/ECDHE tests suite":
   test "ECDHE/100 shared secrets":
     # ECDHE shared secret test
     for i in 1..100:
-      var aliceSecret = PrivateKey.random()[]
+      var aliceSecret = PrivateKey.random(rng[])
       var alicePublic = aliceSecret.toPublicKey()
-      var bobSecret = PrivateKey.random()[]
+      var bobSecret = PrivateKey.random(rng[])
       var bobPublic = bobSecret.toPublicKey()
       var secret1 = ecdhRaw(aliceSecret, bobPublic)
       var secret2 = ecdhRaw(bobSecret, alicePublic)

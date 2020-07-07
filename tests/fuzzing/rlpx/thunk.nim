@@ -9,12 +9,13 @@ var
   node2: EthereumNode
   peer: Peer
 
+let rng = newRng()
 # This is not a good example of a fuzzing test and it would be much better
 # to mock more to get rid of anything sockets, async, etc.
 # However, it can and has provided reasonably quick results anyhow.
 init:
-  node1 = setupTestNode(eth, Whisper)
-  node2 = setupTestNode(eth, Whisper)
+  node1 = setupTestNode(rng, eth, Whisper)
+  node2 = setupTestNode(rng, eth, Whisper)
 
   node2.startListening()
   peer = waitFor node1.rlpxConnect(newNode(node2.toENode()))
