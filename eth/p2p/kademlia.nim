@@ -232,9 +232,9 @@ proc neighbours(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
 proc len(r: RoutingTable): int =
   for b in r.buckets: result += b.len
 
-proc newKademliaProtocol*[Wire](thisNode: Node,
-                                wire: Wire, rng = newRng()): KademliaProtocol[Wire] =
-  doAssert rng != nil, "Need an RNG"
+proc newKademliaProtocol*[Wire](
+    thisNode: Node, wire: Wire, rng = newRng()): KademliaProtocol[Wire] =
+  if rng == nil: raiseAssert "Need an RNG" # doAssert gives compile error on mac
 
   result.new()
   result.thisNode = thisNode
