@@ -701,8 +701,9 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
   # remapping through NAT and this API is also subject to change once we
   # introduce support for ipv4 + ipv6 binding/listening.
   let
+    # TODO: Defect or return a result on this call?
     enrRec = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
-      localEnrFields).expect("Properly intialized private key")
+      localEnrFields).expect("Record within size limits")
     node = newNode(enrRec).expect("Properly initialized node")
 
   # TODO Consider whether this should be a Defect

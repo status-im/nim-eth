@@ -1,5 +1,5 @@
 import
-  unittest, options,
+  unittest, options, sequtils,
   nimcrypto/utils, stew/shims/net,
   eth/p2p/enode, eth/p2p/discoveryv5/enr, eth/keys
 
@@ -35,14 +35,15 @@ suite "ENR":
 
   test "Create from ENode address":
     let
-      keys = KeyPair.random(rng[])
+      keypair = KeyPair.random(rng[])
       ip = ValidIpAddress.init("10.20.30.40")
-      enr = Record.init(100, keys.seckey, some(ip), Port(9000), Port(9000), @[])[]
+      enr = Record.init(
+        100, keypair.seckey, some(ip), Port(9000), Port(9000),@[])[]
       typedEnr = get enr.toTypedRecord()
 
     check:
       typedEnr.secp256k1.isSome()
-      typedEnr.secp256k1.get == keys.pubkey.toRawCompressed()
+      typedEnr.secp256k1.get == keypair.pubkey.toRawCompressed()
 
       typedEnr.ip.isSome()
       typedEnr.ip.get() == [byte 10, 20, 30, 40]
@@ -55,13 +56,14 @@ suite "ENR":
 
   test "ENR without address":
     let
-      keys = KeyPair.random(rng[])
-      enr = Record.init(100, keys.seckey, none(ValidIpAddress), Port(9000), Port(9000))[]
+      keypair = KeyPair.random(rng[])
+      enr = Record.init(
+        100, keypair.seckey, none(ValidIpAddress), Port(9000), Port(9000))[]
       typedEnr = get enr.toTypedRecord()
 
     check:
       typedEnr.secp256k1.isSome()
-      typedEnr.secp256k1.get() == keys.pubkey.toRawCompressed()
+      typedEnr.secp256k1.get() == keypair.pubkey.toRawCompressed()
 
       typedEnr.ip.isNone()
       typedEnr.tcp.isSome()
@@ -73,3 +75,81 @@ suite "ENR":
       typedEnr.ip6.isNone()
       typedEnr.tcp6.isNone()
       typedEnr.udp6.isNone()
+
+  test "ENR init size too big":
+    let pk = PrivateKey.fromHex(
+      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
+    block: # This gives ENR of 300 bytes encoded
+      let r = initRecord(1, pk, {"maxvalue": repeat(byte 2, 169),})
+      check r.isOk()
+
+    block: # This gives ENR of 301 bytes encoded
+      let r = initRecord(1, pk, {"maxplus1": repeat(byte 2, 170),})
+      check r.isErr()
+
+  test "ENR insert":
+    let
+      pk = PrivateKey.fromHex(
+        "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
+      newField = toFieldPair("test", 123'u)
+    var r = Record.init(1, pk, none(ValidIpAddress), Port(9000), Port(9000))[]
+
+    block: # Insert new k:v pair, update of seqNum should occur.
+      let res = r.insertFieldPair(pk, newField)
+      check:
+        res.isOk()
+        r.get("test", uint) == 123
+        r.seqNum == 2
+
+    block: # Insert same k:v pair, no update of seqNum should occur.
+      let res = r.insertFieldPair(pk, newField)
+      check:
+        res.isOk()
+        r.get("test", uint) == 123
+        r.seqNum == 2
+
+    block: # Insert k:v pair with changed value, update of seqNum should occur.
+      let updatedField = toFieldPair("test", 1234'u)
+      let res =  r.insertFieldPair(pk, updatedField)
+      check:
+        res.isOk()
+        r.get("test", uint) == 1234
+        r.seqNum == 3
+
+  test "ENR insert sorted":
+    let pk = PrivateKey.fromHex(
+      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
+    var r = initRecord(123, pk, {"abc": 1234'u,
+                                 "z": [byte 0],
+                                 "123": "abc",
+                                 "a12": 1'u})[]
+    check $r == """(123: "abc", a12: 1, abc: 1234, id: "v4", secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, z: 0x00)"""
+
+    let newField = toFieldPair("test", 123'u)
+    let res = r.insertFieldPair(pk, newField)
+    check res.isOk()
+    check $r == """(123: "abc", a12: 1, abc: 1234, id: "v4", secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, test: 123, z: 0x00)"""
+
+  test "ENR insert size too big":
+    let pk = PrivateKey.fromHex(
+      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
+
+    var r = initRecord(1, pk, {"maxvalue": repeat(byte 2, 169),})
+    check r.isOk()
+
+    let newField = toFieldPair("test", 123'u)
+    let res = r[].insertFieldPair(pk, newField)
+    check res.isErr()
+
+  test "ENR insert invalid key":
+    let pk = PrivateKey.fromHex(
+      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
+
+    var r = initRecord(1, pk, {"abc": 1'u,})
+    check r.isOk()
+
+    let
+      wrongPk = PrivateKey.random(rng[])
+      newField = toFieldPair("test", 123'u)
+      res = r[].insertFieldPair(wrongPk, newField)
+    check res.isErr()
