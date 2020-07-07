@@ -4,9 +4,6 @@ import
   eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol
 
-var rng {.threadvar.}: ref BrHmacDrbgContext
-rng = newRng()
-
 proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
 
@@ -28,33 +25,34 @@ proc nodeIdInNodes*(id: NodeId, nodes: openarray[Node]): bool =
     if id == n.id: return true
 
 # Creating a random packet with specific nodeid each time
-proc randomPacket*(tag: PacketTag): seq[byte] =
+proc randomPacket*(rng: var BrHmacDrbgContext, tag: PacketTag): seq[byte] =
   var
     authTag: AuthTag
     msg: array[44, byte]
 
-  brHmacDrbgGenerate(rng[], authTag)
-  brHmacDrbgGenerate(rng[], msg)
+  brHmacDrbgGenerate(rng, authTag)
+  brHmacDrbgGenerate(rng, msg)
   result.add(tag)
   result.add(rlp.encode(authTag))
   result.add(msg)
 
-proc generateNode*(privKey = PrivateKey.random(rng[]), port: int = 20302,
+proc generateNode*(privKey: PrivateKey, port: int = 20302,
     localEnrFields: openarray[FieldPair] = []): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, some(ValidIpAddress.init("127.0.0.1")),
     port, port, localEnrFields).expect("Properly intialized private key")
   result = newNode(enr).expect("Properly initialized node")
 
-proc nodeAtDistance*(n: Node, d: uint32): Node =
+proc nodeAtDistance*(n: Node, rng: var BrHmacDrbgContext, d: uint32): Node =
   while true:
-    let node = generateNode()
+    let node = generateNode(PrivateKey.random(rng))
     if logDist(n.id, node.id) == d:
       return node
 
-proc nodesAtDistance*(n: Node, d: uint32, amount: int): seq[Node] =
+proc nodesAtDistance*(
+    n: Node, rng: var BrHmacDrbgContext, d: uint32, amount: int): seq[Node] =
   for i in 0..<amount:
-    result.add(nodeAtDistance(n, d))
+    result.add(nodeAtDistance(n, rng, d))
 
 proc addSeenNode*(d: discv5_protocol.Protocol, n: Node): bool =
   # Add it as a seen node, warning: for testing convenience only!

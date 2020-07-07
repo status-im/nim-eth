@@ -1,24 +1,23 @@
 import
-  chronos, chronicles, tables, stint, nimcrypto, testutils/unittests,
+  chronos, chronicles, tables, stint, testutils/unittests,
   stew/shims/net, eth/keys, bearssl,
   eth/p2p/discoveryv5/[enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./discv5_test_helper
 
-var rng {.threadvar.}: ref BrHmacDrbgContext
-rng = newRng()
-
 procSuite "Discovery v5 Tests":
+  let rng = newRng()
+
   asyncTest "GetNode":
     # TODO: This could be tested in just a routing table only context
     let
       node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
-      targetNode = generateNode()
+      targetNode = generateNode(PrivateKey.random(rng[]))
 
     check node.addNode(targetNode)
 
     for i in 0..<1000:
-      discard node.addNode(generateNode())
+      discard node.addNode(generateNode(PrivateKey.random(rng[])))
 
     let n = node.getNode(targetNode.id)
     check n.isSome()
@@ -64,7 +63,7 @@ procSuite "Discovery v5 Tests":
 
     for i in 0 ..< 5:
       brHmacDrbgGenerate(rng[], tag)
-      node.receive(a, randomPacket(tag))
+      node.receive(a, randomPacket(rng[], tag))
 
     # Checking different nodeIds but same address
     check node.codec.handshakes.len == 5
@@ -83,7 +82,7 @@ procSuite "Discovery v5 Tests":
 
     for i in 0 ..< 5:
       let a = localAddress(20303 + i)
-      node.receive(a, randomPacket(tag))
+      node.receive(a, randomPacket(rng[], tag))
 
     check node.codec.handshakes.len == 5
 
@@ -96,7 +95,7 @@ procSuite "Discovery v5 Tests":
     let a = localAddress(20303)
 
     for i in 0 ..< 5:
-      node.receive(a, randomPacket(tag))
+      node.receive(a, randomPacket(rng[], tag))
 
     # Checking handshake duplicates
     check node.codec.handshakes.len == 1
@@ -190,7 +189,7 @@ procSuite "Discovery v5 Tests":
       testNode = initDiscoveryNode(rng, testNodeKey, localAddress(20302))
       # logarithmic distance between mainNode and testNode is 256
 
-    let nodes = nodesAtDistance(mainNode.localNode, dist, 10)
+    let nodes = nodesAtDistance(mainNode.localNode, rng[], dist, 10)
     for n in nodes:
       discard mainNode.addSeenNode(n) # for testing only!
 
@@ -227,7 +226,7 @@ procSuite "Discovery v5 Tests":
     check discovered.isOk
     check discovered[].len == 0
 
-    let moreNodes = nodesAtDistance(mainNode.localNode, dist, 10)
+    let moreNodes = nodesAtDistance(mainNode.localNode, rng[], dist, 10)
     for n in moreNodes:
       discard mainNode.addSeenNode(n) # for testing only!
 
@@ -247,7 +246,7 @@ procSuite "Discovery v5 Tests":
 
     # Generate 1000 random nodes and add to our main node's routing table
     for i in 0..<1000:
-      discard mainNode.addSeenNode(generateNode()) # for testing only!
+      discard mainNode.addSeenNode(generateNode(PrivateKey.random(rng[]))) # for testing only!
 
     let
       neighbours = mainNode.neighbours(mainNode.localNode.id)
@@ -378,10 +377,10 @@ procSuite "Discovery v5 Tests":
     let
       lookupNode = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301))
       targetFieldPair = toFieldPair("test", @[byte 1,2,3,4])
-      targetNode = generateNode(localEnrFields = [targetFieldPair])
+      targetNode = generateNode(PrivateKey.random(rng[]), localEnrFields = [targetFieldPair])
       otherFieldPair = toFieldPair("test", @[byte 1,2,3,4,5])
-      otherNode = generateNode(localEnrFields = [otherFieldPair])
-      anotherNode = generateNode()
+      otherNode = generateNode(PrivateKey.random(rng[]), localEnrFields = [otherFieldPair])
+      anotherNode = generateNode(PrivateKey.random(rng[]))
 
     check:
       lookupNode.addNode(targetNode)
