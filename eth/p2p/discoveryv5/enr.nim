@@ -227,41 +227,62 @@ proc find(r: Record, key: string): Option[int] =
     if k == key:
       return some(i)
 
-proc insertFieldPair*(record: var Record, pk: PrivateKey, fieldPair: FieldPair):
-    EnrResult[bool] =
-  ## Insert or modify a k:v pair to the `Record`.
-  ##
-  ## If k:v pair doesn't exist yet, it will be inserted. If it does exist, it
-  ## will be updated if the value is different, else nothing is done. In case of
-  ## an insert or update the seqNum will be be incremented and a new signature
-  ## will be applied.
-  ##
-  ## Can fail in case of wrong PrivateKey or if the size of the resulting record
-  ## is > maxEnrSize. `record` will not be altered in these cases.
+proc insertFieldPairs*(record: var Record, pk: PrivateKey,
+    fieldPairs: openarray[FieldPair]): EnrResult[bool] =
   var r = record
 
   let pubkey = r.get(PublicKey)
   if pubkey.isNone() or pubkey.get() != pk.toPublicKey():
     return err("Public key does not correspond with given private key")
 
-  let index = r.find(fieldPair[0])
-  if(index.isSome()):
-    if r.pairs[index.get()][1] == fieldPair[1]:
-      # Exact k:v pair is already in record, nothing to do here.
-      return ok(true)
+  var updated = false
+  for fieldPair in fieldPairs:
+    let index = r.find(fieldPair[0])
+    if(index.isSome()):
+      if r.pairs[index.get()][1] == fieldPair[1]:
+        # Exact k:v pair is already in record, nothing to do here.
+        continue
+      else:
+        # Need to update the value.
+        r.pairs[index.get()] = fieldPair
+        updated = true
     else:
-      # Need to update the value.
-      r.pairs[index.get()] = fieldPair
+      # Add new k:v pair.
+      r.pairs.insert(fieldPair,
+        lowerBound(r.pairs, fieldPair) do(a, b: FieldPair) -> int: cmp(a[0], b[0]))
+      updated = true
+
+  if updated:
+    r.seqNum.inc()
+    r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
+    record = r
+    ok(true)
   else:
-    # Add new k:v pair.
-    r.pairs.insert(fieldPair,
-      lowerBound(r.pairs, fieldPair) do(a, b: FieldPair) -> int: cmp(a[0], b[0]))
+    ok(true)
 
-  r.seqNum.inc()
+proc update*(r: var Record, pk: PrivateKey,
+                            ip: Option[ValidIpAddress],
+                            tcpPort, udpPort: Port,
+                            extraFields: openarray[FieldPair]):
+                            EnrResult[bool] =
+  var fields = newSeq[FieldPair]()
 
-  r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
-  record = r
-  ok(true)
+  if ip.isSome():
+    let
+      ipExt = ip.get()
+      isV6 = ipExt.family == IPv6
+
+    fields.add(if isV6: ("ip6", ipExt.address_v6.toField)
+               else: ("ip", ipExt.address_v4.toField))
+    fields.add(((if isV6: "tcp6" else: "tcp"), tcpPort.uint16.toField))
+    fields.add(((if isV6: "udp6" else: "udp"), udpPort.uint16.toField))
+  else:
+    fields.add(("tcp", tcpPort.uint16.toField))
+    fields.add(("udp", udpPort.uint16.toField))
+
+  fields.add extraFields
+
+  r.insertFieldPairs(pk, fields)
 
 proc tryGet*(r: Record, key: string, T: type): Option[T] =
   try:

@@ -95,14 +95,14 @@ suite "ENR":
     var r = Record.init(1, pk, none(ValidIpAddress), Port(9000), Port(9000))[]
 
     block: # Insert new k:v pair, update of seqNum should occur.
-      let res = r.insertFieldPair(pk, newField)
+      let res = r.insertFieldPairs(pk, [newField])
       check:
         res.isOk()
         r.get("test", uint) == 123
         r.seqNum == 2
 
     block: # Insert same k:v pair, no update of seqNum should occur.
-      let res = r.insertFieldPair(pk, newField)
+      let res = r.insertFieldPairs(pk, [newField])
       check:
         res.isOk()
         r.get("test", uint) == 123
@@ -110,7 +110,7 @@ suite "ENR":
 
     block: # Insert k:v pair with changed value, update of seqNum should occur.
       let updatedField = toFieldPair("test", 1234'u)
-      let res =  r.insertFieldPair(pk, updatedField)
+      let res =  r.insertFieldPairs(pk, [updatedField])
       check:
         res.isOk()
         r.get("test", uint) == 1234
@@ -126,9 +126,10 @@ suite "ENR":
     check $r == """(123: "abc", a12: 1, abc: 1234, id: "v4", secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, z: 0x00)"""
 
     let newField = toFieldPair("test", 123'u)
-    let res = r.insertFieldPair(pk, newField)
+    let newField2 = toFieldPair("zzz", 123'u)
+    let res = r.insertFieldPairs(pk, [newField, newField2])
     check res.isOk()
-    check $r == """(123: "abc", a12: 1, abc: 1234, id: "v4", secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, test: 123, z: 0x00)"""
+    check $r == """(123: "abc", a12: 1, abc: 1234, id: "v4", secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, test: 123, z: 0x00, zzz: 123)"""
 
   test "ENR insert size too big":
     let pk = PrivateKey.fromHex(
@@ -138,7 +139,7 @@ suite "ENR":
     check r.isOk()
 
     let newField = toFieldPair("test", 123'u)
-    let res = r[].insertFieldPair(pk, newField)
+    let res = r[].insertFieldPairs(pk, [newField])
     check res.isErr()
 
   test "ENR insert invalid key":
@@ -151,5 +152,5 @@ suite "ENR":
     let
       wrongPk = PrivateKey.random(rng[])
       newField = toFieldPair("test", 123'u)
-      res = r[].insertFieldPair(wrongPk, newField)
+      res = r[].insertFieldPairs(wrongPk, [newField])
     check res.isErr()
