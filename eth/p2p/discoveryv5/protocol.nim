@@ -178,8 +178,9 @@ func getRecord*(d: Protocol): Record =
 proc updateRecord*(
     d: Protocol, enrFields: openarray[(string, seq[byte])]): DiscResult[void] =
   let fields = mapIt(enrFields, toFieldPair(it[0], it[1]))
-  d.localNode.record = ? d.localNode.record.update(d.privateKey, fields)
-  ok()
+  d.localNode.record.update(d.privateKey, fields)
+  # TODO: Would it make sense to actively ping ("broadcast") to all the peers
+  # we stored a handshake with in order to get that ENR updated?
 
 proc send(d: Protocol, a: Address, data: seq[byte]) =
   let ta = initTAddress(a.ip, a.port)
@@ -710,18 +711,19 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
   # Anyhow, nim-beacon-chain would also require some changes to support port
   # remapping through NAT and this API is also subject to change once we
   # introduce support for ipv4 + ipv6 binding/listening.
-  let
-    extraFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
-    # TODO:
-    # - Defect as is now or return a result for enr errors?
-    # - In case incorrect key, allow for new enr based on new key (new node id)?
-    enr = if previousRecord.isSome():
-            previousRecord.get().update(privKey, externalIp, tcpPort, udpPort,
-              extraFields).expect("Record within size limits and correct key")
-          else:
-            enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
-              extraFields).expect("Record within size limits")
-    node = newNode(enr).expect("Properly initialized record")
+  let extraFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
+  # TODO:
+  # - Defect as is now or return a result for enr errors?
+  # - In case incorrect key, allow for new enr based on new key (new node id)?
+  var record: Record
+  if previousRecord.isSome():
+    record = previousRecord.get()
+    record.update(privKey, externalIp, tcpPort, udpPort,
+      extraFields).expect("Record within size limits and correct key")
+  else:
+    record = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
+     extraFields).expect("Record within size limits")
+  let node = newNode(record).expect("Properly initialized record")
 
   # TODO Consider whether this should be a Defect
   doAssert rng != nil, "RNG initialization failed"

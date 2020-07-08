@@ -233,8 +233,8 @@ proc find(r: Record, key: string): Option[int] =
     if k == key:
       return some(i)
 
-proc update*(record: Record, pk: PrivateKey, fieldPairs: openarray[FieldPair]):
-    EnrResult[Record] =
+proc update*(record: var Record, pk: PrivateKey,
+    fieldPairs: openarray[FieldPair]): EnrResult[void] =
   var r = record
 
   let pubkey = r.get(PublicKey)
@@ -262,14 +262,15 @@ proc update*(record: Record, pk: PrivateKey, fieldPairs: openarray[FieldPair]):
       return err("Maximum sequence number reached")
     r.seqNum.inc()
     r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
+    record = r
 
-  ok(r)
+  ok()
 
-proc update*(r: Record, pk: PrivateKey,
-                        ip: Option[ValidIpAddress],
-                        tcpPort, udpPort: Port,
-                        extraFields: openarray[FieldPair] = []):
-                        EnrResult[Record] =
+proc update*(r: var Record, pk: PrivateKey,
+                            ip: Option[ValidIpAddress],
+                            tcpPort, udpPort: Port,
+                            extraFields: openarray[FieldPair] = []):
+                            EnrResult[void] =
   var fields = newSeq[FieldPair]()
 
   fields.addAddress(ip, tcpPort, udpPort)
