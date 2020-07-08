@@ -165,7 +165,7 @@ proc init*(T: type Record, seqNum: uint64,
                            extraFields: openarray[FieldPair] = []):
                            EnrResult[T] =
   ## Initialize a `Record` with given sequence number, private key, optional
-  ## ip-address, tcp port, udp port, and optional custom k:v pairs.
+  ## ip address, tcp port, udp port, and optional custom k:v pairs.
   ##
   ## Can fail in case the record exceeds the `maxEnrSize`.
   var fields = newSeq[FieldPair]()
@@ -235,6 +235,14 @@ proc find(r: Record, key: string): Option[int] =
 
 proc update*(record: var Record, pk: PrivateKey,
     fieldPairs: openarray[FieldPair]): EnrResult[void] =
+  ## Update a `Record` k:v pairs.
+  ##
+  ## In case any of the k:v pairs is updated or added (new), the sequence number
+  ## of the `Record` will be incremented and a new signature will be applied.
+  ##
+  ## Can fail in case of wrong `PrivateKey`, if the size of the resulting record
+  ## exceeds `maxEnrSize` or if maximum sequence number is reached. The `Record`
+  ## will not be altered in these cases.
   var r = record
 
   let pubkey = r.get(PublicKey)
@@ -271,6 +279,15 @@ proc update*(r: var Record, pk: PrivateKey,
                             tcpPort, udpPort: Port,
                             extraFields: openarray[FieldPair] = []):
                             EnrResult[void] =
+  ## Update a `Record` with given ip address, tcp port, udp port and optional
+  ## custom k:v pairs.
+  ##
+  ## In case any of the k:v pairs is updated or added (new), the sequence number
+  ## of the `Record` will be incremented and a new signature will be applied.
+  ##
+  ## Can fail in case of wrong `PrivateKey`, if the size of the resulting record
+  ## exceeds `maxEnrSize` or if maximum sequence number is reached. The `Record`
+  ## will not be altered in these cases.
   var fields = newSeq[FieldPair]()
 
   fields.addAddress(ip, tcpPort, udpPort)
