@@ -73,7 +73,7 @@
 ## This might be a concern for mobile devices.
 
 import
-  std/[tables, sets, options, math, random], bearssl,
+  std/[tables, sets, options, math, random, sequtils], bearssl,
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/[byteutils, endians2], chronicles, chronos, stint,
   eth/[rlp, keys, async_utils], types, encoding, node, routing_table, enr
@@ -171,6 +171,12 @@ proc nodesDiscovered*(d: Protocol): int {.inline.} = d.routingTable.len
 
 func privKey*(d: Protocol): lent PrivateKey =
   d.privateKey
+
+proc updateEnr*(
+    d: Protocol, enrFields: openarray[(string, seq[byte])]): DiscResult[void] =
+  let fields = mapIt(enrFields, toFieldPair(it[0], it[1]))
+  d.localNode.record = ? d.localNode.record.update(d.privateKey, fields)
+  ok()
 
 proc send(d: Protocol, a: Address, data: seq[byte]) =
   let ta = initTAddress(a.ip, a.port)
@@ -691,7 +697,7 @@ proc lookupLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
 
 proc newProtocol*(privKey: PrivateKey, db: Database,
                   externalIp: Option[ValidIpAddress], tcpPort, udpPort: Port,
-                  localEnrFields: openarray[FieldPair] = [],
+                  localEnrFields: openarray[(string, seq[byte])] = [],
                   bootstrapRecords: openarray[Record] = [],
                   previousEnr = none[enr.Record](),
                   bindIp = IPv4_any(), rng = newRng()):
@@ -702,15 +708,16 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
   # remapping through NAT and this API is also subject to change once we
   # introduce support for ipv4 + ipv6 binding/listening.
   let
+    extraFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
     # TODO:
     # - Defect as is now or return a result for enr errors?
     # - In case incorrect key, allow for new enr based on new key (new node id)?
     enr = if previousEnr.isSome():
             previousEnr.get().update(privKey, externalIp, tcpPort, udpPort,
-              localEnrFields).expect("Record within size limits and correct key")
+              extraFields).expect("Record within size limits and correct key")
           else:
             enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
-              localEnrFields).expect("Record within size limits")
+              extraFields).expect("Record within size limits")
     node = newNode(enr).expect("Properly initialized record")
 
   # TODO Consider whether this should be a Defect

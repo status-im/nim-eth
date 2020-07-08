@@ -10,7 +10,7 @@ proc localAddress*(port: int): Address =
 proc initDiscoveryNode*(rng: ref BrHmacDrbgContext, privKey: PrivateKey,
                         address: Address,
                         bootstrapRecords: openarray[Record] = [],
-                        localEnrFields: openarray[FieldPair] = []):
+                        localEnrFields: openarray[(string, seq[byte])] = []):
                         discv5_protocol.Protocol =
   var db = DiscoveryDB.init(newMemoryDB())
   result = newProtocol(privKey, db,

@@ -333,11 +333,12 @@ procSuite "Discovery v5 Tests":
       # resolve in previous test block
       let pong = await targetNode.ping(mainNode.localNode)
       check pong.isOk()
-      # TODO: need to add some logic to update ENRs properly
+
       targetSeqNum.inc()
-      let r = enr.Record.init(targetSeqNum, targetKey,
-        some(targetAddress.ip), targetAddress.port, targetAddress.port)[]
-      targetNode.localNode.record = r
+      # need to add something to get the enr sequence number incremented
+      let update = targetNode.updateEnr({"addsomefield": @[byte 1]})
+      check update.isOk()
+
       let n = await mainNode.resolve(targetId)
       check:
         n.isSome()
@@ -348,9 +349,7 @@ procSuite "Discovery v5 Tests":
     # close targetNode, resolve should lookup, check if we get updated ENR.
     block:
       targetSeqNum.inc()
-      let r = enr.Record.init(targetSeqNum, targetKey, some(targetAddress.ip),
-        targetAddress.port, targetAddress.port)[]
-      targetNode.localNode.record = r
+      let update = targetNode.updateEnr({"addsomefield": @[byte 2]})
 
       # ping node so that its ENR gets added
       check (await targetNode.ping(lookupNode.localNode)).isOk()
