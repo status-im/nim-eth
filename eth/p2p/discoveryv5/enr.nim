@@ -76,6 +76,8 @@ proc `==`(a, b: Field): bool =
   else:
     return false
 
+proc cmp(a, b: FieldPair): int = cmp(a[0], b[0])
+
 proc makeEnrRaw(seqNum: uint64, pk: PrivateKey,
     pairs: openarray[FieldPair]): EnrResult[seq[byte]] =
   proc append(w: var RlpWriter, seqNum: uint64,
@@ -118,8 +120,9 @@ proc makeEnrAux(seqNum: uint64, pk: PrivateKey,
     Field(kind: kBytes, bytes: @(pubkey.toRawCompressed()))))
 
   # Sort by key
-  record.pairs.sort() do(a, b: FieldPair) -> int:
-    cmp(a[0], b[0])
+  record.pairs.sort(cmp)
+  # TODO: Should deduplicate on keys here also. Should we error on that or just
+  # deal with it?
 
   record.raw = ? makeEnrRaw(seqNum, pk, record.pairs)
   ok(record)
@@ -140,18 +143,8 @@ macro initRecord*(seqNum: uint64, pk: PrivateKey,
 template toFieldPair*(key: string, value: auto): FieldPair =
   (key, toField(value))
 
-proc init*(T: type Record, seqNum: uint64,
-                           pk: PrivateKey,
-                           ip: Option[ValidIpAddress],
-                           tcpPort, udpPort: Port,
-                           extraFields: openarray[FieldPair] = []):
-                           EnrResult[T] =
-  ## Initialize a `Record` with given sequence number, private key, optional
-  ## ip-address, tcp port, udp port, and optional custom k:v pairs.
-  ##
-  ## Can fail in case the record exceeds the `maxEnrSize`.
-  var fields = newSeq[FieldPair]()
-
+proc addAddress(fields: var seq[FieldPair], ip: Option[ValidIpAddress],
+    tcpPort, udpPort: Port) =
   if ip.isSome():
     let
       ipExt = ip.get()
@@ -165,6 +158,19 @@ proc init*(T: type Record, seqNum: uint64,
     fields.add(("tcp", tcpPort.uint16.toField))
     fields.add(("udp", udpPort.uint16.toField))
 
+proc init*(T: type Record, seqNum: uint64,
+                           pk: PrivateKey,
+                           ip: Option[ValidIpAddress],
+                           tcpPort, udpPort: Port,
+                           extraFields: openarray[FieldPair] = []):
+                           EnrResult[T] =
+  ## Initialize a `Record` with given sequence number, private key, optional
+  ## ip-address, tcp port, udp port, and optional custom k:v pairs.
+  ##
+  ## Can fail in case the record exceeds the `maxEnrSize`.
+  var fields = newSeq[FieldPair]()
+
+  fields.addAddress(ip, tcpPort, udpPort)
   fields.add extraFields
   makeEnrAux(seqNum, pk, fields)
 
@@ -248,8 +254,7 @@ proc update*(record: Record, pk: PrivateKey, fieldPairs: openarray[FieldPair]):
         updated = true
     else:
       # Add new k:v pair.
-      r.pairs.insert(fieldPair,
-        lowerBound(r.pairs, fieldPair) do(a, b: FieldPair) -> int: cmp(a[0], b[0]))
+      r.pairs.insert(fieldPair, lowerBound(r.pairs, fieldPair, cmp))
       updated = true
 
   if updated:
@@ -265,21 +270,8 @@ proc update*(r: Record, pk: PrivateKey,
                         EnrResult[Record] =
   var fields = newSeq[FieldPair]()
 
-  if ip.isSome():
-    let
-      ipExt = ip.get()
-      isV6 = ipExt.family == IPv6
-
-    fields.add(if isV6: ("ip6", ipExt.address_v6.toField)
-               else: ("ip", ipExt.address_v4.toField))
-    fields.add(((if isV6: "tcp6" else: "tcp"), tcpPort.uint16.toField))
-    fields.add(((if isV6: "udp6" else: "udp"), udpPort.uint16.toField))
-  else:
-    fields.add(("tcp", tcpPort.uint16.toField))
-    fields.add(("udp", udpPort.uint16.toField))
-
+  fields.addAddress(ip, tcpPort, udpPort)
   fields.add extraFields
-
   r.update(pk, fields)
 
 proc tryGet*(r: Record, key: string, T: type): Option[T] =
