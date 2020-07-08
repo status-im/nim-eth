@@ -258,6 +258,8 @@ proc update*(record: Record, pk: PrivateKey, fieldPairs: openarray[FieldPair]):
       updated = true
 
   if updated:
+    if r.seqNum == high(r.seqNum): # highly unlikely
+      return err("Maximum sequence number reached")
     r.seqNum.inc()
     r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
 

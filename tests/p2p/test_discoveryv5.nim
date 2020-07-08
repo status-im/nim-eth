@@ -1,7 +1,7 @@
 import
   chronos, chronicles, tables, stint, testutils/unittests,
-  stew/shims/net, eth/keys, bearssl,
-  eth/p2p/discoveryv5/[enr, node, types, routing_table, encoding],
+  stew/shims/net, eth/[keys, trie/db], bearssl,
+  eth/p2p/discoveryv5/[enr, node, types, routing_table, encoding, discovery_db],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./discv5_test_helper
 
@@ -336,7 +336,7 @@ procSuite "Discovery v5 Tests":
 
       targetSeqNum.inc()
       # need to add something to get the enr sequence number incremented
-      let update = targetNode.updateEnr({"addsomefield": @[byte 1]})
+      let update = targetNode.updateRecord({"addsomefield": @[byte 1]})
       check update.isOk()
 
       let n = await mainNode.resolve(targetId)
@@ -349,7 +349,7 @@ procSuite "Discovery v5 Tests":
     # close targetNode, resolve should lookup, check if we get updated ENR.
     block:
       targetSeqNum.inc()
-      let update = targetNode.updateEnr({"addsomefield": @[byte 2]})
+      let update = targetNode.updateRecord({"addsomefield": @[byte 2]})
 
       # ping node so that its ENR gets added
       check (await targetNode.ping(lookupNode.localNode)).isOk()
@@ -392,3 +392,29 @@ procSuite "Discovery v5 Tests":
     check discoveredFiltered.len == 1 and discoveredFiltered.contains(targetNode)
 
     await lookupNode.closeWait()
+
+  test "New protocol with enr":
+    let
+      privKey = PrivateKey.random(rng[])
+      ip = some(ValidIpAddress.init("127.0.0.1"))
+      port = Port(20301)
+      db = DiscoveryDB.init(newMemoryDB())
+      node = newProtocol(privKey, db, ip, port, port, rng = rng)
+      noUpdatesNode = newProtocol(privKey, db, ip, port, port, rng = rng,
+        previousRecord = some(node.getRecord()))
+      updatesNode = newProtocol(privKey, db, ip, port, Port(20302), rng = rng,
+        previousRecord = some(noUpdatesNode.getRecord()))
+      moreUpdatesNode = newProtocol(privKey, db, ip, port, port, rng = rng,
+        localEnrFields = {"addfield": @[byte 0]},
+        previousRecord = some(updatesNode.getRecord()))
+    check:
+      node.getRecord().seqNum == 1
+      noUpdatesNode.getRecord().seqNum == 1
+      updatesNode.getRecord().seqNum == 2
+      moreUpdatesNode.getRecord().seqNum == 3
+
+    # Defect (for now?) on incorrect key use
+    expect ResultDefect:
+      let incorrectKeyUpdates = newProtocol(PrivateKey.random(rng[]),
+        db, ip, port, port, rng = rng,
+        previousRecord = some(updatesNode.getRecord()))

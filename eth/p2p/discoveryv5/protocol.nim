@@ -172,7 +172,10 @@ proc nodesDiscovered*(d: Protocol): int {.inline.} = d.routingTable.len
 func privKey*(d: Protocol): lent PrivateKey =
   d.privateKey
 
-proc updateEnr*(
+func getRecord*(d: Protocol): Record =
+  d.localNode.record
+
+proc updateRecord*(
     d: Protocol, enrFields: openarray[(string, seq[byte])]): DiscResult[void] =
   let fields = mapIt(enrFields, toFieldPair(it[0], it[1]))
   d.localNode.record = ? d.localNode.record.update(d.privateKey, fields)
@@ -699,7 +702,7 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
                   externalIp: Option[ValidIpAddress], tcpPort, udpPort: Port,
                   localEnrFields: openarray[(string, seq[byte])] = [],
                   bootstrapRecords: openarray[Record] = [],
-                  previousEnr = none[enr.Record](),
+                  previousRecord = none[enr.Record](),
                   bindIp = IPv4_any(), rng = newRng()):
                   Protocol {.raises: [Defect].} =
   # TODO: Tried adding bindPort = udpPort as parameter but that gave
@@ -712,8 +715,8 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
     # TODO:
     # - Defect as is now or return a result for enr errors?
     # - In case incorrect key, allow for new enr based on new key (new node id)?
-    enr = if previousEnr.isSome():
-            previousEnr.get().update(privKey, externalIp, tcpPort, udpPort,
+    enr = if previousRecord.isSome():
+            previousRecord.get().update(privKey, externalIp, tcpPort, udpPort,
               extraFields).expect("Record within size limits and correct key")
           else:
             enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
