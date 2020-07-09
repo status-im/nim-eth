@@ -7,16 +7,19 @@ import
 proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
 
-proc initDiscoveryNode*(rng: ref BrHmacDrbgContext, privKey: PrivateKey, address: Address,
+proc initDiscoveryNode*(rng: ref BrHmacDrbgContext, privKey: PrivateKey,
+                        address: Address,
                         bootstrapRecords: openarray[Record] = [],
-                        localEnrFields: openarray[FieldPair] = []):
+                        localEnrFields: openarray[(string, seq[byte])] = [],
+                        previousRecord = none[enr.Record]()):
                         discv5_protocol.Protocol =
   var db = DiscoveryDB.init(newMemoryDB())
   result = newProtocol(privKey, db,
                        some(address.ip),
                        address.port, address.port,
                        bootstrapRecords = bootstrapRecords,
-                       localEnrFields = localEnrFields, rng = rng)
+                       localEnrFields = localEnrFields,
+                       previousRecord = previousRecord, rng = rng)
 
   result.open()
 

@@ -1,4 +1,4 @@
-# ENR implemetation according to spec:
+# ENR implementation according to specification in EIP-778:
 # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-778.md
 
 import
@@ -11,8 +11,9 @@ export options
 {.push raises: [Defect].}
 
 const
-  maxEnrSize = 300
-  minRlpListLen = 4 # for signature, seqId, "id" key, id
+  maxEnrSize = 300  ## Maximum size of an encoded node record, in bytes.
+  minRlpListLen = 4 ## Minimum node record RLP list has: signature, seqId,
+  ## "id" key and value.
 
 type
   FieldPair* = (string, Field)
@@ -63,8 +64,51 @@ template toField[T](v: T): Field =
   else:
     {.error: "Unsupported field type".}
 
+proc `==`(a, b: Field): bool =
+  if a.kind == b.kind:
+    case a.kind
+    of kString:
+      return a.str == b.str
+    of kNum:
+      return a.num == b.num
+    of kBytes:
+      return a.bytes == b.bytes
+  else:
+    return false
+
+proc cmp(a, b: FieldPair): int = cmp(a[0], b[0])
+
+proc makeEnrRaw(seqNum: uint64, pk: PrivateKey,
+    pairs: openarray[FieldPair]): EnrResult[seq[byte]] =
+  proc append(w: var RlpWriter, seqNum: uint64,
+      pairs: openarray[FieldPair]): seq[byte] =
+    w.append(seqNum)
+    for (k, v) in pairs:
+      w.append(k)
+      case v.kind
+      of kString: w.append(v.str)
+      of kNum: w.append(v.num)
+      of kBytes: w.append(v.bytes)
+    w.finish()
+
+  let toSign = block:
+    var w = initRlpList(pairs.len * 2 + 1)
+    w.append(seqNum, pairs)
+
+  let sig = signNR(pk, toSign)
+
+  var raw = block:
+    var w = initRlpList(pairs.len * 2 + 2)
+    w.append(sig.toRaw())
+    w.append(seqNum, pairs)
+
+  if raw.len > maxEnrSize:
+    err("Record exceeds maximum size")
+  else:
+    ok(raw)
+
 proc makeEnrAux(seqNum: uint64, pk: PrivateKey,
-    pairs: openarray[(string, Field)]): EnrResult[Record] =
+    pairs: openarray[FieldPair]): EnrResult[Record] =
   var record: Record
   record.pairs = @pairs
   record.seqNum = seqNum
@@ -76,35 +120,19 @@ proc makeEnrAux(seqNum: uint64, pk: PrivateKey,
     Field(kind: kBytes, bytes: @(pubkey.toRawCompressed()))))
 
   # Sort by key
-  record.pairs.sort() do(a, b: (string, Field)) -> int:
-    cmp(a[0], b[0])
+  record.pairs.sort(cmp)
+  # TODO: Should deduplicate on keys here also. Should we error on that or just
+  # deal with it?
 
-  proc append(w: var RlpWriter, seqNum: uint64,
-      pairs: openarray[(string, Field)]): seq[byte] =
-    w.append(seqNum)
-    for (k, v) in pairs:
-      w.append(k)
-      case v.kind
-      of kString: w.append(v.str)
-      of kNum: w.append(v.num)
-      of kBytes: w.append(v.bytes)
-    w.finish()
-
-  let toSign = block:
-    var w = initRlpList(record.pairs.len * 2 + 1)
-    w.append(seqNum, record.pairs)
-
-  let sig = signNR(pk, toSign)
-
-  record.raw = block:
-    var w = initRlpList(record.pairs.len * 2 + 2)
-    w.append(sig.toRaw())
-    w.append(seqNum, record.pairs)
-
+  record.raw = ? makeEnrRaw(seqNum, pk, record.pairs)
   ok(record)
 
 macro initRecord*(seqNum: uint64, pk: PrivateKey,
     pairs: untyped{nkTableConstr}): untyped =
+  ## Initialize a `Record` with given sequence number, private key and k:v
+  ## pairs.
+  ##
+  ## Can fail in case the record exceeds the `maxEnrSize`.
   for c in pairs:
     c.expectKind(nnkExprColonExpr)
     c[1] = newCall(bindSym"toField", c[1])
@@ -115,14 +143,8 @@ macro initRecord*(seqNum: uint64, pk: PrivateKey,
 template toFieldPair*(key: string, value: auto): FieldPair =
   (key, toField(value))
 
-proc init*(T: type Record, seqNum: uint64,
-                           pk: PrivateKey,
-                           ip: Option[ValidIpAddress],
-                           tcpPort, udpPort: Port,
-                           extraFields: openarray[FieldPair] = []):
-                           EnrResult[T] =
-  var fields = newSeq[FieldPair]()
-
+proc addAddress(fields: var seq[FieldPair], ip: Option[ValidIpAddress],
+    tcpPort, udpPort: Port) =
   if ip.isSome():
     let
       ipExt = ip.get()
@@ -136,6 +158,19 @@ proc init*(T: type Record, seqNum: uint64,
     fields.add(("tcp", tcpPort.uint16.toField))
     fields.add(("udp", udpPort.uint16.toField))
 
+proc init*(T: type Record, seqNum: uint64,
+                           pk: PrivateKey,
+                           ip: Option[ValidIpAddress],
+                           tcpPort, udpPort: Port,
+                           extraFields: openarray[FieldPair] = []):
+                           EnrResult[T] =
+  ## Initialize a `Record` with given sequence number, private key, optional
+  ## ip address, tcp port, udp port, and optional custom k:v pairs.
+  ##
+  ## Can fail in case the record exceeds the `maxEnrSize`.
+  var fields = newSeq[FieldPair]()
+
+  fields.addAddress(ip, tcpPort, udpPort)
   fields.add extraFields
   makeEnrAux(seqNum, pk, fields)
 
@@ -189,6 +224,75 @@ proc get*(r: Record, T: type PublicKey): Option[T] =
     let pk = PublicKey.fromRaw(pubkeyField.bytes)
     if pk.isOk:
       return some pk[]
+
+proc find(r: Record, key: string): Option[int] =
+  ## Search for key in record key:value pairs.
+  ##
+  ## Returns some(index of key) if key is found in record. Else return none.
+  for i, (k, v) in r.pairs:
+    if k == key:
+      return some(i)
+
+proc update*(record: var Record, pk: PrivateKey,
+    fieldPairs: openarray[FieldPair]): EnrResult[void] =
+  ## Update a `Record` k:v pairs.
+  ##
+  ## In case any of the k:v pairs is updated or added (new), the sequence number
+  ## of the `Record` will be incremented and a new signature will be applied.
+  ##
+  ## Can fail in case of wrong `PrivateKey`, if the size of the resulting record
+  ## exceeds `maxEnrSize` or if maximum sequence number is reached. The `Record`
+  ## will not be altered in these cases.
+  var r = record
+
+  let pubkey = r.get(PublicKey)
+  if pubkey.isNone() or pubkey.get() != pk.toPublicKey():
+    return err("Public key does not correspond with given private key")
+
+  var updated = false
+  for fieldPair in fieldPairs:
+    let index = r.find(fieldPair[0])
+    if(index.isSome()):
+      if r.pairs[index.get()][1] == fieldPair[1]:
+        # Exact k:v pair is already in record, nothing to do here.
+        continue
+      else:
+        # Need to update the value.
+        r.pairs[index.get()] = fieldPair
+        updated = true
+    else:
+      # Add new k:v pair.
+      r.pairs.insert(fieldPair, lowerBound(r.pairs, fieldPair, cmp))
+      updated = true
+
+  if updated:
+    if r.seqNum == high(r.seqNum): # highly unlikely
+      return err("Maximum sequence number reached")
+    r.seqNum.inc()
+    r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
+    record = r
+
+  ok()
+
+proc update*(r: var Record, pk: PrivateKey,
+                            ip: Option[ValidIpAddress],
+                            tcpPort, udpPort: Port,
+                            extraFields: openarray[FieldPair] = []):
+                            EnrResult[void] =
+  ## Update a `Record` with given ip address, tcp port, udp port and optional
+  ## custom k:v pairs.
+  ##
+  ## In case any of the k:v pairs is updated or added (new), the sequence number
+  ## of the `Record` will be incremented and a new signature will be applied.
+  ##
+  ## Can fail in case of wrong `PrivateKey`, if the size of the resulting record
+  ## exceeds `maxEnrSize` or if maximum sequence number is reached. The `Record`
+  ## will not be altered in these cases.
+  var fields = newSeq[FieldPair]()
+
+  fields.addAddress(ip, tcpPort, udpPort)
+  fields.add extraFields
+  r.update(pk, fields)
 
 proc tryGet*(r: Record, key: string, T: type): Option[T] =
   try:
