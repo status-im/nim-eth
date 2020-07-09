@@ -11,7 +11,7 @@ Next install `nim-testutils` its `ntu` application.
 
 E.g. by running the `nim-testutils` nimble install:
 ```sh
-nimble install nim-testutils
+nimble install testutils
 ```
 
 ## How to run
