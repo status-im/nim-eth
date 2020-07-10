@@ -44,5 +44,5 @@ install:
   - cd ../../..
 
 script:
-  - nimble install -y
+  - nimble install -y --depsOnly
   - nimble test
