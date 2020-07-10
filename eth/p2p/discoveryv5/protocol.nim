@@ -73,10 +73,11 @@
 ## This might be a concern for mobile devices.
 
 import
-  std/[tables, sets, options, math, random, sequtils],
+  std/[tables, sets, options, math, sequtils],
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/[byteutils, endians2], chronicles, chronos, stint, bearssl,
-  eth/[rlp, keys, async_utils], types, encoding, node, routing_table, enr
+  eth/[rlp, keys, async_utils],
+  types, encoding, node, routing_table, enr, random2
 
 import nimcrypto except toHex
 
@@ -702,9 +703,8 @@ proc revalidateNode*(d: Protocol, n: Node)
 proc revalidateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   # TODO: General Exception raised.
   try:
-    randomize()
     while true:
-      await sleepAsync(rand(revalidateMax).milliseconds)
+      await sleepAsync(d.rng[].rand(revalidateMax).milliseconds)
       let n = d.routingTable.nodeToRevalidate()
       if not n.isNil:
         traceAsyncErrors d.revalidateNode(n)
@@ -765,7 +765,7 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
     bootstrapRecords: @bootstrapRecords,
     rng: rng)
 
-  result.routingTable.init(node, 5)
+  result.routingTable.init(node, 5, rng)
 
 proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   info "Starting discovery node", node = $d.localNode,
