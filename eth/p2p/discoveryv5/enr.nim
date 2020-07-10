@@ -457,7 +457,7 @@ proc `==`*(a, b: Record): bool = a.raw == b.raw
 
 proc read*(rlp: var Rlp, T: typedesc[Record]):
     T {.inline, raises:[RlpError, ValueError, Defect].} =
-  if not result.fromBytes(rlp.rawData):
+  if not rlp.hasData() or not result.fromBytes(rlp.rawData):
     # TODO: This could also just be an invalid signature, would be cleaner to
     # split of RLP deserialisation errors from this.
     raise newException(ValueError, "Could not deserialize")
