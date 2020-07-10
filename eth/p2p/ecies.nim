@@ -14,7 +14,7 @@
 
 import bearssl
 import eth/keys, nimcrypto/[rijndael, bcmode, hash, hmac, sha2, utils]
-import stew/results
+import stew/[results, endians2]
 
 export results
 
@@ -82,7 +82,7 @@ proc kdf*(data: openarray[byte]): array[KeyLength, byte] {.noInit.} =
   var storage = newSeq[byte](int(ctx.sizeDigest) * (reps + 1))
   while counter <= uint32(reps):
     counter = counter + 1
-    counterLe = LSWAP(counter)
+    counterLe = toBE(counter)
     ctx.init()
     ctx.update(cast[ptr byte](addr counterLe), uint(sizeof(uint32)))
     ctx.update(unsafeAddr data[0], uint(len(data)))
