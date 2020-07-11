@@ -61,7 +61,8 @@ proc idNonceHash(nonce, ephkey: openarray[byte]): MDigest[256] =
   ctx.update(idNoncePrefix)
   ctx.update(nonce)
   ctx.update(ephkey)
-  ctx.finish()
+  result = ctx.finish()
+  ctx.clear()
 
 proc signIDNonce*(privKey: PrivateKey, idNonce, ephKey: openarray[byte]):
     SignatureNR =
@@ -167,8 +168,8 @@ proc encodePacket*(
     (headEnc, secrets) = encodeAuthHeader(rng, c, toId, nonce, challenge)
 
     writeKey = secrets.writeKey
-    # TODO: is it safe to ignore the error here?
-    discard c.db.storeKeys(toId, toAddr, secrets.readKey, secrets.writeKey)
+    if not c.db.storeKeys(toId, toAddr, secrets.readKey, secrets.writeKey):
+      warn "Storing of keys for session failed, will have to redo a handshake"
 
   let tag = packetTag(toId, c.localNode.id)
 
@@ -197,8 +198,7 @@ proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
 
   return some(res)
 
-proc decodeMessage(body: openarray[byte]):
-    DecodeResult[Message] {.raises:[Defect].} =
+proc decodeMessage(body: openarray[byte]): DecodeResult[Message] =
   ## Decodes to the specific `Message` type.
   if body.len < 1:
     return err(PacketError)
@@ -206,6 +206,8 @@ proc decodeMessage(body: openarray[byte]):
   if body[0] < MessageKind.low.byte or body[0] > MessageKind.high.byte:
     return err(PacketError)
 
+  # This cast is covered by the above check (else we could get enum with invalid
+  # data!). However, can't we do this in a cleaner way?
   let kind = cast[MessageKind](body[0])
   var message = Message(kind: kind)
   var rlp = rlpFromBytes(body.toOpenArray(1, body.high))
@@ -238,8 +240,7 @@ proc decodeMessage(body: openarray[byte]):
     err(PacketError)
 
 proc decodeAuthResp*(c: Codec, fromId: NodeId, head: AuthHeader,
-    challenge: Whoareyou, newNode: var Node):
-    DecodeResult[HandshakeSecrets] {.raises:[Defect].} =
+    challenge: Whoareyou, newNode: var Node): DecodeResult[HandshakeSecrets] =
   ## Decrypts and decodes the auth-response, which is part of the auth-header.
   ## Requiers the id-nonce from the WHOAREYOU packet that was send.
   if head.scheme != authSchemeName:
@@ -321,8 +322,8 @@ proc decodePacket*(c: var Codec,
 
     # Swap keys to match remote
     swap(sec.readKey, sec.writeKey)
-    # TODO: is it safe to ignore the error here?
-    discard c.db.storeKeys(fromId, fromAddr, sec.readKey, sec.writeKey)
+    if not c.db.storeKeys(fromId, fromAddr, sec.readKey, sec.writeKey):
+      warn "Storing of keys for session failed, will have to redo a handshake"
     readKey = sec.readKey
   else:
     # Message packet or random packet - rlp bytes (size 12) indicates auth-tag

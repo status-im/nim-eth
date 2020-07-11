@@ -307,7 +307,7 @@ proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
     ping: PingMessage, reqId: RequestId) =
   let a = fromAddr
   var pong: PongMessage
-  pong.enrSeq = ping.enrSeq
+  pong.enrSeq = d.localNode.record.seqNum
   pong.ip = case a.ip.family
     of IpAddressFamily.IPv4: @(a.ip.address_v4)
     of IpAddressFamily.IPv6: @(a.ip.address_v6)
@@ -482,7 +482,7 @@ proc replaceNode(d: Protocol, n: Node) =
     # For now we never remove bootstrap nodes. It might make sense to actually
     # do so and to retry them only in case we drop to a really low amount of
     # peers in the routing table.
-    debug "Revalidation of bootstrap node failed", enr = toURI(n.record)
+    debug "Message request to bootstrap node failed", enr = toURI(n.record)
 
 # TODO: This could be improved to do the clean-up immediatily in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag

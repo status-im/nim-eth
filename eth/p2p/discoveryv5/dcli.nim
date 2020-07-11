@@ -1,5 +1,5 @@
 import
-  std/[sequtils, options, strutils],
+  std/[options, strutils],
   chronos, chronicles, chronicles/topics_registry, confutils, metrics,
   stew/byteutils, confutils/std/net,
   eth/keys, eth/trie/db, eth/net/nat, protocol, discovery_db, enr, node
