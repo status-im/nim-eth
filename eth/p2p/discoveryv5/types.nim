@@ -1,5 +1,6 @@
 import
-  hashes, stint, chronos,
+  std/hashes,
+  stint, chronos,
   eth/[keys, rlp], enr, node
 
 {.push raises: [Defect].}

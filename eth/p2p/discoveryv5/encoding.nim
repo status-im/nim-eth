@@ -1,6 +1,7 @@
 import
-  std/[tables, options], nimcrypto, stint, chronicles, stew/results,
-  types, node, enr, hkdf, eth/[rlp, keys], bearssl
+  std/[tables, options],
+  nimcrypto, stint, chronicles, stew/results, bearssl,
+  eth/[rlp, keys], types, node, enr, hkdf
 
 export keys
 
@@ -95,6 +96,9 @@ proc encodeAuthHeader*(rng: var BrHmacDrbgContext,
                       nonce: array[gcmNonceSize, byte],
                       challenge: Whoareyou):
                       (seq[byte], HandshakeSecrets) =
+  ## Encodes the auth-header, which is required for the packet in response to a
+  ## WHOAREYOU packet. Requires the id-nonce and the enr-seq that were in the
+  ## WHOAREYOU packet, and the public key of the node sending it.
   var resp = AuthResponse(version: 5)
   let ln = c.localNode
 
@@ -139,6 +143,9 @@ proc encodePacket*(
     message: openarray[byte],
     challenge: Whoareyou):
     (seq[byte], array[gcmNonceSize, byte]) =
+  ## Encode a packet. This can be a regular packet or a packet in response to a
+  ## WHOAREYOU packet. The latter is the case when the `challenge` parameter is
+  ## provided.
   var nonce: array[gcmNonceSize, byte]
   brHmacDrbgGenerate(rng, nonce)
 
@@ -152,6 +159,8 @@ proc encodePacket*(
 
     # We might not have the node's keys if the handshake hasn't been performed
     # yet. That's fine, we will be responded with whoareyou.
+    # TODO: in such case we should not encrypt with a 0x0 key and just send
+    # random data, else this practically leaks the first packet!!!
     discard c.db.loadKeys(toId, toAddr, readKey, writeKey)
   else:
     var secrets: HandshakeSecrets
@@ -190,6 +199,7 @@ proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
 
 proc decodeMessage(body: openarray[byte]):
     DecodeResult[Message] {.raises:[Defect].} =
+  ## Decodes to the specific `Message` type.
   if body.len < 1:
     return err(PacketError)
 
@@ -230,6 +240,8 @@ proc decodeMessage(body: openarray[byte]):
 proc decodeAuthResp*(c: Codec, fromId: NodeId, head: AuthHeader,
     challenge: Whoareyou, newNode: var Node):
     DecodeResult[HandshakeSecrets] {.raises:[Defect].} =
+  ## Decrypts and decodes the auth-response, which is part of the auth-header.
+  ## Requiers the id-nonce from the WHOAREYOU packet that was send.
   if head.scheme != authSchemeName:
     warn "Unknown auth scheme"
     return err(HandshakeError)
@@ -273,6 +285,8 @@ proc decodePacket*(c: var Codec,
                       input: openArray[byte],
                       authTag: var AuthTag,
                       newNode: var Node): DecodeResult[Message] =
+  ## Decode a packet. This can be a regular packet or a packet in response to a
+  ## WHOAREYOU packet. In case of the latter a `newNode` might be provided.
   var r = rlpFromBytes(input.toOpenArray(tagSize, input.high))
   var auth: AuthHeader
 

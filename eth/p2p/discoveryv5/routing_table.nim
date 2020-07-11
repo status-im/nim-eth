@@ -1,7 +1,7 @@
 import
   std/[algorithm, times, sequtils, bitops, random, sets, options],
   stint, chronicles, metrics,
-  node
+  node, enr
 
 export options
 
@@ -38,8 +38,9 @@ type
     lastUpdated: float ## epochTime of last update to `nodes` in the KBucket.
 
 const
-  BUCKET_SIZE* = 16
-  REPLACEMENT_CACHE_SIZE* = 8
+  BUCKET_SIZE* = 16 ## Maximum amount of nodes per bucket
+  REPLACEMENT_CACHE_SIZE* = 8 ## Maximum amount of nodes per replacement cache
+  ## of a bucket
   ID_SIZE = 256
 
 proc distanceTo(n: Node, id: NodeId): UInt256 =
@@ -104,7 +105,7 @@ proc add(k: KBucket, n: Node): Node =
   ## However, in discovery v5 it can be that a node is added after a incoming
   ## request, and considering a handshake that needs to be done, it is likely
   ## that this node is reachable. An additional `addSeen` proc could be created
-  ## for this,
+  ## for this.
   k.lastUpdated = epochTime()
   let nodeIdx = k.nodes.find(n)
   if nodeIdx != -1:
@@ -139,7 +140,7 @@ proc removeNode(k: KBucket, n: Node) =
     routing_table_nodes.dec()
 
 proc split(k: KBucket): tuple[lower, upper: KBucket] =
-  ## Split at the median id
+  ## Split the kbucket `k` at the median id.
   let splitid = k.midpoint
   result.lower = newKBucket(k.istart, splitid)
   result.upper = newKBucket(splitid + 1.u256, k.iend)
@@ -186,10 +187,12 @@ proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
   for n in nodes:
     echo n.toHex()
 
-  # Reaching this would mean that all node ids are equal
+  # Reaching this would mean that all node ids are equal.
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
-proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = 8) {.inline.} =
+proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = 5) {.inline.} =
+  ## Initialize the routing table for provided `Node` and bitsPerHop value.
+  ## `bitsPerHop` is default set to 5 as recommended by original Kademlia paper.
   r.thisNode = thisNode
   r.buckets = @[newKBucket(0.u256, high(Uint256))]
   r.bitsPerHop = bitsPerHop
@@ -260,24 +263,29 @@ proc replaceNode*(r: var RoutingTable, n: Node) =
       b.replacementCache.delete(high(b.replacementCache))
 
 proc getNode*(r: RoutingTable, id: NodeId): Option[Node] =
+  ## Get the `Node` with `id` as `NodeId` from the routing table.
+  ## If no node with provided node id can be found,`none` is returned .
   let b = r.bucketForNode(id)
   for n in b.nodes:
     if n.id == id:
       return some(n)
 
 proc contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
+  # Check if the routing table contains node `n`.
 
 proc bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
   sortedByIt(r.buckets, it.distanceTo(id))
 
 proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
     seenOnly = false): seq[Node] =
-  ## Return up to k neighbours of the given node.
+  ## Return up to k neighbours of the given node id.
+  ## When seenOnly is set to true, only nodes that have been contacted
+  ## previously successfully will be selected.
   result = newSeqOfCap[Node](k * 2)
   block addNodes:
     for bucket in r.bucketsByDistanceTo(id):
       for n in bucket.nodesByDistanceTo(id):
-        # Only provide actively seen nodes when `seenOnly` set
+        # Only provide actively seen nodes when `seenOnly` set.
         if not seenOnly or n.seen:
           result.add(n)
           if result.len == k * 2:
@@ -299,6 +307,7 @@ proc idAtDistance*(id: NodeId, dist: uint32): NodeId =
 
 proc neighboursAtDistance*(r: RoutingTable, distance: uint32,
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
+  ## Return up to k neighbours at given logarithmic distance.
   result = r.neighbours(idAtDistance(r.thisNode.id, distance), k, seenOnly)
   # This is a bit silly, first getting closest nodes then to only keep the ones
   # that are exactly the requested distance.
@@ -343,6 +352,8 @@ proc nodeToRevalidate*(r: RoutingTable): Node =
 
 proc randomNodes*(r: RoutingTable, maxAmount: int,
     pred: proc(x: Node): bool {.gcsafe, noSideEffect.} = nil): seq[Node] =
+  ## Get a `maxAmount` of random nodes from the routing table with the `pred`
+  ## predicate function applied as filter on the nodes selected.
   var maxAmount = maxAmount
   let sz = r.len
   if maxAmount > sz:
