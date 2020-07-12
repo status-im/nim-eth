@@ -49,6 +49,7 @@ proc runP2pTests() =
       "test_shh_connect",
       "test_protocol_handlers",
       "test_enr",
+      "test_hkdf",
       "test_discoveryv5",
       "test_discv5_encoding",
       "test_routing_table"
@@ -92,6 +93,7 @@ task test, "run tests":
 proc runDiscv5Tests() =
   for filename in [
       "test_enr",
+      "test_hkdf",
       "test_discoveryv5",
       "test_discv5_encoding",
       "test_routing_table"
