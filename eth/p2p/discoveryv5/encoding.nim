@@ -150,33 +150,39 @@ proc encodePacket*(
   var nonce: array[gcmNonceSize, byte]
   brHmacDrbgGenerate(rng, nonce)
 
-  var headEnc: seq[byte]
-
-  var writeKey: AesKey
+  let tag = packetTag(toId, c.localNode.id)
+  var packet: seq[byte]
+  packet.add(tag)
 
   if challenge.isNil:
-    headEnc = rlp.encode(nonce)
-    var readKey: AesKey
+    # Message packet or random packet
+    let headEnc = rlp.encode(nonce)
+    packet.add(headEnc)
 
+    # TODO: Should we change API to get just the key we need?
+    var writeKey, readKey: AesKey
     # We might not have the node's keys if the handshake hasn't been performed
     # yet. That's fine, we will be responded with whoareyou.
-    # TODO: in such case we should not encrypt with a 0x0 key and just send
-    # random data, else this practically leaks the first packet!!!
-    discard c.db.loadKeys(toId, toAddr, readKey, writeKey)
-  else:
-    var secrets: HandshakeSecrets
-    (headEnc, secrets) = encodeAuthHeader(rng, c, toId, nonce, challenge)
+    if c.db.loadKeys(toId, toAddr, readKey, writeKey):
+      packet.add(encryptGCM(writeKey, nonce, message, tag))
+    else:
+      # We might not have the node's keys if the handshake hasn't been performed
+      # yet. That's fine, we send a random-packet and we will be responded with
+      # a WHOAREYOU packet.
+      var randomData: array[44, byte]
+      brHmacDrbgGenerate(rng, randomData)
+      packet.add(randomData)
 
-    writeKey = secrets.writeKey
+  else:
+    # Handshake
+    let (headEnc, secrets) = encodeAuthHeader(rng, c, toId, nonce, challenge)
+    packet.add(headEnc)
+
     if not c.db.storeKeys(toId, toAddr, secrets.readKey, secrets.writeKey):
       warn "Storing of keys for session failed, will have to redo a handshake"
 
-  let tag = packetTag(toId, c.localNode.id)
+    packet.add(encryptGCM(secrets.writeKey, nonce, message, tag))
 
-  var packet = newSeqOfCap[byte](tag.len + headEnc.len)
-  packet.add(tag)
-  packet.add(headEnc)
-  packet.add(encryptGCM(writeKey, nonce, message, tag))
   (packet, nonce)
 
 proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
@@ -332,6 +338,7 @@ proc decodePacket*(c: var Codec,
     except RlpError:
       return err(PacketError)
     auth.auth = authTag
+    # TODO: Should we change API to get just the key we need?
     var writeKey: AesKey
     if not c.db.loadKeys(fromId, fromAddr, readKey, writeKey):
       trace "Decoding failed (no keys)"
