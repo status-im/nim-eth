@@ -73,9 +73,9 @@
 ## This might be a concern for mobile devices.
 
 import
-  std/[tables, sets, options, math, random, sequtils], bearssl,
+  std/[tables, sets, options, math, random, sequtils],
   stew/shims/net as stewNet, json_serialization/std/net,
-  stew/[byteutils, endians2], chronicles, chronos, stint,
+  stew/[byteutils, endians2], chronicles, chronos, stint, bearssl,
   eth/[rlp, keys, async_utils], types, encoding, node, routing_table, enr
 
 import nimcrypto except toHex
@@ -129,23 +129,35 @@ type
   DiscResult*[T] = Result[T, cstring]
 
 proc addNode*(d: Protocol, node: Node): bool =
+  ## Add `Node` to discovery routing table.
+  ##
+  ## Returns false only if `Node` is not eligable for adding (no Address).
   if node.address.isSome():
     # Only add nodes with an address to the routing table
     discard d.routingTable.addNode(node)
     return true
 
 proc addNode*(d: Protocol, r: Record): bool =
+  ## Add `Node` from a `Record` to discovery routing table.
+  ##
+  ## Returns false only if no valid `Node` can be created from the `Record` or
+  ## on the conditions of `addNode` from a `Node`.
   let node = newNode(r)
   if node.isOk():
     return d.addNode(node[])
 
 proc addNode*(d: Protocol, enr: EnrUri): bool =
+  ## Add `Node` from a ENR URI to discovery routing table.
+  ##
+  ## Returns false if no valid ENR URI, or on the conditions of `addNode` from
+  ## an `Record`.
   var r: Record
   let res = r.fromUri(enr)
   if res:
     return d.addNode(r)
 
 proc getNode*(d: Protocol, id: NodeId): Option[Node] =
+  ## Get the node with id from the routing table.
   d.routingTable.getNode(id)
 
 proc randomNodes*(d: Protocol, maxAmount: int): seq[Node] =
@@ -165,6 +177,7 @@ proc randomNodes*(d: Protocol, maxAmount: int,
   d.randomNodes(maxAmount, proc(x: Node): bool = x.record.contains(enrField))
 
 proc neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
+  ## Return up to k neighbours (closest node ids) of the given node id.
   d.routingTable.neighbours(id, k)
 
 proc nodesDiscovered*(d: Protocol): int {.inline.} = d.routingTable.len
@@ -173,10 +186,12 @@ func privKey*(d: Protocol): lent PrivateKey =
   d.privateKey
 
 func getRecord*(d: Protocol): Record =
+  ## Get the ENR of the local node.
   d.localNode.record
 
 proc updateRecord*(
     d: Protocol, enrFields: openarray[(string, seq[byte])]): DiscResult[void] =
+  ## Update the ENR of the local node with provided `enrFields` k:v pairs.
   let fields = mapIt(enrFields, toFieldPair(it[0], it[1]))
   d.localNode.record.update(d.privateKey, fields)
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
@@ -200,7 +215,8 @@ proc send(d: Protocol, a: Address, data: seq[byte]) =
         # because of ping failures due to own network connection failure.
         debug "Discovery send failed", msg = f.readError.msg
   except Exception as e:
-    # TODO: General exception still being raised from Chronos.
+    # TODO: General exception still being raised from Chronos, but in practice
+    # all CatchableErrors should be grabbed by the above `f.failed`.
     if e of Defect:
       raise (ref Defect)(e)
     else: doAssert(false)
@@ -245,7 +261,7 @@ proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId,
   # the handshake of another node.
   let key = HandShakeKey(nodeId: toNode, address: $address)
   if not d.codec.handshakes.hasKeyOrPut(key, challenge):
-    # TODO: raises: [Exception]
+    # TODO: raises: [Exception], but it shouldn't.
     sleepAsync(handshakeTimeout).addCallback() do(data: pointer):
       # TODO: should we still provide cancellation in case handshake completes
       # correctly?
@@ -291,7 +307,7 @@ proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
     ping: PingMessage, reqId: RequestId) =
   let a = fromAddr
   var pong: PongMessage
-  pong.enrSeq = ping.enrSeq
+  pong.enrSeq = d.localNode.record.seqNum
   pong.ip = case a.ip.family
     of IpAddressFamily.IPv4: @(a.ip.address_v4)
     of IpAddressFamily.IPv6: @(a.ip.address_v6)
@@ -315,7 +331,8 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
   raises: [
     Defect,
     # This just comes now from a future.complete() and `sendWhoareyou` which
-    # has it because of `sleepAsync` with `addCallback`
+    # has it because of `sleepAsync` with `addCallback`, but practically, no
+    # CatchableError should be raised here, we just can't enforce it for now.
     Exception
   ].} =
   if packet.len < tagSize: # or magicSize, can be either
@@ -400,7 +417,9 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
 # as async procs always require `Exception` in the raises pragma, see also:
 # https://github.com/status-im/nim-chronos/issues/98
 # So I don't bother for now and just add them in the raises pragma until this
-# gets fixed.
+# gets fixed. It does not mean that we expect these calls to be raising
+# CatchableErrors, in fact, we really don't, but hey, they might, considering we
+# can't enforce it.
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
     Future[void] {.async, gcsafe, raises: [Exception, Defect].} =
   let proto = getUserData[Protocol](transp)
@@ -463,7 +482,7 @@ proc replaceNode(d: Protocol, n: Node) =
     # For now we never remove bootstrap nodes. It might make sense to actually
     # do so and to retry them only in case we drop to a really low amount of
     # peers in the routing table.
-    debug "Revalidation of bootstrap node failed", enr = toURI(n.record)
+    debug "Message request to bootstrap node failed", enr = toURI(n.record)
 
 # TODO: This could be improved to do the clean-up immediatily in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
@@ -527,6 +546,9 @@ proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
 
 proc ping*(d: Protocol, toNode: Node):
     Future[DiscResult[PongMessage]] {.async, raises: [Exception, Defect].} =
+  ## Send a discovery ping message.
+  ##
+  ## Returns the received pong message or an error.
   let reqId = d.sendMessage(toNode,
     PingMessage(enrSeq: d.localNode.record.seqNum))
   let resp = await d.waitMessage(toNode, reqId)
@@ -540,6 +562,10 @@ proc ping*(d: Protocol, toNode: Node):
 
 proc findNode*(d: Protocol, toNode: Node, distance: uint32):
     Future[DiscResult[seq[Node]]] {.async, raises: [Exception, Defect].} =
+  ## Send a discovery findNode message.
+  ##
+  ## Returns the received nodes or an error.
+  ## Received ENRs are already validated and converted to `Node`.
   let reqId = d.sendMessage(toNode, FindNodeMessage(distance: distance))
   let nodes = await d.waitNodes(toNode, reqId)
 

@@ -1,6 +1,7 @@
 import
-  std/[tables, options], nimcrypto, stint, chronicles, stew/results,
-  types, node, enr, hkdf, eth/[rlp, keys], bearssl
+  std/[tables, options],
+  nimcrypto, stint, chronicles, stew/results, bearssl,
+  eth/[rlp, keys], types, node, enr, hkdf
 
 export keys
 
@@ -60,7 +61,8 @@ proc idNonceHash(nonce, ephkey: openarray[byte]): MDigest[256] =
   ctx.update(idNoncePrefix)
   ctx.update(nonce)
   ctx.update(ephkey)
-  ctx.finish()
+  result = ctx.finish()
+  ctx.clear()
 
 proc signIDNonce*(privKey: PrivateKey, idNonce, ephKey: openarray[byte]):
     SignatureNR =
@@ -95,6 +97,9 @@ proc encodeAuthHeader*(rng: var BrHmacDrbgContext,
                       nonce: array[gcmNonceSize, byte],
                       challenge: Whoareyou):
                       (seq[byte], HandshakeSecrets) =
+  ## Encodes the auth-header, which is required for the packet in response to a
+  ## WHOAREYOU packet. Requires the id-nonce and the enr-seq that were in the
+  ## WHOAREYOU packet, and the public key of the node sending it.
   var resp = AuthResponse(version: 5)
   let ln = c.localNode
 
@@ -139,34 +144,45 @@ proc encodePacket*(
     message: openarray[byte],
     challenge: Whoareyou):
     (seq[byte], array[gcmNonceSize, byte]) =
+  ## Encode a packet. This can be a regular packet or a packet in response to a
+  ## WHOAREYOU packet. The latter is the case when the `challenge` parameter is
+  ## provided.
   var nonce: array[gcmNonceSize, byte]
   brHmacDrbgGenerate(rng, nonce)
 
-  var headEnc: seq[byte]
-
-  var writeKey: AesKey
+  let tag = packetTag(toId, c.localNode.id)
+  var packet: seq[byte]
+  packet.add(tag)
 
   if challenge.isNil:
-    headEnc = rlp.encode(nonce)
-    var readKey: AesKey
+    # Message packet or random packet
+    let headEnc = rlp.encode(nonce)
+    packet.add(headEnc)
 
+    # TODO: Should we change API to get just the key we need?
+    var writeKey, readKey: AesKey
     # We might not have the node's keys if the handshake hasn't been performed
     # yet. That's fine, we will be responded with whoareyou.
-    discard c.db.loadKeys(toId, toAddr, readKey, writeKey)
+    if c.db.loadKeys(toId, toAddr, readKey, writeKey):
+      packet.add(encryptGCM(writeKey, nonce, message, tag))
+    else:
+      # We might not have the node's keys if the handshake hasn't been performed
+      # yet. That's fine, we send a random-packet and we will be responded with
+      # a WHOAREYOU packet.
+      var randomData: array[44, byte]
+      brHmacDrbgGenerate(rng, randomData)
+      packet.add(randomData)
+
   else:
-    var secrets: HandshakeSecrets
-    (headEnc, secrets) = encodeAuthHeader(rng, c, toId, nonce, challenge)
+    # Handshake
+    let (headEnc, secrets) = encodeAuthHeader(rng, c, toId, nonce, challenge)
+    packet.add(headEnc)
 
-    writeKey = secrets.writeKey
-    # TODO: is it safe to ignore the error here?
-    discard c.db.storeKeys(toId, toAddr, secrets.readKey, secrets.writeKey)
+    if not c.db.storeKeys(toId, toAddr, secrets.readKey, secrets.writeKey):
+      warn "Storing of keys for session failed, will have to redo a handshake"
 
-  let tag = packetTag(toId, c.localNode.id)
+    packet.add(encryptGCM(secrets.writeKey, nonce, message, tag))
 
-  var packet = newSeqOfCap[byte](tag.len + headEnc.len)
-  packet.add(tag)
-  packet.add(headEnc)
-  packet.add(encryptGCM(writeKey, nonce, message, tag))
   (packet, nonce)
 
 proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
@@ -188,14 +204,16 @@ proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
 
   return some(res)
 
-proc decodeMessage(body: openarray[byte]):
-    DecodeResult[Message] {.raises:[Defect].} =
+proc decodeMessage(body: openarray[byte]): DecodeResult[Message] =
+  ## Decodes to the specific `Message` type.
   if body.len < 1:
     return err(PacketError)
 
   if body[0] < MessageKind.low.byte or body[0] > MessageKind.high.byte:
     return err(PacketError)
 
+  # This cast is covered by the above check (else we could get enum with invalid
+  # data!). However, can't we do this in a cleaner way?
   let kind = cast[MessageKind](body[0])
   var message = Message(kind: kind)
   var rlp = rlpFromBytes(body.toOpenArray(1, body.high))
@@ -228,8 +246,9 @@ proc decodeMessage(body: openarray[byte]):
     err(PacketError)
 
 proc decodeAuthResp*(c: Codec, fromId: NodeId, head: AuthHeader,
-    challenge: Whoareyou, newNode: var Node):
-    DecodeResult[HandshakeSecrets] {.raises:[Defect].} =
+    challenge: Whoareyou, newNode: var Node): DecodeResult[HandshakeSecrets] =
+  ## Decrypts and decodes the auth-response, which is part of the auth-header.
+  ## Requiers the id-nonce from the WHOAREYOU packet that was send.
   if head.scheme != authSchemeName:
     warn "Unknown auth scheme"
     return err(HandshakeError)
@@ -273,6 +292,8 @@ proc decodePacket*(c: var Codec,
                       input: openArray[byte],
                       authTag: var AuthTag,
                       newNode: var Node): DecodeResult[Message] =
+  ## Decode a packet. This can be a regular packet or a packet in response to a
+  ## WHOAREYOU packet. In case of the latter a `newNode` might be provided.
   var r = rlpFromBytes(input.toOpenArray(tagSize, input.high))
   var auth: AuthHeader
 
@@ -307,8 +328,8 @@ proc decodePacket*(c: var Codec,
 
     # Swap keys to match remote
     swap(sec.readKey, sec.writeKey)
-    # TODO: is it safe to ignore the error here?
-    discard c.db.storeKeys(fromId, fromAddr, sec.readKey, sec.writeKey)
+    if not c.db.storeKeys(fromId, fromAddr, sec.readKey, sec.writeKey):
+      warn "Storing of keys for session failed, will have to redo a handshake"
     readKey = sec.readKey
   else:
     # Message packet or random packet - rlp bytes (size 12) indicates auth-tag
@@ -317,6 +338,7 @@ proc decodePacket*(c: var Codec,
     except RlpError:
       return err(PacketError)
     auth.auth = authTag
+    # TODO: Should we change API to get just the key we need?
     var writeKey: AesKey
     if not c.db.loadKeys(fromId, fromAddr, readKey, writeKey):
       trace "Decoding failed (no keys)"

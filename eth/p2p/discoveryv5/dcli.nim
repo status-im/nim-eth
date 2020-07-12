@@ -1,8 +1,8 @@
 import
-  sequtils, options, strutils, chronos, chronicles, chronicles/topics_registry,
-  stew/byteutils, confutils, confutils/std/net, metrics,
-  eth/keys, eth/trie/db, eth/net/nat,
-  eth/p2p/discoveryv5/[protocol, discovery_db, enr, node]
+  std/[options, strutils],
+  chronos, chronicles, chronicles/topics_registry, confutils, metrics,
+  stew/byteutils, confutils/std/net,
+  eth/keys, eth/trie/db, eth/net/nat, protocol, discovery_db, enr, node
 
 type
   DiscoveryCmd* = enum
@@ -32,7 +32,7 @@ type
 
     nodeKey* {.
       desc: "P2P node private key as hex.",
-      defaultValue: PrivateKey.random().expect("Properly intialized private key")
+      defaultValue: PrivateKey.random(keys.newRng()[])
       name: "nodekey" .}: PrivateKey
 
     metricsEnabled* {.

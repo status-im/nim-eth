@@ -2,8 +2,8 @@
 # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-778.md
 
 import
-  strutils, macros, algorithm, options,
-  stew/shims/net, nimcrypto, stew/base64,
+  std/[strutils, macros, algorithm, options],
+  stew/shims/net, stew/base64, nimcrypto,
   eth/[rlp, keys]
 
 export options
@@ -188,6 +188,9 @@ proc requireKind(f: Field, kind: FieldKind) {.raises: [ValueError].} =
     raise newException(ValueError, "Wrong field kind")
 
 proc get*(r: Record, key: string, T: type): T {.raises: [ValueError, Defect].} =
+  ## Get the value from the provided key.
+  ## Throw `KeyError` if key does not exist.
+  ## Throw `ValueError` if the value is invalid according to type `T`.
   var f: Field
   if r.getField(key, f):
     when T is SomeInteger:
@@ -219,6 +222,8 @@ proc get*(r: Record, key: string, T: type): T {.raises: [ValueError, Defect].} =
     raise newException(KeyError, "Key not found in ENR: " & key)
 
 proc get*(r: Record, T: type PublicKey): Option[T] =
+  ## Get the `PublicKey` from provided `Record`. Return `none` when there is
+  ## no `PublicKey` in the record.
   var pubkeyField: Field
   if r.getField("secp256k1", pubkeyField) and pubkeyField.kind == kBytes:
     let pk = PublicKey.fromRaw(pubkeyField.bytes)
@@ -295,6 +300,9 @@ proc update*(r: var Record, pk: PrivateKey,
   r.update(pk, fields)
 
 proc tryGet*(r: Record, key: string, T: type): Option[T] =
+  ## Get the value from the provided key.
+  ## Return `none` if the key does not exist or if the value is invalid
+  ## according to type `T`.
   try:
     return some get(r, key, T)
   except ValueError:
@@ -400,7 +408,7 @@ proc fromBytesAux(r: var Record): bool {.raises: [RlpError, Defect].} =
   verifySignature(r)
 
 proc fromBytes*(r: var Record, s: openarray[byte]): bool =
-  ## Loads ENR from rlp-encoded bytes, and validated the signature.
+  ## Loads ENR from rlp-encoded bytes, and validates the signature.
   r.raw = @s
   try:
     result = fromBytesAux(r)
@@ -408,7 +416,7 @@ proc fromBytes*(r: var Record, s: openarray[byte]): bool =
     discard
 
 proc fromBase64*(r: var Record, s: string): bool =
-  ## Loads ENR from base64-encoded rlp-encoded bytes, and validated the
+  ## Loads ENR from base64-encoded rlp-encoded bytes, and validates the
   ## signature.
   try:
     r.raw = Base64Url.decode(s)
@@ -418,7 +426,7 @@ proc fromBase64*(r: var Record, s: string): bool =
 
 proc fromURI*(r: var Record, s: string): bool =
   ## Loads ENR from its text encoding: base64-encoded rlp-encoded bytes,
-  ## prefixed with "enr:".
+  ## prefixed with "enr:". Validates the signature.
   const prefix = "enr:"
   if s.startsWith(prefix):
     result = r.fromBase64(s[prefix.len .. ^1])
