@@ -16,6 +16,7 @@ Ethereum-related utilities written in Nim. Includes things like Bloom filters, p
 - [keyfile](doc/keyfile.md)
 - [trie](doc/trie.md)
 - [bloom](doc/bloom.md)
+- [discv5](doc/discv5.md)
 
 ## Prerequisites
 

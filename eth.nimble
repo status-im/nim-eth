@@ -49,6 +49,7 @@ proc runP2pTests() =
       "test_shh_connect",
       "test_protocol_handlers",
       "test_enr",
+      "test_hkdf",
       "test_discoveryv5",
       "test_discv5_encoding",
       "test_routing_table"
@@ -88,3 +89,19 @@ task test, "run tests":
   runRlpTests()
   runTrieTests()
   runDbTests()
+
+proc runDiscv5Tests() =
+  for filename in [
+      "test_enr",
+      "test_hkdf",
+      "test_discoveryv5",
+      "test_discv5_encoding",
+      "test_routing_table"
+    ]:
+    runTest("tests/p2p/" & filename)
+
+task test_discv5, "run tests of discovery v5 and its dependencies":
+  runKeysTests()
+  runRlpTests()
+  runTrieTests() # This probably tests a bit to much for what we use it for.
+  runDiscv5Tests()
