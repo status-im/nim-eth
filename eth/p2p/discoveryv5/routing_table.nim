@@ -1,7 +1,7 @@
 import
-  std/[algorithm, times, sequtils, bitops, random, sets, options],
-  stint, chronicles, metrics,
-  node, enr
+  std/[algorithm, times, sequtils, bitops, sets, options],
+  stint, chronicles, metrics, bearssl,
+  node, random2
 
 export options
 
@@ -22,6 +22,7 @@ type
     ## Setting it higher will increase the amount of splitting on a not in range
     ## branch (thus holding more nodes with a better keyspace coverage) and this
     ## will result in an improvement of log base(2^b) n hops per lookup.
+    rng: ref BrHmacDrbgContext
 
   KBucket = ref object
     istart, iend: NodeId ## Range of NodeIds this KBucket covers. This is not a
@@ -190,13 +191,14 @@ proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
   # Reaching this would mean that all node ids are equal.
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
-proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = 5) {.inline.} =
+proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = 5,
+    rng: ref BrHmacDrbgContext) {.inline.} =
   ## Initialize the routing table for provided `Node` and bitsPerHop value.
   ## `bitsPerHop` is default set to 5 as recommended by original Kademlia paper.
   r.thisNode = thisNode
   r.buckets = @[newKBucket(0.u256, high(Uint256))]
   r.bitsPerHop = bitsPerHop
-  randomize() # for later `randomNodes` selection
+  r.rng = rng
 
 proc splitBucket(r: var RoutingTable, index: int) =
   let bucket = r.buckets[index]
@@ -342,7 +344,7 @@ proc nodeToRevalidate*(r: RoutingTable): Node =
   ## Return a node to revalidate. The least recently seen node from a random
   ## bucket is selected.
   var buckets = r.buckets
-  shuffle(buckets)
+  r.rng[].shuffle(buckets)
   # TODO: Should we prioritize less-recently-updated buckets instead? Could use
   # `lastUpdated` for this, but it would probably make more sense to only update
   # that value on revalidation then and rename it to `lastValidated`.
@@ -375,10 +377,9 @@ proc randomNodes*(r: RoutingTable, maxAmount: int,
   # randomLookup, the time might be wasted as all nodes are possibly seen
   # already.
   while len(seen) < maxAmount:
-    # TODO: Is it important to get a better random source for these sample calls?
-    let bucket = sample(r.buckets)
+    let bucket = r.rng[].sample(r.buckets)
     if bucket.nodes.len != 0:
-      let node = sample(bucket.nodes)
+      let node = r.rng[].sample(bucket.nodes)
       if node notin seen:
         seen.incl(node)
         if pred.isNil() or node.pred:

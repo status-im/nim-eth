@@ -12,7 +12,7 @@ suite "Routing Table Tests":
     var table: RoutingTable
 
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    table.init(node, 1)
+    table.init(node, 1, rng)
 
     for j in 0..5'u32:
       for i in 0..<BUCKET_SIZE:
@@ -24,7 +24,7 @@ suite "Routing Table Tests":
     var table: RoutingTable
 
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    table.init(node, 1)
+    table.init(node, 1, rng)
 
     # Add 16 nodes, distance 256
     for i in 0..<BUCKET_SIZE:
@@ -44,7 +44,7 @@ suite "Routing Table Tests":
     var table: RoutingTable
 
     # bitsPerHop = 2, allow not in range branch to split once (2 buckets).
-    table.init(node, 2)
+    table.init(node, 2, rng)
 
     # Add 16 nodes, distance 256 from `node`, but all with 2 bits shared prefix
     # among themselves.
@@ -74,7 +74,7 @@ suite "Routing Table Tests":
     var table: RoutingTable
 
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    table.init(node, 1)
+    table.init(node, 1, rng)
 
     # create a full bucket
     let bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
@@ -108,7 +108,7 @@ suite "Routing Table Tests":
     var table: RoutingTable
 
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    table.init(node, 1)
+    table.init(node, 1, rng)
 
     check table.nodeToRevalidate().isNil()
 
@@ -132,7 +132,7 @@ suite "Routing Table Tests":
     var table: RoutingTable
 
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    table.init(node, 1)
+    table.init(node, 1, rng)
 
     # create a full bucket TODO: no need to store bucketNodes
     let bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
@@ -148,7 +148,7 @@ suite "Routing Table Tests":
     var table: RoutingTable
 
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    table.init(node, 1)
+    table.init(node, 1, rng)
 
     let doubleNode = node.nodeAtDistance(rng[], 256)
     # Try to add the node twice
@@ -178,7 +178,7 @@ suite "Routing Table Tests":
     var table: RoutingTable
 
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    table.init(node, 1)
+    table.init(node, 1, rng)
 
     # create a full bucket
     let bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
@@ -208,7 +208,7 @@ suite "Routing Table Tests":
     var table: RoutingTable
 
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    table.init(node, 1)
+    table.init(node, 1, rng)
 
     # create a full bucket
     let bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
@@ -228,7 +228,7 @@ suite "Routing Table Tests":
     var table: RoutingTable
 
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    table.init(node, 1)
+    table.init(node, 1, rng)
 
     # create a full bucket
     let bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
