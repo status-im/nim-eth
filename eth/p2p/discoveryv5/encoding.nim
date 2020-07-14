@@ -208,7 +208,7 @@ proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
 
   return some(res)
 
-proc decodeMessage(body: openarray[byte]): DecodeResult[Message] =
+proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
   ## Decodes to the specific `Message` type.
   if body.len < 1:
     return err(PacketError)
