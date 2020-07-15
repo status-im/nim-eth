@@ -517,6 +517,12 @@ proc addNodesFromENRs(result: var seq[Node], enrs: openarray[Record])
 
 proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
     Future[DiscResult[seq[Node]]] {.async, raises: [Exception, Defect].} =
+  ## Wait for one or more nodes replies.
+  ##
+  ## The first reply will hold the total number of replies expected, and based
+  ## on that, more replies will be awaited.
+  ## If one reply is lost here (timed out), others are ignored too.
+  ## Same counts for out of order receival.
   var op = await d.waitMessage(fromNode, reqId)
   if op.isSome and op.get.kind == nodes:
     var res = newSeq[Node]()
@@ -572,14 +578,31 @@ proc findNode*(d: Protocol, toNode: Node, distance: uint32):
 
   if nodes.isOk:
     var res = newSeq[Node]()
+    var seen: HashSet[Node]
     for n in nodes[]:
+      # Check for duplicates in the nodes reply.
+      if n in seen:
+        trace "Nodes reply contained duplicate record",
+          record = n.record.toURI, sender = toNode.record.toURI
+        continue
       # Check if the node has an address and if the address is public or from
       # the same local network or lo network as the sender. The latter allows
       # for local testing.
-      # Any port is allowed, also the so called "well-known" ports.
-      if n.address.isSome() and
+      if not n.address.isSome() or not
           validIp(toNode.address.get().ip, n.address.get().ip):
-        res.add(n)
+        trace "Nodes reply contained record with invalid ip-address",
+          record = n.record.toURI, sender = toNode.record.toURI
+        continue
+      # Check if returned node has the requested distance.
+      if logDist(n.id, toNode.id) != min(distance, 256):
+        warn "Nodes reply contained record with incorrect distance",
+          record = n.record.toURI, sender = toNode.record.toURI
+        continue
+      # No check on UDP port and thus any port is allowed, also the so called
+      # "well-known" ports.
+
+      seen.incl(n)
+      res.add(n)
 
     d.routingTable.setJustSeen(toNode)
     return ok(res)
