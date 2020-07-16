@@ -418,3 +418,63 @@ procSuite "Discovery v5 Tests":
       let incorrectKeyUpdates = newProtocol(PrivateKey.random(rng[]),
         db, ip, port, port, rng = rng,
         previousRecord = some(updatesNode.getRecord()))
+
+  test "Verify records of nodes message":
+    let
+      port = Port(9000)
+      fromNoderecord = enr.Record.init(1, PrivateKey.random(rng[]),
+        some(ValidIpAddress.init("11.12.13.14")),
+        port, port)[]
+      fromNode = newNode(fromNoderecord)[]
+      pk = PrivateKey.random(rng[])
+      targetDistance = logDist(fromNode.id, pk.toPublicKey().toNodeId())
+
+    block: # Duplicates
+      let
+        record = enr.Record.init(
+          1, pk, some(ValidIpAddress.init("12.13.14.15")), port, port)[]
+
+      # Exact duplicates
+      var records = @[record, record]
+      var nodes = verifyNodesRecords(records, fromNode, targetDistance)
+      check nodes.len == 1
+
+      # Node id duplicates
+      let recordSameId = enr.Record.init(
+        1, pk, some(ValidIpAddress.init("212.13.14.15")), port, port)[]
+      records.add(recordSameId)
+      nodes = verifyNodesRecords(records, fromNode, targetDistance)
+      check nodes.len == 1
+
+    block: # No address
+      let
+        recordNoAddress = enr.Record.init(
+          1, pk, none(ValidIpAddress), port, port)[]
+        records = [recordNoAddress]
+        test = verifyNodesRecords(records, fromNode, targetDistance)
+      check test.len == 0
+
+    block: # Invalid address - site local
+      let
+        recordInvalidAddress = enr.Record.init(
+          1, pk, some(ValidIpAddress.init("10.1.2.3")),
+          port, port)[]
+        records = [recordInvalidAddress]
+        test = verifyNodesRecords(records, fromNode, targetDistance)
+      check test.len == 0
+
+    block: # Invalid address - loopback
+      let
+        recordInvalidAddress = enr.Record.init(
+          1, pk, some(ValidIpAddress.init("127.0.0.1")), port, port)[]
+        records = [recordInvalidAddress]
+        test = verifyNodesRecords(records, fromNode, targetDistance)
+      check test.len == 0
+
+    block: # Invalid distance
+      let
+        recordInvalidDistance = enr.Record.init(
+          1, pk, some(ValidIpAddress.init("12.13.14.15")), port, port)[]
+        records = [recordInvalidDistance]
+        test = verifyNodesRecords(records, fromNode, 0)
+      check test.len == 0

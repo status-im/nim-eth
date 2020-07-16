@@ -51,6 +51,9 @@ proc `==`*(a, b: Node): bool =
   (a.isNil and b.isNil) or
     (not a.isNil and not b.isNil and a.pubkey == b.pubkey)
 
+proc `$`*(id: NodeId): string =
+  id.toHex()
+
 proc `$`*(a: Address): string =
   result.add($a.ip)
   result.add(":" & $a.port)

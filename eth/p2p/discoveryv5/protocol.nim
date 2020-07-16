@@ -508,24 +508,61 @@ proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
       res.complete(none(Message)) # TODO: raises: [Exception]
   d.awaitedMessages[key] = result
 
-proc addNodesFromENRs(result: var seq[Node], enrs: openarray[Record])
-    {.raises: [Defect].} =
+proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node,
+    distance: uint32): seq[Node] {.raises: [Defect].} =
+  ## Verify and convert ENRs to a sequence of nodes. Only ENRs that pass
+  ## verification will be added. ENRs are verified for duplicates, invalid
+  ## addresses and invalid distances.
+  # TODO:
+  # - Should we fail and ignore values on first invalid Node?
+  # - Should we limit the amount of nodes? The discovery v5 specification holds
+  # no limit on the amount that can be returned.
+  var seen: HashSet[Node]
   for r in enrs:
     let node = newNode(r)
     if node.isOk():
-      result.add(node[])
+      let n = node.get()
+      # Check for duplicates in the nodes reply. Duplicates are checked based
+      # on node id.
+      if n in seen:
+        trace "Nodes reply contained records with duplicate node ids",
+          record = n.record.toURI, sender = fromNode.record.toURI, id = n.id
+        continue
+      # Check if the node has an address and if the address is public or from
+      # the same local network or lo network as the sender. The latter allows
+      # for local testing.
+      if not n.address.isSome() or not
+          validIp(fromNode.address.get().ip, n.address.get().ip):
+        trace "Nodes reply contained record with invalid ip-address",
+          record = n.record.toURI, sender = fromNode.record.toURI, node = $n
+        continue
+      # Check if returned node has the requested distance.
+      if logDist(n.id, fromNode.id) != min(distance, 256):
+        warn "Nodes reply contained record with incorrect distance",
+          record = n.record.toURI, sender = fromNode.record.toURI
+        continue
+      # No check on UDP port and thus any port is allowed, also the so called
+      # "well-known" ports.
+
+      seen.incl(n)
+      result.add(n)
 
 proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
-    Future[DiscResult[seq[Node]]] {.async, raises: [Exception, Defect].} =
+    Future[DiscResult[seq[Record]]] {.async, raises: [Exception, Defect].} =
+  ## Wait for one or more nodes replies.
+  ##
+  ## The first reply will hold the total number of replies expected, and based
+  ## on that, more replies will be awaited.
+  ## If one reply is lost here (timed out), others are ignored too.
+  ## Same counts for out of order receival.
   var op = await d.waitMessage(fromNode, reqId)
   if op.isSome and op.get.kind == nodes:
-    var res = newSeq[Node]()
-    res.addNodesFromENRs(op.get.nodes.enrs)
+    var res = op.get.nodes.enrs
     let total = op.get.nodes.total
     for i in 1 ..< total:
       op = await d.waitMessage(fromNode, reqId)
       if op.isSome and op.get.kind == nodes:
-        res.addNodesFromENRs(op.get.nodes.enrs)
+        res.add(op.get.nodes.enrs)
       else:
         # No error on this as we received some nodes.
         break
@@ -571,16 +608,7 @@ proc findNode*(d: Protocol, toNode: Node, distance: uint32):
   let nodes = await d.waitNodes(toNode, reqId)
 
   if nodes.isOk:
-    var res = newSeq[Node]()
-    for n in nodes[]:
-      # Check if the node has an address and if the address is public or from
-      # the same local network or lo network as the sender. The latter allows
-      # for local testing.
-      # Any port is allowed, also the so called "well-known" ports.
-      if n.address.isSome() and
-          validIp(toNode.address.get().ip, n.address.get().ip):
-        res.add(n)
-
+    let res = verifyNodesRecords(nodes.get(), toNode, distance)
     d.routingTable.setJustSeen(toNode)
     return ok(res)
   else:
