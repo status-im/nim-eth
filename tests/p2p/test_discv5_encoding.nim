@@ -241,15 +241,27 @@ suite "Discovery v5 Additional":
       nodeId = pubKey.toNodeId()
       idNonce = hexToByteArray[idNonceSize](
         "0xa77e3aa0c144ae7c0a3af73692b7d6e5b7a2fdc0eda16e8d5e6cb0d08e88dd04")
-      whoareyou = Whoareyou(idNonce: idNonce, recordSeq: 0, pubKey: some(pubKey))
       c = Codec(localNode: node, privKey: privKey)
 
-    let (auth, _) = encodeAuthHeader(rng[], c, nodeId, nonce, whoareyou)
-    var rlp = rlpFromBytes(auth)
-    let authHeader = rlp.read(AuthHeader)
-    var newNode: Node
-    let secrets = c.decodeAuthResp(privKey.toPublicKey().toNodeId(),
-      authHeader, whoareyou, newNode)
+    block: # With ENR
+      let
+        whoareyou = Whoareyou(idNonce: idNonce, recordSeq: 0, pubKey: some(pubKey))
+        (auth, _) = encodeAuthHeader(rng[], c, nodeId, nonce, whoareyou)
+      var rlp = rlpFromBytes(auth)
+      let authHeader = rlp.read(AuthHeader)
+      var newNode: Node
+      let secrets = c.decodeAuthResp(privKey.toPublicKey().toNodeId(),
+        authHeader, whoareyou, newNode)
+
+    block: # Without ENR
+      let
+        whoareyou = Whoareyou(idNonce: idNonce, recordSeq: 1, pubKey: some(pubKey))
+        (auth, _) = encodeAuthHeader(rng[], c, nodeId, nonce, whoareyou)
+      var rlp = rlpFromBytes(auth)
+      let authHeader = rlp.read(AuthHeader)
+      var newNode: Node
+      let secrets = c.decodeAuthResp(privKey.toPublicKey().toNodeId(),
+        authHeader, whoareyou, newNode)
 
     # TODO: Test cases with invalid nodeId and invalid signature, the latter
     # is in the current code structure rather difficult and would need some

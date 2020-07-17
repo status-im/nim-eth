@@ -699,10 +699,10 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]]
     {.async, raises: [Exception, Defect].} =
   ## Resolve a `Node` based on provided `NodeId`.
   ##
-  ## This will first look in the own DHT. If the node is known, it will try to
-  ## contact if for newer information. If node is not known or it does not
-  ## reply, a lookup is done to see if it can find a (newer) record of the node
-  ## on the network.
+  ## This will first look in the own routing table. If the node is known, it
+  ## will try to contact if for newer information. If node is not known or it
+  ## does not reply, a lookup is done to see if it can find a (newer) record of
+  ## the node on the network.
 
   let node = d.getNode(id)
   if node.isSome():
@@ -715,8 +715,6 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]]
   let discovered = await d.lookup(id)
   for n in discovered:
     if n.id == id:
-      # TODO: Not getting any new seqNum here as in a lookup nodes in table with
-      # new seqNum don't get replaced.
       if node.isSome() and node.get().record.seqNum >= n.record.seqNum:
         return node
       else:
