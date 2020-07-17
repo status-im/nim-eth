@@ -450,12 +450,9 @@ proc `$`(f: Field): string =
 
 proc `$`*(r: Record): string =
   result = "("
-  var first = true
+  result &= $r.seqNum
   for (k, v) in r.pairs:
-    if first:
-      first = false
-    else:
-      result &= ", "
+    result &= ", "
     result &= k
     result &= ": "
     result &= $v
@@ -472,4 +469,7 @@ proc read*(rlp: var Rlp, T: typedesc[Record]):
   rlp.skipElem()
 
 proc append*(rlpWriter: var RlpWriter, value: Record) =
-  rlpWriter.appendRawBytes(value.raw)
+  if value.raw.len > 0:
+    rlpWriter.appendRawBytes(value.raw)
+  else:
+    rlpWriter.startList(0)

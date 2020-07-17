@@ -110,6 +110,9 @@ proc add(k: KBucket, n: Node): Node =
   k.lastUpdated = epochTime()
   let nodeIdx = k.nodes.find(n)
   if nodeIdx != -1:
+    if k.nodes[nodeIdx].record.seqNum < n.record.seqNum:
+      # In case of a newer record, it gets replaced.
+      k.nodes[nodeIdx].record = n.record
     return nil
   elif k.len < BUCKET_SIZE:
     k.nodes.add(n)
@@ -126,8 +129,11 @@ proc addReplacement(k: KBucket, n: Node) =
   ## to the tail.
   let nodeIdx = k.replacementCache.find(n)
   if nodeIdx != -1:
-    k.replacementCache.delete(nodeIdx)
-    k.replacementCache.add(n)
+    if k.replacementCache[nodeIdx].record.seqNum <= n.record.seqNum:
+      # In case the record sequence number is higher or the same, the node gets
+      # moved to the tail.
+      k.replacementCache.delete(nodeIdx)
+      k.replacementCache.add(n)
   else:
     doAssert(k.replacementCache.len <= REPLACEMENT_CACHE_SIZE)
     if k.replacementCache.len == REPLACEMENT_CACHE_SIZE:

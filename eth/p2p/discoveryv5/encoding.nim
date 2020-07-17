@@ -103,9 +103,10 @@ proc encodeAuthHeader*(rng: var BrHmacDrbgContext,
   var resp = AuthResponse(version: 5)
   let ln = c.localNode
 
-  # TODO: What goes over the wire now in case of no updated ENR?
   if challenge.recordSeq < ln.record.seqNum:
     resp.record = ln.record
+  # else:
+  # an uninitialized record which will get encoded as an empty rlp list.
 
   let ephKeys = KeyPair.random(rng)
   let signature = signIDNonce(c.privKey, challenge.idNonce,
@@ -118,7 +119,7 @@ proc encodeAuthHeader*(rng: var BrHmacDrbgContext,
   let respRlp = rlp.encode(resp)
 
   var zeroNonce: array[gcmNonceSize, byte]
-  let respEnc = encryptGCM(secrets.authRespKey, zeroNonce, respRLP, [])
+  let respEnc = encryptGCM(secrets.authRespKey, zeroNonce, respRlp, [])
 
   let header = AuthHeader(auth: nonce, idNonce: challenge.idNonce,
     scheme: authSchemeName, ephemeralKey: ephKeys.pubkey.toRaw,
