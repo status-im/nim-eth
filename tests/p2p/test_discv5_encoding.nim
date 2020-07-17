@@ -241,7 +241,7 @@ suite "Discovery v5 Additional":
       nodeId = pubKey.toNodeId()
       idNonce = hexToByteArray[idNonceSize](
         "0xa77e3aa0c144ae7c0a3af73692b7d6e5b7a2fdc0eda16e8d5e6cb0d08e88dd04")
-      whoareyou = Whoareyou(idNonce: idNonce, recordSeq: 0, pubKey: pubKey)
+      whoareyou = Whoareyou(idNonce: idNonce, recordSeq: 0, pubKey: some(pubKey))
       c = Codec(localNode: node, privKey: privKey)
 
     let (auth, _) = encodeAuthHeader(rng[], c, nodeId, nonce, whoareyou)

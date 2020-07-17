@@ -469,7 +469,4 @@ proc read*(rlp: var Rlp, T: typedesc[Record]):
   rlp.skipElem()
 
 proc append*(rlpWriter: var RlpWriter, value: Record) =
-  if value.raw.len > 0:
-    rlpWriter.appendRawBytes(value.raw)
-  else:
-    rlpWriter.startList(0)
+  rlpWriter.appendRawBytes(value.raw)
