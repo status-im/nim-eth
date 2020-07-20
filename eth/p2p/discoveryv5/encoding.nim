@@ -19,10 +19,10 @@ const
 type
   PacketTag* = array[tagSize, byte]
 
-  AuthResponse = object
-    version: int
-    signature: array[64, byte]
-    record: Option[enr.Record]
+  AuthResponse* = object
+    version*: int
+    signature*: array[64, byte]
+    record*: Option[enr.Record]
 
   Codec* = object
     localNode*: Node
@@ -208,7 +208,7 @@ proc decryptGCM*(key: AesKey, nonce, ct, authData: openarray[byte]):
 
   return some(res)
 
-proc decodeMessage(body: openarray[byte]): DecodeResult[Message] =
+proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
   ## Decodes to the specific `Message` type.
   if body.len < 1:
     return err(PacketError)

@@ -1,16 +1,11 @@
 import
-  streams, os, strutils, options,
+  std/[os, strutils, options],
   stew/shims/net,
-  eth/keys, eth/p2p/discoveryv5/enr
+  eth/keys, eth/p2p/discoveryv5/enr,
+  ../fuzzing_helpers
 
 template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 const inputsDir = sourceDir / "corpus"
-
-proc toFile(data: seq[byte], fn: string) =
-  var s = newFileStream(fn, fmWrite)
-  for x in data:
-    s.write(x)
-  s.close()
 
 proc generate() =
   let

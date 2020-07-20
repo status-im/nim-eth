@@ -230,7 +230,7 @@ proc `xor`[N: static[int], T](a, b: array[N, T]): array[N, T] =
   for i in 0 .. a.high:
     result[i] = a[i] xor b[i]
 
-proc whoareyouMagic(toNode: NodeId): array[magicSize, byte] =
+proc whoareyouMagic*(toNode: NodeId): array[magicSize, byte] =
   const prefix = "WHOAREYOU"
   var data: array[prefix.len + sizeof(toNode), byte]
   data[0 .. sizeof(toNode) - 1] = toNode.toByteArrayBE()
