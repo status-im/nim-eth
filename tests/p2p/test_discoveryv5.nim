@@ -313,8 +313,8 @@ procSuite "Discovery v5 Tests":
 
     var targetSeqNum = targetNode.localNode.record.seqNum
 
-    # Populate DHT with target through a ping. Next, close target and see
-    # if resolve works (only local lookup)
+    # Populate routing table with target through a ping. Next, close target and
+    # see if resolve works (only local getNode).
     block:
       let pong = await targetNode.ping(mainNode.localNode)
       check pong.isOk()
@@ -324,13 +324,14 @@ procSuite "Discovery v5 Tests":
         n.isSome()
         n.get().id == targetId
         n.get().record.seqNum == targetSeqNum
+    # Node will be removed because of failed findNode request.
 
     # Bring target back online, update seqNum in ENR, check if we get the
     # updated ENR.
     block:
       targetNode.open()
       # ping to node again to add as it was removed after failed findNode in
-      # resolve in previous test block
+      # resolve in previous test block.
       let pong = await targetNode.ping(mainNode.localNode)
       check pong.isOk()
 
@@ -339,13 +340,22 @@ procSuite "Discovery v5 Tests":
       let update = targetNode.updateRecord({"addsomefield": @[byte 1]})
       check update.isOk()
 
-      let n = await mainNode.resolve(targetId)
+      var n = mainNode.getNode(targetId)
+      check:
+        n.isSome()
+        n.get().id == targetId
+        n.get().record.seqNum == targetSeqNum - 1
+
+      n = await mainNode.resolve(targetId)
       check:
         n.isSome()
         n.get().id == targetId
         n.get().record.seqNum == targetSeqNum
 
-    # Update seqNum in ENR again, ping lookupNode to be added in DHT,
+      # Add the updated version
+      check mainNode.addNode(n.get())
+
+    # Update seqNum in ENR again, ping lookupNode to be added in routing table,
     # close targetNode, resolve should lookup, check if we get updated ENR.
     block:
       targetSeqNum.inc()
@@ -357,11 +367,8 @@ procSuite "Discovery v5 Tests":
       # findNode request
       check (await lookupNode.ping(targetNode.localNode)).isOk()
       await targetNode.closeWait()
-      # TODO: This step should eventually not be needed and ENRs with new seqNum
-      # should just get updated in the lookup.
-      await mainNode.revalidateNode(targetNode.localNode)
 
-      check mainNode.addNode(lookupNode.localNode)
+      check mainNode.addNode(lookupNode.localNode.record)
       let n = await mainNode.resolve(targetId)
       check:
         n.isSome()
@@ -418,6 +425,73 @@ procSuite "Discovery v5 Tests":
       let incorrectKeyUpdates = newProtocol(PrivateKey.random(rng[]),
         db, ip, port, port, rng = rng,
         previousRecord = some(updatesNode.getRecord()))
+
+  asyncTest "Update node record with revalidate":
+    let
+      mainNode =
+        initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301))
+      testNode =
+        initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
+      testNodeId = testNode.localNode.id
+
+    check:
+      # Get node with current ENR in routing table.
+      # Handshake will get done here.
+      (await testNode.ping(mainNode.localNode)).isOk()
+      testNode.updateRecord({"test" : @[byte 1]}).isOk()
+      testNode.localNode.record.seqNum == 2
+
+    # Get the node from routing table, seqNum should still be 1.
+    var n = mainNode.getNode(testNodeId)
+    check:
+      n.isSome()
+      n.get.record.seqNum == 1
+
+    # This should not do a handshake and thus the new ENR must come from the
+    # findNode(0)
+    await mainNode.revalidateNode(n.get)
+
+    # Get the node from routing table, and check if record got updated.
+    n = mainNode.getNode(testNodeId)
+    check:
+      n.isSome()
+      n.get.record.seqNum == 2
+
+    await mainNode.closeWait()
+    await testNode.closeWait()
+
+  asyncTest "Update node record with handshake":
+    let
+      mainNode =
+        initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301))
+      testNode =
+        initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
+      testNodeId = testNode.localNode.id
+
+    # Add the node (from the record, so new node!) so no handshake is done yet.
+    check: mainNode.addNode(testNode.localNode.record)
+
+    check:
+      testNode.updateRecord({"test" : @[byte 1]}).isOk()
+      testNode.localNode.record.seqNum == 2
+
+    # Get the node from routing table, seqNum should still be 1.
+    var n = mainNode.getNode(testNodeId)
+    check:
+      n.isSome()
+      n.get.record.seqNum == 1
+
+    # This should do a handshake and update the ENR through that.
+    check (await testNode.ping(mainNode.localNode)).isOk()
+
+    # Get the node from routing table, and check if record got updated.
+    n = mainNode.getNode(testNodeId)
+    check:
+      n.isSome()
+      n.get.record.seqNum == 2
+
+    await mainNode.closeWait()
+    await testNode.closeWait()
 
   test "Verify records of nodes message":
     let

@@ -450,12 +450,9 @@ proc `$`(f: Field): string =
 
 proc `$`*(r: Record): string =
   result = "("
-  var first = true
+  result &= $r.seqNum
   for (k, v) in r.pairs:
-    if first:
-      first = false
-    else:
-      result &= ", "
+    result &= ", "
     result &= k
     result &= ": "
     result &= $v

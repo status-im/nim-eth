@@ -249,7 +249,12 @@ proc decodeWhoAreYou(d: Protocol, packet: openArray[byte]):
 proc sendWhoareyou(d: Protocol, address: Address, toNode: NodeId,
     authTag: AuthTag): DiscResult[void] {.raises: [Exception, Defect].} =
   trace "sending who are you", to = $toNode, toAddress = $address
-  let challenge = Whoareyou(authTag: authTag, recordSeq: 0)
+  let n = d.getNode(toNode)
+  let challenge = if n.isSome():
+                    Whoareyou(authTag: authTag, recordSeq: n.get().record.seqNum,
+                      pubKey: some(n.get().pubkey))
+                  else:
+                    Whoareyou(authTag: authTag, recordSeq: 0)
   brHmacDrbgGenerate(d.rng[], challenge.idNonce)
 
   # If there is already a handshake going on for this nodeid then we drop this
@@ -353,7 +358,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
     var pr: PendingRequest
     if d.pendingRequests.take(whoareyou.authTag, pr):
       let toNode = pr.node
-      whoareyou.pubKey = toNode.pubkey # TODO: Yeah, rather ugly this.
+      whoareyou.pubKey = some(toNode.pubkey) # TODO: Yeah, rather ugly this.
       doAssert(toNode.address.isSome())
       let (data, _) = encodePacket(d.rng[], d.codec, toNode.id, toNode.address.get(),
         pr.message, challenge = whoareyou)
@@ -694,10 +699,10 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]]
     {.async, raises: [Exception, Defect].} =
   ## Resolve a `Node` based on provided `NodeId`.
   ##
-  ## This will first look in the own DHT. If the node is known, it will try to
-  ## contact if for newer information. If node is not known or it does not
-  ## reply, a lookup is done to see if it can find a (newer) record of the node
-  ## on the network.
+  ## This will first look in the own routing table. If the node is known, it
+  ## will try to contact if for newer information. If node is not known or it
+  ## does not reply, a lookup is done to see if it can find a (newer) record of
+  ## the node on the network.
 
   let node = d.getNode(id)
   if node.isSome():
@@ -710,8 +715,6 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]]
   let discovered = await d.lookup(id)
   for n in discovered:
     if n.id == id:
-      # TODO: Not getting any new seqNum here as in a lookup nodes in table with
-      # new seqNum don't get replaced.
       if node.isSome() and node.get().record.seqNum >= n.record.seqNum:
         return node
       else:
@@ -725,8 +728,10 @@ proc revalidateNode*(d: Protocol, n: Node)
 
   if pong.isOK():
     if pong.get().enrSeq > n.record.seqNum:
-      # TODO: Request new ENR
-      discard
+      # Request new ENR
+      let nodes = await d.findNode(n, 0)
+      if nodes.isOk() and nodes[].len > 0:
+        discard d.addNode(nodes[][0])
 
 proc revalidateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   # TODO: General Exception raised.

@@ -22,7 +22,7 @@ type
   AuthResponse = object
     version: int
     signature: array[64, byte]
-    record: Record
+    record: Option[enr.Record]
 
   Codec* = object
     localNode*: Node
@@ -103,22 +103,26 @@ proc encodeAuthHeader*(rng: var BrHmacDrbgContext,
   var resp = AuthResponse(version: 5)
   let ln = c.localNode
 
-  # TODO: What goes over the wire now in case of no updated ENR?
   if challenge.recordSeq < ln.record.seqNum:
-    resp.record = ln.record
+    resp.record = some(ln.record)
+  else:
+    resp.record = none(enr.Record)
 
   let ephKeys = KeyPair.random(rng)
   let signature = signIDNonce(c.privKey, challenge.idNonce,
     ephKeys.pubkey.toRaw)
   resp.signature = signature.toRaw
 
-  let secrets = deriveKeys(ln.id, toId, ephKeys.seckey, challenge.pubKey,
+  # Calling `encodePacket` for handshake should always be with a challenge
+  # with the pubkey of the node we are targetting.
+  doAssert(challenge.pubKey.isSome())
+  let secrets = deriveKeys(ln.id, toId, ephKeys.seckey, challenge.pubKey.get(),
     challenge.idNonce)
 
   let respRlp = rlp.encode(resp)
 
   var zeroNonce: array[gcmNonceSize, byte]
-  let respEnc = encryptGCM(secrets.authRespKey, zeroNonce, respRLP, [])
+  let respEnc = encryptGCM(secrets.authRespKey, zeroNonce, respRlp, [])
 
   let header = AuthHeader(auth: nonce, idNonce: challenge.idNonce,
     scheme: authSchemeName, ephemeralKey: ephKeys.pubkey.toRaw,
@@ -248,7 +252,8 @@ proc decodeMessage(body: openarray[byte]): DecodeResult[Message] =
 proc decodeAuthResp*(c: Codec, fromId: NodeId, head: AuthHeader,
     challenge: Whoareyou, newNode: var Node): DecodeResult[HandshakeSecrets] =
   ## Decrypts and decodes the auth-response, which is part of the auth-header.
-  ## Requiers the id-nonce from the WHOAREYOU packet that was send.
+  ## Requires the id-nonce from the WHOAREYOU packet that was send.
+  ## newNode can be nil in case node was already known (no was ENR send).
   if head.scheme != authSchemeName:
     warn "Unknown auth scheme"
     return err(HandshakeError)
@@ -269,19 +274,26 @@ proc decodeAuthResp*(c: Codec, fromId: NodeId, head: AuthHeader,
     authResp = rlp.decode(respData.get(), AuthResponse)
   except RlpError, ValueError:
     return err(HandshakeError)
-  # TODO:
-  # Should allow for not having an ENR included, solved for now by sending
-  # whoareyou with always recordSeq of 0
 
-  # Node returned might not have an address or not a valid address
-  newNode = ? newNode(authResp.record).mapErrTo(HandshakeError)
-  if newNode.id != fromId:
-    return err(HandshakeError)
+  var pubKey: PublicKey
+  if authResp.record.isSome():
+    # Node returned might not have an address or not a valid address.
+    newNode = ? newNode(authResp.record.get()).mapErrTo(HandshakeError)
+    if newNode.id != fromId:
+      return err(HandshakeError)
+
+    pubKey = newNode.pubKey
+  else:
+    if challenge.pubKey.isSome():
+      pubKey = challenge.pubKey.get()
+    else:
+      # We should have received a Record in this case.
+      return err(HandshakeError)
 
   # Verify the id-nonce-sig
   let sig = ? SignatureNR.fromRaw(authResp.signature).mapErrTo(HandshakeError)
   let h = idNonceHash(head.idNonce, head.ephemeralKey)
-  if verify(sig, SkMessage(h.data), newNode.pubkey):
+  if verify(sig, SkMessage(h.data), pubkey):
     ok(secrets)
   else:
     err(HandshakeError)

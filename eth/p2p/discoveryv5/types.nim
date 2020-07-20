@@ -23,7 +23,7 @@ type
     authTag*: AuthTag
     idNonce*: IdNonce
     recordSeq*: uint64
-    pubKey* {.rlpIgnore.}: PublicKey
+    pubKey* {.rlpIgnore.}: Option[PublicKey]
 
   Whoareyou* = ref WhoareyouObj
 
@@ -107,3 +107,23 @@ proc hash*(address: Address): Hash {.inline.} =
 proc hash*(key: HandshakeKey): Hash =
   result = key.nodeId.hash !& key.address.hash
   result = !$result
+
+proc read*(rlp: var Rlp, O: type Option[Record]): O
+    {.raises: [ValueError, RlpError, Defect].} =
+  mixin read
+  if not rlp.isList:
+    raise newException(
+      ValueError, "Could not deserialize optional ENR, expected list")
+
+  # The discovery specification states that in case no ENR is send in the
+  # handshake, an empty rlp list instead should be send.
+  if rlp.listLen == 0:
+    none(Record)
+  else:
+    some(read(rlp, Record))
+
+proc append*(writer: var RlpWriter, value: Option[Record]) =
+  if value.isSome:
+    writer.append value.get
+  else:
+    writer.startList(0)
