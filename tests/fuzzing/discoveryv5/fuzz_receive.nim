@@ -8,7 +8,8 @@ var targetNode: protocol.Protocol
 init:
   let
     rng = newRng()
-    privKey = PrivateKey.random(rng[])
+    privKey = PrivateKey.fromHex(
+      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
     ip = some(ValidIpAddress.init("127.0.0.1"))
     port = Port(20301)
     dbb = DiscoveryDB.init(newMemoryDB())

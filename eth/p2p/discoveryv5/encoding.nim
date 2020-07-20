@@ -19,10 +19,10 @@ const
 type
   PacketTag* = array[tagSize, byte]
 
-  AuthResponse = object
-    version: int
-    signature: array[64, byte]
-    record: Option[enr.Record]
+  AuthResponse* = object
+    version*: int
+    signature*: array[64, byte]
+    record*: Option[enr.Record]
 
   Codec* = object
     localNode*: Node
