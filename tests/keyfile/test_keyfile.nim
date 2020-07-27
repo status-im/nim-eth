@@ -84,6 +84,83 @@ var TestVectors = [
     "name": "evilnonce",
     "password": "bar",
     "priv": "0202020202020202020202020202020202020202020202020202020202020202"
+  },
+  %*{
+    "keyfile": {
+      "version" : 3,
+      "crypto" : {
+          "cipher" : "aes-128-ctr",
+          "cipherparams" : {
+              "iv" : "83dbcc02d8ccb40e466191a123791e0e"
+          },
+          "ciphertext" : "d172bf743a674da9cdad04534d56926ef8358534d458fffccd4e6ad2fbde479c",
+          "kdf" : "scrypt",
+          "kdfparams" : {
+              "dklen" : 32,
+              "n" : 262144,
+              "r" : 1,
+              "p" : 8,
+              "salt" : "ab0c7876052600dd703518d6fc3fe8984592145b591fc8fb5c6d43190334ba19"
+          },
+          "mac" : "2103ac29920d71da29f15d75b4a16dbe95cfd7ff8faea1056c33131d846e3097"
+      },
+      "id" : "3198bc9c-6672-5ab3-d995-4942343ae5b6"
+    },
+    "name" : "test2",
+    "password": "testpassword",
+    "priv": "7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d"
+  },
+  %*{
+    "keyfile": {
+      "version": 3,
+      "address": "460121576cc7df020759730751f92bd62fd78dd6",
+      "crypto": {
+          "ciphertext": "54ae683c6287fa3d58321f09d56e26d94e58a00d4f90bdd95782ae0e4aab618b",
+          "cipherparams": {
+              "iv": "681679cdb125bba9495d068b002816a4"
+          },
+          "cipher": "aes-128-ctr",
+          "kdf": "scrypt",
+          "kdfparams": {
+              "dklen": 32,
+              "salt": "c3407f363fce02a66e3c4bf4a8f6b7da1c1f54266cef66381f0625c251c32785",
+              "n": 8192,
+              "r": 8,
+              "p": 1
+          },
+          "mac": "dea6bdf22a2f522166ed82808c22a6311e84c355f4bbe100d4260483ff675a46"
+      },
+      "id": "0eb785e0-340a-4290-9c42-90a11973ee47"
+    },
+    "name": "mycrypto",
+    "password": "foobartest121",
+    "priv": "05a4d3eb46c742cb8850440145ce70cbc80b59f891cf5f50fd3e9c280b50c4e4"
+  },
+  %*{
+    "keyfile": {
+        "crypto": {
+            "cipher": "aes-128-ctr",
+            "cipherparams": {
+                "iv": "7e7b02d2b4ef45d6c98cb885e75f48d5",
+            },
+            "ciphertext": "a7a5743a6c7eb3fa52396bd3fd94043b79075aac3ccbae8e62d3af94db00397c",
+            "kdf": "scrypt",
+            "kdfparams": {
+                "dklen": 32,
+                "n": 8192,
+                "p": 1,
+                "r": 8,
+                "salt": "247797c7a357b707a3bdbfaa55f4c553756bca09fec20ddc938e7636d21e4a20",
+            },
+            "mac": "5a3ba5bebfda2c384586eda5fcda9c8397d37c9b0cc347fea86525cf2ea3a468",
+        },
+        "address": "0b6f2de3dee015a95d3330dcb7baf8e08aa0112d",
+        "id": "3c8efdd6-d538-47ec-b241-36783d3418b9",
+        "version": 3
+    },
+    "password": "moomoocow",
+    "priv": "21eac69b9a52f466bfe9047f0f21c9caf3a5cdaadf84e2750a9b3265d450d481",
+    "name": "eth-keyfile-conftest"
   }
 ]
 
@@ -115,6 +192,39 @@ suite "KeyFile test suite":
                         "wrongpassword")
     check:
       seckey.error == KeyFileError.IncorrectMac
+
+
+  test "KeyStoreTests/basic_tests.json test2":
+    var expectkey = PrivateKey.fromHex(TestVectors[3].getOrDefault("priv").getStr())[]
+    let seckey =
+      decodeKeyFileJson(TestVectors[3].getOrDefault("keyfile"),
+                        TestVectors[3].getOrDefault("password").getStr())[]
+    check:
+      seckey.toRaw == expectkey.toRaw
+
+  test "KeyStoreTests/basic_tests.json mycrypto":
+    var expectkey = PrivateKey.fromHex(TestVectors[4].getOrDefault("priv").getStr())[]
+    let seckey =
+      decodeKeyFileJson(TestVectors[4].getOrDefault("keyfile"),
+                        TestVectors[4].getOrDefault("password").getStr())[]
+    check:
+      seckey.toRaw == expectkey.toRaw
+
+  test "eth-key/conftest.py":
+    var expectkey = PrivateKey.fromHex(TestVectors[5].getOrDefault("priv").getStr())[]
+    let seckey =
+      decodeKeyFileJson(TestVectors[5].getOrDefault("keyfile"),
+                        TestVectors[5].getOrDefault("password").getStr())[]
+    check:
+      seckey.toRaw == expectkey.toRaw
+
+  test "eth-key/conftest.py with wrong password":
+    let seckey =
+      decodeKeyFileJson(TestVectors[5].getOrDefault("keyfile"),
+                        "wrongpassword")
+    check:
+      seckey.error == KeyFileError.IncorrectMac
+
   test "Create/Save/Load test":
     var seckey0 = PrivateKey.random(rng[])
     let jobject = createKeyFileJson(seckey0, "randompassword")[]
@@ -125,6 +235,15 @@ suite "KeyFile test suite":
     check:
       seckey0.toRaw == seckey1.toRaw
     removeFile("test.keyfile")
+
+  test "Scrypt roundtrip":
+    let
+      seckey1 = PrivateKey.random(rng[])
+      jobject = createKeyFileJson(seckey1, "miawmiawcat", 3, AES128CTR, SCRYPT)[]
+      privKey = decodeKeyFileJson(jobject, "miawmiawcat")[]
+
+    check privKey.toRaw == secKey1.toRaw
+
   test "Load non-existent pathname test":
     check:
       loadKeyFile("nonexistant.keyfile", "password").error ==

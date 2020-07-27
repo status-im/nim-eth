@@ -9,7 +9,7 @@
 
 {.push raises: [Defect].}
 
-import nimcrypto/[bcmode, hmac, rijndael, pbkdf2, sha2, sysrand, utils, keccak],
+import nimcrypto/[bcmode, hmac, rijndael, pbkdf2, sha2, sysrand, utils, keccak, scrypt],
        eth/keys, json, uuid, strutils, stew/results
 
 export results
@@ -43,6 +43,8 @@ type
     CipherNotSupported    = "kf: `cipher` parameter is not supported"
     IncorrectMac          = "kf: `mac` verification failed"
     IncorrectPrivateKey   = "kf: incorrect private key"
+    IncorrectN            = "kf: incorrect N value for scrypt"
+    ScryptBadParam        = "kf: bad scrypt's parameters"
     OsError               = "kf: OS specific error"
     JsonError             = "kf: JSON encoder/decoder error"
 
@@ -59,6 +61,32 @@ type
     CipherNoSupport,    ## Cipher not supported
     AES128CTR           ## AES-128-CTR
 
+  CipherParams = object
+    iv: seq[byte]
+
+  Cipher = object
+    kind: CryptKind
+    params: CipherParams
+    text: seq[byte]
+
+  Crypto = object
+    kind: KdfKind
+    cipher: Cipher
+    kdfParams: JsonNode
+    mac: seq[byte]
+
+  ScryptParams* = object
+    dklen: int
+    n, p, r: int
+    salt: string
+
+  Pbkdf2Params* = object
+    dklen: int
+    c: int
+    prf: HashKind
+    salt: string
+
+  DKey = array[DKLen, byte]
   KfResult*[T] = Result[T, KeyFileError]
 
 proc mapErrTo[T, E](r: Result[T, E], v: static KeyFileError): KfResult[T] =
@@ -113,9 +141,9 @@ proc deriveKey(password: string,
                salt: string,
                kdfkind: KdfKind,
                hashkind: HashKind,
-               workfactor: int): KfResult[array[DKLen, byte]] =
+               workfactor: int): KfResult[DKey] =
   if kdfkind == PBKDF2:
-    var output: array[DKLen, byte]
+    var output: DKey
     var c = if workfactor == 0: Pbkdf2WorkFactor else: workfactor
     case hashkind
     of HashSHA2_224:
@@ -170,6 +198,16 @@ proc deriveKey(password: string,
       err(PrfNotSupported)
   else:
     err(NotImplemented)
+
+proc deriveKey(password: string, salt: string,
+               workFactor, r, p: int): KfResult[DKey] =
+
+  let wf = if workFactor == 0: ScryptWorkFactor else: workFactor
+  var output: DKey
+  if scrypt(password, salt, wf, r, p, output) == 0:
+    return err(ScryptBadParam)
+
+  result = ok(output)
 
 proc encryptKey(seckey: PrivateKey,
                 cryptkind: CryptKind,
@@ -279,11 +317,11 @@ proc createKeyFileJson*(seckey: PrivateKey,
 
   let u = ? uuidGenerate().mapErrTo(UuidError)
 
-  if kdfkind != PBKDF2:
-    return err(NotImplemented)
-
   let
-    dkey = ? deriveKey(password, saltstr, kdfkind, HashSHA2_256, workfactor)
+    dkey = case kdfkind
+           of PBKDF2: ? deriveKey(password, saltstr, kdfkind, HashSHA2_256, workfactor)
+           of SCRYPT: ? deriveKey(password, saltstr, workfactor, ScryptR, ScryptP)
+
     ciphertext = ? encryptKey(seckey, cryptkind, dkey, iv)
 
   var ctx: keccak256
@@ -313,11 +351,8 @@ proc createKeyFileJson*(seckey: PrivateKey,
     }
   )
 
-proc decodeKeyFileJson*(j: JsonNode,
-                        password: string): KfResult[PrivateKey] =
-  ## Decode private key into ``seckey`` from keyfile json object ``j`` using
-  ## password string ``password``.
-  var crypto = j.getOrDefault("crypto")
+proc decodeCrypto(n: JsonNode): KfResult[Crypto] =
+  var crypto = n.getOrDefault("crypto")
   if isNil(crypto):
     return err(MalformedError)
 
@@ -325,57 +360,122 @@ proc decodeKeyFileJson*(j: JsonNode,
   if isNil(kdf):
     return err(MalformedError)
 
+  var c: Crypto
+  case kdf.getStr()
+  of "pbkdf2": c.kind = PBKDF2
+  of "scrypt": c.kind = SCRYPT
+  else: return err(KdfNotSupported)
+
   var cipherparams = crypto.getOrDefault("cipherparams")
   if isNil(cipherparams):
     return err(MalformedError)
 
-  if kdf.getStr() == "pbkdf2":
-    var params = crypto.getOrDefault("kdfparams")
+  c.cipher.kind = getCipher(crypto.getOrDefault("cipher").getStr())
+  c.cipher.params.iv = decodeHex(cipherparams.getOrDefault("iv").getStr())
+  c.cipher.text = decodeHex(crypto.getOrDefault("ciphertext").getStr())
+  c.mac = decodeHex(crypto.getOrDefault("mac").getStr())
+  c.kdfParams = crypto.getOrDefault("kdfparams")
 
-    if isNil(params):
-      return err(MalformedError)
-
-    var salt = decodeSalt(params.getOrDefault("salt").getStr())
-    var ciphertext = decodeHex(crypto.getOrDefault("ciphertext").getStr())
-    var mactext = decodeHex(crypto.getOrDefault("mac").getStr())
-    var cryptkind = getCipher(crypto.getOrDefault("cipher").getStr())
-    var iv = decodeHex(cipherparams.getOrDefault("iv").getStr())
-
-    if len(salt) == 0:
-      return err(EmptySalt)
-    if len(ciphertext) == 0:
-      return err(EmptyCiphertext)
-    if len(mactext) == 0:
-      return err(EmptyMac)
-    if cryptkind == CipherNoSupport:
-      return err(CipherNotSupported)
-
-    var dklen = params.getOrDefault("dklen").getInt()
-    var c = params.getOrDefault("c").getInt()
-    var hash = getPrfHash(params.getOrDefault("prf").getStr())
-
-    if hash == HashNoSupport:
-      return err(PrfNotSupported)
-    if dklen == 0 or dklen > MaxDKLen:
-      return err(IncorrectDKLen)
-    if len(ciphertext) != KeyLength:
+  if c.cipher.kind == CipherNoSupport:
+    return err(CipherNotSupported)
+  if len(c.cipher.text) == 0:
+    return err(EmptyCiphertext)
+  if len(c.cipher.text) != KeyLength:
       return err(IncorrectPrivateKey)
+  if len(c.mac) == 0:
+    return err(EmptyMac)
+  if isNil(c.kdfParams):
+    return err(MalformedError)
 
-    let dkey = ? deriveKey(password, salt, PBKDF2, hash, c)
+  result = ok(c)
 
-    var ctx: keccak256
-    ctx.init()
-    ctx.update(toOpenArray(dkey, 16, 31))
-    ctx.update(ciphertext)
-    var mac = ctx.finish()
-    if not compareMac(mac.data, mactext):
-      return err(IncorrectMac)
+proc decodePbkdf2Params(params: JsonNode): KfResult[Pbkdf2Params] =
+  var p: Pbkdf2Params
+  p.salt = decodeSalt(params.getOrDefault("salt").getStr())
+  if len(p.salt) == 0:
+    return err(EmptySalt)
 
-    let plaintext = ? decryptKey(ciphertext, cryptkind, dkey, iv)
+  p.dklen = params.getOrDefault("dklen").getInt()
+  p.c = params.getOrDefault("c").getInt()
+  p.prf = getPrfHash(params.getOrDefault("prf").getStr())
 
-    PrivateKey.fromRaw(plaintext).mapErrTo(IncorrectPrivateKey)
-  else:
-    err(KdfNotSupported)
+  if p.prf == HashNoSupport:
+    return err(PrfNotSupported)
+  if p.dklen == 0 or p.dklen > MaxDKLen:
+    return err(IncorrectDKLen)
+  result = ok(p)
+
+proc decodeScryptParams(params: JsonNode): KfResult[ScryptParams] =
+  var p: ScryptParams
+  p.salt = decodeSalt(params.getOrDefault("salt").getStr())
+  if len(p.salt) == 0:
+    return err(EmptySalt)
+
+  p.dklen = params.getOrDefault("dklen").getInt()
+  p.n = params.getOrDefault("n").getInt()
+  p.p = params.getOrDefault("p").getInt()
+  p.r = params.getOrDefault("r").getInt()
+
+  if p.n <= 1 or (p.n and (p.n-1)) != 0:
+    return err(IncorrectN)
+  if p.dklen == 0 or p.dklen > MaxDKLen:
+    return err(IncorrectDKLen)
+
+  const
+    maxInt = high(int64)
+    maxIntd128 = maxInt div 128
+    maxIntd256 = maxInt div 256
+
+  let
+    badParam1 = uint64(p.r)*uint64(p.p) >= 1 shl 30
+    badParam2 = p.r > maxIntd128 div p.p
+    badParam3 = p.r > maxIntd256
+    badParam4 = p.n > maxIntd128 div p.r
+
+  if badParam1 or badParam2 or badParam3 or badParam4:
+    return err(ScryptBadParam)
+
+  result = ok(p)
+
+func decryptPrivateKey(crypto: Crypto, dkey: DKey): KfResult[PrivateKey] =
+  var ctx: keccak256
+  ctx.init()
+  ctx.update(toOpenArray(dkey, 16, 31))
+  ctx.update(crypto.cipher.text)
+  var mac = ctx.finish()
+  if not compareMac(mac.data, crypto.mac):
+    return err(IncorrectMac)
+
+  let plaintext = ? decryptKey(crypto.cipher.text, crypto.cipher.kind, dkey, crypto.cipher.params.iv)
+  PrivateKey.fromRaw(plaintext).mapErrTo(IncorrectPrivateKey)
+
+proc decodeKeyFileJson*(j: JsonNode,
+                        password: string): KfResult[PrivateKey] =
+  ## Decode private key into ``seckey`` from keyfile json object ``j`` using
+  ## password string ``password``.
+  let res = decodeCrypto(j)
+  if res.isErr:
+    return err(res.error)
+  let crypto = res.get()
+
+  case crypto.kind
+  of PBKDF2:
+    let res = decodePbkdf2Params(crypto.kdfParams)
+    if res.isErr:
+      return err(res.error)
+
+    let params = res.get()
+    let dkey = ? deriveKey(password, params.salt, PBKDF2, params.prf, params.c)
+    result = decryptPrivateKey(crypto, dkey)
+
+  of SCRYPT:
+    let res = decodeScryptParams(crypto.kdfParams)
+    if res.isErr:
+      return err(res.error)
+
+    let params = res.get()
+    let dkey = ? deriveKey(password, params.salt, params.n, params.r, params.p)
+    result = decryptPrivateKey(crypto, dkey)
 
 proc loadKeyFile*(pathname: string,
                   password: string): KfResult[PrivateKey] =
