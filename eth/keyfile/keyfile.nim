@@ -43,7 +43,6 @@ type
     CipherNotSupported    = "kf: `cipher` parameter is not supported"
     IncorrectMac          = "kf: `mac` verification failed"
     IncorrectPrivateKey   = "kf: incorrect private key"
-    IncorrectN            = "kf: incorrect N value for scrypt"
     ScryptBadParam        = "kf: bad scrypt's parameters"
     OsError               = "kf: OS specific error"
     JsonError             = "kf: JSON encoder/decoder error"
@@ -198,6 +197,13 @@ proc deriveKey(password: string,
       err(PrfNotSupported)
   else:
     err(NotImplemented)
+
+func scrypt[T, M](password: openArray[T], salt: openArray[M],
+                   N, r, p: int, output: var openArray[byte]): int =
+  let (xyvLen, bLen) = scryptCalc(N, r, p)
+  var xyv = newSeq[uint32](xyvLen)
+  var b = newSeq[byte](bLen)
+  scrypt(password, salt, N, r, p, xyv, b, output)
 
 proc deriveKey(password: string, salt: string,
                workFactor, r, p: int): KfResult[DKey] =
@@ -416,24 +422,8 @@ proc decodeScryptParams(params: JsonNode): KfResult[ScryptParams] =
   p.p = params.getOrDefault("p").getInt()
   p.r = params.getOrDefault("r").getInt()
 
-  if p.n <= 1 or (p.n and (p.n-1)) != 0:
-    return err(IncorrectN)
   if p.dklen == 0 or p.dklen > MaxDKLen:
     return err(IncorrectDKLen)
-
-  const
-    maxInt = high(int64)
-    maxIntd128 = maxInt div 128
-    maxIntd256 = maxInt div 256
-
-  let
-    badParam1 = uint64(p.r)*uint64(p.p) >= 1 shl 30
-    badParam2 = p.r > maxIntd128 div p.p
-    badParam3 = p.r > maxIntd256
-    badParam4 = p.n > maxIntd128 div p.r
-
-  if badParam1 or badParam2 or badParam3 or badParam4:
-    return err(ScryptBadParam)
 
   result = ok(p)
 
