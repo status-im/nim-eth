@@ -258,7 +258,7 @@ proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void] =
 template compressMsg(peer: Peer, data: seq[byte]): seq[byte] =
   when useSnappy:
     if peer.snappyEnabled:
-      snappy.compress(data)
+      snappy.encode(data)
     else: data
   else:
     data
@@ -422,7 +422,7 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
 
   when useSnappy:
     if peer.snappyEnabled:
-      decryptedBytes = snappy.uncompress(decryptedBytes)
+      decryptedBytes = snappy.decode(decryptedBytes, maxMsgSize)
       if decryptedBytes.len == 0:
         await peer.disconnectAndRaise(BreachOfProtocol,
                                       "Snappy uncompress encountered malformed data")
