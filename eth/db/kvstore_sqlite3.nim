@@ -149,7 +149,7 @@ proc init*(
         x != "memory" and x != "wal"):
       discard sqlite3_finalize(journalModePragma)
       discard sqlite3_close(env)
-      return err("Invalid result from pragma: " & $x)
+      return err("Invalid pragma result: " & $x)
 
   # TODO: check current version and implement schema versioning
   checkExec "PRAGMA user_version = 1;"
