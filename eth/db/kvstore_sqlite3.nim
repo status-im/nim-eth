@@ -120,9 +120,7 @@ proc init*(
       discard sqlite3_close(env)
     s
 
-  template checkExec(q: string) =
-    let s = prepare(q): discard
-
+  template checkExec(s: ptr sqlite3_stmt) =
     if (let x = sqlite3_step(s); x != SQLITE_DONE):
       discard sqlite3_finalize(s)
       discard sqlite3_close(env)
@@ -132,8 +130,32 @@ proc init*(
       discard sqlite3_close(env)
       return err($sqlite3_errstr(x))
 
+  template checkExec(q: string) =
+    let s = prepare(q): discard
+    checkExec(s)
+
+  template checkWalPragmaResult(journalModePragma: ptr sqlite3_stmt) =
+    if (let x = sqlite3_step(journalModePragma); x != SQLITE_ROW):
+      discard sqlite3_finalize(journalModePragma)
+      discard sqlite3_close(env)
+      return err($sqlite3_errstr(x))
+
+    if (let x = sqlite3_column_type(journalModePragma, 0); x != SQLITE3_TEXT):
+      discard sqlite3_finalize(journalModePragma)
+      discard sqlite3_close(env)
+      return err($sqlite3_errstr(x))
+
+    if (let x = sqlite3_column_text(journalModePragma, 0); x != "wal"):
+      discard sqlite3_finalize(journalModePragma)
+      discard sqlite3_close(env)
+      return err("Invalid result from pramga")
+
   # TODO: check current version and implement schema versioning
   checkExec "PRAGMA user_version = 1;"
+
+  let journalModePragma = prepare("PRAGMA journal_mode = WAL;"): discard
+  checkWalPragmaResult(journalModePragma)
+  checkExec(journalModePragma)
 
   checkExec """
     CREATE TABLE IF NOT EXISTS kvstore(
