@@ -8,6 +8,8 @@
 
 Ethereum-related utilities written in Nim. Includes things like Bloom filters, private/public key utilities, RLP, devp2p, and more.
 
+This branch has a non-semantic change.
+
 ## Docs
 
 - [rlp](doc/rlp.md)
