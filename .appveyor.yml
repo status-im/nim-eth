@@ -53,7 +53,6 @@ install:
   - IF "%PLATFORM%" == "x64" ( copy %CD%\x64\librocksdb.dll %CD%\bin\librocksdb.dll ) ELSE ( copy %CD%\x86\librocksdb.dll %CD%\bin\librocksdb.dll )
 
   # download and build lmdb
-  - DIR C:\mingw-64\
   - SET "LMDB_URL=https://github.com/LMDB/lmdb/archive"
   - SET "LMDB_VER=0.9.22"
   - SET "LMDB_ARCHIVE=LMDB_%LMDB_VER%.tar.gz"
