@@ -75,6 +75,7 @@ build_script:
   - bash -c "nimble install -y --depsOnly"
 
 test_script:
+  - gcc --version
   - echo %PATH%
   - nimble test
 
