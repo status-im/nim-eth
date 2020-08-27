@@ -1,6 +1,6 @@
 version: '{build}'
 
-image: Visual Studio 2013
+image: Visual Studio 2015
 
 cache:
 - sqlite-dll-win32-x86-3240000.zip -> .appveyor.yml
@@ -37,7 +37,7 @@ install:
 
   # use the newest versions documented here: https://www.appveyor.com/docs/windows-images-software/#mingw-msys-cygwin
   - IF "%PLATFORM%" == "x86" SET PATH=C:\mingw-w64\i686-6.3.0-posix-dwarf-rt_v5-rev1\mingw32\bin;%PATH%
-  - IF "%PLATFORM%" == "x64" SET PATH=C:\mingw-w64\x86_64-6.3.0-posix-seh-rt_v5-rev1\mingw64\bin;%PATH%
+  - IF "%PLATFORM%" == "x64" SET PATH=C:\mingw-w64\x86_64-8.1.0-posix-seh-rt_v6-rev0\mingw64\bin;%PATH%
 
   - MKDIR %CD%\bin
   - SET PATH=%CD%\bin;%CD%\Nim\bin;%PATH%
@@ -71,6 +71,7 @@ install:
   - env MAKE="mingw32-make -j2" ARCH_OVERRIDE=%PLATFORM% bash build_nim.sh Nim csources dist/nimble NimBinaries
 
 build_script:
+  - echo %CC%
   - cd C:\projects\%APPVEYOR_PROJECT_SLUG%
   - bash -c "nimble install -y --depsOnly"
 
