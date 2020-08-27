@@ -42,6 +42,9 @@ install:
   - MKDIR %CD%\bin
   - SET PATH=%CD%\bin;%CD%\Nim\bin;%PATH%
 
+  - systeminfo | findstr /B /C:"OS Name" /C:"OS Version"
+  - wmic os get Caption,CSDVersion /value
+
   # Unpack sqlite
   - IF not exist "%SQLITE_ARCHIVE%" appveyor DownloadFile "%SQLITE_URL%" -FileName "%SQLITE_ARCHIVE%"
   - 7z x -y "%SQLITE_ARCHIVE%" > nul
