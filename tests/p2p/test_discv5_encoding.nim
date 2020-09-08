@@ -1,5 +1,6 @@
 import
-  unittest, options, sequtils, stint, stew/byteutils, stew/shims/net,
+  std/[unittest, options, sequtils],
+  stint, stew/byteutils, stew/shims/net,
   eth/[rlp, keys] , eth/p2p/discoveryv5/[types, encoding, enr, node]
 
 # According to test vectors:

@@ -1,7 +1,7 @@
 import
   std/[tables, options],
   nimcrypto, stint, chronicles, stew/results, bearssl,
-  eth/[rlp, keys], types, node, enr, hkdf
+  eth/[rlp, keys], types, node, enr, hkdf, sessions
 
 export keys
 
@@ -27,8 +27,8 @@ type
   Codec* = object
     localNode*: Node
     privKey*: PrivateKey
-    db*: Database
     handshakes*: Table[HandShakeKey, Whoareyou]
+    sessions*: Sessions
 
   HandshakeSecrets = object
     writeKey: AesKey
@@ -142,7 +142,7 @@ proc packetTag(destNode, srcNode: NodeID): PacketTag =
 
 proc encodePacket*(
     rng: var BrHmacDrbgContext,
-    c: Codec,
+    c: var Codec,
     toId: NodeID,
     toAddr: Address,
     message: openarray[byte],
@@ -165,9 +165,7 @@ proc encodePacket*(
 
     # TODO: Should we change API to get just the key we need?
     var writeKey, readKey: AesKey
-    # We might not have the node's keys if the handshake hasn't been performed
-    # yet. That's fine, we will be responded with whoareyou.
-    if c.db.loadKeys(toId, toAddr, readKey, writeKey):
+    if c.sessions.load(toId, toAddr, readKey, writeKey):
       packet.add(encryptGCM(writeKey, nonce, message, tag))
     else:
       # We might not have the node's keys if the handshake hasn't been performed
@@ -182,8 +180,7 @@ proc encodePacket*(
     let (headEnc, secrets) = encodeAuthHeader(rng, c, toId, nonce, challenge)
     packet.add(headEnc)
 
-    if not c.db.storeKeys(toId, toAddr, secrets.readKey, secrets.writeKey):
-      warn "Storing of keys for session failed, will have to redo a handshake"
+    c.sessions.store(toId, toAddr, secrets.readKey, secrets.writeKey)
 
     packet.add(encryptGCM(secrets.writeKey, nonce, message, tag))
 
@@ -340,8 +337,7 @@ proc decodePacket*(c: var Codec,
 
     # Swap keys to match remote
     swap(sec.readKey, sec.writeKey)
-    if not c.db.storeKeys(fromId, fromAddr, sec.readKey, sec.writeKey):
-      warn "Storing of keys for session failed, will have to redo a handshake"
+    c.sessions.store(fromId, fromAddr, sec.readKey, sec.writeKey)
     readKey = sec.readKey
   else:
     # Message packet or random packet - rlp bytes (size 12) indicates auth-tag
@@ -352,7 +348,7 @@ proc decodePacket*(c: var Codec,
     auth.auth = authTag
     # TODO: Should we change API to get just the key we need?
     var writeKey: AesKey
-    if not c.db.loadKeys(fromId, fromAddr, readKey, writeKey):
+    if not c.sessions.load(fromId, fromAddr, readKey, writeKey):
       trace "Decoding failed (no keys)"
       return err(DecryptError)
 
@@ -363,7 +359,7 @@ proc decodePacket*(c: var Codec,
     input.toOpenArray(headSize, input.high),
     input.toOpenArray(0, tagSize - 1))
   if message.isNone():
-    discard c.db.deleteKeys(fromId, fromAddr)
+    c.sessions.del(fromId, fromAddr)
     return err(DecryptError)
 
   decodeMessage(message.get())

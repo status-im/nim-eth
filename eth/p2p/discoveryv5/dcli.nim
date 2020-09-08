@@ -2,7 +2,7 @@ import
   std/[options, strutils],
   chronos, chronicles, chronicles/topics_registry, confutils, metrics,
   stew/byteutils, confutils/std/net,
-  eth/keys, eth/trie/db, eth/net/nat, protocol, discovery_db, enr, node
+  eth/keys, eth/net/nat, protocol, enr, node
 
 type
   DiscoveryCmd* = enum
@@ -145,9 +145,7 @@ proc setupNat(conf: DiscoveryConf): tuple[ip: Option[ValidIpAddress],
 proc run(config: DiscoveryConf) =
   let
     (ip, tcpPort, udpPort) = setupNat(config)
-    ddb = DiscoveryDB.init(newMemoryDB())
-    # TODO: newProtocol should allow for no tcpPort
-    d = newProtocol(config.nodeKey, ddb, ip, tcpPort, udpPort,
+    d = newProtocol(config.nodeKey, ip, tcpPort, udpPort,
       bootstrapRecords = config.bootnodes)
 
   d.open()

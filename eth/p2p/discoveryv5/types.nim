@@ -27,8 +27,6 @@ type
 
   Whoareyou* = ref WhoareyouObj
 
-  Database* = ref object of RootRef
-
   MessageKind* = enum
     # TODO This is needed only to make Nim 1.0.4 happy
     #      Without it, the `MessageKind` type cannot be used as
@@ -83,15 +81,6 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   elif T is PongMessage: pong
   elif T is FindNodeMessage: findNode
   elif T is NodesMessage: nodes
-
-method storeKeys*(db: Database, id: NodeId, address: Address,
-    r, w: AesKey): bool {.base.} = discard
-
-method loadKeys*(db: Database, id: NodeId, address: Address,
-  r, w: var AesKey): bool {.base.} = discard
-
-method deleteKeys*(db: Database, id: NodeId, address: Address):
-  bool {.base.} = discard
 
 proc toBytes*(id: NodeId): array[32, byte] {.inline.} =
   id.toByteArrayBE()
