@@ -77,7 +77,7 @@ import
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/[byteutils, endians2], chronicles, chronos, stint, bearssl,
   eth/[rlp, keys, async_utils],
-  types, encoding, node, routing_table, enr, random2
+  types, encoding, node, routing_table, enr, random2, sessions
 
 import nimcrypto except toHex
 
@@ -114,7 +114,6 @@ type
     whoareyouMagic: array[magicSize, byte]
     idHash: array[32, byte]
     pendingRequests: Table[AuthTag, PendingRequest]
-    db: Database
     routingTable: RoutingTable
     codec*: Codec
     awaitedMessages: Table[(NodeId, RequestId), Future[Option[Message]]]
@@ -477,13 +476,6 @@ proc validIp(sender, address: IpAddress): bool {.raises: [Defect].} =
 proc replaceNode(d: Protocol, n: Node) =
   if n.record notin d.bootstrapRecords:
     d.routingTable.replaceNode(n)
-      # Remove shared secrets when removing the node from routing table.
-      # TODO: This might be to direct, so we could keep these longer. But better
-      # would be to simply not remove the nodes immediatly but use an LRU cache.
-      # Also because some shared secrets will be with nodes not eligable for
-      # the routing table, and these don't get deleted now, see issue:
-      # https://github.com/status-im/nim-eth/issues/242
-    discard d.codec.db.deleteKeys(n.id, n.address.get())
   else:
     # For now we never remove bootstrap nodes. It might make sense to actually
     # do so and to retry them only in case we drop to a really low amount of
@@ -758,7 +750,7 @@ proc lookupLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   except CancelledError:
     trace "lookupLoop canceled"
 
-proc newProtocol*(privKey: PrivateKey, db: Database,
+proc newProtocol*(privKey: PrivateKey,
                   externalIp: Option[ValidIpAddress], tcpPort, udpPort: Port,
                   localEnrFields: openarray[(string, seq[byte])] = [],
                   bootstrapRecords: openarray[Record] = [],
@@ -789,12 +781,12 @@ proc newProtocol*(privKey: PrivateKey, db: Database,
 
   result = Protocol(
     privateKey: privKey,
-    db: db,
     localNode: node,
     bindAddress: Address(ip: ValidIpAddress.init(bindIp), port: udpPort),
     whoareyouMagic: whoareyouMagic(node.id),
     idHash: sha256.digest(node.id.toByteArrayBE).data,
-    codec: Codec(localNode: node, privKey: privKey, db: db),
+    codec: Codec(localNode: node, privKey: privKey,
+      sessions: Sessions.init(256)),
     bootstrapRecords: @bootstrapRecords,
     rng: rng)
 

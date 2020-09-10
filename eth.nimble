@@ -50,6 +50,7 @@ proc runP2pTests() =
       "test_protocol_handlers",
       "test_enr",
       "test_hkdf",
+      "test_lru",
       "test_discoveryv5",
       "test_discv5_encoding",
       "test_routing_table"
@@ -94,6 +95,7 @@ proc runDiscv5Tests() =
   for filename in [
       "test_enr",
       "test_hkdf",
+      "test_lru",
       "test_discoveryv5",
       "test_discv5_encoding",
       "test_routing_table"
@@ -103,5 +105,4 @@ proc runDiscv5Tests() =
 task test_discv5, "run tests of discovery v5 and its dependencies":
   runKeysTests()
   runRlpTests()
-  runTrieTests() # This probably tests a bit to much for what we use it for.
   runDiscv5Tests()

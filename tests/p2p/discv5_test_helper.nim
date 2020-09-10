@@ -1,7 +1,7 @@
 import
   testutils/unittests, stew/shims/net, bearssl,
-  eth/[keys, rlp, trie/db],
-  eth/p2p/discoveryv5/[discovery_db, enr, node, types, routing_table, encoding],
+  eth/[keys, rlp],
+  eth/p2p/discoveryv5/[enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol
 
 proc localAddress*(port: int): Address =
@@ -13,8 +13,7 @@ proc initDiscoveryNode*(rng: ref BrHmacDrbgContext, privKey: PrivateKey,
                         localEnrFields: openarray[(string, seq[byte])] = [],
                         previousRecord = none[enr.Record]()):
                         discv5_protocol.Protocol =
-  var db = DiscoveryDB.init(newMemoryDB())
-  result = newProtocol(privKey, db,
+  result = newProtocol(privKey,
                        some(address.ip),
                        address.port, address.port,
                        bootstrapRecords = bootstrapRecords,

@@ -1,7 +1,8 @@
 import
-  chronos, chronicles, tables, stint, testutils/unittests,
-  stew/shims/net, eth/[keys, trie/db], bearssl,
-  eth/p2p/discoveryv5/[enr, node, types, routing_table, encoding, discovery_db],
+  std/tables,
+  chronos, chronicles, stint, testutils/unittests,
+  stew/shims/net, eth/keys, bearssl,
+  eth/p2p/discoveryv5/[enr, node, types, routing_table, encoding],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./discv5_test_helper
 
@@ -330,10 +331,14 @@ procSuite "Discovery v5 Tests":
     # updated ENR.
     block:
       targetNode.open()
-      # ping to node again to add as it was removed after failed findNode in
-      # resolve in previous test block.
-      let pong = await targetNode.ping(mainNode.localNode)
-      check pong.isOk()
+      # Request the target ENR and manually add it to the routing table.
+      # Ping for handshake based ENR passing will not work as our previous
+      # session will still be in the LRU cache.
+      let nodes = await mainNode.findNode(targetNode.localNode, 0)
+      check:
+        nodes.isOk()
+        nodes[].len == 1
+        mainNode.addNode(nodes[][0])
 
       targetSeqNum.inc()
       # need to add something to get the enr sequence number incremented
@@ -405,13 +410,12 @@ procSuite "Discovery v5 Tests":
       privKey = PrivateKey.random(rng[])
       ip = some(ValidIpAddress.init("127.0.0.1"))
       port = Port(20301)
-      db = DiscoveryDB.init(newMemoryDB())
-      node = newProtocol(privKey, db, ip, port, port, rng = rng)
-      noUpdatesNode = newProtocol(privKey, db, ip, port, port, rng = rng,
+      node = newProtocol(privKey, ip, port, port, rng = rng)
+      noUpdatesNode = newProtocol(privKey, ip, port, port, rng = rng,
         previousRecord = some(node.getRecord()))
-      updatesNode = newProtocol(privKey, db, ip, port, Port(20302), rng = rng,
+      updatesNode = newProtocol(privKey, ip, port, Port(20302), rng = rng,
         previousRecord = some(noUpdatesNode.getRecord()))
-      moreUpdatesNode = newProtocol(privKey, db, ip, port, port, rng = rng,
+      moreUpdatesNode = newProtocol(privKey, ip, port, port, rng = rng,
         localEnrFields = {"addfield": @[byte 0]},
         previousRecord = some(updatesNode.getRecord()))
     check:
@@ -423,7 +427,7 @@ procSuite "Discovery v5 Tests":
     # Defect (for now?) on incorrect key use
     expect ResultDefect:
       let incorrectKeyUpdates = newProtocol(PrivateKey.random(rng[]),
-        db, ip, port, port, rng = rng,
+        ip, port, port, rng = rng,
         previousRecord = some(updatesNode.getRecord()))
 
   asyncTest "Update node record with revalidate":
