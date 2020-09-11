@@ -31,6 +31,7 @@ type
   GetProc = proc (db: RootRef, key: openArray[byte], onData: DataProc): KvResult[bool] {.nimcall, gcsafe, raises: [Defect].}
   DelProc = proc (db: RootRef, key: openArray[byte]): KvResult[void] {.nimcall, gcsafe, raises: [Defect].}
   ContainsProc = proc (db: RootRef, key: openArray[byte]): KvResult[bool] {.nimcall, gcsafe, raises: [Defect].}
+  CloseProc = proc (db: RootRef): KvResult[void] {.nimcall, gcsafe, raises: [Defect].}
 
   KvStoreRef* = ref object
     ## Key-Value store virtual interface
@@ -39,6 +40,7 @@ type
     getProc: GetProc
     delProc: DelProc
     containsProc: ContainsProc
+    closeProc: CloseProc
 
 template put*(dbParam: KvStoreRef, key, val: openArray[byte]): KvResult[void] =
   ## Store ``value`` at ``key`` - overwrites existing value if already present
@@ -63,6 +65,11 @@ template contains*(dbParam: KvStoreRef, key: openArray[byte]): KvResult[bool] =
   let db = dbParam
   db.containsProc(db.obj, key)
 
+template close*(dbParam: KvStoreRef): KvResult[void] =
+  ## Close database
+  let db = dbParam
+  db.closeProc(db.obj)
+
 proc putImpl[T](db: RootRef, key, val: openArray[byte]): KvResult[void] =
   mixin put
   put(T(db), key, val)
@@ -79,15 +86,20 @@ proc containsImpl[T](db: RootRef, key: openArray[byte]): KvResult[bool] =
   mixin contains
   contains(T(db), key)
 
+proc closeImpl[T](db: RootRef): KvResult[void] =
+  mixin close
+  close(T(db))
+
 func kvStore*[T: RootRef](x: T): KvStoreRef =
-  mixin del, get, put, contains
+  mixin del, get, put, contains, close
 
   KvStoreRef(
     obj: x,
     putProc: putImpl[T],
     getProc: getImpl[T],
     delProc: delImpl[T],
-    containsProc: containsImpl[T]
+    containsProc: containsImpl[T],
+    closeProc: closeImpl[T]
   )
 
 proc get*(db: MemStoreRef, key: openArray[byte], onData: DataProc): KvResult[bool] =
@@ -106,6 +118,10 @@ proc contains*(db: MemStoreRef, key: openArray[byte]): KvResult[bool] =
 
 proc put*(db: MemStoreRef, key, val: openArray[byte]): KvResult[void] =
   db.records[@key] = @val
+  ok()
+
+proc close*(db: MemStoreRef): KvResult[void] =
+  db.records.clear()
   ok()
 
 proc init*(T: type MemStoreRef): T =
