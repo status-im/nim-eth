@@ -121,6 +121,7 @@ proc put*(db: MemStoreRef, key, val: openArray[byte]): KvResult[void] =
   ok()
 
 proc close*(db: MemStoreRef): KvResult[void] =
+  db.records.clear()
   ok()
 
 proc init*(T: type MemStoreRef): T =
