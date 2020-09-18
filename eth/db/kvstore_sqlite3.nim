@@ -26,57 +26,75 @@ proc bindBlob(s: ptr sqlite3_stmt, n: int, blob: openarray[byte]): cint =
   sqlite3_bind_blob(s, n.cint, unsafeAddr blob[0], blob.len.cint, nil)
 
 proc get*(db: SqStoreRef, key: openarray[byte], onData: DataProc): KvResult[bool] =
-  checkErr sqlite3_reset(db.getStmt)
-  checkErr sqlite3_clear_bindings(db.getStmt)
   checkErr bindBlob(db.getStmt, 1, key)
 
-  let v = sqlite3_step(db.getStmt)
-  case v
-  of SQLITE_ROW:
-    let
-      p = cast[ptr UncheckedArray[byte]](sqlite3_column_blob(db.getStmt, 0))
-      l = sqlite3_column_bytes(db.getStmt, 0)
-    onData(toOpenArray(p, 0, l-1))
-    ok(true)
-  of SQLITE_DONE:
-    ok(false)
-  else:
-    err($sqlite3_errstr(v))
+  let
+    v = sqlite3_step(db.getStmt)
+    res = case v
+      of SQLITE_ROW:
+        let
+          p = cast[ptr UncheckedArray[byte]](sqlite3_column_blob(db.getStmt, 0))
+          l = sqlite3_column_bytes(db.getStmt, 0)
+        onData(toOpenArray(p, 0, l-1))
+
+        ok(true)
+      of SQLITE_DONE:
+        ok(false)
+      else:
+        err($sqlite3_errstr(v))
+
+  # release implicit transaction
+  discard sqlite3_reset(db.getStmt) # same return information as step
+  discard sqlite3_clear_bindings(db.getStmt) # no errors possible
+
+  res
 
 proc put*(db: SqStoreRef, key, value: openarray[byte]): KvResult[void] =
-  checkErr sqlite3_reset(db.putStmt)
-  checkErr sqlite3_clear_bindings(db.putStmt)
-
   checkErr bindBlob(db.putStmt, 1, key)
   checkErr bindBlob(db.putStmt, 2, value)
 
-  if (let v = sqlite3_step(db.putStmt); v != SQLITE_DONE):
-    err($sqlite3_errstr(v))
-  else:
-    ok()
+  let res =
+    if (let v = sqlite3_step(db.putStmt); v != SQLITE_DONE):
+      err($sqlite3_errstr(v))
+    else:
+      ok()
+
+  # release implict transaction
+  discard sqlite3_reset(db.putStmt) # same return information as step
+  discard sqlite3_clear_bindings(db.putStmt) # no errors possible
+
+  res
 
 proc contains*(db: SqStoreRef, key: openarray[byte]): KvResult[bool] =
-  checkErr sqlite3_reset(db.containsStmt)
-  checkErr sqlite3_clear_bindings(db.containsStmt)
-
   checkErr bindBlob(db.containsStmt, 1, key)
 
-  let v = sqlite3_step(db.containsStmt)
-  case v
-  of SQLITE_ROW: ok(true)
-  of SQLITE_DONE: ok(false)
-  else: err($sqlite3_errstr(v))
+  let
+    v = sqlite3_step(db.containsStmt)
+    res = case v
+      of SQLITE_ROW: ok(true)
+      of SQLITE_DONE: ok(false)
+      else: err($sqlite3_errstr(v))
+
+  # release implicit transaction
+  discard sqlite3_reset(db.containsStmt) # same return information as step
+  discard sqlite3_clear_bindings(db.containsStmt) # no errors possible
+
+  res
 
 proc del*(db: SqStoreRef, key: openarray[byte]): KvResult[void] =
-  checkErr sqlite3_reset(db.delStmt)
-  checkErr sqlite3_clear_bindings(db.delStmt)
-
   checkErr bindBlob(db.delStmt, 1, key)
 
-  if (let v = sqlite3_step(db.delStmt); v != SQLITE_DONE):
-    err($sqlite3_errstr(v))
-  else:
-    ok()
+  let res =
+    if (let v = sqlite3_step(db.delStmt); v != SQLITE_DONE):
+      err($sqlite3_errstr(v))
+    else:
+      ok()
+
+  # release implict transaction
+  discard sqlite3_reset(db.delStmt) # same return information as step
+  discard sqlite3_clear_bindings(db.delStmt) # no errors possible
+
+  res
 
 proc close*(db: SqStoreRef) =
   discard sqlite3_finalize(db.putStmt)
