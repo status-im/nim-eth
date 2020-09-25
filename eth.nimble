@@ -53,12 +53,20 @@ proc runP2pTests() =
       "test_lru",
       "test_discoveryv5",
       "test_discv5_encoding",
+      "test_discv51_encoding",
       "test_routing_table"
     ]:
     runTest("tests/p2p/" & filename)
 
+proc runDiscv51Test() =
+  let path = "tests/p2p/test_discoveryv5"
+  echo "\nRunning: ", path
+  exec "nim c -r -d:UseDiscv51=true -d:release -d:chronicles_log_level=ERROR --verbosity:0 --hints:off " & path
+  rmFile path
+
 task test_p2p, "run p2p tests":
   runP2pTests()
+  runDiscv51Test()
 
 proc runRlpTests() =
   runTest("tests/rlp/all_tests")

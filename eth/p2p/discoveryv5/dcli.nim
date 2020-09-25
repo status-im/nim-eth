@@ -2,7 +2,14 @@ import
   std/[options, strutils],
   chronos, chronicles, chronicles/topics_registry, confutils, metrics,
   stew/byteutils, confutils/std/net,
-  eth/keys, eth/net/nat, protocol, enr, node
+  eth/keys, eth/net/nat, enr, node
+
+const UseDiscv51* {.booldefine.} = false
+
+when UseDiscv51:
+  import protocolv1
+else:
+  import protocol
 
 type
   DiscoveryCmd* = enum

@@ -1,8 +1,18 @@
 import
-  testutils/unittests, stew/shims/net, bearssl,
+  stew/shims/net, bearssl,
   eth/[keys, rlp],
-  eth/p2p/discoveryv5/[enr, node, types, routing_table, encoding],
-  eth/p2p/discoveryv5/protocol as discv5_protocol
+  eth/p2p/discoveryv5/[enr, node, routing_table]
+
+const UseDiscv51* {.booldefine.} = false
+
+when UseDiscv51:
+  import
+    eth/p2p/discoveryv5/[typesv1, encodingv1],
+    eth/p2p/discoveryv5/protocolv1 as discv5_protocol
+else:
+  import
+    eth/p2p/discoveryv5/[types, encoding],
+    eth/p2p/discoveryv5/protocol as discv5_protocol
 
 proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
@@ -26,17 +36,16 @@ proc nodeIdInNodes*(id: NodeId, nodes: openarray[Node]): bool =
   for n in nodes:
     if id == n.id: return true
 
-# Creating a random packet with specific nodeid each time
-proc randomPacket*(rng: var BrHmacDrbgContext, tag: PacketTag): seq[byte] =
-  var
-    authTag: AuthTag
-    msg: array[44, byte]
+# proc randomPacket*(rng: var BrHmacDrbgContext, tag: PacketTag): seq[byte] =
+#   var
+#     authTag: AuthTag
+#     msg: array[44, byte]
 
-  brHmacDrbgGenerate(rng, authTag)
-  brHmacDrbgGenerate(rng, msg)
-  result.add(tag)
-  result.add(rlp.encode(authTag))
-  result.add(msg)
+#   brHmacDrbgGenerate(rng, authTag)
+#   brHmacDrbgGenerate(rng, msg)
+#   result.add(tag)
+#   result.add(rlp.encode(authTag))
+#   result.add(msg)
 
 proc generateNode*(privKey: PrivateKey, port: int = 20302,
     localEnrFields: openarray[FieldPair] = []): Node =
