@@ -19,7 +19,7 @@ iterator bloomBits(h: MDigest[256]): UInt2048 =
 type BloomFilter* = object
   value*: UInt2048
 
-proc incl(f: var BloomFilter, h: MDigest[256]) = # Should this be public?
+proc incl*(f: var BloomFilter, h: MDigest[256]) =
   for bits in bloomBits(h):
     f.value = f.value or bits
 
