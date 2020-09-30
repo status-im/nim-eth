@@ -5,6 +5,8 @@ import
   eth/p2p/discoveryv5/[enr, node, routing_table],
   ./discv5_test_helper
 
+
+### This is all just temporary to be compatible with both versions
 const UseDiscv51* {.booldefine.} = false
 
 when UseDiscv51:
@@ -15,6 +17,12 @@ else:
   import
     eth/p2p/discoveryv5/[types, encoding],
     eth/p2p/discoveryv5/protocol as discv5_protocol
+
+  proc findNode*(d: discv5_protocol.Protocol, toNode: Node, distances: seq[uint32]):
+      Future[DiscResult[seq[Node]]] =
+    if distances.len > 0:
+      return d.findNode(toNode, distances[0])
+###
 
 procSuite "Discovery v5 Tests":
   let rng = newRng()
@@ -189,7 +197,7 @@ procSuite "Discovery v5 Tests":
       check idAtDistance(targetId, d) == parse(id, UInt256, 16)
 
   asyncTest "FindNode Test":
-    const dist = 253
+    const dist = 253'u32
     let
       mainNodeKey = PrivateKey.fromHex(
         "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
@@ -209,14 +217,14 @@ procSuite "Discovery v5 Tests":
 
     # Get ENR of the node itself
     var discovered =
-      await discv5_protocol.findNode(testNode, mainNode.localNode, 0)
+      await findNode(testNode, mainNode.localNode, @[0'u32])
     check:
       discovered.isOk
       discovered[].len == 1
       discovered[][0] == mainNode.localNode
     # Get ENRs of nodes added at provided logarithmic distance
     discovered =
-      await discv5_protocol.findNode(testNode, mainNode.localNode, dist)
+      await findNode(testNode, mainNode.localNode, @[dist])
     check discovered.isOk
     check discovered[].len == 10
     for n in nodes:
@@ -224,14 +232,14 @@ procSuite "Discovery v5 Tests":
 
     # Too high logarithmic distance, should return no nodes.
     discovered =
-      await discv5_protocol.findNode(testNode, mainNode.localNode, 4294967295'u32)
+      await findNode(testNode, mainNode.localNode, @[4294967295'u32])
     check:
       discovered.isOk
       discovered[].len == 0
 
     # Logarithmic distance of 256 should only return the testNode
     discovered =
-      await discv5_protocol.findNode(testNode, mainNode.localNode, 256)
+      await findNode(testNode, mainNode.localNode, @[256'u32])
     check:
       discovered.isOk
       discovered[].len == 1
@@ -239,7 +247,7 @@ procSuite "Discovery v5 Tests":
 
     # Empty bucket
     discovered =
-      await discv5_protocol.findNode(testNode, mainNode.localNode, 254)
+      await findNode(testNode, mainNode.localNode, @[254'u32])
     check discovered.isOk
     check discovered[].len == 0
 
@@ -249,7 +257,7 @@ procSuite "Discovery v5 Tests":
 
     # Full bucket
     discovered =
-      await discv5_protocol.findNode(testNode, mainNode.localNode, dist)
+      await findNode(testNode, mainNode.localNode, @[dist])
     check discovered.isOk
     check discovered[].len == 16
 
@@ -276,8 +284,8 @@ procSuite "Discovery v5 Tests":
       testNode = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20302),
         @[mainNode.localNode.record])
-      discovered = await discv5_protocol.findNode(testNode, mainNode.localNode,
-        closestDistance)
+      discovered = await findNode(testNode, mainNode.localNode,
+        @[closestDistance])
 
     check discovered.isOk
     check closest in discovered[]
@@ -355,7 +363,7 @@ procSuite "Discovery v5 Tests":
       # Request the target ENR and manually add it to the routing table.
       # Ping for handshake based ENR passing will not work as our previous
       # session will still be in the LRU cache.
-      let nodes = await mainNode.findNode(targetNode.localNode, 0)
+      let nodes = await mainNode.findNode(targetNode.localNode, @[0'u32])
       check:
         nodes.isOk()
         nodes[].len == 1
@@ -575,5 +583,5 @@ procSuite "Discovery v5 Tests":
         recordInvalidDistance = enr.Record.init(
           1, pk, some(ValidIpAddress.init("12.13.14.15")), port, port)[]
         records = [recordInvalidDistance]
-        test = verifyNodesRecords(records, fromNode, 0)
+        test = verifyNodesRecords(records, fromNode, 0'u32)
       check test.len == 0

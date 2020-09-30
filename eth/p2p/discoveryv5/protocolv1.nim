@@ -267,12 +267,22 @@ proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
 
 proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
     fn: FindNodeMessage, reqId: RequestId) =
-  if fn.distance == 0:
+  if fn.distances.len == 0:
+    d.sendNodes(fromId, fromAddr, reqId, [])
+  elif fn.distances.contains(0):
+    # A request for our own record.
+    # It would be a weird request if there are more distances next to 0
+    # requested, so in this case lets just pass only our own. TODO: OK?
     d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
   else:
-    let distance = min(fn.distance, 256)
-    d.sendNodes(fromId, fromAddr, reqId,
-      d.routingTable.neighboursAtDistance(distance, seenOnly = true))
+    # TODO: Still deduplicate also?
+    if fn.distances.all(proc (x: uint32): bool = return x <= 256):
+      d.sendNodes(fromId, fromAddr, reqId,
+        d.routingTable.neighboursAtDistances(fn.distances, seenOnly = true))
+    else:
+      # At least one invalid distance, but the polite node we are, still respond
+      # with empty nodes.
+      d.sendNodes(fromId, fromAddr, reqId, [])
 
 proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
     message: Message) {.raises:[Exception].} =
@@ -473,7 +483,7 @@ proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
   d.awaitedMessages[key] = result
 
 proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node,
-    distance: uint32): seq[Node] {.raises: [Defect].} =
+    distances: varargs[uint32]): seq[Node] {.raises: [Defect].} =
   ## Verify and convert ENRs to a sequence of nodes. Only ENRs that pass
   ## verification will be added. ENRs are verified for duplicates, invalid
   ## addresses and invalid distances.
@@ -500,11 +510,12 @@ proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node,
         trace "Nodes reply contained record with invalid ip-address",
           record = n.record.toURI, sender = fromNode.record.toURI, node = $n
         continue
-      # Check if returned node has the requested distance.
-      if logDist(n.id, fromNode.id) != min(distance, 256):
+      # Check if returned node has one of the requested distances.
+      if not distances.contains(logDist(n.id, fromNode.id)):
         warn "Nodes reply contained record with incorrect distance",
           record = n.record.toURI, sender = fromNode.record.toURI
         continue
+
       # No check on UDP port and thus any port is allowed, also the so called
       # "well-known" ports.
 
@@ -564,17 +575,17 @@ proc ping*(d: Protocol, toNode: Node):
     d.replaceNode(toNode)
     return err("Pong message not received in time")
 
-proc findNode*(d: Protocol, toNode: Node, distance: uint32):
+proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
     Future[DiscResult[seq[Node]]] {.async, raises: [Exception, Defect].} =
   ## Send a discovery findNode message.
   ##
   ## Returns the received nodes or an error.
   ## Received ENRs are already validated and converted to `Node`.
-  let reqId = d.sendMessage(toNode, FindNodeMessage(distance: distance))
+  let reqId = d.sendMessage(toNode, FindNodeMessage(distances: distances))
   let nodes = await d.waitNodes(toNode, reqId)
 
   if nodes.isOk:
-    let res = verifyNodesRecords(nodes.get(), toNode, distance)
+    let res = verifyNodesRecords(nodes.get(), toNode, distances)
     d.routingTable.setJustSeen(toNode)
     return ok(res)
   else:
@@ -596,8 +607,9 @@ proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
     Future[seq[Node]] {.async, raises: [Exception, Defect].} =
   let dists = lookupDistances(target, destNode.id)
   var i = 0
+  # TODO: We can make use of the multiple distances here now.
   while i < lookupRequestLimit and result.len < findNodeResultLimit:
-    let r = await d.findNode(destNode, dists[i])
+    let r = await d.findNode(destNode, @[dists[i]])
     # TODO: Handle failures better. E.g. stop on different failures than timeout
     if r.isOk:
       # TODO: I guess it makes sense to limit here also to `findNodeResultLimit`?
@@ -667,7 +679,7 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]]
 
   let node = d.getNode(id)
   if node.isSome():
-    let request = await d.findNode(node.get(), 0)
+    let request = await d.findNode(node.get(), @[0'u32])
 
     # TODO: Handle failures better. E.g. stop on different failures than timeout
     if request.isOk() and request[].len > 0:
@@ -690,7 +702,7 @@ proc revalidateNode*(d: Protocol, n: Node)
   if pong.isOK():
     if pong.get().enrSeq > n.record.seqNum:
       # Request new ENR
-      let nodes = await d.findNode(n, 0)
+      let nodes = await d.findNode(n, @[0'u32])
       if nodes.isOk() and nodes[].len > 0:
         discard d.addNode(nodes[][0])
 

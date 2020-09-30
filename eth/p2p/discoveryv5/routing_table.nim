@@ -321,6 +321,20 @@ proc neighboursAtDistance*(r: RoutingTable, distance: uint32,
   # that are exactly the requested distance.
   keepIf(result, proc(n: Node): bool = logDist(n.id, r.thisNode.id) == distance)
 
+proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint32],
+    k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
+  ## Return up to k neighbours at given logarithmic distances.
+  # TODO: This will currently return nodes with neighbouring distances on the
+  # first one prioritize. It might end up not including all the node distances
+  # requested. Need to rework the logic here and not use the neighbours call.
+  if distances.len > 0:
+    result = r.neighbours(idAtDistance(r.thisNode.id, distances[0]), k,
+      seenOnly)
+    # This is a bit silly, first getting closest nodes then to only keep the ones
+    # that are exactly the requested distances.
+    keepIf(result, proc(n: Node): bool =
+      distances.contains(logDist(n.id, r.thisNode.id)))
+
 proc len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len
 

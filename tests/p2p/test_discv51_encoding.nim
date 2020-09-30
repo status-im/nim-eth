@@ -26,9 +26,9 @@ suite "Discovery v5 Protocol Message Encodings":
 
   test "FindNode Request":
     var p: FindNodeMessage
-    p.distance = 0x0100
+    p.distances = @[0x0100'u32]
     var reqId: RequestId = 1
-    check encodeMessage(p, reqId).toHex == "03c401820100"
+    check encodeMessage(p, reqId).toHex == "03c501c3820100"
 
   test "Nodes Response (empty)":
     var p: NodesMessage
