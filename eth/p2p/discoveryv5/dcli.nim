@@ -4,12 +4,14 @@ import
   stew/byteutils, confutils/std/net,
   eth/keys, eth/net/nat, enr, node
 
+### This is all just temporary to be compatible with both versions
 const UseDiscv51* {.booldefine.} = false
 
 when UseDiscv51:
   import protocolv1
 else:
   import protocol
+###
 
 type
   DiscoveryCmd* = enum
@@ -173,7 +175,10 @@ proc run(config: DiscoveryConf) =
     else:
       echo "No Pong message returned"
   of findnode:
-    let nodes = waitFor d.findNode(config.findNodeTarget, config.distance)
+    when UseDiscv51:
+      let nodes = waitFor d.findNode(config.findNodeTarget, @[config.distance])
+    else:
+      let nodes = waitFor d.findNode(config.findNodeTarget, config.distance)
     if nodes.isOk():
       echo "Received valid records:"
       for node in nodes[]:
