@@ -27,7 +27,7 @@ proc incl(f: var BloomFilter, h: MDigest[256]) = # Should this be public?
 proc incl*(f: var BloomFilter, v: string) = f.incl(keccak256.digest(v))
 proc incl*(f: var BloomFilter, v: openarray[byte]) = f.incl(keccak256.digest(v))
 
-proc contains(f: BloomFilter, h: MDigest[256]): bool = # Should this be public?
+proc contains*(f: BloomFilter, h: MDigest[256]): bool =
   for bits in bloomBits(h):
     if (f.value and bits).isZero: return false
   return true
