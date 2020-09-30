@@ -23,6 +23,9 @@ proc incl*(f: var BloomFilter, h: MDigest[256]) =
   for bits in bloomBits(h):
     f.value = f.value or bits
 
+proc init*(_: type BloomFilter, h: MDigest[256]): BloomFilter =
+  result.incl(h)
+
 # TODO: The following 2 procs should be one genric, but it doesn't compile. Nim bug?
 proc incl*(f: var BloomFilter, v: string) = f.incl(keccak256.digest(v))
 proc incl*(f: var BloomFilter, v: openarray[byte]) = f.incl(keccak256.digest(v))
