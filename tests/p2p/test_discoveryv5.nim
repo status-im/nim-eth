@@ -212,9 +212,16 @@ procSuite "Discovery v5 Tests":
     for n in nodes:
       check discovered[].contains(n)
 
-    # Too high logarithmic distance, caps at 256
+    # Too high logarithmic distance, should return no nodes.
     discovered =
       await discv5_protocol.findNode(testNode, mainNode.localNode, 4294967295'u32)
+    check:
+      discovered.isOk
+      discovered[].len == 0
+
+    # Logarithmic distance of 256 should only return the testNode
+    discovered =
+      await discv5_protocol.findNode(testNode, mainNode.localNode, 256)
     check:
       discovered.isOk
       discovered[].len == 1

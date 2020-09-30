@@ -328,9 +328,12 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
   if fn.distance == 0:
     d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
   else:
-    let distance = min(fn.distance, 256)
-    d.sendNodes(fromId, fromAddr, reqId,
-      d.routingTable.neighboursAtDistance(distance, seenOnly = true))
+    if fn.distance <= 256:
+      d.sendNodes(fromId, fromAddr, reqId,
+        d.routingTable.neighboursAtDistance(fn.distance, seenOnly = true))
+    else:
+      # The polite node we are, still respond with empty nodes.
+      d.sendNodes(fromId, fromAddr, reqId, [])
 
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
   raises: [
@@ -533,8 +536,8 @@ proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node,
         trace "Nodes reply contained record with invalid ip-address",
           record = n.record.toURI, sender = fromNode.record.toURI, node = $n
         continue
-      # Check if returned node has the requested distance.
-      if logDist(n.id, fromNode.id) != min(distance, 256):
+      # Check if returned node has exactly the requested distance.
+      if logDist(n.id, fromNode.id) != distance:
         warn "Nodes reply contained record with incorrect distance",
           record = n.record.toURI, sender = fromNode.record.toURI
         continue

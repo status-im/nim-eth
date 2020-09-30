@@ -72,7 +72,7 @@ proc deriveKeys(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
     idNonce: openarray[byte]): HandshakeSecrets =
   let eph = ecdhRawFull(priv, pub)
 
-  var info = newSeqOfCap[byte](idNoncePrefix.len + 32 * 2)
+  var info = newSeqOfCap[byte](keyAgreementPrefix.len + 32 * 2)
   for i, c in keyAgreementPrefix: info.add(byte(c))
   info.add(n1.toByteArrayBE())
   info.add(n2.toByteArrayBE())
@@ -318,9 +318,24 @@ proc decodePacket*(c: var Codec,
     authTag = auth.auth
 
     let key = HandShakeKey(nodeId: fromId, address: $fromAddr)
-    let challenge = c.handshakes.getOrDefault(key)
-    if challenge.isNil:
-      trace "Decoding failed (no challenge)"
+    var challenge: Whoareyou
+    # Note: We remove (pop) the stored handshake data here on failure on purpose
+    # as mitigation for a DoS attack where an invalid handshake is send
+    # repeatedly, which causes the signature verification to be done until
+    # handshake timeout, in case the stored data is not removed at first fail.
+    # See also more info here: https://github.com/prysmaticlabs/prysm/issues/7346
+    #
+    # It should be noted though that this means that now it might be possible to
+    # drop a handshake on purpose by a malicious party. But only if that
+    # attacker manages to spoof the IP-address of a peer A, and manages to
+    # listen to traffic between peer A and B that are starting a handshake, and
+    # next manages to be faster in sending out the (invalid) handshake. And this
+    # for each attempt in order to deny the peers setting up a session.
+    # However, this looks like a much more difficult scenario to pull off than
+    # the more convenient DoS attack. The DoS attack might have less heavy
+    # consequences though.
+    if not c.handshakes.pop(key, challenge):
+      debug "Decoding failed (no previous stored handshake challenge)"
       return err(HandshakeError)
 
     if auth.idNonce != challenge.idNonce:
