@@ -16,7 +16,7 @@ type
     address*: string # TODO: Replace with Address, need hash
 
   MessageKind* = enum
-    # TODO This is needed only to make Nim 1.0.4 happy
+    # TODO This is needed only to make Nim 1.2.6 happy
     #      Without it, the `MessageKind` type cannot be used as
     #      a discriminator in case objects.
     unused = 0x00
@@ -30,7 +30,7 @@ type
     regtopic = 0x07
     ticket = 0x08
     regconfirmation = 0x09
-    topicquery = 0x10
+    topicquery = 0x0A
 
   RequestId* = uint64
 
