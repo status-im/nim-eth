@@ -49,7 +49,21 @@ type
     total*: uint32
     enrs*: seq[Record]
 
-  SomeMessage* = PingMessage or PongMessage or FindNodeMessage or NodesMessage
+  TalkReqMessage* = object
+    protocol*: seq[byte]
+    request*: seq[byte]
+
+  TalkRespMessage* = object
+    response*: seq[byte]
+
+  # Not implemented, specification is not final here.
+  RegTopicMessage* = object
+  TicketMessage* = object
+  RegConfirmationMessage* = object
+  TopicQueryMessage* = object
+
+  SomeMessage* = PingMessage or PongMessage or FindNodeMessage or NodesMessage or
+    TalkReqMessage or TalkRespMessage
 
   Message* = object
     reqId*: RequestId
@@ -62,8 +76,19 @@ type
       findNode*: FindNodeMessage
     of nodes:
       nodes*: NodesMessage
+    of talkreq:
+      talkreq*: TalkReqMessage
+    of talkresp:
+      talkresp*: TalkRespMessage
+    of regtopic:
+      regtopic*: RegTopicMessage
+    of ticket:
+      ticket*: TicketMessage
+    of regconfirmation:
+      regconfirmation*: RegConfirmationMessage
+    of topicquery:
+      topicquery*: TopicQueryMessage
     else:
-      # TODO: Define the rest
       discard
 
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
@@ -71,6 +96,8 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   elif T is PongMessage: pong
   elif T is FindNodeMessage: findNode
   elif T is NodesMessage: nodes
+  elif T is TalkReqMessage: talkreq
+  elif T is TalkRespMessage: talkresp
 
 proc toBytes*(id: NodeId): array[32, byte] {.inline.} =
   id.toByteArrayBE()
