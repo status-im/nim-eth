@@ -337,9 +337,14 @@ proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
       of pong: rlp.decode(message.pong)
       of findNode: rlp.decode(message.findNode)
       of nodes: rlp.decode(message.nodes)
-      of talkreq, talkresp, regtopic, ticket, regconfirmation, topicquery:
-        # TODO: Implement support for topic advertisement and talkreq/resp
-        return err(UnsupportedMessage)
+      of talkreq: rlp.decode(message.talkreq)
+      of talkresp: rlp.decode(message.talkresp)
+      of regtopic, ticket, regconfirmation, topicquery:
+        # We just pass the empty type of this message without attempting to
+        # decode, so that the protocol knows what was received.
+        # But we ignore the message as per specification as "the content and
+        # semantics of this message are not final".
+        discard
     except RlpError, ValueError:
       return err(PacketError)
 

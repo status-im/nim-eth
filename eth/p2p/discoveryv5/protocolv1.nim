@@ -284,6 +284,16 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
       # with empty nodes.
       d.sendNodes(fromId, fromAddr, reqId, [])
 
+proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
+    talkreq: TalkReqMessage, reqId: RequestId) =
+  # No support for any protocol yet so an empty response is send as per
+  # specification.
+  let talkresp = TalkRespMessage(response: @[])
+  let (data, _) = encodeMessagePacket(d.rng[], d.codec, fromId, fromAddr,
+    encodeMessage(talkresp, reqId))
+
+  d.send(fromAddr, data)
+
 proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
     message: Message) {.raises:[Exception].} =
   case message.kind
@@ -291,6 +301,11 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
     d.handlePing(srcId, fromAddr, message.ping, message.reqId)
   of findNode:
     d.handleFindNode(srcId, fromAddr, message.findNode, message.reqId)
+  of talkreq:
+    d.handleTalkReq(srcId, fromAddr, message.talkreq, message.reqId)
+  of regtopic, topicquery:
+    trace "Received unimplemented message kind", message = message.kind,
+      origin = fromAddr
   else:
     var waiter: Future[Option[Message]]
     if d.awaitedMessages.take((srcId, message.reqId), waiter):
@@ -343,7 +358,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
     case packet.flag
     of OrdinaryMessage:
       if packet.messageOpt.isSome():
-        trace "Received message"
+        trace "Received message", address = a, sender = packet.srcId
         d.handleMessage(packet.srcId, a, packet.messageOpt.get())
       else:
         trace "Not decryptable message packet received, respond with whoareyou",
@@ -591,6 +606,22 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
   else:
     d.replaceNode(toNode)
     return err(nodes.error)
+
+proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
+    Future[DiscResult[TalkRespMessage]] {.async, raises: [Exception, Defect].} =
+  ## Send a discovery talkreq message.
+  ##
+  ## Returns the received talkresp message or an error.
+  let reqId = d.sendMessage(toNode,
+    TalkReqMessage(protocol: protocol, request: request))
+  let resp = await d.waitMessage(toNode, reqId)
+
+  if resp.isSome() and resp.get().kind == talkresp:
+    d.routingTable.setJustSeen(toNode)
+    return ok(resp.get().talkresp)
+  else:
+    d.replaceNode(toNode)
+    return err("Talk response message not received in time")
 
 proc lookupDistances(target, dest: NodeId): seq[uint32] {.raises: [Defect].} =
   let td = logDist(target, dest)
