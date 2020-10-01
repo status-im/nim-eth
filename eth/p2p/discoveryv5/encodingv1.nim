@@ -478,8 +478,6 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, srcId: NodeId,
     ephKey, challenge.whoareyouData.idNonce)
 
   swap(secrets.readKey, secrets.writeKey)
-  c.sessions.store(srcId, fromAddr, secrets.readKey,
-    secrets.writeKey)
 
   let pt = decryptGCM(secrets.readKey, nonce, ct, header)
   if pt.isNone():
@@ -489,6 +487,11 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, srcId: NodeId,
     return err(DecryptError)
 
   let message = ? decodeMessage(pt.get())
+
+  # Only store the session secrets in case decryption was successful and also
+  # in case the message can get decoded.
+  c.sessions.store(srcId, fromAddr, secrets.readKey,
+    secrets.writeKey)
 
   return ok(Packet(flag: Flag.HandshakeMessage, message: message, srcId: srcId,
     node: newNode))
