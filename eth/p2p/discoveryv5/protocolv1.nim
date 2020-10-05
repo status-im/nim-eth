@@ -316,28 +316,20 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
 
 proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
     requestNonce: AESGCMNonce, node: Option[Node]) {.raises: [Exception].} =
-  var idNonce: IdNonce
-  brHmacDrbgGenerate(d.rng[], idNonce)
+  let key = HandShakeKey(nodeId: toId, address: $a)
+  if not d.codec.hasHandshake(key):
+    let
+      recordSeq = if node.isSome(): node.get().record.seqNum
+                  else: 0
+      pubkey = if node.isSome(): some(node.get().pubkey)
+              else: none(PublicKey)
 
-  let
-    recordSeq = if node.isSome(): node.get().record.seqNum
-                else: 0
-    whoareyouData = WhoareyouData(requestNonce: requestNonce,
-      idNonce: idNonce, recordSeq: recordSeq)
-    pubkey = if node.isSome(): some(node.get().pubkey)
-             else: none(PublicKey)
-    challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey)
-    key = HandShakeKey(nodeId: toId, address: $a)
-
-  if not d.codec.handshakes.hasKeyOrPut(key, challenge):
-    # TODO: raises: [Exception], but it shouldn't.
+    let data = encodeWhoareyouPacket(d.rng[], d.codec, toId, a, requestNonce,
+      recordSeq, pubkey)
     sleepAsync(handshakeTimeout).addCallback() do(data: pointer):
     # TODO: should we still provide cancellation in case handshake completes
     # correctly?
       d.codec.handshakes.del(key)
-
-    let data = encodeWhoareyouPacket(d.rng[], d.codec, toId,
-      requestNonce, idNonce, recordSeq)
 
     d.send(a, data)
   else:
@@ -374,15 +366,14 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
         # This is a node we previously contacted and thus must have an address.
         doAssert(toNode.address.isSome())
         let data = encodeHandshakePacket(d.rng[], d.codec, toNode.id,
-          toNode.address.get(), pr.message, packet.whoareyou.idNonce,
-          packet.whoareyou.recordSeq, toNode.pubkey)
+          toNode.address.get(), pr.message, packet.whoareyou, toNode.pubkey)
 
         d.send(toNode, data)
       else:
         debug "Timed out or unrequested Whoareyou packet"
     of HandshakeMessage:
       trace "Received handshake packet"
-      d.handleMessage(packet.srcId, a, packet.message)
+      d.handleMessage(packet.srcIdHs, a, packet.message)
       # For a handshake message it is possible that we received an newer ENR.
       # In that case we can add/update it to the routing table.
       if packet.node.isSome():

@@ -8,17 +8,19 @@ export keys
 {.push raises: [Defect].}
 
 const
-  version: uint8 = 1
+  version: uint16 = 1
   idNoncePrefix = "discovery-id-nonce"
+  idSignatureText  = "discovery v5 identity proof"
   keyAgreementPrefix = "discovery v5 key agreement"
-  protocolIdStr = "discv5  "
+  protocolIdStr = "discv5"
   protocolId = toBytes(protocolIdStr)
   gcmNonceSize* = 12
-  idNonceSize* = 32
+  idNonceSize* = 16
   gcmTagSize* = 16
-  ivSize = 16
-  staticHeaderSize = protocolId.len + sizeof(NodeId) + 1 + 2
-  authdataHeadSize = 1 + gcmNonceSize + 1 + 1
+  ivSize* = 16
+  staticHeaderSize = protocolId.len + 2 + 2 + 1 + gcmNonceSize
+  authdataHeadSize = sizeof(NodeId) + 1 + 1
+  whoareyouSize = ivSize + staticHeaderSize + idNonceSize + 8
 
 type
   AESGCMNonce* = array[gcmNonceSize, byte]
@@ -26,16 +28,17 @@ type
 
   WhoareyouData* = object
     requestNonce*: AESGCMNonce
-    idNonce*: IdNonce
+    idNonce*: IdNonce # TODO: This data is also available in challengeData
     recordSeq*: uint64
+    challengeData*: seq[byte]
 
   Challenge* = object
     whoareyouData*: WhoareyouData
     pubkey*: Option[PublicKey]
 
   StaticHeader* = object
-    srcId: NodeId
     flag: Flag
+    nonce: AESGCMNonce
     authdataSize: uint16
 
   HandshakeSecrets* = object
@@ -52,13 +55,14 @@ type
     of OrdinaryMessage:
       messageOpt*: Option[Message]
       requestNonce*: AESGCMNonce
+      srcId*: NodeId
     of Whoareyou:
       whoareyou*: WhoareyouData
     of HandshakeMessage:
       message*: Message # In a handshake we expect to always be able to decrypt
       # TODO record or node immediately?
       node*: Option[Node]
-    srcId*: NodeId
+      srcIdHs*: NodeId
 
   Codec* = object
     localNode*: Node
@@ -79,21 +83,23 @@ proc mapErrTo[T, E](r: Result[T, E], v: static DecodeError):
     DecodeResult[T] =
   r.mapErr(proc (e: E): DecodeError = v)
 
-proc idNonceHash(nonce, ephkey: openarray[byte]): MDigest[256] =
+proc idNonceHash(challengeData, ephkey: openarray[byte], nodeId: NodeId):
+    MDigest[256] =
   var ctx: sha256
   ctx.init()
-  ctx.update(idNoncePrefix)
-  ctx.update(nonce)
+  ctx.update(idSignatureText)
+  ctx.update(challengeData)
   ctx.update(ephkey)
+  ctx.update(nodeId.toByteArrayBE())
   result = ctx.finish()
   ctx.clear()
 
-proc signIDNonce*(privKey: PrivateKey, idNonce, ephKey: openarray[byte]):
-    SignatureNR =
-  signNR(privKey, SkMessage(idNonceHash(idNonce, ephKey).data))
+proc signIDNonce*(privKey: PrivateKey, challengeData,
+    ephKey: openarray[byte], nodeId: NodeId): SignatureNR =
+  signNR(privKey, SkMessage(idNonceHash(challengeData, ephKey, nodeId).data))
 
 proc deriveKeys*(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
-    idNonce: openarray[byte]): HandshakeSecrets =
+    challengeData: openarray[byte]): HandshakeSecrets =
   let eph = ecdhRawFull(priv, pub)
 
   var info = newSeqOfCap[byte](keyAgreementPrefix.len + 32 * 2)
@@ -104,7 +110,9 @@ proc deriveKeys*(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
   var secrets: HandshakeSecrets
   static: assert(sizeof(secrets) == aesKeySize * 2)
   var res = cast[ptr UncheckedArray[byte]](addr secrets)
-  hkdf(sha256, eph.data, idNonce, info, toOpenArray(res, 0, sizeof(secrets) - 1))
+
+  hkdf(sha256, eph.data, challengeData, info,
+    toOpenArray(res, 0, sizeof(secrets) - 1))
   secrets
 
 proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
@@ -141,21 +149,29 @@ proc encryptHeader*(id: NodeId, iv, header: openarray[byte]): seq[byte] =
   ectx.encrypt(header, result)
   ectx.clear()
 
-proc encodeStaticHeader*(srcId: NodeId, flag: Flag, authSize: int): seq[byte] =
+proc hasHandshake*(c: Codec, key: HandShakeKey): bool =
+  c.handshakes.hasKey(key)
+
+proc encodeStaticHeader*(flag: Flag, nonce: AESGCMNonce, authSize: int):
+    seq[byte] =
   result.add(protocolId)
-  result.add(srcId.toByteArrayBE())
+  result.add(version.toBytesBE())
   result.add(byte(flag))
+  result.add(nonce)
   # TODO: assert on authSize of > 2^16?
   result.add((uint16(authSize)).toBytesBE())
 
 proc encodeMessagePacket*(rng: var BrHmacDrbgContext, c: var Codec,
     toId: NodeID, toAddr: Address, message: openarray[byte]):
     (seq[byte], AESGCMNonce) =
-  var authdata: AESGCMNonce
-  brHmacDrbgGenerate(rng, authdata) # Random AESGCM nonce
+  var nonce: AESGCMNonce
+  brHmacDrbgGenerate(rng, nonce) # Random AESGCM nonce
+  var iv: array[ivSize, byte]
+  brHmacDrbgGenerate(rng, iv) # Random IV
 
   # static-header
-  let staticHeader = encodeStaticHeader(c.localNode.id, Flag.OrdinaryMessage,
+  let authdata = c.localNode.id.toByteArrayBE()
+  let staticHeader = encodeStaticHeader(Flag.OrdinaryMessage, nonce,
     authdata.len())
   # header = static-header || authdata
   var header: seq[byte]
@@ -166,19 +182,17 @@ proc encodeMessagePacket*(rng: var BrHmacDrbgContext, c: var Codec,
   var messageEncrypted: seq[byte]
   var writeKey, readKey: AesKey
   if c.sessions.load(toId, toAddr, readKey, writeKey):
-    messageEncrypted = encryptGCM(writeKey, authdata, message, header)
+    messageEncrypted = encryptGCM(writeKey, nonce, message, @iv & header)
   else:
     # We might not have the node's keys if the handshake hasn't been performed
     # yet. That's fine, we send a random-packet and we will be responded with
     # a WHOAREYOU packet.
-    # TODO: What is minimum size of an encrypted message that we should provided
-    # here?
-    var randomData: array[44, byte]
+    # TODO Minumum packet size is 63, we have here 16 + 23 + 32 = 71, so in theory
+    # we don't need to add random data? But then how do we know if decryption
+    # fails. Empty message automatically means -> whoareyou?
+    var randomData: array[8, byte]
     brHmacDrbgGenerate(rng, randomData)
     messageEncrypted.add(randomData)
-
-  var iv: array[ivSize, byte]
-  brHmacDrbgGenerate(rng, iv) # Random IV
 
   let maskedHeader = encryptHeader(toId, iv, header)
 
@@ -187,20 +201,22 @@ proc encodeMessagePacket*(rng: var BrHmacDrbgContext, c: var Codec,
   packet.add(maskedHeader)
   packet.add(messageEncrypted)
 
-  return (packet, authdata)
+  return (packet, nonce)
 
 proc encodeWhoareyouPacket*(rng: var BrHmacDrbgContext, c: var Codec,
-    toId: NodeID, requestNonce: AESGCMNonce, idNonce: IdNonce, enrSeq: uint64):
-    seq[byte] =
+    toId: NodeID, toAddr: Address, requestNonce: AESGCMNonce, recordSeq: uint64,
+    pubkey: Option[PublicKey]): seq[byte] =
+  var idNonce: IdNonce
+  brHmacDrbgGenerate(rng, idNonce)
+
   # authdata
   var authdata: seq[byte]
-  authdata.add(requestNonce)
   authdata.add(idNonce)
-  authdata.add(enrSeq.tobytesBE)
+  authdata.add(recordSeq.tobytesBE)
 
   # static-header
-  let staticHeader = encodeStaticHeader(c.localNode.id, Flag.Whoareyou,
-    authdata.len()) # authdata will always be 52 bytes
+  let staticHeader = encodeStaticHeader(Flag.Whoareyou, requestNonce,
+    authdata.len())
 
   # header = static-header || authdata
   var header: seq[byte]
@@ -216,50 +232,60 @@ proc encodeWhoareyouPacket*(rng: var BrHmacDrbgContext, c: var Codec,
   packet.add(iv)
   packet.add(maskedHeader)
 
+  let
+    whoareyouData = WhoareyouData(
+      requestNonce: requestNonce,
+      idNonce: idNonce,
+      recordSeq: recordSeq,
+      challengeData: @iv & header)
+    challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey)
+    key = HandShakeKey(nodeId: toId, address: $toAddr)
+
+  c.handshakes[key] = challenge
+
   return packet
 
 proc encodeHandshakePacket*(rng: var BrHmacDrbgContext, c: var Codec,
-    toId: NodeID, toAddr: Address, message: openarray[byte], idNonce: IdNonce,
-    enrSeq: uint64, pubkey: PublicKey): seq[byte] =
+    toId: NodeID, toAddr: Address, message: openarray[byte],
+    whoareyouData: WhoareyouData, pubkey: PublicKey): seq[byte] =
   var header: seq[byte]
   var nonce: AESGCMNonce
   brHmacDrbgGenerate(rng, nonce)
+  var iv: array[ivSize, byte]
+  brHmacDrbgGenerate(rng, iv) # Random IV
 
   var authdata: seq[byte]
   var authdataHead: seq[byte]
-  authdataHead.add(version)
-  authdataHead.add(nonce)
+
+  authdataHead.add(c.localNode.id.toByteArrayBE())
   authdataHead.add(64'u8) # sig-size: 64
   authdataHead.add(33'u8) # eph-key-size: 33
   authdata.add(authdataHead)
 
   let ephKeys = KeyPair.random(rng)
-  let signature = signIDNonce(c.privKey, idNonce,
-    ephKeys.pubkey.toRawCompressed())
+  let signature = signIDNonce(c.privKey, whoareyouData.challengeData,
+    ephKeys.pubkey.toRawCompressed(), toId)
 
   authdata.add(signature.toRaw())
   # compressed pub key format (33 bytes)
   authdata.add(ephKeys.pubkey.toRawCompressed())
 
   # Add ENR of sequence number is newer
-  if enrSeq < c.localNode.record.seqNum:
+  if whoareyouData.recordSeq < c.localNode.record.seqNum:
     authdata.add(encode(c.localNode.record))
 
   let secrets = deriveKeys(c.localNode.id, toId, ephKeys.seckey, pubkey,
-    idNonce)
+    whoareyouData.challengeData)
 
   # Header
-  let staticHeader = encodeStaticHeader(c.localNode.id, Flag.HandshakeMessage,
+  let staticHeader = encodeStaticHeader(Flag.HandshakeMessage, nonce,
     authdata.len())
 
   header.add(staticHeader)
   header.add(authdata)
 
   c.sessions.store(toId, toAddr, secrets.readKey, secrets.writeKey)
-  let messageEncrypted = encryptGCM(secrets.writeKey, nonce, message, header)
-
-  var iv: array[ivSize, byte]
-  brHmacDrbgGenerate(rng, iv) # Random IV
+  let messageEncrypted = encryptGCM(secrets.writeKey, nonce, message, @iv & header)
 
   let maskedHeader = encryptHeader(toId, iv, header)
 
@@ -272,11 +298,8 @@ proc encodeHandshakePacket*(rng: var BrHmacDrbgContext, c: var Codec,
 
 proc decodeHeader*(id: NodeId, iv, maskedHeader: openarray[byte]):
     DecodeResult[(StaticHeader, seq[byte])] =
-  # Smallest header is staticHeader + gcm nonce for a ordinary message
-  let inputLen = maskedHeader.len
-  if inputLen < staticHeaderSize + gcmNonceSize:
-    return err(PacketError)
-
+  # No need to check staticHeader size as that is included in minimum packet
+  # size check in decodePacket
   var ectx: CTR[aes128]
   ectx.init(id.toByteArrayBE().toOpenArray(0, ivSize - 1), iv)
   # Decrypt static-header part of the header
@@ -287,15 +310,22 @@ proc decodeHeader*(id: NodeId, iv, maskedHeader: openarray[byte]):
   if staticHeader.toOpenArray(0, protocolId.len - 1) != protocolId:
     return err(PacketError)
 
-  let srcId = NodeId.fromBytesBE(staticHeader.toOpenArray(8, 39))
-
-  if staticHeader[40] < Flag.low.byte or staticHeader[40] > Flag.high.byte:
+  if uint16.fromBytesBE(staticHeader.toOpenArray(6, 7)) != version:
     return err(PacketError)
-  let flag = cast[Flag](staticHeader[40])
 
-  let authdataSize = uint16.fromBytesBE(staticHeader.toOpenArray(41, 42))
+  if staticHeader[8] < Flag.low.byte or staticHeader[8] > Flag.high.byte:
+    return err(PacketError)
+  let flag = cast[Flag](staticHeader[8])
+
+  var nonce: AESGCMNonce
+  copyMem(addr nonce[0], unsafeAddr staticHeader[9], gcmNonceSize)
+
+  let authdataSize = uint16.fromBytesBE(staticHeader.toOpenArray(21,
+    staticHeader.high))
+
   # Input should have minimum size of staticHeader + provided authdata size
-  if inputLen < staticHeaderSize + int(authdataSize):
+  # Can be larger as there can come a message after.
+  if maskedHeader.len < staticHeaderSize + int(authdataSize):
     return err(PacketError)
 
   var authdata = newSeq[byte](int(authdataSize))
@@ -303,7 +333,7 @@ proc decodeHeader*(id: NodeId, iv, maskedHeader: openarray[byte]):
     staticHeaderSize + int(authdataSize) - 1), authdata)
   ectx.clear()
 
-  ok((StaticHeader(srcId: srcId, flag: flag, authdataSize: authdataSize),
+  ok((StaticHeader(authdataSize: authdataSize, flag: flag, nonce: nonce),
     staticHeader & authdata))
 
 proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
@@ -352,69 +382,65 @@ proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
   else:
     err(PacketError)
 
-proc decodeMessagePacket(c: var Codec, fromAddr: Address, srcId: NodeId,
-    ct, header: openArray[byte]): DecodeResult[Packet] =
-    # We now know the exact size that the header should be
-    if header.len != staticHeaderSize + gcmNonceSize:
-      return err(PacketError)
-
-    var nonce: AESGCMNonce
-    copyMem(addr nonce[0], unsafeAddr header[staticHeaderSize], gcmNonceSize)
-
-    var writeKey, readKey: AesKey
-    if not c.sessions.load(srcId, fromAddr, readKey, writeKey):
-      # Don't consider this an error, simply haven't done a handshake yet or
-      # the session got removed.
-      trace "Decrypting failed (no keys)"
-      return ok(Packet(flag: Flag.OrdinaryMessage, requestNonce: nonce,
-        srcId: srcId))
-
-    let pt = decryptGCM(readKey, nonce, ct, header)
-    if pt.isNone():
-      # Don't consider this an error, the session got probably removed at the
-      # peer's side.
-      trace "Decrypting failed (invalid keys)"
-      c.sessions.del(srcId, fromAddr)
-      return ok(Packet(flag: Flag.OrdinaryMessage, requestNonce: nonce,
-        srcId: srcId))
-
-    let message = ? decodeMessage(pt.get())
-
-    return ok(Packet(flag: Flag.OrdinaryMessage,
-      messageOpt: some(message), requestNonce: nonce, srcId: srcId))
-
-proc decodeWhoareyouPacket(c: var Codec, srcId: NodeId,
-    authdata: openArray[byte]): DecodeResult[Packet] =
-  # We now know the exact size that the authdata should be
-  if authdata.len != gcmNonceSize + idNonceSize + sizeof(uint64):
+proc decodeMessagePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
+    iv, header, ct: openArray[byte]): DecodeResult[Packet] =
+  # We now know the exact size that the header should be
+  if header.len != staticHeaderSize + sizeof(NodeId):
     return err(PacketError)
 
-  var requestNonce: AESGCMNonce
-  copyMem(addr requestNonce[0], unsafeAddr authdata[0], gcmNonceSize)
+  let srcId = NodeId.fromBytesBE(header.toOpenArray(staticHeaderSize,
+    header.high))
+
+  var writeKey, readKey: AesKey
+  if not c.sessions.load(srcId, fromAddr, readKey, writeKey):
+    # Don't consider this an error, simply haven't done a handshake yet or
+    # the session got removed.
+    trace "Decrypting failed (no keys)"
+    return ok(Packet(flag: Flag.OrdinaryMessage, requestNonce: nonce,
+      srcId: srcId))
+
+  let pt = decryptGCM(readKey, nonce, ct, @iv & @header)
+  if pt.isNone():
+    # Don't consider this an error, the session got probably removed at the
+    # peer's side.
+    trace "Decrypting failed (invalid keys)"
+    c.sessions.del(srcId, fromAddr)
+    return ok(Packet(flag: Flag.OrdinaryMessage, requestNonce: nonce,
+      srcId: srcId))
+
+  let message = ? decodeMessage(pt.get())
+
+  return ok(Packet(flag: Flag.OrdinaryMessage,
+    messageOpt: some(message), requestNonce: nonce, srcId: srcId))
+
+proc decodeWhoareyouPacket(c: var Codec, nonce: AESGCMNonce,
+    iv, header: openArray[byte]): DecodeResult[Packet] =
+  # TODO improve this
+  let authdata = header[staticHeaderSize..header.high()]
+  # We now know the exact size that the authdata should be
+  if authdata.len != idNonceSize + sizeof(uint64):
+    return err(PacketError)
+
   var idNonce: IdNonce
-  copyMem(addr idNonce[0], unsafeAddr authdata[gcmNonceSize], idNonceSize)
-  let whoareyou = WhoareyouData(requestNonce: requestNonce, idNonce: idNonce,
+  copyMem(addr idNonce[0], unsafeAddr authdata[0], idNonceSize)
+  let whoareyou = WhoareyouData(requestNonce: nonce, idNonce: idNonce,
     recordSeq: uint64.fromBytesBE(
-      authdata.toOpenArray(gcmNonceSize + idNonceSize, authdata.high)))
+      authdata.toOpenArray(idNonceSize, authdata.high)),
+    challengeData: @iv & @header)
 
-  return ok(Packet(flag: Flag.Whoareyou, whoareyou: whoareyou,
-    srcId: srcId))
+  return ok(Packet(flag: Flag.Whoareyou, whoareyou: whoareyou))
 
-proc decodeHandshakePacket(c: var Codec, fromAddr: Address, srcId: NodeId,
-    ct, header: openArray[byte]): DecodeResult[Packet] =
+proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
+    iv, header, ct: openArray[byte]): DecodeResult[Packet] =
   # Checking if there is enough data to decode authdata-head
   if header.len <= staticHeaderSize + authdataHeadSize:
     return err(PacketError)
 
-  # check version
-  let authData = header[staticHeaderSize..header.high()]
-  if uint8(authData[0]) != version:
-    return err(HandshakeError)
-
   let
-    nonce = authdata[1..12]
-    sigSize = uint8(authdata[13])
-    ephKeySize = uint8(authdata[14])
+    authdata = header[staticHeaderSize..header.high()]
+    srcId = NodeId.fromBytesBE(authdata.toOpenArray(0, 31))
+    sigSize = uint8(authdata[32])
+    ephKeySize = uint8(authdata[33])
 
   # If smaller, as it can be equal and bigger (in case it holds an enr)
   if header.len < staticHeaderSize + authdataHeadSize + int(sigSize) + int(ephKeySize):
@@ -469,17 +495,18 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, srcId: NodeId,
     authdata.toOpenArray(authdataHeadSize,
       authdataHeadSize + int(sigSize) - 1)).mapErrTo(HandshakeError)
 
-  let h = idNonceHash(challenge.whoareyouData.idNonce, ephKeyRaw)
+  let h = idNonceHash(challenge.whoareyouData.challengeData, ephKeyRaw,
+    c.localNode.id)
   if not verify(sig, SkMessage(h.data), pubkey):
     return err(HandshakeError)
 
   # Do the key derivation step only after id-nonce-sig is verified!
   var secrets = deriveKeys(srcId, c.localNode.id, c.privKey,
-    ephKey, challenge.whoareyouData.idNonce)
+    ephKey, challenge.whoareyouData.challengeData)
 
   swap(secrets.readKey, secrets.writeKey)
 
-  let pt = decryptGCM(secrets.readKey, nonce, ct, header)
+  let pt = decryptGCM(secrets.readKey, nonce, ct, @iv & @header)
   if pt.isNone():
     c.sessions.del(srcId, fromAddr)
     # Differently from an ordinary message, this is seen as an error as the
@@ -490,20 +517,19 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, srcId: NodeId,
 
   # Only store the session secrets in case decryption was successful and also
   # in case the message can get decoded.
-  c.sessions.store(srcId, fromAddr, secrets.readKey,
-    secrets.writeKey)
+  c.sessions.store(srcId, fromAddr, secrets.readKey, secrets.writeKey)
 
-  return ok(Packet(flag: Flag.HandshakeMessage, message: message, srcId: srcId,
-    node: newNode))
+  return ok(Packet(flag: Flag.HandshakeMessage, message: message,
+    srcIdHs: srcId, node: newNode))
 
 proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
     DecodeResult[Packet] =
   ## Decode a packet. This can be a regular packet or a packet in response to a
   ## WHOAREYOU packet. In case of the latter a `newNode` might be provided.
-  # TODO: First size check. Which size however?
-  # IVSize + staticHeaderSize + 12 + ...? What is minimum message size?
-  if input.len() <= ivSize + staticHeaderSize + gcmNonceSize:
+  # Smallest packet is Whoareyou packet so that is the minimum size
+  if input.len() < whoareyouSize:
     return err(PacketError)
+
   # TODO: Just pass in the full input? Makes more sense perhaps..
   let (staticHeader, header) = ? decodeHeader(c.localNode.id,
     input.toOpenArray(0, ivSize - 1), # IV
@@ -513,18 +539,20 @@ proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
   case staticHeader.flag
   of OrdinaryMessage:
     # TODO: Extra size check on ct data?
-    return decodeMessagePacket(c, fromAddr, staticHeader.srcId,
-      input.toOpenArray(ivSize + header.len, input.high), header)
+    return decodeMessagePacket(c, fromAddr, staticHeader.nonce,
+      input.toOpenArray(0, ivSize - 1), header,
+      input.toOpenArray(ivSize + header.len, input.high))
 
   of Whoareyou:
     # Header size got checked in decode header
-    return decodeWhoareyouPacket(c, staticHeader.srcId,
-      header.toOpenArray(staticHeaderSize, header.high()))
+    return decodeWhoareyouPacket(c, staticHeader.nonce,
+      input.toOpenArray(0, ivSize - 1), header)
 
   of HandshakeMessage:
     # TODO: Extra size check on ct data?
-    return decodeHandshakePacket(c, fromAddr, staticHeader.srcId,
-      input.toOpenArray(ivSize + header.len, input.high), header)
+    return decodeHandshakePacket(c, fromAddr, staticHeader.nonce,
+      input.toOpenArray(0, ivSize - 1), header,
+      input.toOpenArray(ivSize + header.len, input.high))
 
 proc init*(T: type RequestId, rng: var BrHmacDrbgContext): T =
   var buf: array[sizeof(T), byte]
