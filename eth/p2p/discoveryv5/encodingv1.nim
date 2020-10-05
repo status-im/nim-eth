@@ -187,10 +187,10 @@ proc encodeMessagePacket*(rng: var BrHmacDrbgContext, c: var Codec,
     # We might not have the node's keys if the handshake hasn't been performed
     # yet. That's fine, we send a random-packet and we will be responded with
     # a WHOAREYOU packet.
-    # TODO Minumum packet size is 63, we have here 16 + 23 + 32 = 71, so in theory
-    # we don't need to add random data? But then how do we know if decryption
-    # fails. Empty message automatically means -> whoareyou?
-    var randomData: array[8, byte]
+    # The 16 here is the aes gcm tag size, as an empty plain text would result
+    # in that size. TODO: Is that ok though? Shouldn't some extra data be added
+    # not to be recognized as a "random message"?
+    var randomData: array[16, byte]
     brHmacDrbgGenerate(rng, randomData)
     messageEncrypted.add(randomData)
 
