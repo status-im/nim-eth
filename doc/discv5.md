@@ -84,8 +84,11 @@ node, by providing its ENR.
 
 ### Example usage
 ```sh
+# Install required modules
+# Make sure you have the latest modules, do NOT trust nimble on this.
+nimble install
 # Build dcli
-nim c -d:chronicles_log_level:trace -d:release eth/p2p/discoveryv5/dcli
+nim c -d:chronicles_log_level:trace -d:release --threads:on eth/p2p/discoveryv5/dcli
 # See all options
 ./eth/p2p/discoveryv5/dcli --help
 # Ping another node
