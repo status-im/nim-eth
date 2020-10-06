@@ -32,7 +32,7 @@ type
     regconfirmation = 0x09
     topicquery = 0x0A
 
-  RequestId* = uint64
+  RequestId* = seq[byte]
 
   PingMessage* = object
     enrSeq*: uint64
