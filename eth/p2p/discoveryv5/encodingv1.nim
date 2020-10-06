@@ -83,7 +83,7 @@ proc mapErrTo[T, E](r: Result[T, E], v: static DecodeError):
     DecodeResult[T] =
   r.mapErr(proc (e: E): DecodeError = v)
 
-proc idNonceHash(challengeData, ephkey: openarray[byte], nodeId: NodeId):
+proc idNonceHash*(challengeData, ephkey: openarray[byte], nodeId: NodeId):
     MDigest[256] =
   var ctx: sha256
   ctx.init()
@@ -351,6 +351,7 @@ proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
   var rlp = rlpFromBytes(body.toOpenArray(1, body.high))
   if rlp.enterList:
     try:
+      # TODO: 8 bytes limitation on RequestId decode.
       message.reqId = rlp.read(RequestId)
     except RlpError:
       return err(PacketError)
@@ -555,10 +556,8 @@ proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
       input.toOpenArray(ivSize + header.len, input.high))
 
 proc init*(T: type RequestId, rng: var BrHmacDrbgContext): T =
-  var buf: array[sizeof(T), byte]
-  brHmacDrbgGenerate(rng, buf)
-  var id: T
-  copyMem(addr id, addr buf[0], sizeof(id))
+  var id = newSeq[byte](8) # RequestId must be <= 8 bytes
+  brHmacDrbgGenerate(rng, id)
   id
 
 proc numFields(T: typedesc): int =

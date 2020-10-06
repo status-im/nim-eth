@@ -8,41 +8,105 @@ let rng = newRng()
 
 suite "Discovery v5.1 Protocol Message Encodings":
   test "Ping Request":
-    var p: PingMessage
-    p.enrSeq = 1
-    var reqId: RequestId = 1
-    check encodeMessage(p, reqId).toHex == "01c20101"
+    let
+      enrSeq = 1'u64
+      p = PingMessage(enrSeq: enrSeq)
+      reqId: RequestId = @[1.byte]
+
+    let encoded = encodeMessage(p, reqId)
+    check encoded.toHex == "01c20101"
+
+    let decoded = decodeMessage(encoded)
+    check decoded.isOk()
+
+    let message = decoded.get()
+    check:
+      message.reqId == reqId
+      message.kind == ping
+      message.ping.enrSeq == enrSeq
 
   test "Pong Response":
-    var p: PongMessage
-    p.enrSeq = 1
-    p.port = 5000
-    p.ip = @[127.byte, 0, 0, 1]
-    var reqId: RequestId = 1
-    check encodeMessage(p, reqId).toHex == "02ca0101847f000001821388"
+    let
+      enrSeq = 1'u64
+      ip = @[127.byte, 0, 0, 1]
+      port = 5000'u16
+      p = PongMessage(enrSeq: enrSeq, ip: ip, port: port)
+      reqId: RequestId = @[1.byte]
+
+    let encoded = encodeMessage(p, reqId)
+    check encoded.toHex == "02ca0101847f000001821388"
+
+    let decoded = decodeMessage(encoded)
+    check decoded.isOk()
+
+    let message = decoded.get()
+    check:
+      message.reqId == reqId
+      message.kind == pong
+      message.pong.enrSeq == enrSeq
+      message.pong.ip == ip
+      message.pong.port == port
 
   test "FindNode Request":
-    var p: FindNodeMessage
-    p.distances = @[0x0100'u32]
-    var reqId: RequestId = 1
-    check encodeMessage(p, reqId).toHex == "03c501c3820100"
+    let
+      distances = @[0x0100'u32]
+      fn = FindNodeMessage(distances: distances)
+      reqId: RequestId = @[1.byte]
+
+    let encoded = encodeMessage(fn, reqId)
+    check encoded.toHex == "03c501c3820100"
+
+    let decoded = decodeMessage(encoded)
+    check decoded.isOk()
+
+    let message = decoded.get()
+    check:
+      message.reqId == reqId
+      message.kind == findnode
+      message.findnode.distances == distances
 
   test "Nodes Response (empty)":
-    var p: NodesMessage
-    p.total = 0x1
-    var reqId: RequestId = 1
-    check encodeMessage(p, reqId).toHex == "04c30101c0"
+    let
+      total = 0x1'u32
+      n = NodesMessage(total: total)
+      reqId: RequestId = @[1.byte]
+
+    let encoded = encodeMessage(n, reqId)
+    check encoded.toHex == "04c30101c0"
+
+    let decoded = decodeMessage(encoded)
+    check decoded.isOk()
+
+    let message = decoded.get()
+    check:
+      message.reqId == reqId
+      message.kind == nodes
+      message.nodes.total == total
+      message.nodes.enrs.len() == 0
 
   test "Nodes Response (multiple)":
-    var p: NodesMessage
-    p.total = 0x1
     var e1, e2: Record
     check e1.fromURI("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg")
     check e2.fromURI("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU")
+    let
+      total = 0x1'u32
+      n = NodesMessage(total: total, enrs: @[e1, e2])
+      reqId: RequestId = @[1.byte]
 
-    p.enrs = @[e1, e2]
-    var reqId: RequestId = 1
-    check encodeMessage(p, reqId).toHex == "04f8f20101f8eef875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
+    let encoded = encodeMessage(n, reqId)
+    check encoded.toHex == "04f8f20101f8eef875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
+
+    let decoded = decodeMessage(encoded)
+    check decoded.isOk()
+
+    let message = decoded.get()
+    check:
+      message.reqId == reqId
+      message.kind == nodes
+      message.nodes.total == total
+      message.nodes.enrs.len() == 2
+      message.nodes.enrs[0] == e1
+      message.nodes.enrs[1] == e2
 
 # According to test vectors:
 # https://github.com/fjl/devp2p/blob/discv5-v1-update/discv5/discv5-wire-test-vectors.md#cryptographic-primitives
@@ -104,6 +168,10 @@ suite "Discovery v5.1 Cryptographic Primitives Test Vectors":
         NodeId.fromHex(nodeIdB))
     check signature.toRaw() == hexToByteArray[64](idSignature)
 
+    let h = idNonceHash(hexToSeqByte(challengeData), hexToSeqByte(ephemeralPubkey),
+      NodeId.fromHex(nodeIdB))
+    check verify(signature, SkMessage(h.data), privKey.toPublicKey())
+
   test "Encryption/Decryption":
     const
       # input
@@ -150,7 +218,7 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
   test "Ping Ordinary Message Packet":
     const
       readKey = "0x00000000000000000000000000000000"
-      pingReqId = 0x00000001'u64
+      pingReqId = "0x00000001"
       pingEnrSeq = 2'u64
 
       encodedPacket =
@@ -164,15 +232,11 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
     codecB.sessions.store(nodeA.id, nodeA.address.get(),
       hexToByteArray[aesKeySize](readKey), hexToByteArray[aesKeySize](dummyKey))
 
-    # Note: Noticed when comparing these test vectors that we encode reqId as
-    # integer while it seems the test vectors have it encoded as byte seq,
-    # meaning having potentially leading zeroes.
-
     let decoded = codecB.decodePacket(nodeA.address.get(), hexToSeqByte(encodedPacket))
     check:
       decoded.isOK()
       decoded.get().messageOpt.isSome()
-      decoded.get().messageOpt.get().reqId == pingReqId
+      decoded.get().messageOpt.get().reqId == hexToSeqByte(pingReqId)
       decoded.get().messageOpt.get().kind == ping
       decoded.get().messageOpt.get().ping.enrSeq == pingEnrSeq
 
@@ -200,7 +264,7 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
 
   test "Ping Handshake Message Packet":
     const
-      pingReqId = 0x00000001'u64
+      pingReqId = "0x00000001"
       pingEnrSeq = 1'u64
       #
       # handshake inputs:
@@ -236,14 +300,14 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
 
     check:
       decoded.isOk()
-      decoded.get().message.reqId == pingReqId
+      decoded.get().message.reqId == hexToSeqByte(pingReqId)
       decoded.get().message.kind == ping
       decoded.get().message.ping.enrSeq == pingEnrSeq
       decoded.get().node.isNone()
 
   test "Ping Handshake Message Packet with ENR":
     const
-      pingReqId = 0x00000001'u64
+      pingReqId = "0x00000001"
       pingEnrSeq = 1'u64
       #
       # handshake inputs:
@@ -283,7 +347,7 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
 
     check:
       decoded.isOk()
-      decoded.get().message.reqId == pingReqId
+      decoded.get().message.reqId == hexToSeqByte(pingReqId)
       decoded.get().message.kind == ping
       decoded.get().message.ping.enrSeq == pingEnrSeq
       decoded.get().node.isSome()
