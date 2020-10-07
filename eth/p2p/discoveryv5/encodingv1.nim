@@ -351,9 +351,8 @@ proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
   var rlp = rlpFromBytes(body.toOpenArray(1, body.high))
   if rlp.enterList:
     try:
-      # TODO: 8 bytes limitation on RequestId decode.
       message.reqId = rlp.read(RequestId)
-    except RlpError:
+    except RlpError, ValueError:
       return err(PacketError)
 
     proc decode[T](rlp: var Rlp, v: var T)
@@ -556,9 +555,9 @@ proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
       input.toOpenArray(ivSize + header.len, input.high))
 
 proc init*(T: type RequestId, rng: var BrHmacDrbgContext): T =
-  var id = newSeq[byte](8) # RequestId must be <= 8 bytes
-  brHmacDrbgGenerate(rng, id)
-  id
+  var reqId = RequestId(id: newSeq[byte](8)) # RequestId must be <= 8 bytes
+  brHmacDrbgGenerate(rng, reqId.id)
+  reqId
 
 proc numFields(T: typedesc): int =
   for k, v in fieldPairs(default(T)): inc result
