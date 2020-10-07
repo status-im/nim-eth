@@ -1,7 +1,7 @@
 import
   std/hashes,
   stint,
-  enr, node
+  eth/rlp, enr, node
 
 {.push raises: [Defect].}
 
@@ -32,7 +32,8 @@ type
     regconfirmation = 0x09
     topicquery = 0x0A
 
-  RequestId* = seq[byte]
+  RequestId* = object
+    id*: seq[byte]
 
   PingMessage* = object
     enrSeq*: uint64
@@ -98,6 +99,23 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   elif T is NodesMessage: nodes
   elif T is TalkReqMessage: talkreq
   elif T is TalkRespMessage: talkresp
+
+proc read*(rlp: var Rlp, T: type RequestId): T
+    {.raises: [ValueError, RlpError, Defect].} =
+  mixin read
+  var reqId: RequestId
+  reqId.id = rlp.toBytes()
+  if reqId.id.len > 8:
+    raise newException(ValueError, "RequestId is > 8 bytes")
+  rlp.skipElem()
+
+  reqId
+
+proc append*(writer: var RlpWriter, value: RequestId) =
+  writer.append(value.id)
+
+proc hash*(reqId: RequestId): Hash =
+  hash(reqId.id)
 
 proc toBytes*(id: NodeId): array[32, byte] {.inline.} =
   id.toByteArrayBE()
