@@ -384,19 +384,8 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
           debug "Adding new node to routing table", node = $node,
             localNode = $d.localNode
           discard d.addNode(node)
-
-  elif decoded.error == DecodeError.UnsupportedMessage:
-    # TODO: Probably should still complete handshake in these cases.
-    trace "Packet contained unsupported message"
-  elif decoded.error == DecodeError.PacketError:
+  else:
     debug "Packet decoding error", error = decoded.error
-  elif decoded.error == DecodeError.HandshakeError:
-    debug "Packet handshake error", error = decoded.error
-  elif decoded.error == DecodeError.DecryptError:
-    # This is a specific decryption error on a handshake. We do not send a
-    # new Whoareyou on these as it probably means there is a compatiblity
-    # issue and we might loop forever in failed handshakes with this peer.
-    debug "Packet decrypting error", error = decoded.error
 
 # TODO: Not sure why but need to pop the raises here as it is apparently not
 # enough to put it in the raises pragma of `processClient` and other async procs.
