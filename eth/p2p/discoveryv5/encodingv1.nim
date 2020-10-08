@@ -9,7 +9,6 @@ export keys
 
 const
   version: uint16 = 1
-  idNoncePrefix = "discovery-id-nonce"
   idSignatureText  = "discovery v5 identity proof"
   keyAgreementPrefix = "discovery v5 key agreement"
   protocolIdStr = "discv5"
@@ -70,18 +69,7 @@ type
     handshakes*: Table[HandShakeKey, Challenge]
     sessions*: Sessions
 
-  DecodeError* = enum
-    HandshakeError = "discv5: handshake failed"
-    PacketError = "discv5: invalid packet"
-    DecryptError = "discv5: decryption failed"
-    UnsupportedMessage = "discv5: unsupported message"
-
-  DecodeResult*[T] = Result[T, DecodeError]
-  EncodeResult*[T] = Result[T, cstring]
-
-proc mapErrTo[T, E](r: Result[T, E], v: static DecodeError):
-    DecodeResult[T] =
-  r.mapErr(proc (e: E): DecodeError = v)
+  DecodeResult*[T] = Result[T, cstring]
 
 proc idNonceHash*(challengeData, ephkey: openarray[byte], nodeId: NodeId):
     MDigest[256] =
@@ -308,13 +296,13 @@ proc decodeHeader*(id: NodeId, iv, maskedHeader: openarray[byte]):
 
   # Check fields of the static-header
   if staticHeader.toOpenArray(0, protocolId.len - 1) != protocolId:
-    return err(PacketError)
+    return err("Invalid protocol id")
 
   if uint16.fromBytesBE(staticHeader.toOpenArray(6, 7)) != version:
-    return err(PacketError)
+    return err("Invalid protocol version")
 
   if staticHeader[8] < Flag.low.byte or staticHeader[8] > Flag.high.byte:
-    return err(PacketError)
+    return err("Invalid packet flag")
   let flag = cast[Flag](staticHeader[8])
 
   var nonce: AESGCMNonce
@@ -326,7 +314,7 @@ proc decodeHeader*(id: NodeId, iv, maskedHeader: openarray[byte]):
   # Input should have minimum size of staticHeader + provided authdata size
   # Can be larger as there can come a message after.
   if maskedHeader.len < staticHeaderSize + int(authdataSize):
-    return err(PacketError)
+    return err("Authdata is smaller than authdata-size indicates")
 
   var authdata = newSeq[byte](int(authdataSize))
   ectx.decrypt(maskedHeader.toOpenArray(staticHeaderSize,
@@ -339,10 +327,10 @@ proc decodeHeader*(id: NodeId, iv, maskedHeader: openarray[byte]):
 proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
   ## Decodes to the specific `Message` type.
   if body.len < 1:
-    return err(PacketError)
+    return err("No message data")
 
   if body[0] < MessageKind.low.byte or body[0] > MessageKind.high.byte:
-    return err(PacketError)
+    return err("Invalid message type")
 
   # This cast is covered by the above check (else we could get enum with invalid
   # data!). However, can't we do this in a cleaner way?
@@ -353,7 +341,7 @@ proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
     try:
       message.reqId = rlp.read(RequestId)
     except RlpError, ValueError:
-      return err(PacketError)
+      return err("Invalid request-id")
 
     proc decode[T](rlp: var Rlp, v: var T)
         {.inline, nimcall, raises:[RlpError, ValueError, Defect].} =
@@ -362,7 +350,7 @@ proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
 
     try:
       case kind
-      of unused: return err(PacketError)
+      of unused: return err("Invalid message type")
       of ping: rlp.decode(message.ping)
       of pong: rlp.decode(message.pong)
       of findNode: rlp.decode(message.findNode)
@@ -376,17 +364,17 @@ proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
         # semantics of this message are not final".
         discard
     except RlpError, ValueError:
-      return err(PacketError)
+      return err("Invalid message encoding")
 
     ok(message)
   else:
-    err(PacketError)
+    err("Invalid message encoding: no rlp list")
 
 proc decodeMessagePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
     iv, header, ct: openArray[byte]): DecodeResult[Packet] =
   # We now know the exact size that the header should be
   if header.len != staticHeaderSize + sizeof(NodeId):
-    return err(PacketError)
+    return err("Invalid header length for ordinary message packet")
 
   let srcId = NodeId.fromBytesBE(header.toOpenArray(staticHeaderSize,
     header.high))
@@ -419,7 +407,7 @@ proc decodeWhoareyouPacket(c: var Codec, nonce: AESGCMNonce,
   let authdata = header[staticHeaderSize..header.high()]
   # We now know the exact size that the authdata should be
   if authdata.len != idNonceSize + sizeof(uint64):
-    return err(PacketError)
+    return err("Invalid header length for whoareyou packet")
 
   var idNonce: IdNonce
   copyMem(addr idNonce[0], unsafeAddr authdata[0], idNonceSize)
@@ -434,7 +422,7 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
     iv, header, ct: openArray[byte]): DecodeResult[Packet] =
   # Checking if there is enough data to decode authdata-head
   if header.len <= staticHeaderSize + authdataHeadSize:
-    return err(PacketError)
+    return err("Invalid header for handshake message packet: no authdata-head")
 
   let
     authdata = header[staticHeaderSize..header.high()]
@@ -444,13 +432,12 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
 
   # If smaller, as it can be equal and bigger (in case it holds an enr)
   if header.len < staticHeaderSize + authdataHeadSize + int(sigSize) + int(ephKeySize):
-    return err(PacketError)
+    return err("Invalid header for handshake message packet")
 
   let key = HandShakeKey(nodeId: srcId, address: $fromAddr)
   var challenge: Challenge
   if not c.handshakes.pop(key, challenge):
-    debug "Decoding failed (no previous stored handshake challenge)"
-    return err(HandshakeError)
+    return err("No challenge found: timed out or unsolicited packet")
 
   # This should be the compressed public key. But as we use the provided
   # ephKeySize, it should also work with full sized key. However, the idNonce
@@ -458,7 +445,7 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   let
     ephKeyPos = authdataHeadSize + int(sigSize)
     ephKeyRaw = authdata[ephKeyPos..<ephKeyPos + int(ephKeySize)]
-    ephKey = ? PublicKey.fromRaw(ephKeyRaw).mapErrTo(HandshakeError)
+    ephKey = ? PublicKey.fromRaw(ephKeyRaw)
 
   var record: Option[enr.Record]
   let recordPos = ephKeyPos + int(ephKeySize)
@@ -469,7 +456,7 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
       record = some(rlp.decode(authdata.toOpenArray(recordPos, authdata.high),
         enr.Record))
     except RlpError, ValueError:
-      return err(HandshakeError)
+      return err("Invalid encoded ENR")
 
   var pubKey: PublicKey
   var newNode: Option[Node]
@@ -477,28 +464,28 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   # need the pubkey and the nodeid
   if record.isSome():
     # Node returned might not have an address or not a valid address.
-    let node = ? newNode(record.get()).mapErrTo(HandshakeError)
+    let node = ? newNode(record.get())
     if node.id != srcId:
-      return err(HandshakeError)
+      return err("Invalid node id: does not match node id of ENR")
 
     pubKey = node.pubKey
     newNode = some(node)
   else:
+    # TODO: Hmm, should we still verify node id of the ENR of this node?
     if challenge.pubkey.isSome():
       pubKey = challenge.pubkey.get()
     else:
       # We should have received a Record in this case.
-      return err(HandshakeError)
+      return err("Missing ENR in handshake packet")
 
   # Verify the id-nonce-sig
   let sig = ? SignatureNR.fromRaw(
-    authdata.toOpenArray(authdataHeadSize,
-      authdataHeadSize + int(sigSize) - 1)).mapErrTo(HandshakeError)
+    authdata.toOpenArray(authdataHeadSize, authdataHeadSize + int(sigSize) - 1))
 
   let h = idNonceHash(challenge.whoareyouData.challengeData, ephKeyRaw,
     c.localNode.id)
   if not verify(sig, SkMessage(h.data), pubkey):
-    return err(HandshakeError)
+    return err("Invalid id-signature")
 
   # Do the key derivation step only after id-nonce-sig is verified!
   var secrets = deriveKeys(srcId, c.localNode.id, c.privKey,
@@ -510,8 +497,11 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   if pt.isNone():
     c.sessions.del(srcId, fromAddr)
     # Differently from an ordinary message, this is seen as an error as the
-    # secrets just got negotiated in the handshake.
-    return err(DecryptError)
+    # secrets just got negotiated in the handshake and thus decryption should
+    # always work. We do not send a new Whoareyou on these as it probably means
+    # there is a compatiblity issue and we might loop forever in failed
+    # handshakes with this peer.
+    return err("Decryption of message failed in handshake packet")
 
   let message = ? decodeMessage(pt.get())
 
@@ -528,7 +518,7 @@ proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
   ## WHOAREYOU packet. In case of the latter a `newNode` might be provided.
   # Smallest packet is Whoareyou packet so that is the minimum size
   if input.len() < whoareyouSize:
-    return err(PacketError)
+    return err("Packet size too short")
 
   # TODO: Just pass in the full input? Makes more sense perhaps..
   let (staticHeader, header) = ? decodeHeader(c.localNode.id,
