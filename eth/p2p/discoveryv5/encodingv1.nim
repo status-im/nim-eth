@@ -175,10 +175,11 @@ proc encodeMessagePacket*(rng: var BrHmacDrbgContext, c: var Codec,
     # We might not have the node's keys if the handshake hasn't been performed
     # yet. That's fine, we send a random-packet and we will be responded with
     # a WHOAREYOU packet.
-    # The 16 here is the aes gcm tag size, as an empty plain text would result
-    # in that size. TODO: Is that ok though? Shouldn't some extra data be added
-    # not to be recognized as a "random message"?
-    var randomData: array[16, byte]
+    # Select 20 bytes of random data, which is the smallest possible ping
+    # message. 16 bytes for the gcm tag and 4 bytes for ping with requestId of
+    # 1 byte (e.g "01c20101"). Could increase to 27 for 8 bytes requestId in
+    # case this must not look like a random packet.
+    var randomData: array[gcmTagSize + 4, byte]
     brHmacDrbgGenerate(rng, randomData)
     messageEncrypted.add(randomData)
 
@@ -376,6 +377,10 @@ proc decodeMessagePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   if header.len != staticHeaderSize + sizeof(NodeId):
     return err("Invalid header length for ordinary message packet")
 
+  # Need to have at minimum the gcm tag size for the message.
+  if ct.len < gcmTagSize:
+    return err("Invalid message length for ordinary message packet")
+
   let srcId = NodeId.fromBytesBE(header.toOpenArray(staticHeaderSize,
     header.high))
 
@@ -423,6 +428,13 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   # Checking if there is enough data to decode authdata-head
   if header.len <= staticHeaderSize + authdataHeadSize:
     return err("Invalid header for handshake message packet: no authdata-head")
+
+  # Need to have at minimum the gcm tag size for the message.
+  # TODO: And actually, as we should be able to decrypt it, it should also be
+  # a valid message and thus we could increase here to the size of the smallest
+  # message possible.
+  if ct.len < gcmTagSize:
+    return err("Invalid message length for ordinary message packet")
 
   let
     authdata = header[staticHeaderSize..header.high()]
@@ -520,7 +532,7 @@ proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
   if input.len() < whoareyouSize:
     return err("Packet size too short")
 
-  # TODO: Just pass in the full input? Makes more sense perhaps..
+  # TODO: Just pass in the full input? Makes more sense perhaps.
   let (staticHeader, header) = ? decodeHeader(c.localNode.id,
     input.toOpenArray(0, ivSize - 1), # IV
     # Don't know the size yet of the full header, so we pass all.
@@ -528,7 +540,6 @@ proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
 
   case staticHeader.flag
   of OrdinaryMessage:
-    # TODO: Extra size check on ct data?
     return decodeMessagePacket(c, fromAddr, staticHeader.nonce,
       input.toOpenArray(0, ivSize - 1), header,
       input.toOpenArray(ivSize + header.len, input.high))
@@ -539,7 +550,6 @@ proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
       input.toOpenArray(0, ivSize - 1), header)
 
   of HandshakeMessage:
-    # TODO: Extra size check on ct data?
     return decodeHandshakePacket(c, fromAddr, staticHeader.nonce,
       input.toOpenArray(0, ivSize - 1), header,
       input.toOpenArray(ivSize + header.len, input.high))
