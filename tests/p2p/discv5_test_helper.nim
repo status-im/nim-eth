@@ -36,17 +36,6 @@ proc nodeIdInNodes*(id: NodeId, nodes: openarray[Node]): bool =
   for n in nodes:
     if id == n.id: return true
 
-# proc randomPacket*(rng: var BrHmacDrbgContext, tag: PacketTag): seq[byte] =
-#   var
-#     authTag: AuthTag
-#     msg: array[44, byte]
-
-#   brHmacDrbgGenerate(rng, authTag)
-#   brHmacDrbgGenerate(rng, msg)
-#   result.add(tag)
-#   result.add(rlp.encode(authTag))
-#   result.add(msg)
-
 proc generateNode*(privKey: PrivateKey, port: int = 20302,
     localEnrFields: openarray[FieldPair] = []): Node =
   let port = Port(port)
