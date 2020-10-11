@@ -3,16 +3,21 @@
 {.push raises: [Defect].}
 
 import
-  os,
+  os, strformat,
   sqlite3_abi,
   ./kvstore
 
 export kvstore
 
 type
-  SqStoreRef* = ref object of RootObj
-    env: ptr sqlite3
+  Sqlite3Ptr* = ptr sqlite3
+
+  KeySpaceStatements = object
     getStmt, putStmt, delStmt, containsStmt: ptr sqlite3_stmt
+
+  SqStoreRef* = ref object of RootObj
+    env: Sqlite3Ptr
+    keyspaces: seq[KeySpaceStatements]
 
 template checkErr(op, cleanup: untyped) =
   if (let v = (op); v != SQLITE_OK):
@@ -25,18 +30,21 @@ template checkErr(op) =
 proc bindBlob(s: ptr sqlite3_stmt, n: int, blob: openarray[byte]): cint =
   sqlite3_bind_blob(s, n.cint, unsafeAddr blob[0], blob.len.cint, nil)
 
-proc get*(db: SqStoreRef, key: openarray[byte], onData: DataProc): KvResult[bool] =
-  checkErr bindBlob(db.getStmt, 1, key)
+proc getImpl(db: SqStoreRef,
+             keyspace: int,
+             key: openarray[byte],
+             onData: DataProc): KvResult[bool] =
+  let getStmt = db.keyspaces[keyspace].getStmt
+  checkErr bindBlob(getStmt, 1, key)
 
   let
-    v = sqlite3_step(db.getStmt)
+    v = sqlite3_step(getStmt)
     res = case v
       of SQLITE_ROW:
         let
-          p = cast[ptr UncheckedArray[byte]](sqlite3_column_blob(db.getStmt, 0))
-          l = sqlite3_column_bytes(db.getStmt, 0)
+          p = cast[ptr UncheckedArray[byte]](sqlite3_column_blob(getStmt, 0))
+          l = sqlite3_column_bytes(getStmt, 0)
         onData(toOpenArray(p, 0, l-1))
-
         ok(true)
       of SQLITE_DONE:
         ok(false)
@@ -44,63 +52,92 @@ proc get*(db: SqStoreRef, key: openarray[byte], onData: DataProc): KvResult[bool
         err($sqlite3_errstr(v))
 
   # release implicit transaction
-  discard sqlite3_reset(db.getStmt) # same return information as step
-  discard sqlite3_clear_bindings(db.getStmt) # no errors possible
+  discard sqlite3_reset(getStmt) # same return information as step
+  discard sqlite3_clear_bindings(getStmt) # no errors possible
 
   res
 
-proc put*(db: SqStoreRef, key, value: openarray[byte]): KvResult[void] =
-  checkErr bindBlob(db.putStmt, 1, key)
-  checkErr bindBlob(db.putStmt, 2, value)
+proc get*(db: SqStoreRef, key: openarray[byte], onData: DataProc): KvResult[bool] =
+  getImpl(db, 0, key, onData)
+
+template get*(db: SqStoreRef, keyspace: int, key: openarray[byte], onData: DataProc): KvResult[bool] =
+  getImpl(db, keyspace, key, onData)
+
+proc putImpl(db: SqStoreRef, keyspace: int, key, value: openarray[byte]): KvResult[void] =
+  let putStmt = db.keyspaces[keyspace].putStmt
+
+  checkErr bindBlob(putStmt, 1, key)
+  checkErr bindBlob(putStmt, 2, value)
 
   let res =
-    if (let v = sqlite3_step(db.putStmt); v != SQLITE_DONE):
+    if (let v = sqlite3_step(putStmt); v != SQLITE_DONE):
       err($sqlite3_errstr(v))
     else:
       ok()
 
   # release implict transaction
-  discard sqlite3_reset(db.putStmt) # same return information as step
-  discard sqlite3_clear_bindings(db.putStmt) # no errors possible
+  discard sqlite3_reset(putStmt) # same return information as step
+  discard sqlite3_clear_bindings(putStmt) # no errors possible
 
   res
 
-proc contains*(db: SqStoreRef, key: openarray[byte]): KvResult[bool] =
-  checkErr bindBlob(db.containsStmt, 1, key)
+proc put*(db: SqStoreRef, key, value: openarray[byte]): KvResult[void] =
+  putImpl(db, 0, key, value)
+
+template put*(db: SqStoreRef, keyspace: int, key, value: openarray[byte]): KvResult[void] =
+  putImpl(db, keyspace, key, value)
+
+proc containsImpl(db: SqStoreRef, keyspace: int, key: openarray[byte]): KvResult[bool] =
+  let containsStmt = db.keyspaces[keyspace].containsStmt
+  checkErr bindBlob(containsStmt, 1, key)
 
   let
-    v = sqlite3_step(db.containsStmt)
+    v = sqlite3_step(containsStmt)
     res = case v
       of SQLITE_ROW: ok(true)
       of SQLITE_DONE: ok(false)
       else: err($sqlite3_errstr(v))
 
   # release implicit transaction
-  discard sqlite3_reset(db.containsStmt) # same return information as step
-  discard sqlite3_clear_bindings(db.containsStmt) # no errors possible
+  discard sqlite3_reset(containsStmt) # same return information as step
+  discard sqlite3_clear_bindings(containsStmt) # no errors possible
 
   res
 
-proc del*(db: SqStoreRef, key: openarray[byte]): KvResult[void] =
-  checkErr bindBlob(db.delStmt, 1, key)
+proc contains*(db: SqStoreRef, key: openarray[byte]): KvResult[bool] =
+  containsImpl(db, 0, key)
+
+template contains*(db: SqStoreRef, keyspace: int, key: openarray[byte]): KvResult[bool] =
+  containsImpl(db, keyspace, key)
+
+proc delImpl(db: SqStoreRef, keyspace: int, key: openarray[byte]): KvResult[void] =
+  let delStmt = db.keyspaces[keyspace].delStmt
+  checkErr bindBlob(delStmt, 1, key)
 
   let res =
-    if (let v = sqlite3_step(db.delStmt); v != SQLITE_DONE):
+    if (let v = sqlite3_step(delStmt); v != SQLITE_DONE):
       err($sqlite3_errstr(v))
     else:
       ok()
 
   # release implict transaction
-  discard sqlite3_reset(db.delStmt) # same return information as step
-  discard sqlite3_clear_bindings(db.delStmt) # no errors possible
+  discard sqlite3_reset(delStmt) # same return information as step
+  discard sqlite3_clear_bindings(delStmt) # no errors possible
 
   res
 
+proc del*(db: SqStoreRef, key: openarray[byte]): KvResult[void] =
+  delImpl(db, 0, key)
+
+template del*(db: SqStoreRef, keyspace: int, key: openarray[byte]): KvResult[void] =
+  delImpl(db, keyspace, key)
+
 proc close*(db: SqStoreRef) =
-  discard sqlite3_finalize(db.putStmt)
-  discard sqlite3_finalize(db.getStmt)
-  discard sqlite3_finalize(db.delStmt)
-  discard sqlite3_finalize(db.containsStmt)
+  for keyspace in db.keyspaces:
+    discard sqlite3_finalize(keyspace.putStmt)
+    discard sqlite3_finalize(keyspace.getStmt)
+    discard sqlite3_finalize(keyspace.delStmt)
+    discard sqlite3_finalize(keyspace.containsStmt)
 
   discard sqlite3_close(db.env)
 
@@ -111,7 +148,8 @@ proc init*(
     basePath: string,
     name: string,
     readOnly = false,
-    inMemory = false): KvResult[T] =
+    inMemory = false,
+    keyspaces: openarray[string] = ["kvstore"]): KvResult[T] =
   var
     env: ptr sqlite3
 
@@ -176,33 +214,52 @@ proc init*(
   checkWalPragmaResult(journalModePragma)
   checkExec(journalModePragma)
 
-  checkExec """
-    CREATE TABLE IF NOT EXISTS kvstore(
-       key BLOB PRIMARY KEY,
-       value BLOB
-    ) WITHOUT ROWID;
-  """
+  var keyspaceStatements = newSeq[KeySpaceStatements]()
+  for keyspace in keyspaces:
+    checkExec """
+      CREATE TABLE IF NOT EXISTS """ & keyspace & """ (
+         key BLOB PRIMARY KEY,
+         value BLOB
+      ) WITHOUT ROWID;
+    """
 
-  let
-    getStmt = prepare "SELECT value FROM kvstore WHERE key = ?;":
-      discard
-    putStmt = prepare "INSERT OR REPLACE INTO kvstore(key, value) VALUES (?, ?);":
-      discard sqlite3_finalize(getStmt)
-    delStmt = prepare "DELETE FROM kvstore WHERE key = ?;":
-      discard sqlite3_finalize(getStmt)
-      discard sqlite3_finalize(putStmt)
-    containsStmt = prepare "SELECT 1 FROM kvstore WHERE key = ?;":
-      discard sqlite3_finalize(getStmt)
-      discard sqlite3_finalize(putStmt)
-      discard sqlite3_finalize(delStmt)
+    let
+      getStmt = prepare("SELECT value FROM " & keyspace & " WHERE key = ?;"):
+        discard
+      putStmt = prepare("INSERT OR REPLACE INTO " & keyspace & "(key, value) VALUES (?, ?);"):
+        discard sqlite3_finalize(getStmt)
+      delStmt = prepare("DELETE FROM " & keyspace & " WHERE key = ?;"):
+        discard sqlite3_finalize(getStmt)
+        discard sqlite3_finalize(putStmt)
+      containsStmt = prepare("SELECT 1 FROM " & keyspace & " WHERE key = ?;"):
+        discard sqlite3_finalize(getStmt)
+        discard sqlite3_finalize(putStmt)
+        discard sqlite3_finalize(delStmt)
+
+    keyspaceStatements.add KeySpaceStatements(
+      getStmt: getStmt,
+      putStmt: putStmt,
+      delStmt: delStmt,
+      containsStmt: containsStmt)
 
   ok(SqStoreRef(
     env: env,
-    getStmt: getStmt,
-    putStmt: putStmt,
-    delStmt: delStmt,
-    containsStmt: containsStmt
+    keyspaces: keyspaceStatements
   ))
+
+proc init*(
+    T: type SqStoreRef,
+    basePath: string,
+    name: string,
+    Keyspaces: type[enum],
+    readOnly = false,
+    inMemory = false): KvResult[T] =
+
+  var keyspaceNames = newSeq[string]()
+  for keyspace in Keyspaces:
+    keyspaceNames.add $keyspace
+
+  SqStoreRef.init(basePath, name, readOnly, inMemory, keyspaceNames)
 
 when defined(metrics):
   import tables, times,
