@@ -247,6 +247,13 @@ proc outputParamType*(msg: Message): NimNode =
   if outputParam != nil:
     return outputParam[1]
 
+proc refreshParam(n: NimNode): NimNode =
+  result = copyNimTree(n)
+  if n.kind == nnkIdentDefs:
+    for i in 0..<n.len-2:
+      if n[i].kind == nnkSym: 
+        result[i] = genSym(symKind(n[i]), $n[i])
+
 iterator typedInputParams(procDef: NimNode, skip = 0): (NimNode, NimNode) =
   for paramName, paramType in typedParams(procDef, skip):
     if not isOutputParamName(paramName):
@@ -256,7 +263,7 @@ proc copyInputParams(params: NimNode): NimNode =
   result = newTree(params.kind)
   for param in params:
     if not isOutputParam(param):
-      result.add param
+      result.add param.refreshParam
 
 proc chooseFieldType(n: NimNode): NimNode =
   ## Examines the parameter types used in the message signature
@@ -790,6 +797,7 @@ proc createHandshakeTemplate*(msg: Message,
   forwardCall[1] = peerVar
   forwardCall.del(forwardCall.len - 1)
 
+  let peerVar = genSym(nskLet ,"peer")
   handshakeExchanger.setBody quote do:
     let `peerVar` = `peerValue`
     let sendingFuture = `forwardCall`
