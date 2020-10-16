@@ -42,7 +42,7 @@ proc release[T](x: var AutoDisposed[T]): T =
   result = x.val
   x.val = nil
 
-proc `=destroy`*[T](x: var AutoDisposed[T]) =
+proc disposeIfUnreleased[T](x: var AutoDisposed[T]) =
   mixin dispose
   if x.val != nil:
     dispose(x.release)
@@ -299,6 +299,7 @@ proc init*(
     inMemory = false,
     keyspaces: openarray[string] = ["kvstore"]): KvResult[T] =
   var env: AutoDisposed[ptr sqlite3]
+  defer: disposeIfUnreleased(env)
 
   let
     name =
