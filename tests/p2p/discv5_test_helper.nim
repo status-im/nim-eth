@@ -1,18 +1,8 @@
 import
   stew/shims/net, bearssl,
-  eth/[keys, rlp],
-  eth/p2p/discoveryv5/[enr, node, routing_table]
-
-const UseDiscv51* {.booldefine.} = false
-
-when UseDiscv51:
-  import
-    eth/p2p/discoveryv5/[typesv1, encodingv1],
-    eth/p2p/discoveryv5/protocolv1 as discv5_protocol
-else:
-  import
-    eth/p2p/discoveryv5/[types, encoding],
-    eth/p2p/discoveryv5/protocol as discv5_protocol
+  eth/keys,
+  eth/p2p/discoveryv5/[enr, node, routing_table],
+  eth/p2p/discoveryv5/protocol as discv5_protocol
 
 proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))

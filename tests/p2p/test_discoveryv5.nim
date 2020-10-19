@@ -3,20 +3,13 @@ import
   chronos, chronicles, stint, testutils/unittests,
   stew/shims/net, eth/[keys, rlp], bearssl,
   eth/p2p/discoveryv5/[enr, node, routing_table],
+  eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./discv5_test_helper
 
-
-### This is all just temporary to be compatible with both versions
-const UseDiscv51* {.booldefine.} = false
-
-when UseDiscv51:
+### This is all just temporary to support both versions
+when not UseDiscv51:
   import
-    eth/p2p/discoveryv5/[typesv1, encodingv1],
-    eth/p2p/discoveryv5/protocolv1 as discv5_protocol
-else:
-  import
-    eth/p2p/discoveryv5/[types, encoding],
-    eth/p2p/discoveryv5/protocol as discv5_protocol
+    eth/p2p/discoveryv5/[types, encoding]
 
   proc findNode*(d: discv5_protocol.Protocol, toNode: Node, distances: seq[uint32]):
       Future[DiscResult[seq[Node]]] =
@@ -344,6 +337,7 @@ procSuite "Discovery v5 Tests":
     block:
       targetSeqNum.inc()
       let update = targetNode.updateRecord({"addsomefield": @[byte 2]})
+      check update.isOk()
 
       # ping node so that its ENR gets added
       check (await targetNode.ping(lookupNode.localNode)).isOk()
