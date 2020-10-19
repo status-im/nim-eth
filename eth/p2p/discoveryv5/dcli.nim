@@ -2,16 +2,7 @@ import
   std/[options, strutils],
   chronos, chronicles, chronicles/topics_registry, confutils, metrics,
   stew/byteutils, confutils/std/net,
-  eth/keys, eth/net/nat, enr, node
-
-### This is all just temporary to be compatible with both versions
-const UseDiscv51* {.booldefine.} = false
-
-when UseDiscv51:
-  import protocolv1
-else:
-  import protocol
-###
+  eth/keys, eth/net/nat, enr, node, protocol
 
 type
   DiscoveryCmd* = enum
@@ -175,6 +166,7 @@ proc run(config: DiscoveryConf) =
     else:
       echo "No Pong message returned"
   of findnode:
+    # Discv5.1 and Discv5.0 have a different findnode API
     when UseDiscv51:
       let nodes = waitFor d.findNode(config.findNodeTarget, @[config.distance])
     else:
