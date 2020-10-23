@@ -7,6 +7,9 @@ export keys
 
 {.push raises: [Defect].}
 
+logScope:
+  topics = "discv5"
+
 const
   version: uint16 = 1
   idSignatureText  = "discovery v5 identity proof"
@@ -395,7 +398,7 @@ proc decodeMessagePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   let pt = decryptGCM(readKey, nonce, ct, @iv & @header)
   if pt.isNone():
     # Don't consider this an error, the session got probably removed at the
-    # peer's side.
+    # peer's side and a random message is send.
     trace "Decrypting failed (invalid keys)"
     c.sessions.del(srcId, fromAddr)
     return ok(Packet(flag: Flag.OrdinaryMessage, requestNonce: nonce,
@@ -480,6 +483,8 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
     if node.id != srcId:
       return err("Invalid node id: does not match node id of ENR")
 
+    # Note: Not checking if the record seqNum is higher than the one we might
+    # have stored as it comes from this node directly.
     pubKey = node.pubKey
     newNode = some(node)
   else:

@@ -349,7 +349,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
   # debug "Packet received: ", length = packet.len
 
   if d.isWhoAreYou(packet):
-    trace "Received whoareyou", localNode = $d.localNode, address = a
+    trace "Received whoareyou", localNode = d.localNode, address = a
     var whoareyou: WhoAreYou
     try:
       whoareyou = d.decodeWhoAreYou(packet)
@@ -383,8 +383,8 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
         # Not filling table with nodes without correct IP in the ENR
         # TODO: Should we care about this???
         if node.address.isSome() and a == node.address.get():
-          debug "Adding new node to routing table", node = $node,
-            localNode = $d.localNode
+          debug "Adding new node to routing table", node = node,
+            localNode = d.localNode
           discard d.addNode(node)
 
       case message.kind
@@ -401,7 +401,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
             origin = a
     elif decoded.error == DecodeError.DecryptError:
       trace "Could not decrypt packet, respond with whoareyou",
-        localNode = $d.localNode, address = a
+        localNode = d.localNode, address = a
       # only sendingWhoareyou in case it is a decryption failure
       let res = d.sendWhoareyou(a, sender, authTag)
       if res.isErr():
@@ -412,8 +412,8 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
         # Not filling table with nodes without correct IP in the ENR
         # TODO: Should we care about this???s
         if node.address.isSome() and a == node.address.get():
-          debug "Adding new node to routing table", node = $node,
-            localNode = $d.localNode
+          debug "Adding new node to routing table", node = node,
+            localNode = d.localNode
           discard d.addNode(node)
     # elif decoded.error == DecodeError.PacketError:
       # Not adding this node as from our perspective it is sending rubbish.
@@ -534,7 +534,7 @@ proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node,
       if not n.address.isSome() or not
           validIp(fromNode.address.get().ip, n.address.get().ip):
         trace "Nodes reply contained record with invalid ip-address",
-          record = n.record.toURI, sender = fromNode.record.toURI, node = $n
+          record = n.record.toURI, sender = fromNode.record.toURI, node = n
         continue
       # Check if returned node has exactly the requested distance.
       if logDist(n.id, fromNode.id) != distance:
@@ -744,10 +744,10 @@ proc lookupLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   try:
     # lookup self (neighbour nodes)
     let selfLookup = await d.lookup(d.localNode.id)
-    trace "Discovered nodes in self lookup", nodes = $selfLookup
+    trace "Discovered nodes in self lookup", nodes = selfLookup
     while true:
       let randomLookup = await d.lookupRandom()
-      trace "Discovered nodes in random lookup", nodes = $randomLookup
+      trace "Discovered nodes in random lookup", nodes = randomLookup
       trace "Total nodes in routing table", total = d.routingTable.len()
       await sleepAsync(lookupInterval)
   except CancelledError:
@@ -796,7 +796,7 @@ proc newProtocol*(privKey: PrivateKey,
   result.routingTable.init(node, 5, rng)
 
 proc open*(d: Protocol) {.raises: [Exception, Defect].} =
-  info "Starting discovery node", node = $d.localNode,
+  info "Starting discovery node", node = d.localNode,
     uri = toURI(d.localNode.record), bindAddress = d.bindAddress
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(d.bindAddress.ip, d.bindAddress.port)
@@ -815,7 +815,7 @@ proc start*(d: Protocol) {.raises: [Exception, Defect].} =
 proc close*(d: Protocol) {.raises: [Exception, Defect].} =
   doAssert(not d.transp.closed)
 
-  debug "Closing discovery node", node = $d.localNode
+  debug "Closing discovery node", node = d.localNode
   if not d.revalidateLoop.isNil:
     d.revalidateLoop.cancel()
   if not d.lookupLoop.isNil:
@@ -826,7 +826,7 @@ proc close*(d: Protocol) {.raises: [Exception, Defect].} =
 proc closeWait*(d: Protocol) {.async, raises: [Exception, Defect].} =
   doAssert(not d.transp.closed)
 
-  debug "Closing discovery node", node = $d.localNode
+  debug "Closing discovery node", node = d.localNode
   if not d.revalidateLoop.isNil:
     await d.revalidateLoop.cancelAndWait()
   if not d.lookupLoop.isNil:

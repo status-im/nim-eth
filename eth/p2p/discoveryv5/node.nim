@@ -1,6 +1,6 @@
 import
   std/hashes,
-  nimcrypto, stint, chronos, stew/shims/net,
+  nimcrypto, stint, chronos, stew/shims/net, chronicles,
   eth/keys, enr
 
 {.push raises: [Defect].}
@@ -20,11 +20,11 @@ type
     seen*: bool ## Indicates if there was at least one successful
     ## request-response with this node.
 
-proc toNodeId*(pk: PublicKey): NodeId =
+func toNodeId*(pk: PublicKey): NodeId =
   ## Convert public key to a node identifier.
   readUintBE[256](keccak256.digest(pk.toRaw()).data)
 
-proc newNode*(r: Record): Result[Node, cstring] =
+func newNode*(r: Record): Result[Node, cstring] =
   ## Create a new `Node` from a `Record`.
   # TODO: Handle IPv6
 
@@ -46,22 +46,51 @@ proc newNode*(r: Record): Result[Node, cstring] =
     ok(Node(id: pk.get().toNodeId(), pubkey: pk.get(), record: r,
        address: none(Address)))
 
-proc hash*(n: Node): hashes.Hash = hash(n.pubkey.toRaw)
-proc `==`*(a, b: Node): bool =
+func hash*(n: Node): hashes.Hash = hash(n.pubkey.toRaw)
+func `==`*(a, b: Node): bool =
   (a.isNil and b.isNil) or
     (not a.isNil and not b.isNil and a.pubkey == b.pubkey)
 
-proc `$`*(id: NodeId): string =
+func `$`*(id: NodeId): string =
   id.toHex()
 
-proc `$`*(a: Address): string =
+func shortLog*(id: NodeId): string =
+  ## Returns compact string representation of ``id``.
+  var sid = $id
+  if len(sid) <= 10:
+    result = sid
+  else:
+    result = newStringOfCap(10)
+    for i in 0..<2:
+      result.add(sid[i])
+    result.add("*")
+    for i in (len(sid) - 6)..sid.high:
+      result.add(sid[i])
+chronicles.formatIt(NodeId): shortLog(it)
+
+func `$`*(a: Address): string =
   result.add($a.ip)
   result.add(":" & $a.port)
 
-proc `$`*(n: Node): string =
-  if n == nil:
-    "Node[uninitialized]"
+func shortLog*(n: Node): string =
+  if n.isNil:
+    "uninitialized"
   elif n.address.isNone():
-    "Node[unaddressable]"
+    shortLog(n.id) & ":unaddressable"
   else:
-    "Node[" & $n.address.get().ip & ":" & $n.address.get().port & "]"
+    shortLog(n.id) & ":" & $n.address.get()
+chronicles.formatIt(Node): shortLog(it)
+
+func shortLog*(nodes: seq[Node]): string =
+  result = "["
+
+  var first = true
+  for n in nodes:
+    if first:
+      first = false
+    else:
+      result.add(", ")
+    result.add(shortLog(n))
+
+  result.add("]")
+chronicles.formatIt(seq[Node]): shortLog(it)
