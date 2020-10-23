@@ -174,7 +174,7 @@ proc run(config: DiscoveryConf) =
     if nodes.isOk():
       echo "Received valid records:"
       for node in nodes[]:
-        echo $node.record & " - " & $node
+        echo $node.record & " - " & shortLog(node)
     else:
       echo "No Nodes message returned"
   of noCommand:
