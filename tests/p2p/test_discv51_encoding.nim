@@ -121,7 +121,7 @@ suite "Discovery v5.1 Protocol Message Encodings":
     check decoded.isErr()
 
 # According to test vectors:
-# https://github.com/fjl/devp2p/blob/discv5-v1-update/discv5/discv5-wire-test-vectors.md#cryptographic-primitives
+# https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire-test-vectors.md#cryptographic-primitives
 suite "Discovery v5.1 Cryptographic Primitives Test Vectors":
   test "ECDH":
     const
@@ -158,8 +158,8 @@ suite "Discovery v5.1 Cryptographic Primitives Test Vectors":
       hexToSeqByte(challengeData))
 
     check:
-      secrets.writeKey == hexToByteArray[aesKeySize](initiatorKey)
-      secrets.readKey == hexToByteArray[aesKeySize](recipientKey)
+      secrets.initiatorKey == hexToByteArray[aesKeySize](initiatorKey)
+      secrets.recipientKey == hexToByteArray[aesKeySize](recipientKey)
 
   test "Nonce Signing":
     const
@@ -173,16 +173,16 @@ suite "Discovery v5.1 Cryptographic Primitives Test Vectors":
 
     let
       privKey = PrivateKey.fromHex(staticKey)[]
-      signature = signIDNonce(
+      signature = createIdSignature(
         privKey,
         hexToSeqByte(challengeData),
         hexToSeqByte(ephemeralPubkey),
         NodeId.fromHex(nodeIdB))
-    check signature.toRaw() == hexToByteArray[64](idSignature)
-
-    let h = idNonceHash(hexToSeqByte(challengeData), hexToSeqByte(ephemeralPubkey),
-      NodeId.fromHex(nodeIdB))
-    check verify(signature, SkMessage(h.data), privKey.toPublicKey())
+    check:
+      signature.toRaw() == hexToByteArray[64](idSignature)
+      verifyIdSignature(signature, hexToSeqByte(challengeData),
+        hexToSeqByte(ephemeralPubkey), NodeId.fromHex(nodeIdB),
+        privKey.toPublicKey())
 
   test "Encryption/Decryption":
     const
@@ -201,7 +201,7 @@ suite "Discovery v5.1 Cryptographic Primitives Test Vectors":
     check encrypted == hexToSeqByte(messageCiphertext)
 
 # According to test vectors:
-# https://github.com/fjl/devp2p/blob/discv5-v1-update/discv5/discv5-wire-test-vectors.md#packet-encodings
+# https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire-test-vectors.md#packet-encodings
 suite "Discovery v5.1 Packet Encodings Test Vectors":
   const
     nodeAKey = "0xeef77acb6c6a6eebc5b363a475ac583ec7eccdb42b6481424c60f59aa326547f"
@@ -546,8 +546,10 @@ suite "Discovery v5.1 Additional Encode/Decode":
     # Need to manually add the secrets that normally get negotiated in the
     # handshake packet.
     var secrets: HandshakeSecrets
-    codecA.sessions.store(nodeB.id, nodeB.address.get(), secrets.readKey, secrets.writeKey)
-    codecB.sessions.store(nodeA.id, nodeA.address.get(), secrets.writeKey, secrets.readKey)
+    codecA.sessions.store(nodeB.id, nodeB.address.get(), secrets.recipientKey,
+      secrets.initiatorKey)
+    codecB.sessions.store(nodeA.id, nodeA.address.get(), secrets.initiatorKey,
+      secrets.recipientKey)
 
     let (data, nonce) = encodeMessagePacket(rng[], codecA, nodeB.id,
       nodeB.address.get(), message)

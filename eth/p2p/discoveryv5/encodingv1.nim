@@ -46,8 +46,8 @@ type
     authdataSize: uint16
 
   HandshakeSecrets* = object
-    writeKey*: AesKey
-    readKey*: AesKey
+    initiatorKey*: AesKey
+    recipientKey*: AesKey
 
   Flag* = enum
     OrdinaryMessage = 0x00
@@ -76,7 +76,7 @@ type
 
   DecodeResult*[T] = Result[T, cstring]
 
-proc idNonceHash*(challengeData, ephkey: openarray[byte], nodeId: NodeId):
+proc idHash(challengeData, ephkey: openarray[byte], nodeId: NodeId):
     MDigest[256] =
   var ctx: sha256
   ctx.init()
@@ -87,9 +87,14 @@ proc idNonceHash*(challengeData, ephkey: openarray[byte], nodeId: NodeId):
   result = ctx.finish()
   ctx.clear()
 
-proc signIDNonce*(privKey: PrivateKey, challengeData,
+proc createIdSignature*(privKey: PrivateKey, challengeData,
     ephKey: openarray[byte], nodeId: NodeId): SignatureNR =
-  signNR(privKey, SkMessage(idNonceHash(challengeData, ephKey, nodeId).data))
+  signNR(privKey, SkMessage(idHash(challengeData, ephKey, nodeId).data))
+
+proc verifyIdSignature*(sig: SignatureNR, challengeData, ephKey: openarray[byte],
+    nodeId: NodeId, pubKey: PublicKey): bool =
+  let h = idHash(challengeData, ephKey, nodeId)
+  verify(sig, SkMessage(h.data), pubKey)
 
 proc deriveKeys*(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
     challengeData: openarray[byte]): HandshakeSecrets =
@@ -173,9 +178,9 @@ proc encodeMessagePacket*(rng: var BrHmacDrbgContext, c: var Codec,
 
   # message
   var messageEncrypted: seq[byte]
-  var writeKey, readKey: AesKey
-  if c.sessions.load(toId, toAddr, readKey, writeKey):
-    messageEncrypted = encryptGCM(writeKey, nonce, message, @iv & header)
+  var initiatorKey, recipientKey: AesKey
+  if c.sessions.load(toId, toAddr, recipientKey, initiatorKey):
+    messageEncrypted = encryptGCM(initiatorKey, nonce, message, @iv & header)
   else:
     # We might not have the node's keys if the handshake hasn't been performed
     # yet. That's fine, we send a random-packet and we will be responded with
@@ -257,7 +262,7 @@ proc encodeHandshakePacket*(rng: var BrHmacDrbgContext, c: var Codec,
   authdata.add(authdataHead)
 
   let ephKeys = KeyPair.random(rng)
-  let signature = signIDNonce(c.privKey, whoareyouData.challengeData,
+  let signature = createIdSignature(c.privKey, whoareyouData.challengeData,
     ephKeys.pubkey.toRawCompressed(), toId)
 
   authdata.add(signature.toRaw())
@@ -278,8 +283,9 @@ proc encodeHandshakePacket*(rng: var BrHmacDrbgContext, c: var Codec,
   header.add(staticHeader)
   header.add(authdata)
 
-  c.sessions.store(toId, toAddr, secrets.readKey, secrets.writeKey)
-  let messageEncrypted = encryptGCM(secrets.writeKey, nonce, message, @iv & header)
+  c.sessions.store(toId, toAddr, secrets.recipientKey, secrets.initiatorKey)
+  let messageEncrypted = encryptGCM(secrets.initiatorKey, nonce, message,
+    @iv & header)
 
   let maskedHeader = encryptHeader(toId, iv, header)
 
@@ -387,15 +393,15 @@ proc decodeMessagePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   let srcId = NodeId.fromBytesBE(header.toOpenArray(staticHeaderSize,
     header.high))
 
-  var writeKey, readKey: AesKey
-  if not c.sessions.load(srcId, fromAddr, readKey, writeKey):
+  var initiatorKey, recipientKey: AesKey
+  if not c.sessions.load(srcId, fromAddr, recipientKey, initiatorKey):
     # Don't consider this an error, simply haven't done a handshake yet or
     # the session got removed.
     trace "Decrypting failed (no keys)"
     return ok(Packet(flag: Flag.OrdinaryMessage, requestNonce: nonce,
       srcId: srcId))
 
-  let pt = decryptGCM(readKey, nonce, ct, @iv & @header)
+  let pt = decryptGCM(recipientKey, nonce, ct, @iv & @header)
   if pt.isNone():
     # Don't consider this an error, the session got probably removed at the
     # peer's side and a random message is send.
@@ -495,22 +501,21 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
       # We should have received a Record in this case.
       return err("Missing ENR in handshake packet")
 
-  # Verify the id-nonce-sig
+  # Verify the id-signature
   let sig = ? SignatureNR.fromRaw(
     authdata.toOpenArray(authdataHeadSize, authdataHeadSize + int(sigSize) - 1))
-
-  let h = idNonceHash(challenge.whoareyouData.challengeData, ephKeyRaw,
-    c.localNode.id)
-  if not verify(sig, SkMessage(h.data), pubkey):
+  if not verifyIdSignature(sig, challenge.whoareyouData.challengeData,
+      ephKeyRaw, c.localNode.id, pubkey):
     return err("Invalid id-signature")
 
-  # Do the key derivation step only after id-nonce-sig is verified!
+  # Do the key derivation step only after id-signature is verified as this is
+  # costly.
   var secrets = deriveKeys(srcId, c.localNode.id, c.privKey,
     ephKey, challenge.whoareyouData.challengeData)
 
-  swap(secrets.readKey, secrets.writeKey)
+  swap(secrets.recipientKey, secrets.initiatorKey)
 
-  let pt = decryptGCM(secrets.readKey, nonce, ct, @iv & @header)
+  let pt = decryptGCM(secrets.recipientKey, nonce, ct, @iv & @header)
   if pt.isNone():
     c.sessions.del(srcId, fromAddr)
     # Differently from an ordinary message, this is seen as an error as the
@@ -524,7 +529,7 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
 
   # Only store the session secrets in case decryption was successful and also
   # in case the message can get decoded.
-  c.sessions.store(srcId, fromAddr, secrets.readKey, secrets.writeKey)
+  c.sessions.store(srcId, fromAddr, secrets.recipientKey, secrets.initiatorKey)
 
   return ok(Packet(flag: Flag.HandshakeMessage, message: message,
     srcIdHs: srcId, node: newNode))
