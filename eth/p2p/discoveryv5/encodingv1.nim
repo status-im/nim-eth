@@ -1,7 +1,9 @@
 import
   std/[tables, options],
-  nimcrypto, stint, chronicles, stew/results, bearssl, stew/byteutils,
+  nimcrypto, stint, chronicles, bearssl, stew/[results, byteutils],
   eth/[rlp, keys], typesv1, node, enr, hkdf, sessions
+
+from stew/objects import checkedEnumAssign
 
 export keys
 
@@ -305,9 +307,9 @@ proc decodeHeader*(id: NodeId, iv, maskedHeader: openarray[byte]):
   if uint16.fromBytesBE(staticHeader.toOpenArray(6, 7)) != version:
     return err("Invalid protocol version")
 
-  if staticHeader[8] < Flag.low.byte or staticHeader[8] > Flag.high.byte:
+  var flag: Flag
+  if not checkedEnumAssign(flag, staticHeader[8]):
     return err("Invalid packet flag")
-  let flag = cast[Flag](staticHeader[8])
 
   var nonce: AESGCMNonce
   copyMem(addr nonce[0], unsafeAddr staticHeader[9], gcmNonceSize)
@@ -333,12 +335,10 @@ proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
   if body.len < 1:
     return err("No message data")
 
-  if body[0] < MessageKind.low.byte or body[0] > MessageKind.high.byte:
+  var kind: MessageKind
+  if not checkedEnumAssign(kind, body[0]):
     return err("Invalid message type")
 
-  # This cast is covered by the above check (else we could get enum with invalid
-  # data!). However, can't we do this in a cleaner way?
-  let kind = cast[MessageKind](body[0])
   var message = Message(kind: kind)
   var rlp = rlpFromBytes(body.toOpenArray(1, body.high))
   if rlp.enterList:
