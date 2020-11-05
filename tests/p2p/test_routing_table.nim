@@ -300,23 +300,25 @@ suite "Routing Table Tests":
 
     block: # Second bucket
       # Try to add another node with the same IP, but different distance.
+      # This should split the bucket and add it.
       let anotherSameIpNode = node.nodeAtDistance(rng[], 255)
-      check table.addNode(anotherSameIpNode) == IpLimitReached
+      check table.addNode(anotherSameIpNode) == Added
 
       # Add more nodes with different ip and distance 255 to get in the new bucket
       let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 255,
-        int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit),
+        int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit - 1),
         ValidIpAddress.init("192.168.1.1"))
       for n in diffIpNodes:
         check table.addNode(n) == Added
 
       let sameIpNodes = node.nodesAtDistance(rng[], 255,
-        int(DefaultTableIpLimits.bucketIpLimit))
+        int(DefaultTableIpLimits.bucketIpLimit - 1))
       for n in sameIpNodes:
         check table.addNode(n) == Added
 
       # Adding in another one should fail again
-      check table.addNode(anotherSameIpNode) == IpLimitReached
+      let anotherSameIpNode2 = node.nodeAtDistance(rng[], 255)
+      check table.addNode(anotherSameIpNode2) == IpLimitReached
 
   test "Ip limits on routing table":
     let node = generateNode(PrivateKey.random(rng[]))
@@ -435,3 +437,27 @@ suite "Routing Table Tests":
 
     # Now the add should work
     check table.addNode(sameIpNode) == ReplacementAdded
+
+  test "Ip limits on replacement cache: double add":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table: RoutingTable
+
+    table.init(node, 1, DefaultTableIpLimits, rng = rng)
+
+    # Fill bucket
+    let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256, BUCKET_SIZE,
+      ValidIpAddress.init("192.168.0.1"))
+    for n in diffIpNodes:
+      check table.addNode(n) == Added
+
+    let sameIpNode1 = node.nodeAtDistance(rng[], 256)
+    check table.addNode(sameIpNode1) == ReplacementAdded
+    # Add it again
+    check table.addNode(sameIpNode1) == ReplacementExisting
+
+    # Test if double add didn't account for the ip limits
+    let sameIpNode2 = node.nodeAtDistance(rng[], 256)
+    check table.addNode(sameIpNode2) == ReplacementAdded
+
+    let sameIpNode3 = node.nodeAtDistance(rng[], 256)
+    check table.addNode(sameIpNode3) == IpLimitReached

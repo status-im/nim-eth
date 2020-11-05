@@ -134,52 +134,9 @@ proc checkUpdate(k: KBucket, n: Node): bool =
 
     return true
 
-proc add(k: KBucket, n: Node): bool =
-  ## Try to add the given node to this bucket.
-  ## If the bucket has fewer than `BUCKET_SIZE` entries, it is inserted as the
-  ## last entry of the bucket (least recently seen node) and true is returned.
-  ## If the bucket is full, nothing is done and false is returned.
-  ##
-  ## Reasoning here is that adding nodes will happen for a big part from
-  ## lookups, which do not necessarily return nodes that are (still) reachable.
-  ## So, more trust is put in the own ordering and newly additions are added
-  ## as least recently seen (in fact they are never seen yet from this node its
-  ## perspective).
-  ## However, in discovery v5 it can be that a node is added after a incoming
-  ## request, and considering a handshake that needs to be done, it is likely
-  ## that this node is reachable. An additional `addSeen` proc could be created
-  ## for this.
-  if k.len < BUCKET_SIZE:
-    k.nodes.add(n)
-    routing_table_nodes.inc()
-    true
-  else:
-    false
-
-proc addReplacement(r: var RoutingTable, k: KBucket, n: Node): bool =
-  ## Add the node to the tail of the replacement cache of the KBucket.
-  ##
-  ## If the replacement cache is full, the oldest (first entry) node will be
-  ## removed. If the node is already in the replacement cache, it will be moved
-  ## to the tail.
-  let nodeIdx = k.replacementCache.find(n)
-  if nodeIdx != -1:
-    if k.replacementCache[nodeIdx].record.seqNum <= n.record.seqNum:
-      # In case the record sequence number is higher or the same, the node gets
-      # moved to the tail.
-      k.replacementCache.delete(nodeIdx)
-      k.replacementCache.add(n)
-    return false
-  else:
-    doAssert(k.replacementCache.len <= REPLACEMENT_CACHE_SIZE)
-
-    if k.replacementCache.len == REPLACEMENT_CACHE_SIZE:
-      # Remove ip from limits for the to be deleted node.
-      ipLimitDec(r, k, k.replacementCache[0])
-      k.replacementCache.delete(0)
-
-    k.replacementCache.add(n)
-    return true
+proc add(k: KBucket, n: Node) =
+  k.nodes.add(n)
+  routing_table_nodes.inc()
 
 proc removeNode(k: KBucket, n: Node) =
   let i = k.nodes.find(n)
@@ -267,9 +224,32 @@ proc bucketForNode(r: RoutingTable, id: NodeId): KBucket =
   doAssert(not result.isNil(),
     "Routing table should always cover the full id space")
 
-proc removeNode*(r: var RoutingTable, n: Node) =
-  ## Remove the node `n` from the routing table.
-  r.bucketForNode(n.id).removeNode(n)
+proc addReplacement(r: var RoutingTable, k: KBucket, n: Node): NodeStatus =
+  ## Add the node to the tail of the replacement cache of the KBucket.
+  ##
+  ## If the replacement cache is full, the oldest (first entry) node will be
+  ## removed. If the node is already in the replacement cache, it will be moved
+  ## to the tail.
+  let nodeIdx = k.replacementCache.find(n)
+  if nodeIdx != -1:
+    if k.replacementCache[nodeIdx].record.seqNum <= n.record.seqNum:
+      # In case the record sequence number is higher or the same, the node gets
+      # moved to the tail.
+      k.replacementCache.delete(nodeIdx)
+      k.replacementCache.add(n)
+    return ReplacementExisting
+  elif not ipLimitInc(r, k, n):
+    return IpLimitReached
+  else:
+    doAssert(k.replacementCache.len <= REPLACEMENT_CACHE_SIZE)
+
+    if k.replacementCache.len == REPLACEMENT_CACHE_SIZE:
+      # Remove ip from limits for the to be deleted node.
+      ipLimitDec(r, k, k.replacementCache[0])
+      k.replacementCache.delete(0)
+
+    k.replacementCache.add(n)
+    return ReplacementAdded
 
 proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   ## Try to add the node to the routing table.
@@ -293,10 +273,25 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
     # If the node is already present, we're done here.
     return Existing
 
-  if not ipLimitInc(r, bucket, n):
-    return IpLimitReached
+  # If the bucket has fewer than `BUCKET_SIZE` entries, it is inserted as the
+  # last entry of the bucket (least recently seen node). If the bucket is
+  # full, it might get split and adding is retried, or it is added as a
+  # replacement.
+  # Reasoning here is that adding nodes will happen for a big part from
+  # lookups, which do not necessarily return nodes that are (still) reachable.
+  # So, more trust is put in the own ordering and newly additions are added
+  # as least recently seen (in fact they are never seen yet from this node its
+  # perspective).
+  # However, in discovery v5 it can be that a node is added after a incoming
+  # request, and considering a handshake that needs to be done, it is likely
+  # that this node is reachable. An additional `addSeen` proc could be created
+  # for this.
+  if bucket.len < BUCKET_SIZE:
+    if not ipLimitInc(r, bucket, n):
+      return IpLimitReached
 
-  if not bucket.add(n):
+    bucket.add(n)
+  else:
     # Bucket must be full, but lets see if it should be split.
 
     # Calculate the prefix shared by all nodes in the bucket's range, not the
@@ -307,17 +302,14 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
     if bucket.inRange(r.thisNode) or
         (depth mod r.bitsPerHop != 0 and depth != ID_SIZE):
       r.splitBucket(r.buckets.find(bucket))
-      ipLimitDec(r, bucket, n)
       return r.addNode(n) # retry adding
     else:
       # When bucket doesn't get split the node is added to the replacement cache
-      if not r.addReplacement(bucket, n):
-        ipLimitDec(r, bucket, n)
-        return ReplacementExisting
-      else:
-        return ReplacementAdded
-  else:
-    return Added
+      return r.addReplacement(bucket, n)
+
+proc removeNode*(r: var RoutingTable, n: Node) =
+  ## Remove the node `n` from the routing table.
+  r.bucketForNode(n.id).removeNode(n)
 
 proc replaceNode*(r: var RoutingTable, n: Node) =
   ## Replace node `n` with last entry in the replacement cache. If there are
