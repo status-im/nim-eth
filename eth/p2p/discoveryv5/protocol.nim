@@ -760,7 +760,9 @@ proc newProtocol*(privKey: PrivateKey,
                   localEnrFields: openarray[(string, seq[byte])] = [],
                   bootstrapRecords: openarray[Record] = [],
                   previousRecord = none[enr.Record](),
-                  bindIp = IPv4_any(), rng = newRng()):
+                  bindIp = IPv4_any(),
+                  tableIpLimits = DefaultTableIpLimits,
+                  rng = newRng()):
                   Protocol {.raises: [Defect].} =
   # TODO: Tried adding bindPort = udpPort as parameter but that gave
   # "Error: internal error: environment misses: udpPort" in nim-beacon-chain.
@@ -793,7 +795,7 @@ proc newProtocol*(privKey: PrivateKey,
     bootstrapRecords: @bootstrapRecords,
     rng: rng)
 
-  result.routingTable.init(node, 5, rng)
+  result.routingTable.init(node, DefaultBitsPerHop, tableIpLimits, rng)
 
 proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   info "Starting discovery node", node = d.localNode,
