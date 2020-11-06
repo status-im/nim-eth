@@ -123,17 +123,6 @@ proc ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   b.ipLimits.dec(ip)
   r.ipLimits.dec(ip)
 
-proc checkUpdate(k: KBucket, n: Node): bool =
-  ## Check if the node is already present. If so, check if the record requires
-  ## updating and return true. If it isn't present, return false.
-  let nodeIdx = k.nodes.find(n)
-  if nodeIdx != -1:
-    if k.nodes[nodeIdx].record.seqNum < n.record.seqNum:
-      # In case of a newer record, it gets replaced.
-      k.nodes[nodeIdx].record = n.record
-
-    return true
-
 proc add(k: KBucket, n: Node) =
   k.nodes.add(n)
   routing_table_nodes.inc()
@@ -233,8 +222,12 @@ proc addReplacement(r: var RoutingTable, k: KBucket, n: Node): NodeStatus =
   let nodeIdx = k.replacementCache.find(n)
   if nodeIdx != -1:
     if k.replacementCache[nodeIdx].record.seqNum <= n.record.seqNum:
-      # In case the record sequence number is higher or the same, the node gets
-      # moved to the tail.
+      # In case the record sequence number is higher or the same, the new node
+      # gets moved to the tail.
+      if k.replacementCache[nodeIdx].address.get().ip != n.address.get().ip:
+        if not ipLimitInc(r, k, n):
+          return IpLimitReached
+        ipLimitDec(r, k, k.replacementCache[nodeIdx])
       k.replacementCache.delete(nodeIdx)
       k.replacementCache.add(n)
     return ReplacementExisting
@@ -269,8 +262,18 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
 
   let bucket = r.bucketForNode(n.id)
 
-  if bucket.checkUpdate(n):
-    # If the node is already present, we're done here.
+  ## Check if the node is already present. If so, check if the record requires
+  ## updating and return true. If it isn't present, return false.
+  let nodeIdx = bucket.nodes.find(n)
+  if nodeIdx != -1:
+    if bucket.nodes[nodeIdx].record.seqNum < n.record.seqNum:
+      # In case of a newer record, it gets replaced.
+      if bucket.nodes[nodeIdx].address.get().ip != n.address.get().ip:
+        if not ipLimitInc(r, bucket, n):
+          return IpLimitReached
+        ipLimitDec(r, bucket, bucket.nodes[nodeIdx])
+      bucket.nodes[nodeIdx].record = n.record
+
     return Existing
 
   # If the bucket has fewer than `BUCKET_SIZE` entries, it is inserted as the

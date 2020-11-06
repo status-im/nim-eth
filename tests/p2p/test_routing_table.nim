@@ -1,6 +1,6 @@
 import
   std/unittest,
-  bearssl, eth/keys, eth/p2p/discoveryv5/[routing_table, node],
+  bearssl, eth/keys, eth/p2p/discoveryv5/[routing_table, node, enr],
   ./discv5_test_helper
 
 suite "Routing Table Tests":
@@ -461,3 +461,52 @@ suite "Routing Table Tests":
 
     let sameIpNode3 = node.nodeAtDistance(rng[], 256)
     check table.addNode(sameIpNode3) == IpLimitReached
+
+  test "Ip limits on bucket: double add with new ip":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table: RoutingTable
+
+    table.init(node, 1, DefaultTableIpLimits, rng = rng)
+
+    let pk = PrivateKey.random(rng[])
+    let sameIpNode1 = generateNode(pk)
+    check table.addNode(sameIpNode1) == Added
+
+    let updatedNode1 = generateNode(pk)
+    # Need to do an update to get seqNum increased
+    let updated = updatedNode1.updateNode(pk,
+      some(ValidIpAddress.init("192.168.0.1")), Port(9000), Port(9000))
+    check updated.isOk()
+    check table.addNode(updatedNode1) == Existing
+
+    let sameIpNodes = node.nodesAtDistance(rng[], 256,
+      int(DefaultTableIpLimits.bucketIpLimit))
+    for n in sameIpNodes:
+      check table.addNode(n) == Added
+
+    check table.len == 3
+
+  test "Ip limits on replacement cache: double add with new ip":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table: RoutingTable
+
+    table.init(node, 1, DefaultTableIpLimits, rng = rng)
+
+    # Fill bucket
+    let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256, BUCKET_SIZE,
+      ValidIpAddress.init("192.168.0.1"))
+    for n in diffIpNodes:
+      check table.addNode(n) == Added
+
+    let (sameIpNode1, pk) = node.nodeAndPrivKeyAtDistance(rng[], 256)
+    check table.addNode(sameIpNode1) == ReplacementAdded
+
+    # For replacements we don't need to get seqNum increased as the node will
+    # still get pushed in front of the queue.
+    let updatedNode1 = generateNode(pk, ip = ValidIpAddress.init("192.168.1.1"))
+    check table.addNode(updatedNode1) == ReplacementExisting
+
+    let sameIpNodes = node.nodesAtDistance(rng[], 256,
+      int(DefaultTableIpLimits.bucketIpLimit))
+    for n in sameIpNodes:
+      check table.addNode(n) == ReplacementAdded
