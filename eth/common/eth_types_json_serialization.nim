@@ -2,6 +2,9 @@ import
   times, net,
   json_serialization, nimcrypto/[hash, utils], eth_types
 
+export
+  json_serialization
+
 {.push raises: [SerializationError, IOError, Defect].}
 
 proc writeValue*(w: var JsonWriter, a: MDigest) =
@@ -41,4 +44,13 @@ proc writeValue*(w: var JsonWriter, value: HashOrNum) =
   else:
     w.writeField("number", value.number)
   w.endRecord()
+
+proc writeValue*(w: var JsonWriter, value: BlockHashOrNumber) =
+  w.writeValue $value
+
+proc readValue*(r: var JsonReader, value: var BlockHashOrNumber) =
+  try:
+    value = init(BlockHashOrNumber, r.readValue(string))
+  except ValueError:
+    r.raiseUnexpectedValue("A hex-encoded block hash or a decimal block number expected")
 

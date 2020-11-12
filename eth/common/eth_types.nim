@@ -1,5 +1,6 @@
 import
-  stew/endians2, options, times, chronicles,
+  strutils,
+  stew/[endians2, byteutils], options, times, chronicles,
   stint, nimcrypto/[keccak, hash], eth/rlp, eth/trie/[trie_defs, db]
 
 export
@@ -125,12 +126,20 @@ type
     receiptRoot*:   Hash256
     blockNumber*:   BlockNumber
 
+  # TODO: Make BlockNumber a uint64 and deprecate either this or BlockHashOrNumber
   HashOrNum* = object
     case isHash*: bool
     of true:
       hash*: Hash256
     else:
       number*: BlockNumber
+
+  BlockHashOrNumber* = object
+    case isHash*: bool
+    of true:
+      hash*: Hash256
+    else:
+      number*: uint64
 
   BlocksRequest* = object
     startBlock*: HashOrNum
@@ -300,6 +309,24 @@ proc read*(rlp: var Rlp, T: typedesc[HashOrStatus]): T {.inline.} =
   else:
     raise newException(RlpTypeMismatch,
       "HashOrStatus expected, but the source RLP is not a blob of right size.")
+
+func init*(T: type BlockHashOrNumber, str: string): T
+          {.raises: [ValueError, Defect].} =
+  if str.startsWith "0x":
+    if str.len != sizeof(result.hash.data) * 2 + 2:
+      raise newException(ValueError, "Block hash has incorrect length")
+
+    result.isHash = true
+    hexToByteArray(str, result.hash.data)
+  else:
+    result.isHash = false
+    result.number = parseBiggestUInt str
+
+func `$`*(x: BlockHashOrNumber): string =
+  if x.isHash:
+    "0x" & x.hash.data.toHex
+  else:
+    $x.number
 
 proc append*(rlpWriter: var RlpWriter, value: HashOrStatus) {.inline.} =
   if value.isHash:
