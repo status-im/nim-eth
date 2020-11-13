@@ -518,3 +518,97 @@ procSuite "Discovery v5 Tests":
         records = [recordInvalidDistance]
         test = verifyNodesRecords(records, fromNode, 0'u32)
       check test.len == 0
+
+  asyncTest "Handshake cleanup: different ids":
+    # Node to test the handshakes on.
+    let receiveNode = initDiscoveryNode(
+      rng, PrivateKey.random(rng[]), localAddress(20302))
+
+    # Create random packets with same ip but different node ids
+    # and "receive" them on receiveNode
+    let a = localAddress(20303)
+    for i in 0 ..< 5:
+      let
+        privKey = PrivateKey.random(rng[])
+        enrRec = enr.Record.init(1, privKey,
+          some(ValidIpAddress.init("127.0.0.1")), Port(9000),
+          Port(9000)).expect("Properly intialized private key")
+        sendNode = newNode(enrRec).expect("Properly initialized record")
+      var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
+
+      let (packet, _) = encodeMessagePacket(rng[], codec,
+        receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
+      receiveNode.receive(a, packet)
+
+    # Checking different nodeIds but same address
+    check receiveNode.codec.handshakes.len == 5
+    # TODO: Could get rid of the sleep by storing the timeout future of the
+    # handshake
+    await sleepAsync(handshakeTimeout)
+    # Checking handshake cleanup
+    check receiveNode.codec.handshakes.len == 0
+
+    await receiveNode.closeWait()
+
+  asyncTest "Handshake cleanup: different ips":
+    # Node to test the handshakes on.
+    let receiveNode = initDiscoveryNode(
+      rng, PrivateKey.random(rng[]), localAddress(20302))
+
+    # Create random packets with same node ids but different ips
+    # and "receive" them on receiveNode
+    let
+      privKey = PrivateKey.random(rng[])
+      enrRec = enr.Record.init(1, privKey,
+        some(ValidIpAddress.init("127.0.0.1")), Port(9000),
+        Port(9000)).expect("Properly intialized private key")
+      sendNode = newNode(enrRec).expect("Properly initialized record")
+    var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
+    for i in 0 ..< 5:
+      let a = localAddress(20303 + i)
+      let (packet, _) = encodeMessagePacket(rng[], codec,
+        receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
+      receiveNode.receive(a, packet)
+
+    # Checking different nodeIds but same address
+    check receiveNode.codec.handshakes.len == 5
+    # TODO: Could get rid of the sleep by storing the timeout future of the
+    # handshake
+    await sleepAsync(handshakeTimeout)
+    # Checking handshake cleanup
+    check receiveNode.codec.handshakes.len == 0
+
+    await receiveNode.closeWait()
+
+  asyncTest "Handshake duplicates":
+    # Node to test the handshakes on.
+    let receiveNode = initDiscoveryNode(
+      rng, PrivateKey.random(rng[]), localAddress(20302))
+
+    # Create random packets with same node ids and same ips
+    # and "receive" them on receiveNode
+    let
+      a = localAddress(20303)
+      privKey = PrivateKey.random(rng[])
+      enrRec = enr.Record.init(1, privKey,
+        some(ValidIpAddress.init("127.0.0.1")), Port(9000),
+        Port(9000)).expect("Properly intialized private key")
+      sendNode = newNode(enrRec).expect("Properly initialized record")
+    var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
+
+    var firstRequestNonce: AESGCMNonce
+    for i in 0 ..< 5:
+      let (packet, requestNonce) = encodeMessagePacket(rng[], codec,
+        receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
+      receiveNode.receive(a, packet)
+      if i == 0:
+        firstRequestNonce = requestNonce
+
+    # Check handshake duplicates
+    check receiveNode.codec.handshakes.len == 1
+    # Check if it is for the first packet that a handshake is stored
+    let key = HandShakeKey(nodeId: sendNode.id, address: $a)
+    check receiveNode.codec.handshakes[key].whoareyouData.requestNonce ==
+      firstRequestNonce
+
+    await receiveNode.closeWait()
