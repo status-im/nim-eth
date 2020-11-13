@@ -1,34 +1,22 @@
 import
   std/hashes,
-  stint, chronos,
-  eth/[keys, rlp], enr, node
+  stint,
+  eth/rlp, enr, node
 
 {.push raises: [Defect].}
 
 const
-  authTagSize* = 12
-  idNonceSize* = 32
   aesKeySize* = 128 div 8
 
 type
-  AuthTag* = array[authTagSize, byte]
-  IdNonce* = array[idNonceSize, byte]
   AesKey* = array[aesKeySize, byte]
 
   HandshakeKey* = object
     nodeId*: NodeId
     address*: string # TODO: Replace with Address, need hash
 
-  WhoareyouObj* = object
-    authTag*: AuthTag
-    idNonce*: IdNonce
-    recordSeq*: uint64
-    pubKey* {.rlpIgnore.}: Option[PublicKey]
-
-  Whoareyou* = ref WhoareyouObj
-
   MessageKind* = enum
-    # TODO This is needed only to make Nim 1.0.4 happy
+    # TODO This is needed only to make Nim 1.2.6 happy
     #      Without it, the `MessageKind` type cannot be used as
     #      a discriminator in case objects.
     unused = 0x00
@@ -37,12 +25,15 @@ type
     pong = 0x02
     findnode = 0x03
     nodes = 0x04
-    regtopic = 0x05
-    ticket = 0x06
-    regconfirmation = 0x07
-    topicquery = 0x08
+    talkreq = 0x05
+    talkresp = 0x06
+    regtopic = 0x07
+    ticket = 0x08
+    regconfirmation = 0x09
+    topicquery = 0x0A
 
-  RequestId* = uint64
+  RequestId* = object
+    id*: seq[byte]
 
   PingMessage* = object
     enrSeq*: uint64
@@ -53,13 +44,27 @@ type
     port*: uint16
 
   FindNodeMessage* = object
-    distance*: uint32
+    distances*: seq[uint32]
 
   NodesMessage* = object
     total*: uint32
     enrs*: seq[Record]
 
-  SomeMessage* = PingMessage or PongMessage or FindNodeMessage or NodesMessage
+  TalkReqMessage* = object
+    protocol*: seq[byte]
+    request*: seq[byte]
+
+  TalkRespMessage* = object
+    response*: seq[byte]
+
+  # Not implemented, specification is not final here.
+  RegTopicMessage* = object
+  TicketMessage* = object
+  RegConfirmationMessage* = object
+  TopicQueryMessage* = object
+
+  SomeMessage* = PingMessage or PongMessage or FindNodeMessage or NodesMessage or
+    TalkReqMessage or TalkRespMessage
 
   Message* = object
     reqId*: RequestId
@@ -72,8 +77,19 @@ type
       findNode*: FindNodeMessage
     of nodes:
       nodes*: NodesMessage
+    of talkreq:
+      talkreq*: TalkReqMessage
+    of talkresp:
+      talkresp*: TalkRespMessage
+    of regtopic:
+      regtopic*: RegTopicMessage
+    of ticket:
+      ticket*: TicketMessage
+    of regconfirmation:
+      regconfirmation*: RegConfirmationMessage
+    of topicquery:
+      topicquery*: TopicQueryMessage
     else:
-      # TODO: Define the rest
       discard
 
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
@@ -81,6 +97,25 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   elif T is PongMessage: pong
   elif T is FindNodeMessage: findNode
   elif T is NodesMessage: nodes
+  elif T is TalkReqMessage: talkreq
+  elif T is TalkRespMessage: talkresp
+
+proc read*(rlp: var Rlp, T: type RequestId): T
+    {.raises: [ValueError, RlpError, Defect].} =
+  mixin read
+  var reqId: RequestId
+  reqId.id = rlp.toBytes()
+  if reqId.id.len > 8:
+    raise newException(ValueError, "RequestId is > 8 bytes")
+  rlp.skipElem()
+
+  reqId
+
+proc append*(writer: var RlpWriter, value: RequestId) =
+  writer.append(value.id)
+
+proc hash*(reqId: RequestId): Hash =
+  hash(reqId.id)
 
 proc toBytes*(id: NodeId): array[32, byte] {.inline.} =
   id.toByteArrayBE()
@@ -96,23 +131,3 @@ proc hash*(address: Address): Hash {.inline.} =
 proc hash*(key: HandshakeKey): Hash =
   result = key.nodeId.hash !& key.address.hash
   result = !$result
-
-proc read*(rlp: var Rlp, O: type Option[Record]): O
-    {.raises: [ValueError, RlpError, Defect].} =
-  mixin read
-  if not rlp.isList:
-    raise newException(
-      ValueError, "Could not deserialize optional ENR, expected list")
-
-  # The discovery specification states that in case no ENR is send in the
-  # handshake, an empty rlp list instead should be send.
-  if rlp.listLen == 0:
-    none(Record)
-  else:
-    some(read(rlp, Record))
-
-proc append*(writer: var RlpWriter, value: Option[Record]) =
-  if value.isSome:
-    writer.append value.get
-  else:
-    writer.startList(0)

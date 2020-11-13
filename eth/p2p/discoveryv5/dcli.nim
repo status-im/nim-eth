@@ -166,11 +166,7 @@ proc run(config: DiscoveryConf) =
     else:
       echo "No Pong message returned"
   of findnode:
-    # Discv5.1 and Discv5.0 have a different findnode API
-    when UseDiscv51:
-      let nodes = waitFor d.findNode(config.findNodeTarget, @[config.distance])
-    else:
-      let nodes = waitFor d.findNode(config.findNodeTarget, config.distance)
+    let nodes = waitFor d.findNode(config.findNodeTarget, @[config.distance])
     if nodes.isOk():
       echo "Received valid records:"
       for node in nodes[]:
