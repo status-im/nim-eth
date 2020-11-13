@@ -9,6 +9,7 @@ type
     noCommand
     ping
     findnode
+    talkreq
 
   DiscoveryConf* = object
     logLevel* {.
@@ -70,6 +71,11 @@ type
       findNodeTarget* {.
         argument
         desc: "ENR URI of the node to send a findNode message"
+        name: "node" .}: Node
+    of talkreq:
+      talkreqTarget* {.
+        argument
+        desc: "ENR URI of the node to send a talkreq message"
         name: "node" .}: Node
 
 proc parseCmdArg*(T: type enr.Record, p: TaintedString): T =
@@ -166,17 +172,19 @@ proc run(config: DiscoveryConf) =
     else:
       echo "No Pong message returned"
   of findnode:
-    # Discv5.1 and Discv5.0 have a different findnode API
-    when UseDiscv51:
-      let nodes = waitFor d.findNode(config.findNodeTarget, @[config.distance])
-    else:
-      let nodes = waitFor d.findNode(config.findNodeTarget, config.distance)
+    let nodes = waitFor d.findNode(config.findNodeTarget, @[config.distance])
     if nodes.isOk():
       echo "Received valid records:"
       for node in nodes[]:
         echo $node.record & " - " & shortLog(node)
     else:
       echo "No Nodes message returned"
+  of talkreq:
+    let talkresp = waitFor d.talkreq(config.talkreqTarget, @[], @[])
+    if talkresp.isOk():
+      echo talkresp[]
+    else:
+      echo "No Talk Response message returned"
   of noCommand:
     d.start()
     runForever()

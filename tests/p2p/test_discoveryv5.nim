@@ -2,20 +2,9 @@ import
   std/tables,
   chronos, chronicles, stint, testutils/unittests,
   stew/shims/net, eth/[keys, rlp], bearssl,
-  eth/p2p/discoveryv5/[enr, node, routing_table],
+  eth/p2p/discoveryv5/[enr, node, routing_table, encoding, sessions, types],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./discv5_test_helper
-
-### This is all just temporary to support both versions
-when not UseDiscv51:
-  import
-    eth/p2p/discoveryv5/[types, encoding]
-
-  proc findNode*(d: discv5_protocol.Protocol, toNode: Node, distances: seq[uint32]):
-      Future[DiscResult[seq[Node]]] =
-    if distances.len > 0:
-      return d.findNode(toNode, distances[0])
-###
 
 procSuite "Discovery v5 Tests":
   let rng = newRng()
@@ -530,64 +519,96 @@ procSuite "Discovery v5 Tests":
         test = verifyNodesRecords(records, fromNode, 0'u32)
       check test.len == 0
 
-  when not UseDiscv51:
-    proc randomPacket(rng: var BrHmacDrbgContext, tag: PacketTag): seq[byte] =
-      var
-        authTag: AuthTag
-        msg: array[44, byte]
+  asyncTest "Handshake cleanup: different ids":
+    # Node to test the handshakes on.
+    let receiveNode = initDiscoveryNode(
+      rng, PrivateKey.random(rng[]), localAddress(20302))
 
-      brHmacDrbgGenerate(rng, authTag)
-      brHmacDrbgGenerate(rng, msg)
-      result.add(tag)
-      result.add(rlp.encode(authTag))
-      result.add(msg)
+    # Create random packets with same ip but different node ids
+    # and "receive" them on receiveNode
+    let a = localAddress(20303)
+    for i in 0 ..< 5:
+      let
+        privKey = PrivateKey.random(rng[])
+        enrRec = enr.Record.init(1, privKey,
+          some(ValidIpAddress.init("127.0.0.1")), Port(9000),
+          Port(9000)).expect("Properly intialized private key")
+        sendNode = newNode(enrRec).expect("Properly initialized record")
+      var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 
-    asyncTest "Handshake cleanup":
-      let node = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
-      var tag: PacketTag
-      let a = localAddress(20303)
+      let (packet, _) = encodeMessagePacket(rng[], codec,
+        receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
+      receiveNode.receive(a, packet)
 
-      for i in 0 ..< 5:
-        brHmacDrbgGenerate(rng[], tag)
-        node.receive(a, randomPacket(rng[], tag))
+    # Checking different nodeIds but same address
+    check receiveNode.codec.handshakes.len == 5
+    # TODO: Could get rid of the sleep by storing the timeout future of the
+    # handshake
+    await sleepAsync(handshakeTimeout)
+    # Checking handshake cleanup
+    check receiveNode.codec.handshakes.len == 0
 
-      # Checking different nodeIds but same address
-      check node.codec.handshakes.len == 5
-      # TODO: Could get rid of the sleep by storing the timeout future of the
-      # handshake
-      await sleepAsync(handshakeTimeout)
-      # Checking handshake cleanup
-      check node.codec.handshakes.len == 0
+    await receiveNode.closeWait()
 
-      await node.closeWait()
+  asyncTest "Handshake cleanup: different ips":
+    # Node to test the handshakes on.
+    let receiveNode = initDiscoveryNode(
+      rng, PrivateKey.random(rng[]), localAddress(20302))
 
-    asyncTest "Handshake different address":
-      let node = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
-      var tag: PacketTag
+    # Create random packets with same node ids but different ips
+    # and "receive" them on receiveNode
+    let
+      privKey = PrivateKey.random(rng[])
+      enrRec = enr.Record.init(1, privKey,
+        some(ValidIpAddress.init("127.0.0.1")), Port(9000),
+        Port(9000)).expect("Properly intialized private key")
+      sendNode = newNode(enrRec).expect("Properly initialized record")
+    var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
+    for i in 0 ..< 5:
+      let a = localAddress(20303 + i)
+      let (packet, _) = encodeMessagePacket(rng[], codec,
+        receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
+      receiveNode.receive(a, packet)
 
-      for i in 0 ..< 5:
-        let a = localAddress(20303 + i)
-        node.receive(a, randomPacket(rng[], tag))
+    # Checking different nodeIds but same address
+    check receiveNode.codec.handshakes.len == 5
+    # TODO: Could get rid of the sleep by storing the timeout future of the
+    # handshake
+    await sleepAsync(handshakeTimeout)
+    # Checking handshake cleanup
+    check receiveNode.codec.handshakes.len == 0
 
-      check node.codec.handshakes.len == 5
+    await receiveNode.closeWait()
 
-      await node.closeWait()
+  asyncTest "Handshake duplicates":
+    # Node to test the handshakes on.
+    let receiveNode = initDiscoveryNode(
+      rng, PrivateKey.random(rng[]), localAddress(20302))
 
-    asyncTest "Handshake duplicates":
-      let node = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
-      var tag: PacketTag
-      let a = localAddress(20303)
+    # Create random packets with same node ids and same ips
+    # and "receive" them on receiveNode
+    let
+      a = localAddress(20303)
+      privKey = PrivateKey.random(rng[])
+      enrRec = enr.Record.init(1, privKey,
+        some(ValidIpAddress.init("127.0.0.1")), Port(9000),
+        Port(9000)).expect("Properly intialized private key")
+      sendNode = newNode(enrRec).expect("Properly initialized record")
+    var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 
-      for i in 0 ..< 5:
-        node.receive(a, randomPacket(rng[], tag))
+    var firstRequestNonce: AESGCMNonce
+    for i in 0 ..< 5:
+      let (packet, requestNonce) = encodeMessagePacket(rng[], codec,
+        receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
+      receiveNode.receive(a, packet)
+      if i == 0:
+        firstRequestNonce = requestNonce
 
-      # Checking handshake duplicates
-      check node.codec.handshakes.len == 1
+    # Check handshake duplicates
+    check receiveNode.codec.handshakes.len == 1
+    # Check if it is for the first packet that a handshake is stored
+    let key = HandShakeKey(nodeId: sendNode.id, address: $a)
+    check receiveNode.codec.handshakes[key].whoareyouData.requestNonce ==
+      firstRequestNonce
 
-      # TODO: add check that gets the Whoareyou value and checks if its authTag
-      # is that of the first packet.
-
-      await node.closeWait()
+    await receiveNode.closeWait()

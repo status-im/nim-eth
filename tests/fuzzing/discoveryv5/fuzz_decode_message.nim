@@ -15,6 +15,8 @@ test:
       of pong: encoded = encodeMessage(message.pong, message.reqId)
       of findNode: encoded = encodeMessage(message.findNode, message.reqId)
       of nodes: encoded = encodeMessage(message.nodes, message.reqId)
+      of talkreq: encoded = encodeMessage(message.talkreq, message.reqId)
+      of talkresp: encoded = encodeMessage(message.talkresp, message.reqId)
       of regtopic, ticket, regconfirmation, topicquery:
         break
 

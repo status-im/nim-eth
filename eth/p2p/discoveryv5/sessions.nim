@@ -1,7 +1,7 @@
 import
   std/options,
   stint, stew/endians2, stew/shims/net,
-  typesv1, node, lru
+  types, node, lru
 
 export lru
 
