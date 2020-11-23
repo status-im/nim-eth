@@ -106,6 +106,10 @@ proc len(k: KBucket): int {.inline.} = k.nodes.len
 proc tail(k: KBucket): Node {.inline.} = k.nodes[high(k.nodes)]
 
 proc ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
+  ## Check if the ip limits of the routing table and the bucket are reached for
+  ## the specified `Node` its ip.
+  ## When one of the ip limits is reached return false, else increment them and
+  ## return true.
   let ip = n.address.get().ip # Node from table should always have an address
   # Check ip limit for bucket
   if not b.ipLimits.inc(ip):
@@ -118,6 +122,8 @@ proc ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
   return true
 
 proc ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
+  ## Decrement the ip limits of the routing table and the bucket for the
+  ## specified `Node` its ip.
   let ip = n.address.get().ip # Node from table should always have an address
 
   b.ipLimits.dec(ip)
@@ -219,6 +225,8 @@ proc addReplacement(r: var RoutingTable, k: KBucket, n: Node): NodeStatus =
   ## If the replacement cache is full, the oldest (first entry) node will be
   ## removed. If the node is already in the replacement cache, it will be moved
   ## to the tail.
+  ## When the IP of the node has reached the IP limits for the bucket or the
+  ## total routing table, the node will not be added to the replacement cache.
   let nodeIdx = k.replacementCache.find(n)
   if nodeIdx != -1:
     if k.replacementCache[nodeIdx].record.seqNum <= n.record.seqNum:
@@ -263,7 +271,7 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   let bucket = r.bucketForNode(n.id)
 
   ## Check if the node is already present. If so, check if the record requires
-  ## updating and return true. If it isn't present, return false.
+  ## updating.
   let nodeIdx = bucket.nodes.find(n)
   if nodeIdx != -1:
     if bucket.nodes[nodeIdx].record.seqNum < n.record.seqNum:
@@ -272,30 +280,32 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
         if not ipLimitInc(r, bucket, n):
           return IpLimitReached
         ipLimitDec(r, bucket, bucket.nodes[nodeIdx])
-      bucket.nodes[nodeIdx].record = n.record
+      bucket.nodes[nodeIdx] = n
 
     return Existing
 
   # If the bucket has fewer than `BUCKET_SIZE` entries, it is inserted as the
   # last entry of the bucket (least recently seen node). If the bucket is
-  # full, it might get split and adding is retried, or it is added as a
+  # full, it might get split and adding is retried, else it is added as a
   # replacement.
   # Reasoning here is that adding nodes will happen for a big part from
   # lookups, which do not necessarily return nodes that are (still) reachable.
-  # So, more trust is put in the own ordering and newly additions are added
-  # as least recently seen (in fact they are never seen yet from this node its
-  # perspective).
-  # However, in discovery v5 it can be that a node is added after a incoming
-  # request, and considering a handshake that needs to be done, it is likely
-  # that this node is reachable. An additional `addSeen` proc could be created
-  # for this.
+  # So, more trust is put in the own ordering by actually contacting peers and
+  # newly additions are added as least recently seen (in fact they have not been
+  # seen yet from our node its perspective).
+  # However, in discovery v5 a node can also be added after a incoming request
+  # if a handshake is done and an ENR is provided, and considering that this
+  # handshake needs to be done, it is more likely that this node is reachable.
+  # However, it is not certain and depending on different NAT mechanisms and
+  # timers it might still fail. For this reason we currently do not add a way to
+  # immediately add nodes to the most recently seen spot.
   if bucket.len < BUCKET_SIZE:
     if not ipLimitInc(r, bucket, n):
       return IpLimitReached
 
     bucket.add(n)
   else:
-    # Bucket must be full, but lets see if it should be split.
+    # Bucket must be full, but lets see if it should be split the bucket.
 
     # Calculate the prefix shared by all nodes in the bucket's range, not the
     # ones actually in the bucket.

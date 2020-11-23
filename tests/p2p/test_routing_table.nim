@@ -450,17 +450,15 @@ suite "Routing Table Tests":
     for n in diffIpNodes:
       check table.addNode(n) == Added
 
-    let sameIpNode1 = node.nodeAtDistance(rng[], 256)
-    check table.addNode(sameIpNode1) == ReplacementAdded
-    # Add it again
-    check table.addNode(sameIpNode1) == ReplacementExisting
+    # Test if double add does not account for the ip limits.
+    for i in 0..<DefaultTableIpLimits.bucketIpLimit:
+      let sameIpNode = node.nodeAtDistance(rng[], 256)
+      check table.addNode(sameIpNode) == ReplacementAdded
+      # Add it again
+      check table.addNode(sameIpNode) == ReplacementExisting
 
-    # Test if double add didn't account for the ip limits
-    let sameIpNode2 = node.nodeAtDistance(rng[], 256)
-    check table.addNode(sameIpNode2) == ReplacementAdded
-
-    let sameIpNode3 = node.nodeAtDistance(rng[], 256)
-    check table.addNode(sameIpNode3) == IpLimitReached
+    let sameIpNode = node.nodeAtDistance(rng[], 256)
+    check table.addNode(sameIpNode) == IpLimitReached
 
   test "Ip limits on bucket: double add with new ip":
     let node = generateNode(PrivateKey.random(rng[]))
@@ -484,7 +482,7 @@ suite "Routing Table Tests":
     for n in sameIpNodes:
       check table.addNode(n) == Added
 
-    check table.len == 3
+    check table.len == int(DefaultTableIpLimits.bucketIpLimit) + 1
 
   test "Ip limits on replacement cache: double add with new ip":
     let node = generateNode(PrivateKey.random(rng[]))
@@ -510,3 +508,30 @@ suite "Routing Table Tests":
       int(DefaultTableIpLimits.bucketIpLimit))
     for n in sameIpNodes:
       check table.addNode(n) == ReplacementAdded
+
+  test "Ip limits on bucket: even more adds with new ip":
+    # This tests against an issue where the ip of the nodes would not get updated
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table: RoutingTable
+
+    table.init(node, 1, DefaultTableIpLimits, rng = rng)
+
+    let pk = PrivateKey.random(rng[])
+    let sameIpNode1 = generateNode(pk)
+    check table.addNode(sameIpNode1) == Added
+
+    let updatedNode1 = generateNode(pk)
+
+    for i in 0..<DefaultTableIpLimits.bucketIpLimit + 1:
+      # Need to do an update to get seqNum increased
+      let updated = updatedNode1.updateNode(pk,
+        some(ValidIpAddress.init("192.168.0.1")), Port(9000+i), Port(9000+i))
+      check updated.isOk()
+      check table.addNode(updatedNode1) == Existing
+
+    let sameIpNodes = node.nodesAtDistance(rng[], 256,
+      int(DefaultTableIpLimits.bucketIpLimit))
+    for n in sameIpNodes:
+      check table.addNode(n) == Added
+
+    check table.len == int(DefaultTableIpLimits.bucketIpLimit) + 1
