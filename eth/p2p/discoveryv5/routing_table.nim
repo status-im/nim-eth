@@ -133,11 +133,16 @@ proc add(k: KBucket, n: Node) =
   k.nodes.add(n)
   routing_table_nodes.inc()
 
-proc removeNode(k: KBucket, n: Node) =
+proc remove(k: KBucket, n: Node): bool =
   let i = k.nodes.find(n)
   if i != -1:
-    k.nodes.delete(i)
     routing_table_nodes.dec()
+    if k.nodes[i].seen:
+      routing_table_nodes.dec(labelValues = ["seen"])
+    k.nodes.delete(i)
+    true
+  else:
+    false
 
 proc split(k: KBucket): tuple[lower, upper: KBucket] =
   ## Split the kbucket `k` at the median id.
@@ -322,7 +327,9 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
 
 proc removeNode*(r: var RoutingTable, n: Node) =
   ## Remove the node `n` from the routing table.
-  r.bucketForNode(n.id).removeNode(n)
+  let b = r.bucketForNode(n.id)
+  if b.remove(n):
+    ipLimitDec(r, b, n)
 
 proc replaceNode*(r: var RoutingTable, n: Node) =
   ## Replace node `n` with last entry in the replacement cache. If there are
@@ -331,18 +338,12 @@ proc replaceNode*(r: var RoutingTable, n: Node) =
   # replacements. However, that would require a bit more complexity in the
   # revalidation as you don't want to try pinging that node all the time.
   let b = r.bucketForNode(n.id)
-  let idx = b.nodes.find(n)
-  if idx != -1:
-    routing_table_nodes.dec()
-    if b.nodes[idx].seen:
-      routing_table_nodes.dec(labelValues = ["seen"])
-    b.nodes.delete(idx)
-
+  if b.remove(n):
     ipLimitDec(r, b, n)
 
     if b.replacementCache.len > 0:
-      b.nodes.add(b.replacementCache[high(b.replacementCache)])
-      routing_table_nodes.inc()
+      # Nodes in the replacement cache are already included in the ip limits.
+      b.add(b.replacementCache[high(b.replacementCache)])
       b.replacementCache.delete(high(b.replacementCache))
 
 proc getNode*(r: RoutingTable, id: NodeId): Option[Node] =
