@@ -285,6 +285,9 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
         if not ipLimitInc(r, bucket, n):
           return IpLimitReached
         ipLimitDec(r, bucket, bucket.nodes[nodeIdx])
+      # Copy over the seen status, we trust here that after the ENR update the
+      # node will still be reachable, but it might not be the case.
+      n.seen = bucket.nodes[nodeIdx].seen
       bucket.nodes[nodeIdx] = n
 
     return Existing
