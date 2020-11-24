@@ -16,7 +16,7 @@ proc initDiscoveryNode*(rng: ref BrHmacDrbgContext, privKey: PrivateKey,
                         previousRecord = none[enr.Record]()):
                         discv5_protocol.Protocol =
   # set bucketIpLimit to allow bucket split
-  let tableIpLimits = TableIpLimits(tableIpLimit: 100,  bucketIpLimit: 17)
+  let tableIpLimits = TableIpLimits(tableIpLimit: 1000,  bucketIpLimit: 24)
 
   result = newProtocol(privKey,
                        some(address.ip),

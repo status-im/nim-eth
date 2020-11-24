@@ -319,7 +319,7 @@ procSuite "Discovery v5 Tests":
         n.get().record.seqNum == targetSeqNum
 
       # Add the updated version
-      check mainNode.addNode(n.get())
+      discard mainNode.addNode(n.get())
 
     # Update seqNum in ENR again, ping lookupNode to be added in routing table,
     # close targetNode, resolve should lookup, check if we get updated ENR.

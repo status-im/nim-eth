@@ -52,6 +52,7 @@ type
     IpLimitReached
     ReplacementAdded
     ReplacementExisting
+    NoAddress
 
 const
   BUCKET_SIZE* = 16 ## Maximum amount of nodes per bucket
@@ -270,6 +271,13 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   ## When the IP of the node has reached the IP limits for the bucket or the
   ## total routing table, the node will not be added to the bucket, nor its
   ## replacement cache.
+
+  # Don't allow nodes without an address field in the ENR to be added.
+  # This could also be reworked by having another Node type that always has an
+  # address.
+  if n.address.isNone():
+    return NoAddress
+
   if n == r.thisNode:
     return LocalNode
 
