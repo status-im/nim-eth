@@ -23,7 +23,8 @@ type
     ## Setting it higher will increase the amount of splitting on a not in range
     ## branch (thus holding more nodes with a better keyspace coverage) and this
     ## will result in an improvement of log base(2^b) n hops per lookup.
-    ipLimits: IpLimits # IP limits for total routing table
+    ipLimits: IpLimits ## IP limits for total routing table: all buckets and
+    ## replacement caches.
     rng: ref BrHmacDrbgContext
 
   KBucket = ref object
@@ -39,8 +40,29 @@ type
     ## seq as it is full and without stale nodes. This is practically a small
     ## LRU cache.
     lastUpdated: float ## epochTime of last update to `nodes` in the KBucket.
-    ipLimits: IpLimits # IP limits for bucket: nodes + replacementCache combined
+    ipLimits: IpLimits ## IP limits for bucket: node entries and replacement
+    ## cache entries combined.
 
+  ## The routing table IP limits are applied on both the total table, and on the
+  ## individual buckets. In each case, the active node entries, but also the
+  ## entries waiting in the replacement cache are accounted for. This way, the
+  ## replacement cache can't get filled with nodes that then can't be added due
+  ## to the limits that apply.
+  ##
+  ## As entries are not verified (=contacted) immediately before or on entry, it
+  ## is possible that a malicious node could fill (poison) the routing table or
+  ## a specific bucket with ENRs with IPs it does not control. The effect of
+  ## this would be that a node that actually owns the IP could have a difficult
+  ## time getting its ENR distrubuted in the DHT and as a consequence would
+  ## not be reached from the outside as much (or at all). However, that node can
+  ## still search and find nodes to connect to. So it would practically be a
+  ## similar situation as a node that is not reachable behind the NAT because
+  ## port mapping is not set up properly.
+  ## There is the possiblity to set the IP limit on verified (=contacted) nodes
+  ## only, but that would allow for lookups to be done on a higher set of nodes
+  ## owned by the same identity. This is a worse alternative.
+  ## Next, doing lookups only on verified nodes would slow down discovery start
+  ## up.
   TableIpLimits* = object
     tableIpLimit*: uint
     bucketIpLimit*: uint
