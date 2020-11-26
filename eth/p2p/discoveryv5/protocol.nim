@@ -798,6 +798,9 @@ proc newProtocol*(privKey: PrivateKey,
 proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   info "Starting discovery node", node = d.localNode,
     bindAddress = d.bindAddress, uri = toURI(d.localNode.record)
+
+  if d.localNode.address.isNone():
+    info "No external IP provided, this node will not be discoverable"
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(d.bindAddress.ip, d.bindAddress.port)
   # TODO: raises `OSError` and `IOSelectorsException`, the latter which is
