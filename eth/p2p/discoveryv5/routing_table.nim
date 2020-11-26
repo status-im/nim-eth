@@ -1,7 +1,8 @@
 import
   std/[algorithm, times, sequtils, bitops, sets, options],
-  stint, chronicles, metrics, bearssl,
-  node, random2
+  stint, chronicles, metrics, bearssl, chronos, stew/shims/net as stewNet,
+  ../../net/utils,
+  node, random2, enr
 
 export options
 
@@ -22,6 +23,8 @@ type
     ## Setting it higher will increase the amount of splitting on a not in range
     ## branch (thus holding more nodes with a better keyspace coverage) and this
     ## will result in an improvement of log base(2^b) n hops per lookup.
+    ipLimits: IpLimits ## IP limits for total routing table: all buckets and
+    ## replacement caches.
     rng: ref BrHmacDrbgContext
 
   KBucket = ref object
@@ -37,12 +40,52 @@ type
     ## seq as it is full and without stale nodes. This is practically a small
     ## LRU cache.
     lastUpdated: float ## epochTime of last update to `nodes` in the KBucket.
+    ipLimits: IpLimits ## IP limits for bucket: node entries and replacement
+    ## cache entries combined.
+
+  ## The routing table IP limits are applied on both the total table, and on the
+  ## individual buckets. In each case, the active node entries, but also the
+  ## entries waiting in the replacement cache are accounted for. This way, the
+  ## replacement cache can't get filled with nodes that then can't be added due
+  ## to the limits that apply.
+  ##
+  ## As entries are not verified (=contacted) immediately before or on entry, it
+  ## is possible that a malicious node could fill (poison) the routing table or
+  ## a specific bucket with ENRs with IPs it does not control. The effect of
+  ## this would be that a node that actually owns the IP could have a difficult
+  ## time getting its ENR distrubuted in the DHT and as a consequence would
+  ## not be reached from the outside as much (or at all). However, that node can
+  ## still search and find nodes to connect to. So it would practically be a
+  ## similar situation as a node that is not reachable behind the NAT because
+  ## port mapping is not set up properly.
+  ## There is the possiblity to set the IP limit on verified (=contacted) nodes
+  ## only, but that would allow for lookups to be done on a higher set of nodes
+  ## owned by the same identity. This is a worse alternative.
+  ## Next, doing lookups only on verified nodes would slow down discovery start
+  ## up.
+  TableIpLimits* = object
+    tableIpLimit*: uint
+    bucketIpLimit*: uint
+
+  NodeStatus* = enum
+    Added
+    LocalNode
+    Existing
+    IpLimitReached
+    ReplacementAdded
+    ReplacementExisting
+    NoAddress
 
 const
   BUCKET_SIZE* = 16 ## Maximum amount of nodes per bucket
   REPLACEMENT_CACHE_SIZE* = 8 ## Maximum amount of nodes per replacement cache
   ## of a bucket
   ID_SIZE = 256
+  DefaultBitsPerHop* = 5
+  DefaultBucketIpLimit* = 2'u
+  DefaultTableIpLimit* = 10'u
+  DefaultTableIpLimits* = TableIpLimits(tableIpLimit: DefaultTableIpLimit,
+    bucketIpLimit: DefaultBucketIpLimit)
 
 proc distanceTo(n: Node, id: NodeId): UInt256 =
   ## Calculate the distance to a NodeId.
@@ -67,12 +110,13 @@ proc logDist*(a, b: NodeId): uint32 =
       break
   return uint32(a.len * 8 - lz)
 
-proc newKBucket(istart, iend: NodeId): KBucket =
+proc newKBucket(istart, iend: NodeId, bucketIpLimit: uint): KBucket =
   result.new()
   result.istart = istart
   result.iend = iend
   result.nodes = @[]
   result.replacementCache = @[]
+  result.ipLimits.limit = bucketIpLimit
 
 proc midpoint(k: KBucket): NodeId =
   k.istart + (k.iend - k.istart) div 2.u256
@@ -84,79 +128,64 @@ proc nodesByDistanceTo(k: KBucket, id: NodeId): seq[Node] =
 proc len(k: KBucket): int {.inline.} = k.nodes.len
 proc tail(k: KBucket): Node {.inline.} = k.nodes[high(k.nodes)]
 
-proc add(k: KBucket, n: Node): Node =
-  ## Try to add the given node to this bucket.
-  ##
-  ## If the node is already present, nothing is done, as the node should only
-  ## be moved in case of a new succesful request-reponse.
-  ##
-  ## If the node is not already present and the bucket has fewer than k entries,
-  ## it is inserted as the last entry of the bucket (least recently seen node),
-  ## and nil is returned.
-  ##
-  ## If the bucket is full, the node at the last entry of the bucket (least
-  ## recently seen), which should be evicted if it fails to respond to a ping,
-  ## is returned.
-  ##
-  ## Reasoning here is that adding nodes will happen for a big part from
-  ## lookups, which do not necessarily return nodes that are (still) reachable.
-  ## So, more trust is put in the own ordering and newly additions are added
-  ## as least recently seen (in fact they are never seen yet from this node its
-  ## perspective).
-  ## However, in discovery v5 it can be that a node is added after a incoming
-  ## request, and considering a handshake that needs to be done, it is likely
-  ## that this node is reachable. An additional `addSeen` proc could be created
-  ## for this.
-  k.lastUpdated = epochTime()
-  let nodeIdx = k.nodes.find(n)
-  if nodeIdx != -1:
-    if k.nodes[nodeIdx].record.seqNum < n.record.seqNum:
-      # In case of a newer record, it gets replaced.
-      k.nodes[nodeIdx].record = n.record
-    return nil
-  elif k.len < BUCKET_SIZE:
-    k.nodes.add(n)
-    routing_table_nodes.inc()
-    return nil
-  else:
-    return k.tail
+proc ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
+  ## Check if the ip limits of the routing table and the bucket are reached for
+  ## the specified `Node` its ip.
+  ## When one of the ip limits is reached return false, else increment them and
+  ## return true.
+  let ip = n.address.get().ip # Node from table should always have an address
+  # Check ip limit for bucket
+  if not b.ipLimits.inc(ip):
+    return false
+  # Check ip limit for routing table
+  if not r.ipLimits.inc(ip):
+    b.iplimits.dec(ip)
+    return false
 
-proc addReplacement(k: KBucket, n: Node) =
-  ## Add the node to the tail of the replacement cache of the KBucket.
-  ##
-  ## If the replacement cache is full, the oldest (first entry) node will be
-  ## removed. If the node is already in the replacement cache, it will be moved
-  ## to the tail.
-  let nodeIdx = k.replacementCache.find(n)
-  if nodeIdx != -1:
-    if k.replacementCache[nodeIdx].record.seqNum <= n.record.seqNum:
-      # In case the record sequence number is higher or the same, the node gets
-      # moved to the tail.
-      k.replacementCache.delete(nodeIdx)
-      k.replacementCache.add(n)
-  else:
-    doAssert(k.replacementCache.len <= REPLACEMENT_CACHE_SIZE)
-    if k.replacementCache.len == REPLACEMENT_CACHE_SIZE:
-      k.replacementCache.delete(0)
-    k.replacementCache.add(n)
+  return true
 
-proc removeNode(k: KBucket, n: Node) =
+proc ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
+  ## Decrement the ip limits of the routing table and the bucket for the
+  ## specified `Node` its ip.
+  let ip = n.address.get().ip # Node from table should always have an address
+
+  b.ipLimits.dec(ip)
+  r.ipLimits.dec(ip)
+
+proc add(k: KBucket, n: Node) =
+  k.nodes.add(n)
+  routing_table_nodes.inc()
+
+proc remove(k: KBucket, n: Node): bool =
   let i = k.nodes.find(n)
   if i != -1:
-    k.nodes.delete(i)
     routing_table_nodes.dec()
+    if k.nodes[i].seen:
+      routing_table_nodes.dec(labelValues = ["seen"])
+    k.nodes.delete(i)
+    true
+  else:
+    false
 
 proc split(k: KBucket): tuple[lower, upper: KBucket] =
   ## Split the kbucket `k` at the median id.
   let splitid = k.midpoint
-  result.lower = newKBucket(k.istart, splitid)
-  result.upper = newKBucket(splitid + 1.u256, k.iend)
+  result.lower = newKBucket(k.istart, splitid, k.ipLimits.limit)
+  result.upper = newKBucket(splitid + 1.u256, k.iend, k.ipLimits.limit)
   for node in k.nodes:
     let bucket = if node.id <= splitid: result.lower else: result.upper
     bucket.nodes.add(node)
+    # Ip limits got reset because of the newKBuckets, so there is the need to
+    # increment again for each added node. It should however never fail as the
+    # previous bucket had the same limits.
+    doAssert(bucket.ipLimits.inc(node.address.get().ip),
+      "IpLimit increment should work as all buckets have the same limits")
+
   for node in k.replacementCache:
     let bucket = if node.id <= splitid: result.lower else: result.upper
     bucket.replacementCache.add(node)
+    doAssert(bucket.ipLimits.inc(node.address.get().ip),
+      "IpLimit increment should work as all buckets have the same limits")
 
 proc inRange(k: KBucket, n: Node): bool {.inline.} =
   k.istart <= n.id and n.id <= k.iend
@@ -197,13 +226,14 @@ proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
   # Reaching this would mean that all node ids are equal.
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
-proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = 5,
-    rng: ref BrHmacDrbgContext) {.inline.} =
+proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = DefaultBitsPerHop,
+    ipLimits = DefaultTableIpLimits, rng: ref BrHmacDrbgContext) {.inline.} =
   ## Initialize the routing table for provided `Node` and bitsPerHop value.
   ## `bitsPerHop` is default set to 5 as recommended by original Kademlia paper.
   r.thisNode = thisNode
-  r.buckets = @[newKBucket(0.u256, high(Uint256))]
+  r.buckets = @[newKBucket(0.u256, high(Uint256), ipLimits.bucketIpLimit)]
   r.bitsPerHop = bitsPerHop
+  r.ipLimits.limit = ipLimits.tableIpLimit
   r.rng = rng
 
 proc splitBucket(r: var RoutingTable, index: int) =
@@ -217,39 +247,122 @@ proc bucketForNode(r: RoutingTable, id: NodeId): KBucket =
   doAssert(not result.isNil(),
     "Routing table should always cover the full id space")
 
-proc removeNode*(r: var RoutingTable, n: Node) =
-  ## Remove the node `n` from the routing table.
-  r.bucketForNode(n.id).removeNode(n)
+proc addReplacement(r: var RoutingTable, k: KBucket, n: Node): NodeStatus =
+  ## Add the node to the tail of the replacement cache of the KBucket.
+  ##
+  ## If the replacement cache is full, the oldest (first entry) node will be
+  ## removed. If the node is already in the replacement cache, it will be moved
+  ## to the tail.
+  ## When the IP of the node has reached the IP limits for the bucket or the
+  ## total routing table, the node will not be added to the replacement cache.
+  let nodeIdx = k.replacementCache.find(n)
+  if nodeIdx != -1:
+    if k.replacementCache[nodeIdx].record.seqNum <= n.record.seqNum:
+      # In case the record sequence number is higher or the same, the new node
+      # gets moved to the tail.
+      if k.replacementCache[nodeIdx].address.get().ip != n.address.get().ip:
+        if not ipLimitInc(r, k, n):
+          return IpLimitReached
+        ipLimitDec(r, k, k.replacementCache[nodeIdx])
+      k.replacementCache.delete(nodeIdx)
+      k.replacementCache.add(n)
+    return ReplacementExisting
+  elif not ipLimitInc(r, k, n):
+    return IpLimitReached
+  else:
+    doAssert(k.replacementCache.len <= REPLACEMENT_CACHE_SIZE)
 
-proc addNode*(r: var RoutingTable, n: Node): Node =
+    if k.replacementCache.len == REPLACEMENT_CACHE_SIZE:
+      # Remove ip from limits for the to be deleted node.
+      ipLimitDec(r, k, k.replacementCache[0])
+      k.replacementCache.delete(0)
+
+    k.replacementCache.add(n)
+    return ReplacementAdded
+
+proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   ## Try to add the node to the routing table.
   ##
   ## First, an attempt will be done to add the node to the bucket in its range.
   ## If this fails, the bucket will be split if it is eligable for splitting.
   ## If so, a new attempt will be done to add the node. If not, the node will be
   ## added to the replacement cache.
+  ##
+  ## In case the node was already in the table, it will be updated if it has a
+  ## newer record.
+  ## When the IP of the node has reached the IP limits for the bucket or the
+  ## total routing table, the node will not be added to the bucket, nor its
+  ## replacement cache.
+
+  # Don't allow nodes without an address field in the ENR to be added.
+  # This could also be reworked by having another Node type that always has an
+  # address.
+  if n.address.isNone():
+    return NoAddress
+
   if n == r.thisNode:
-    # warn "Trying to add ourselves to the routing table", node = n
-    return
+    return LocalNode
+
   let bucket = r.bucketForNode(n.id)
-  let evictionCandidate = bucket.add(n)
-  if not evictionCandidate.isNil:
-    # Split if the bucket has the local node in its range or if the depth is not
-    # congruent to 0 mod `bitsPerHop`
-    #
+
+  ## Check if the node is already present. If so, check if the record requires
+  ## updating.
+  let nodeIdx = bucket.nodes.find(n)
+  if nodeIdx != -1:
+    if bucket.nodes[nodeIdx].record.seqNum < n.record.seqNum:
+      # In case of a newer record, it gets replaced.
+      if bucket.nodes[nodeIdx].address.get().ip != n.address.get().ip:
+        if not ipLimitInc(r, bucket, n):
+          return IpLimitReached
+        ipLimitDec(r, bucket, bucket.nodes[nodeIdx])
+      # Copy over the seen status, we trust here that after the ENR update the
+      # node will still be reachable, but it might not be the case.
+      n.seen = bucket.nodes[nodeIdx].seen
+      bucket.nodes[nodeIdx] = n
+
+    return Existing
+
+  # If the bucket has fewer than `BUCKET_SIZE` entries, it is inserted as the
+  # last entry of the bucket (least recently seen node). If the bucket is
+  # full, it might get split and adding is retried, else it is added as a
+  # replacement.
+  # Reasoning here is that adding nodes will happen for a big part from
+  # lookups, which do not necessarily return nodes that are (still) reachable.
+  # So, more trust is put in the own ordering by actually contacting peers and
+  # newly additions are added as least recently seen (in fact they have not been
+  # seen yet from our node its perspective).
+  # However, in discovery v5 a node can also be added after a incoming request
+  # if a handshake is done and an ENR is provided, and considering that this
+  # handshake needs to be done, it is more likely that this node is reachable.
+  # However, it is not certain and depending on different NAT mechanisms and
+  # timers it might still fail. For this reason we currently do not add a way to
+  # immediately add nodes to the most recently seen spot.
+  if bucket.len < BUCKET_SIZE:
+    if not ipLimitInc(r, bucket, n):
+      return IpLimitReached
+
+    bucket.add(n)
+  else:
+    # Bucket must be full, but lets see if it should be split the bucket.
+
     # Calculate the prefix shared by all nodes in the bucket's range, not the
     # ones actually in the bucket.
     let depth = computeSharedPrefixBits(@[bucket.istart, bucket.iend])
+    # Split if the bucket has the local node in its range or if the depth is not
+    # congruent to 0 mod `bitsPerHop`
     if bucket.inRange(r.thisNode) or
         (depth mod r.bitsPerHop != 0 and depth != ID_SIZE):
       r.splitBucket(r.buckets.find(bucket))
       return r.addNode(n) # retry adding
     else:
       # When bucket doesn't get split the node is added to the replacement cache
-      bucket.addReplacement(n)
+      return r.addReplacement(bucket, n)
 
-      # Nothing added, return evictionCandidate
-      return evictionCandidate
+proc removeNode*(r: var RoutingTable, n: Node) =
+  ## Remove the node `n` from the routing table.
+  let b = r.bucketForNode(n.id)
+  if b.remove(n):
+    ipLimitDec(r, b, n)
 
 proc replaceNode*(r: var RoutingTable, n: Node) =
   ## Replace node `n` with last entry in the replacement cache. If there are
@@ -258,16 +371,12 @@ proc replaceNode*(r: var RoutingTable, n: Node) =
   # replacements. However, that would require a bit more complexity in the
   # revalidation as you don't want to try pinging that node all the time.
   let b = r.bucketForNode(n.id)
-  let idx = b.nodes.find(n)
-  if idx != -1:
-    routing_table_nodes.dec()
-    if b.nodes[idx].seen:
-      routing_table_nodes.dec(labelValues = ["seen"])
-    b.nodes.delete(idx)
+  if b.remove(n):
+    ipLimitDec(r, b, n)
 
     if b.replacementCache.len > 0:
-      b.nodes.add(b.replacementCache[high(b.replacementCache)])
-      routing_table_nodes.inc()
+      # Nodes in the replacement cache are already included in the ip limits.
+      b.add(b.replacementCache[high(b.replacementCache)])
       b.replacementCache.delete(high(b.replacementCache))
 
 proc getNode*(r: RoutingTable, id: NodeId): Option[Node] =

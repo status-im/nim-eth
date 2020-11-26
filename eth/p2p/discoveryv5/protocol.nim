@@ -127,11 +127,12 @@ type
 proc addNode*(d: Protocol, node: Node): bool =
   ## Add `Node` to discovery routing table.
   ##
-  ## Returns false only if `Node` is not eligable for adding (no Address).
-  if node.address.isSome():
-    # Only add nodes with an address to the routing table
-    discard d.routingTable.addNode(node)
+  ## Returns true only when `Node` was added as a new entry to a bucket in the
+  ## routing table.
+  if d.routingTable.addNode(node) == Added:
     return true
+  else:
+    return false
 
 proc addNode*(d: Protocol, r: Record): bool =
   ## Add `Node` from a `Record` to discovery routing table.
@@ -393,10 +394,10 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
         # Not filling table with nodes without correct IP in the ENR
         # TODO: Should we care about this???
         if node.address.isSome() and a == node.address.get():
-          debug "Adding new node to routing table", node
-          discard d.addNode(node)
+          if d.addNode(node):
+            trace "Added new node to routing table after handshake", node
   else:
-    debug "Packet decoding error", error = decoded.error, address = a
+    trace "Packet decoding error", error = decoded.error, address = a
 
 # TODO: Not sure why but need to pop the raises here as it is apparently not
 # enough to put it in the raises pragma of `processClient` and other async procs.
@@ -641,7 +642,7 @@ proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
     inc i
 
   for n in result:
-    discard d.routingTable.addNode(n)
+    discard d.addNode(n)
 
 proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
     {.async, raises: [Exception, Defect].} =
@@ -760,7 +761,9 @@ proc newProtocol*(privKey: PrivateKey,
                   localEnrFields: openarray[(string, seq[byte])] = [],
                   bootstrapRecords: openarray[Record] = [],
                   previousRecord = none[enr.Record](),
-                  bindIp = IPv4_any(), rng = newRng()):
+                  bindIp = IPv4_any(),
+                  tableIpLimits = DefaultTableIpLimits,
+                  rng = newRng()):
                   Protocol {.raises: [Defect].} =
   # TODO: Tried adding bindPort = udpPort as parameter but that gave
   # "Error: internal error: environment misses: udpPort" in nim-beacon-chain.
@@ -793,7 +796,7 @@ proc newProtocol*(privKey: PrivateKey,
     bootstrapRecords: @bootstrapRecords,
     rng: rng)
 
-  result.routingTable.init(node, 5, rng)
+  result.routingTable.init(node, DefaultBitsPerHop, tableIpLimits, rng)
 
 proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   info "Starting discovery node", node = d.localNode,
@@ -808,8 +811,10 @@ proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
   for record in d.bootstrapRecords:
-    debug "Adding bootstrap node", uri = toURI(record)
-    discard d.addNode(record)
+    if d.addNode(record):
+      debug "Added bootstrap node", uri = toURI(record)
+    else:
+      debug "Bootstrap node could not be added", uri = toURI(record)
 
 proc start*(d: Protocol) {.raises: [Exception, Defect].} =
   d.lookupLoop = lookupLoop(d)

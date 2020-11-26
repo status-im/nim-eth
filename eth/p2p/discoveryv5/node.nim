@@ -46,6 +46,19 @@ func newNode*(r: Record): Result[Node, cstring] =
     ok(Node(id: pk.get().toNodeId(), pubkey: pk.get(), record: r,
        address: none(Address)))
 
+proc updateNode*(n: Node, pk: PrivateKey, ip: Option[ValidIpAddress],
+    tcpPort, udpPort: Port, extraFields: openarray[FieldPair] = []):
+    Result[void, cstring] =
+  ? n.record.update(pk, ip, tcpPort, udpPort, extraFields)
+
+  if ip.isSome():
+    let a = Address(ip: ip.get(), port: Port(udpPort))
+    n.address = some(a)
+  else:
+    n.address = none(Address)
+
+  ok()
+
 func hash*(n: Node): hashes.Hash = hash(n.pubkey.toRaw)
 func `==`*(a, b: Node): bool =
   (a.isNil and b.isNil) or
