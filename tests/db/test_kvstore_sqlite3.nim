@@ -95,3 +95,84 @@ procSuite "SqStoreRef":
         @[byte 5]
       ]
 
+  test "Tuple with byte arrays support":
+    # openarray[byte] requires either Nim 1.4
+    # or hardcoding the seq[byte] and array[N, byte] paths
+    let db = SqStoreRef.init("", "test", inMemory = true)[]
+    defer: db.close()
+
+    let createTableRes = db.exec """
+      CREATE TABLE IF NOT EXISTS attestations(
+         validator_id INTEGER NOT NULL,
+         source_epoch INTEGER NOT NULL,
+         target_epoch INTEGER NOT NULL,
+         attestation_root BLOB NOT NULL UNIQUE,
+         UNIQUE (validator_id, target_epoch)
+      );
+    """
+    check createTableRes.isOk
+
+    let insertStmt = db.prepareStmt("""
+      INSERT INTO attestations(
+        validator_id,
+        source_epoch,
+        target_epoch,
+        attestation_root)
+      VALUES
+        (?,?,?,?);
+    """, (int32, int64, int64, array[32, byte]), void).get()
+
+    var hash: array[32, byte]
+    hash[1] = byte 1
+    hash[2] = byte 2
+    let insertRes = insertStmt.exec(
+      (123'i32, 2'i64, 4'i64, hash)
+    )
+
+    check: insertRes.isOk
+
+    let countStmt = db.prepareStmt(
+      "SELECT COUNT(*) FROM attestations;",
+      NoParams, int64).get
+
+    var totalRecords = 0
+    echo "About to call total attestations"
+    let countRes = countStmt.exec do (res: int64):
+      totalRecords = int res
+
+    check:
+      countRes.isOk and countRes.get == true
+      totalRecords == 1
+
+    let selectRangeStmt = db.prepareStmt("""
+      SELECT
+        source_epoch,
+        target_epoch,
+        attestation_root
+      FROM
+        attestations
+      WHERE
+        validator_id = ?
+        AND
+        ? < source_epoch AND target_epoch < ?
+      LIMIT 1
+      """, (int32, int64, int64), (int64, int64, array[32, byte])).get()
+
+    block:
+      var digest: array[32, byte]
+      var source, target: int64
+      let selectRangeRes = selectRangeStmt.exec(
+            (123'i32, 1'i64, 5'i64)
+          ) do (res: tuple[source, target: int64, hash: array[32, byte]]) {.gcsafe.}:
+        source = res.source
+        target = res.target
+        digest = res.hash
+
+      if selectRangeRes.isErr:
+        echo selectRangeRes.error
+
+      check:
+        selectRangeRes.isOk and selectRangeRes.get == true
+        source == 2
+        target == 4
+        digest == hash

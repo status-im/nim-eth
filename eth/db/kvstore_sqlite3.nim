@@ -3,7 +3,7 @@
 {.push raises: [Defect].}
 
 import
-  os, strformat,
+  std/[os, strformat],
   sqlite3_abi,
   ./kvstore
 
@@ -74,12 +74,22 @@ proc bindParam(s: RawStmtPtr, n: int, val: auto): cint =
       sqlite3_bind_blob(s, n.cint, unsafeAddr val[0], val.len.cint, nil)
     else:
       sqlite3_bind_blob(s, n.cint, nil, 0.cint, nil)
+  elif val is array:
+    when val.items.typeof is byte:
+      # Prior to Nim 1.4 and view types array[N, byte] in tuples
+      # don't match with openarray[byte]
+      if val.len > 0:
+        sqlite3_bind_blob(s, n.cint, unsafeAddr val[0], val.len.cint, nil)
+      else:
+        sqlite3_bind_blob(s, n.cint, nil, 0.cint, nil)
+    else:
+      {.fatal: "Please add support for the '" & $typeof(val) & "' type".}
   elif val is int32:
     sqlite3_bind_int(s, n.cint, val)
   elif val is int64:
     sqlite3_bind_int64(s, n.cint, val)
   else:
-    {.fatal: "Please add support for the '" & $(T) & "' type".}
+    {.fatal: "Please add support for the '" & $typeof(val) & "' type".}
 
 template bindParams(s: RawStmtPtr, params: auto) =
   when params is tuple:
@@ -125,6 +135,20 @@ template readResult(s: RawStmtPtr, column: cint, T: type): auto =
       res.setLen(len)
       copyMem(addr res[0], sqlite3_column_blob(s, column), len)
     res
+  elif T is array:
+    # array[N, byte]. "genericParams(T)[1]" requires 1.4 to handle nnkTypeOfExpr
+    when typeof(block: (var a: T; a[0])) is byte:
+      var res: T
+      let colLen = sqlite3_column_bytes(s, column)
+
+      # truncate if the type is too small
+      # TODO: warning/error? We assume that users always properly dimension buffers
+      let copyLen = min(colLen, res.len)
+      if copyLen > 0:
+        copyMem(addr res[0], sqlite3_column_blob(s, column), copyLen)
+      res
+    else:
+      {.fatal: "Please add support for the '" & $(T) & "' type".}
   else:
     {.fatal: "Please add support for the '" & $(T) & "' type".}
 
@@ -445,4 +469,3 @@ when defined(metrics):
           timestamp: timestamp,
         ),
       ]
-
