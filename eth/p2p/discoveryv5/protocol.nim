@@ -102,6 +102,7 @@ const
   ## whoareyou message
   responseTimeout* = 4.seconds ## timeout for the response of a request-response
   ## call
+  initialLookups = 2 ## Amount of lookups done when refreshing the routing table
 
 type
   Protocol* = ref object
@@ -457,15 +458,6 @@ proc validIp(sender, address: IpAddress): bool {.raises: [Defect].} =
   # https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
   return true
 
-proc replaceNode(d: Protocol, n: Node) =
-  if n.record notin d.bootstrapRecords:
-    d.routingTable.replaceNode(n)
-  else:
-    # For now we never remove bootstrap nodes. It might make sense to actually
-    # do so and to retry them only in case we drop to a really low amount of
-    # peers in the routing table.
-    debug "Message request to bootstrap node failed", enr = toURI(n.record)
-
 # TODO: This could be improved to do the clean-up immediatily in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
 # somewhere
@@ -581,7 +573,7 @@ proc ping*(d: Protocol, toNode: Node):
     d.routingTable.setJustSeen(toNode)
     return ok(resp.get().pong)
   else:
-    d.replaceNode(toNode)
+    d.routingTable.replaceNode(toNode)
     return err("Pong message not received in time")
 
 proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
@@ -598,7 +590,7 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
     d.routingTable.setJustSeen(toNode)
     return ok(res)
   else:
-    d.replaceNode(toNode)
+    d.routingTable.replaceNode(toNode)
     return err(nodes.error)
 
 proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
@@ -614,7 +606,7 @@ proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
     d.routingTable.setJustSeen(toNode)
     return ok(resp.get().talkresp)
   else:
-    d.replaceNode(toNode)
+    d.routingTable.replaceNode(toNode)
     return err("Talk response message not received in time")
 
 proc lookupDistances(target, dest: NodeId): seq[uint32] {.raises: [Defect].} =
@@ -742,17 +734,46 @@ proc revalidateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   except CancelledError:
     trace "revalidateLoop canceled"
 
+proc seedNodes(d: Protocol) =
+  for record in d.bootstrapRecords:
+    if d.addNode(record):
+      debug "Added bootstrap node", uri = toURI(record)
+    else:
+      debug "Bootstrap node could not be added", uri = toURI(record)
+
+proc populateTable(d: Protocol) {.async, raises: [Exception, Defect].} =
+  ## Seed the table with known nodes and next do a set of initial lookups to
+  ## further populate the table.
+  d.seedNodes()
+
+  # lookup self (neighbour nodes)
+  let selfLookup = await d.lookup(d.localNode.id)
+  trace "Discovered nodes in self lookup", nodes = selfLookup
+
+  # `initialLookups` random lookups
+  for i in 0..<initialLookups:
+    let randomLookup = await d.lookupRandom()
+    trace "Discovered nodes in random lookup", nodes = randomLookup
+
+  debug "Total nodes in routing table after refresh",
+    total = d.routingTable.len()
+
 proc lookupLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   # TODO: General Exception raised.
   try:
-    # lookup self (neighbour nodes)
-    let selfLookup = await d.lookup(d.localNode.id)
-    trace "Discovered nodes in self lookup", nodes = selfLookup
+    await d.populateTable()
+
     while true:
+      # When our routing table is smaller than the original set of bootstrap
+      # nodes, we attempt to repopulate the table.
+      if d.routingTable.len() < d.bootstrapRecords.len():
+        await d.populateTable()
+
+      await sleepAsync(lookupInterval)
       let randomLookup = await d.lookupRandom()
       trace "Discovered nodes in random lookup", nodes = randomLookup
-      debug "Total nodes in discv5 routing table", total = d.routingTable.len()
-      await sleepAsync(lookupInterval)
+      debug "Total nodes in routing table", total = d.routingTable.len()
+
   except CancelledError:
     trace "lookupLoop canceled"
 
@@ -809,12 +830,6 @@ proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   # TODO: raises `OSError` and `IOSelectorsException`, the latter which is
   # object of Exception. In Nim devel this got changed to CatchableError.
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
-
-  for record in d.bootstrapRecords:
-    if d.addNode(record):
-      debug "Added bootstrap node", uri = toURI(record)
-    else:
-      debug "Bootstrap node could not be added", uri = toURI(record)
 
 proc start*(d: Protocol) {.raises: [Exception, Defect].} =
   d.lookupLoop = lookupLoop(d)
