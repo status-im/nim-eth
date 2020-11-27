@@ -30,13 +30,16 @@ type
   SqStoreRef* = ref object of RootObj
     env: Sqlite
     keyspaces: seq[KeySpaceStatements]
-    extraStmts: seq[RawStmtPtr]
+    managedStmts: seq[RawStmtPtr]
 
 template dispose(db: Sqlite) =
   discard sqlite3_close(db)
 
 template dispose(db: RawStmtPtr) =
   discard sqlite3_finalize(db)
+
+template dispose*(db: SqliteStmt) =
+  discard sqlite3_finalize(RawStmtPtr db)
 
 proc release[T](x: var AutoDisposed[T]): T =
   result = x.val
@@ -58,9 +61,11 @@ template checkErr(op) =
 proc prepareStmt*(db: SqStoreRef,
                   stmt: string,
                   Params: type,
-                  Res: type): KvResult[SqliteStmt[Params, Res]] =
+                  Res: type,
+                  managed = true): KvResult[SqliteStmt[Params, Res]] =
   var s: RawStmtPtr
   checkErr sqlite3_prepare_v2(db.env, stmt, stmt.len.cint, addr s, nil)
+  if managed: db.managedStmts.add s
   ok SqliteStmt[Params, Res](s)
 
 proc bindParam(s: RawStmtPtr, n: int, val: auto): cint =
@@ -165,12 +170,17 @@ template exec*[Res](s: SqliteStmt[NoParams, Res],
                     onData: ResultHandler[Res]): KvResult[bool] =
   exec(s, (), onData)
 
-proc exec*(db: SqStoreRef, stmt: string): KvResult[void] =
-  let stmt = ? db.prepareStmt(stmt, NoParams, void)
-  result = exec(stmt)
+proc exec*[Params: tuple](db: SqStoreRef,
+                          stmt: string,
+                          params: Params): KvResult[void] =
+  let stmt = ? db.prepareStmt(stmt, Params, void, managed = false)
+  result = exec(stmt, params)
   let finalizeStatus = sqlite3_finalize(RawStmtPtr stmt)
   if finalizeStatus != SQLITE_OK and result.isOk:
     return err($sqlite3_errstr(finalizeStatus))
+
+template exec*(db: SqStoreRef, stmt: string): KvResult[void] =
+  exec(db, stmt, ())
 
 proc getImpl(db: SqStoreRef,
              keyspace: int,
@@ -281,7 +291,7 @@ proc close*(db: SqStoreRef) =
     discard sqlite3_finalize(keyspace.delStmt)
     discard sqlite3_finalize(keyspace.containsStmt)
 
-  for stmt in db.extraStmts:
+  for stmt in db.managedStmts:
     discard sqlite3_finalize(stmt)
 
   discard sqlite3_close(db.env)
