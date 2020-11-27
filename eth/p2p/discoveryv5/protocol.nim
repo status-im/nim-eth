@@ -98,11 +98,13 @@ const
   ## minutes. Trinity starts one every minute.
   revalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
+  populateCheckInterval = 5.seconds ## Interval of the routing table population
+  ## check
+  initialLookups = 2 ## Amount of lookups done when populating the routing table
   handshakeTimeout* = 2.seconds ## timeout for the reply on the
   ## whoareyou message
   responseTimeout* = 4.seconds ## timeout for the response of a request-response
   ## call
-  initialLookups = 2 ## Amount of lookups done when refreshing the routing table
 
 type
   Protocol* = ref object
@@ -116,6 +118,7 @@ type
     awaitedMessages: Table[(NodeId, RequestId), Future[Option[Message]]]
     lookupLoop: Future[void]
     revalidateLoop: Future[void]
+    repopulateLoop: Future[void]
     bootstrapRecords*: seq[Record]
     rng*: ref BrHmacDrbgContext
 
@@ -734,18 +737,34 @@ proc revalidateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   except CancelledError:
     trace "revalidateLoop canceled"
 
-proc seedNodes(d: Protocol) =
+proc isPopulated*(d: Protocol): bool =
+  d.routingTable.len() >= d.bootstrapRecords.len()
+
+proc lookupLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
+  # TODO: General Exception raised.
+  try:
+    while true:
+      await sleepAsync(lookupInterval)
+      # We only do these lookups when table is populated and didn't drop again
+      # to a too low set.
+      if d.isPopulated():
+        let randomLookup = await d.lookupRandom()
+        trace "Discovered nodes in random lookup", nodes = randomLookup
+        debug "Total nodes in routing table", total = d.routingTable.len()
+
+  except CancelledError:
+    trace "lookupLoop canceled"
+
+proc seedNodes*(d: Protocol) =
+  ## Seed the table with known nodes.
   for record in d.bootstrapRecords:
     if d.addNode(record):
       debug "Added bootstrap node", uri = toURI(record)
     else:
       debug "Bootstrap node could not be added", uri = toURI(record)
 
-proc populateTable(d: Protocol) {.async, raises: [Exception, Defect].} =
-  ## Seed the table with known nodes and next do a set of initial lookups to
-  ## further populate the table.
-  d.seedNodes()
-
+proc populateTable*(d: Protocol) {.async, raises: [Exception, Defect].} =
+  ## Do a set of initial lookups to quickly populate the table.
   # lookup self (neighbour nodes)
   let selfLookup = await d.lookup(d.localNode.id)
   trace "Discovered nodes in self lookup", nodes = selfLookup
@@ -758,24 +777,22 @@ proc populateTable(d: Protocol) {.async, raises: [Exception, Defect].} =
   debug "Total nodes in routing table after refresh",
     total = d.routingTable.len()
 
-proc lookupLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
+proc repopulateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   # TODO: General Exception raised.
   try:
     await d.populateTable()
+    d.lookupLoop = lookupLoop(d)
+    d.revalidateLoop = revalidateLoop(d)
 
     while true:
-      # When our routing table is smaller than the original set of bootstrap
-      # nodes, we attempt to repopulate the table.
-      if d.routingTable.len() < d.bootstrapRecords.len():
+      # When our routing table is smaller than the original set of
+      # bootstrap nodes, we attempt to reseed and repopulate the table.
+      if not d.isPopulated():
+        d.seedNodes()
         await d.populateTable()
-
-      await sleepAsync(lookupInterval)
-      let randomLookup = await d.lookupRandom()
-      trace "Discovered nodes in random lookup", nodes = randomLookup
-      debug "Total nodes in routing table", total = d.routingTable.len()
-
+      await sleepAsync(populateCheckInterval)
   except CancelledError:
-    trace "lookupLoop canceled"
+    trace "repopulateLoop canceled"
 
 proc newProtocol*(privKey: PrivateKey,
                   externalIp: Option[ValidIpAddress], tcpPort, udpPort: Port,
@@ -831,9 +848,10 @@ proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   # object of Exception. In Nim devel this got changed to CatchableError.
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
+  d.seedNodes()
+
 proc start*(d: Protocol) {.raises: [Exception, Defect].} =
-  d.lookupLoop = lookupLoop(d)
-  d.revalidateLoop = revalidateLoop(d)
+  d.repopulateLoop = repopulateLoop(d)
 
 proc close*(d: Protocol) {.raises: [Exception, Defect].} =
   doAssert(not d.transp.closed)
@@ -843,6 +861,8 @@ proc close*(d: Protocol) {.raises: [Exception, Defect].} =
     d.revalidateLoop.cancel()
   if not d.lookupLoop.isNil:
     d.lookupLoop.cancel()
+  if not d.repopulateLoop.isNil:
+    d.repopulateLoop.cancel()
 
   d.transp.close()
 
@@ -854,5 +874,7 @@ proc closeWait*(d: Protocol) {.async, raises: [Exception, Defect].} =
     await d.revalidateLoop.cancelAndWait()
   if not d.lookupLoop.isNil:
     await d.lookupLoop.cancelAndWait()
+  if not d.repopulateLoop.isNil:
+    await d.repopulateLoop.cancelAndWait()
 
   await d.transp.closeWait()

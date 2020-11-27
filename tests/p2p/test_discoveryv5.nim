@@ -28,32 +28,49 @@ procSuite "Discovery v5 Tests":
 
   asyncTest "Node deletion":
     let
-      bootnode = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20301))
       node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302),
-        @[bootnode.localNode.record])
+        rng, PrivateKey.random(rng[]), localAddress(20301))
       node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303),
-        @[bootnode.localNode.record])
-      pong1 = await discv5_protocol.ping(node1, bootnode.localNode)
-      pong2 = await discv5_protocol.ping(node1, node2.localNode)
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node3 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+    let
+      pong1 = await discv5_protocol.ping(node2, node1.localNode)
+      pong2 = await discv5_protocol.ping(node3, node1.localNode)
 
-    check pong1.isOk() and pong2.isOk()
-
-    await bootnode.closeWait()
-    await node2.closeWait()
-
-    await node1.revalidateNode(bootnode.localNode)
-    await node1.revalidateNode(node2.localNode)
-
-    let n = node1.getNode(bootnode.localNode.id)
     check:
-      n.isSome()
-      n.get() == bootnode.localNode
+      pong1.isOk() and pong2.isOk()
+      node1.getNode(node2.localNode.id).isSome()
+      node1.getNode(node3.localNode.id).isSome()
+
+    await node2.closeWait()
+    await node3.closeWait()
+    await node1.revalidateNode(node2.localNode)
+    await node1.revalidateNode(node3.localNode)
+    check:
       node1.getNode(node2.localNode.id).isNone()
+      node1.getNode(node3.localNode.id).isNone()
 
     await node1.closeWait()
+
+  asyncTest "Bootstrap node deletion":
+    let
+      bootnode = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20301))
+      node = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302),
+        @[bootnode.localNode.record])
+
+    check: node.getNode(bootnode.localNode.id).isSome()
+
+    await node.revalidateNode(bootnode.localNode)
+    check: node.getNode(bootnode.localNode.id).isSome()
+
+    await bootnode.closeWait()
+    await node.revalidateNode(bootnode.localNode)
+    check: node.getNode(bootnode.localNode.id).isNone()
+
+    await node.closeWait()
 
   test "Distance check":
     const
