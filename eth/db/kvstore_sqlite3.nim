@@ -137,7 +137,7 @@ template readResult(s: RawStmtPtr, column: cint, T: type): auto =
     res
   elif T is array:
     # array[N, byte]. "genericParams(T)[1]" requires 1.4 to handle nnkTypeOfExpr
-    when typeof(block: (var a: T; a[0])) is byte:
+    when typeof(default(T)[0]) is byte:
       var res: T
       let colLen = sqlite3_column_bytes(s, column)
 
