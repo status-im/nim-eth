@@ -808,7 +808,8 @@ proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   let ta = initTAddress(d.bindAddress.ip, d.bindAddress.port)
   # TODO: raises `OSError` and `IOSelectorsException`, the latter which is
   # object of Exception. In Nim devel this got changed to CatchableError.
-  d.transp = newDatagramTransport(processClient, udata = d, local = ta)
+  d.transp = newDatagramTransport(processClient, udata = d, local = ta,
+    flags = {ReuseAddr})
 
   for record in d.bootstrapRecords:
     if d.addNode(record):
