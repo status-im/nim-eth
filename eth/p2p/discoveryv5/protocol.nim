@@ -75,7 +75,7 @@
 import
   std/[tables, sets, options, math, sequtils],
   stew/shims/net as stewNet, json_serialization/std/net,
-  stew/[byteutils, endians2], chronicles, chronos, stint, bearssl,
+  stew/endians2, chronicles, chronos, stint, bearssl,
   eth/[rlp, keys, async_utils],
   types, encoding, node, routing_table, enr, random2, sessions
 
@@ -519,7 +519,7 @@ proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node,
         continue
       # Check if returned node has one of the requested distances.
       if not distances.contains(logDist(n.id, fromNode.id)):
-        warn "Nodes reply contained record with incorrect distance",
+        debug "Nodes reply contained record with incorrect distance",
           record = n.record.toURI, sender = fromNode.record.toURI
         continue
 
