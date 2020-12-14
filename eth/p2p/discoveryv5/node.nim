@@ -52,7 +52,7 @@ proc updateNode*(n: Node, pk: PrivateKey, ip: Option[ValidIpAddress],
   ? n.record.update(pk, ip, tcpPort, udpPort, extraFields)
 
   if ip.isSome():
-    let a = Address(ip: ip.get(), port: Port(udpPort))
+    let a = Address(ip: ip.get(), port: udpPort)
     n.address = some(a)
   else:
     n.address = none(Address)
