@@ -47,6 +47,3 @@ proc ignoreSignalsInThread*() =
     if pthread_sigmask(SIG_BLOCK, signalMask, oldSignalMask) != 0:
       echo osErrorMsg(osLastError())
       quit(QuitFailure)
-
-declarePublicGauge connected_peers, "number of peers in the pool"
-

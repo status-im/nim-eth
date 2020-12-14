@@ -13,6 +13,8 @@ when useSnappy:
 export
   options, p2pProtocol, rlp, chronicles
 
+declarePublicGauge connected_peers, "number of peers in the pool"
+
 logScope:
   topics = "rlpx"
 
