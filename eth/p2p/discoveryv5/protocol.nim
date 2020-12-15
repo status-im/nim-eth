@@ -672,11 +672,16 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
     if pendingQueries.len == 0:
       break
 
-    let idx = await oneIndex(pendingQueries)
-    trace "Got discv5 lookup response", idx
+    let query = await one(pendingQueries)
+    trace "Got discv5 lookup query response"
 
-    let nodes = pendingQueries[idx].read
-    pendingQueries.del(idx)
+    let index = pendingQueries.find(query)
+    if index != -1:
+      pendingQueries.del(index)
+    else:
+      error "Resulting query should have beeen in the pending queries"
+
+    let nodes = query.read
     for n in nodes:
       if not seen.containsOrIncl(n.id):
         if result.len < BUCKET_SIZE:
