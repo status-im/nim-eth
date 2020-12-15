@@ -75,7 +75,7 @@
 import
   std/[tables, sets, options, math, sequtils, algorithm],
   stew/shims/net as stewNet, json_serialization/std/net,
-  stew/endians2, chronicles, chronos, stint, bearssl,
+  stew/endians2, chronicles, chronos, stint, bearssl, metrics,
   eth/[rlp, keys, async_utils],
   types, encoding, node, routing_table, enr, random2, sessions
 
@@ -85,13 +85,16 @@ export options
 
 {.push raises: [Defect].}
 
+declarePublicGauge discovery_message_requests,
+  "Discovery protocol message requests", labels = ["response"]
+
 logScope:
   topics = "discv5"
 
 const
   alpha = 3 ## Kademlia concurrency factor
   lookupRequestLimit = 3
-  findNodeResultLimit = 15 # applies in FINDNODE handler
+  findNodeResultLimit = 16 # applies in FINDNODE handler
   maxNodesPerMessage = 3
   lookupInterval = 60.seconds ## Interval of launching a random lookup to
   ## populate the routing table. go-ethereum seems to do 3 runs every 30
@@ -566,6 +569,7 @@ proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
   d.registerRequest(toNode, message, nonce)
   trace "Send message packet", dstId = toNode.id, address, kind = messageKind(T)
   d.send(toNode, data)
+  discovery_message_requests.inc()
   return reqId
 
 proc ping*(d: Protocol, toNode: Node):
@@ -582,6 +586,7 @@ proc ping*(d: Protocol, toNode: Node):
     return ok(resp.get().pong)
   else:
     d.replaceNode(toNode)
+    discovery_message_requests.inc(labelValues = ["timed_out"])
     return err("Pong message not received in time")
 
 proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
@@ -599,6 +604,7 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
     return ok(res)
   else:
     d.replaceNode(toNode)
+    discovery_message_requests.inc(labelValues = ["timed_out"])
     return err(nodes.error)
 
 proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
@@ -615,6 +621,7 @@ proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
     return ok(resp.get().talkresp)
   else:
     d.replaceNode(toNode)
+    discovery_message_requests.inc(labelValues = ["timed_out"])
     return err("Talk response message not received in time")
 
 proc lookupDistances(target, dest: NodeId): seq[uint32] {.raises: [Defect].} =
@@ -640,7 +647,9 @@ proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
     if r.isOk:
       # TODO: I guess it makes sense to limit here also to `findNodeResultLimit`?
       result.add(r[])
-    inc i
+      inc i
+    else:
+      break
 
   for n in result:
     discard d.addNode(n)
@@ -684,7 +693,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
     if index != -1:
       pendingQueries.del(index)
     else:
-      error "Resulting query should have beeen in the pending queries"
+      error "Resulting query should have been in the pending queries"
 
     let nodes = query.read
     # TODO: Remove node on timed-out query?
