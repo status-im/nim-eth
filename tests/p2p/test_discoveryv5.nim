@@ -256,8 +256,7 @@ procSuite "Discovery v5 Tests":
       let target = nodes[i]
       let discovered = await nodes[nodeCount-1].lookup(target.localNode.id)
       debug "Lookup result", target = target.localNode, discovered
-      # if lookUp would return ordered on distance we could check discovered[0]
-      check discovered.contains(target.localNode)
+      check discovered[0] == target.localNode
 
     for node in nodes:
       await node.closeWait()

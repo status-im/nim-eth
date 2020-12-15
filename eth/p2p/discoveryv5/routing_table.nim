@@ -87,7 +87,7 @@ const
   DefaultTableIpLimits* = TableIpLimits(tableIpLimit: DefaultTableIpLimit,
     bucketIpLimit: DefaultBucketIpLimit)
 
-proc distanceTo(n: Node, id: NodeId): UInt256 =
+proc distanceTo*(n: Node, id: NodeId): UInt256 =
   ## Calculate the distance to a NodeId.
   n.id xor id
 

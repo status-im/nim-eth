@@ -73,7 +73,7 @@
 ## This might be a concern for mobile devices.
 
 import
-  std/[tables, sets, options, math, sequtils],
+  std/[tables, sets, options, math, sequtils, algorithm],
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/endians2, chronicles, chronos, stint, bearssl,
   eth/[rlp, keys, async_utils],
@@ -633,6 +633,7 @@ proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
   let dists = lookupDistances(target, destNode.id)
   var i = 0
   # TODO: We can make use of the multiple distances here now.
+  # Do findNode requests with different distances until we hit limits.
   while i < lookupRequestLimit and result.len < findNodeResultLimit:
     let r = await d.findNode(destNode, @[dists[i]])
     # TODO: Handle failures better. E.g. stop on different failures than timeout
@@ -648,21 +649,25 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
     {.async, raises: [Exception, Defect].} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
-  # TODO: Sort the returned nodes on distance
-  # Also use unseen nodes as a form of validation.
-  result = d.routingTable.neighbours(target, BUCKET_SIZE, seenOnly = false)
-  var asked = initHashSet[NodeId]()
-  asked.incl(d.localNode.id)
-  var seen = asked
-  for node in result:
+  # `closestNodes` holds the k closest nodes to target found, sorted by distance
+  # Unvalidated nodes are used for requests as a form of validation.
+  var closestNodes = d.routingTable.neighbours(target, BUCKET_SIZE,
+    seenOnly = false)
+
+  var asked, seen = initHashSet[NodeId]()
+  asked.incl(d.localNode.id) # No need to ask our own node
+  seen.incl(d.localNode.id) # No need to discover our own node
+  for node in closestNodes:
     seen.incl(node.id)
 
   var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
 
   while true:
     var i = 0
-    while i < result.len and pendingQueries.len < alpha:
-      let n = result[i]
+    # Doing `alpha` amount of requests at once as long as closer non queried
+    # nodes are discovered.
+    while i < closestNodes.len and pendingQueries.len < alpha:
+      let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(d.lookupWorker(n, target))
       inc i
@@ -682,10 +687,19 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
       error "Resulting query should have beeen in the pending queries"
 
     let nodes = query.read
+    # TODO: Remove node on timed-out query?
     for n in nodes:
       if not seen.containsOrIncl(n.id):
-        if result.len < BUCKET_SIZE:
-          result.add(n)
+        # If it wasn't seen before, insert node while remaining sorted
+        closestNodes.insert(n, closestNodes.lowerBound(n,
+          proc(x: Node, n: Node): int =
+            cmp(distanceTo(x, target), distanceTo(n, target))
+        ))
+
+        if closestNodes.len > BUCKET_SIZE:
+          closestNodes.del(closestNodes.high())
+
+  return closestNodes
 
 proc lookupRandom*(d: Protocol): Future[seq[Node]]
     {.async, raises:[Exception, Defect].} =
