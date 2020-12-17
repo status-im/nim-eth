@@ -638,21 +638,16 @@ proc lookupDistances(target, dest: NodeId): seq[uint32] {.raises: [Defect].} =
 proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
     Future[seq[Node]] {.async, raises: [Exception, Defect].} =
   let dists = lookupDistances(target, destNode.id)
-  var i = 0
-  # TODO: We can make use of the multiple distances here now.
-  # Do findNode requests with different distances until we hit limits.
-  while i < lookupRequestLimit and result.len < findNodeResultLimit:
-    let r = await d.findNode(destNode, @[dists[i]])
-    # TODO: Handle failures better. E.g. stop on different failures than timeout
-    if r.isOk:
-      # TODO: I guess it makes sense to limit here also to `findNodeResultLimit`?
-      result.add(r[])
-      inc i
-    else:
-      break
 
-  for n in result:
-    discard d.addNode(n)
+  # Instead of doing max `lookupRequestLimit` findNode requests,  make use
+  # of the discv5.1 functionality to request nodes for multiple distances.
+  let r = await d.findNode(destNode, dists)
+  if r.isOk:
+    result.add(r[])
+
+    # Attempt to add all nodes discovered
+    for n in result:
+      discard d.addNode(n)
 
 proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
     {.async, raises: [Exception, Defect].} =
