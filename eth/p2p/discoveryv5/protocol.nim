@@ -93,9 +93,11 @@ logScope:
 
 const
   alpha = 3 ## Kademlia concurrency factor
-  lookupRequestLimit = 3
-  findNodeResultLimit = 16 # applies in FINDNODE handler
-  maxNodesPerMessage = 3
+  lookupRequestLimit = 3 ## Amount of distances requested in a single Findnode
+  ## message for a lookup or query
+  findNodeResultLimit = 16 ## Maximum amount of ENRs in the total Nodes messages
+  ## that will be processed
+  maxNodesPerMessage = 3 ## Maximum amount of ENRs per individual Nodes message
   lookupInterval = 60.seconds ## Interval of launching a random lookup to
   ## populate the routing table. go-ethereum seems to do 3 runs every 30
   ## minutes. Trinity starts one every minute.
@@ -497,12 +499,24 @@ proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node,
   ## Verify and convert ENRs to a sequence of nodes. Only ENRs that pass
   ## verification will be added. ENRs are verified for duplicates, invalid
   ## addresses and invalid distances.
-  # TODO:
-  # - Should we fail and ignore values on first invalid Node?
-  # - Should we limit the amount of nodes? The discovery v5 specification holds
-  # no limit on the amount that can be returned.
   var seen: HashSet[Node]
+  var count = 0
   for r in enrs:
+    # Check and allow for processing of maximum `findNodeResultLimit` ENRs
+    # returned. This limitation is required so no huge lists of invalid ENRs
+    # are processed for no reason, and for not overwhelming a routing table
+    # with nodes from a malicious actor.
+    # The discovery v5 specification specifies no limit on the amount of ENRs
+    # that can be returned, but clients usually stick with the bucket size limit
+    # as in original Kademlia. Because of this it is chosen not to fail
+    # immediatly, but still process maximum `findNodeResultLimit`.
+    if count >= findNodeResultLimit:
+      debug "Response on findnode returned too many ENRs", enrs = enrs.len(),
+        limit = findNodeResultLimit, sender = fromNode.record.toURI
+      break
+
+    count.inc()
+
     let node = newNode(r)
     if node.isOk():
       let n = node.get()
