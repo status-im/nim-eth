@@ -32,6 +32,9 @@ type
     keyspaces: seq[KeySpaceStatements]
     managedStmts: seq[RawStmtPtr]
 
+  SqStoreCheckpointKind* {.pure.} = enum
+    passive, full, restart, truncate
+
 template dispose(db: Sqlite) =
   discard sqlite3_close(db)
 
@@ -322,6 +325,14 @@ proc close*(db: SqStoreRef) =
 
   db[] = SqStoreRef()[]
 
+proc checkpoint*(db: SqStoreRef, kind = SqStoreCheckpointKind.passive) =
+  let mode: cint = case kind
+  of SqStoreCheckpointKind.passive: SQLITE_CHECKPOINT_PASSIVE
+  of SqStoreCheckpointKind.full: SQLITE_CHECKPOINT_FULL
+  of SqStoreCheckpointKind.restart: SQLITE_CHECKPOINT_RESTART
+  of SqStoreCheckpointKind.truncate: SQLITE_CHECKPOINT_TRUNCATE
+  discard sqlite3_wal_checkpoint_v2(db.env, nil, mode, nil, nil)
+
 proc isClosed*(db: SqStoreRef): bool =
   db.env != nil
 
@@ -331,6 +342,7 @@ proc init*(
     name: string,
     readOnly = false,
     inMemory = false,
+    manualCheckpoint = false,
     keyspaces: openarray[string] = ["kvstore"]): KvResult[T] =
   var env: AutoDisposed[ptr sqlite3]
   defer: disposeIfUnreleased(env)
@@ -390,6 +402,15 @@ proc init*(
   checkWalPragmaResult(journalModePragma)
   checkExec(journalModePragma)
 
+
+  if manualCheckpoint:
+    checkErr sqlite3_wal_autocheckpoint(env.val, 0)
+    # In manual checkpointing mode, we relax synchronization to NORMAL -
+    # this is safe in WAL mode leaving us with a consistent database at all
+    # times, though potentially losing any data written between checkpoints.
+    # http://www3.sqlite.org/wal.html#performance_considerations
+    checkExec("PRAGMA synchronous = NORMAL;")
+
   var keyspaceStatements = newSeq[KeySpaceStatements]()
   for keyspace in keyspaces:
     checkExec """
@@ -429,13 +450,14 @@ proc init*(
     name: string,
     Keyspaces: type[enum],
     readOnly = false,
-    inMemory = false): KvResult[T] =
+    inMemory = false,
+    manualCheckpoint = false): KvResult[T] =
 
   var keyspaceNames = newSeq[string]()
   for keyspace in Keyspaces:
     keyspaceNames.add $keyspace
 
-  SqStoreRef.init(basePath, name, readOnly, inMemory, keyspaceNames)
+  SqStoreRef.init(basePath, name, readOnly, inMemory, manualCheckpoint, keyspaceNames)
 
 when defined(metrics):
   import tables, times,
