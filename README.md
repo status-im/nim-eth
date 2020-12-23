@@ -1,8 +1,9 @@
-# eth - Eth Common Library 
+# eth - Eth Common Library
 
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
+![Github action](https://github.com/status-im/nim-eth/workflows/nim-eth%20CI/badge.svg)
 
 ## Introduction
 
@@ -28,7 +29,7 @@ E.g. on Ubuntu one can run:
 apt install -y librocksdb-dev liblmdb-dev sqlite3
 ```
 
-## Building & Testing 
+## Building & Testing
 ```
 # Install required modules
 nimble install

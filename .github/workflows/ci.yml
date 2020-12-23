@@ -1,0 +1,271 @@
+name: nim-eth CI
+on: [push, pull_request]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        branch: [master]
+        target:
+          - os: linux
+            cpu: amd64
+            TEST_LANG: c
+          - os: linux
+            cpu: amd64
+            TEST_LANG: cpp
+          - os: linux
+            cpu: i386
+            TEST_LANG: c
+          - os: linux
+            cpu: i386
+            TEST_LANG: cpp
+          - os: macos
+            cpu: amd64
+            TEST_LANG: c
+          - os: macos
+            cpu: amd64
+            TEST_LANG: cpp
+          - os: windows
+            cpu: amd64
+            TEST_LANG: c
+          - os: windows
+            cpu: amd64
+            TEST_LANG: cpp
+          - os: windows
+            cpu: i386
+            TEST_LANG: c
+          - os: windows
+            cpu: i386
+            TEST_LANG: cpp
+        include:
+          - target:
+              os: linux
+            builder: ubuntu-18.04
+          - target:
+              os: macos
+            builder: macos-10.15
+          - target:
+              os: windows
+            builder: windows-2019
+
+    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ matrix.target.TEST_LANG }} (${{ matrix.branch }})'
+    runs-on: ${{ matrix.builder }}
+    steps:
+      - name: Checkout nim-eth
+        uses: actions/checkout@v2
+        with:
+          path: nim-eth
+          submodules: false
+
+      - name: Install build dependencies (Linux i386)
+        if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-fast update -qq
+          sudo DEBIAN_FRONTEND='noninteractive' apt-fast install \
+            --no-install-recommends -yq gcc-multilib g++-multilib \
+            libz-dev:i386 libbz2-dev:i386 libssl-dev:i386
+          mkdir -p external/bin
+          cat << EOF > external/bin/gcc
+          #!/bin/bash
+          exec $(which gcc) -m32 "\$@"
+          EOF
+          cat << EOF > external/bin/g++
+          #!/bin/bash
+          exec $(which g++) -m32 "\$@"
+          EOF
+          chmod 755 external/bin/gcc external/bin/g++
+          echo '${{ github.workspace }}/external/bin' >> $GITHUB_PATH
+
+      - name: Restore rocksdb from cache (Macos)
+        if: runner.os != 'Windows'
+        id: rocksdb-cache
+        uses: actions/cache@v1
+        with:
+          path: rocks-db-cache-${{ matrix.target.cpu }}
+          key: 'rocksdb-${{ matrix.target.os }}-${{ matrix.target.cpu }}'
+
+      - name: Build and install rocksdb (Linux i386)
+        # no librocksdb-dev:i386
+        if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
+        shell: bash
+        run: |
+          curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_rocksdb.sh
+          bash build_rocksdb.sh rocks-db-cache-${{ matrix.target.cpu }}
+
+      - name: Install rocksdb (Linux amd64)
+        # mysterious illegal instruction error if we build our own librocksdb
+        if: runner.os == 'Linux' && matrix.target.cpu == 'amd64'
+        shell: bash
+        run: |
+         sudo apt-get -q update
+         sudo apt-get install -y librocksdb-dev
+
+      - name: Build and install lmdb (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          LMDBVER="0.9.22"
+          curl -L "https://github.com/LMDB/lmdb/archive/LMDB_$LMDBVER.tar.gz" -o "LMDB_$LMDBVER.tar.gz"
+          tar xzf "LMDB_$LMDBVER.tar.gz"
+          cd "lmdb-LMDB_$LMDBVER/libraries/liblmdb"
+          make -j2
+          sed -i 's| liblmdb.a||' Makefile
+          sudo make prefix=/usr install
+
+      - name: Build and install rocksdb (Macos)
+        if: runner.os == 'Macos'
+        shell: bash
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ccache
+          echo "/usr/local/opt/ccache/libexec" >> $GITHUB_PATH
+          curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_rocksdb.sh
+          bash build_rocksdb.sh rocks-db-cache-${{ matrix.target.cpu }}
+
+      - name: Build and install lmdb (Macos)
+        if: runner.os == 'Macos'
+        shell: bash
+        run: |
+          LMDBVER="0.9.22"
+          curl -L "https://github.com/LMDB/lmdb/archive/LMDB_$LMDBVER.tar.gz" -o "LMDB_$LMDBVER.tar.gz"
+          tar xzf "LMDB_$LMDBVER.tar.gz"
+          cd "lmdb-LMDB_$LMDBVER/libraries/liblmdb"
+          make -j2
+          sudo cp -a liblmdb.so /usr/local/lib/liblmdb.dylib
+
+      - name: Restore MinGW-W64 (Windows) from cache
+        if: runner.os == 'Windows'
+        id: windows-mingw-cache
+        uses: actions/cache@v2
+        with:
+          path: external/mingw-${{ matrix.target.cpu }}
+          key: 'mingw-${{ matrix.target.cpu }}'
+
+      - name: Restore Nim DLLs dependencies (Windows) from cache
+        if: runner.os == 'Windows'
+        id: windows-dlls-cache
+        uses: actions/cache@v2
+        with:
+          path: external/dlls-${{ matrix.target.cpu }}
+          key: 'dlls-${{ matrix.target.cpu }}'
+
+      - name: Install MinGW64 dependency (Windows)
+        if: >
+          steps.windows-mingw-cache.outputs.cache-hit != 'true' &&
+          runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p external
+          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
+            MINGW_URL="https://sourceforge.net/projects/mingw-w64/files/Toolchains targetting Win64/Personal Builds/mingw-builds/8.1.0/threads-posix/seh/x86_64-8.1.0-release-posix-seh-rt_v6-rev0.7z"
+            ARCH=64
+          else
+            MINGW_URL="https://sourceforge.net/projects/mingw-w64/files/Toolchains targetting Win32/Personal Builds/mingw-builds/8.1.0/threads-posix/dwarf/i686-8.1.0-release-posix-dwarf-rt_v6-rev0.7z"
+            ARCH=32
+          fi
+          curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.target.cpu }}.7z"
+          7z x -y "external/mingw-${{ matrix.target.cpu }}.7z" -oexternal/
+          mv external/mingw$ARCH external/mingw-${{ matrix.target.cpu }}
+
+      - name: Install DLLs dependencies (Windows)
+        if: >
+          steps.windows-dlls-cache.outputs.cache-hit != 'true' &&
+          runner.os == 'Windows'
+        shell: bash
+        run: |
+          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
+            ROCKSDBSUB=x64
+            SQLITE_URL="https://www.sqlite.org/2018/sqlite-dll-win64-x64-3240000.zip"
+            SQLITE_DLL="sqlite3_64.dll"
+          else
+            ROCKSDBSUB=x86
+            SQLITE_URL="https://www.sqlite.org/2018/sqlite-dll-win32-x86-3240000.zip"
+            SQLITE_DLL="sqlite3_32.dll"
+          fi
+          DLLPATH=external/dlls-${{ matrix.target.cpu }}
+          mkdir -p external
+          curl -L "https://nim-lang.org/download/windeps.zip" -o external/windeps.zip
+          7z x -y external/windeps.zip -o"$DLLPATH"
+          # ROCKSDB
+          curl -L "https://github.com/status-im/nimbus-deps/releases/download/nimbus-deps/nimbus-deps.zip" -o external/nimbus-deps.zip
+          7z x -y external/nimbus-deps.zip
+          cp "./$ROCKSDBSUB/librocksdb.dll" "$DLLPATH/librocksdb.dll"
+          # SQLITE
+          curl -L "$SQLITE_URL" -o external/sqlite-dll.zip
+          7z x -y external/sqlite-dll.zip
+          cp ./sqlite3.dll "$DLLPATH/$SQLITE_DLL"
+          # LMDB
+          LMDBVER="0.9.22"
+          LMDB_PATH="lmdb-LMDB_$LMDBVER/libraries/liblmdb"
+          curl -L "https://github.com/LMDB/lmdb/archive/LMDB_$LMDBVER.tar.gz" -o "LMDB_$LMDBVER.tar.gz"
+          tar xzf "LMDB_$LMDBVER.tar.gz"
+          cd "$LMDB_PATH"
+          gcc -march=native -O3 -pipe -shared -o lmdb.dll mdb.c midl.c -lntdll
+          cd ../../..
+          cp "$LMDB_PATH/lmdb.dll" "$DLLPATH/lmdb.dll"
+
+      - name: Path to cached dependencies (Windows)
+        if: >
+          runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo '${{ github.workspace }}'"/external/mingw-${{ matrix.target.cpu }}/bin" >> $GITHUB_PATH
+          echo '${{ github.workspace }}'"/external/dlls-${{ matrix.target.cpu }}" >> $GITHUB_PATH
+
+      - name: Get latest nimbus-build-system commit hash
+        id: versions
+        shell: bash
+        run: |
+          getHash() {
+            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
+          }
+          nbsHash=$(getHash status-im/nimbus-build-system)
+          echo "::set-output name=nimbus_build_system::$nbsHash"
+
+      - name: Restore prebuilt Nim from cache
+        id: nim-cache
+        uses: actions/cache@v2
+        with:
+          path: nim
+          key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}'
+
+      - name: Build Nim and associated tools
+        if: steps.nim-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_nim.sh
+          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
+            PLATFORM=x64
+          else
+            PLATFORM=x86
+          fi
+          if [[ '${{ matrix.target.os }}' == 'windows' ]]; then
+            MAKE_CMD="mingw32-make"
+          else
+            MAKE_CMD="make"
+          fi
+          env MAKE="$MAKE_CMD -j2" ARCH_OVERRIDE=$PLATFORM CC=gcc bash build_nim.sh nim csources dist/nimble NimBinaries
+
+          # clean up to save cache space
+          cd nim
+          rm koch
+          rm -rf nimcache
+          rm -rf csources
+          rm -rf tests
+          rm -rf dist
+          rm -rf .git
+
+      - name: Setup environment
+        shell: bash
+        run: echo '${{ github.workspace }}/nim/bin' >> $GITHUB_PATH
+
+      - name: Run nim-eth tests
+        shell: bash
+        working-directory: nim-eth
+        run: |
+          export PLATFORM="${{ matrix.target.os }}-${{ matrix.target.cpu }}"
+          export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
+          nimble install -y --depsOnly
+          env TEST_LANG="${{ matrix.target.TEST_LANG }}" PLATFORM="$PLATFORM" nimble test
