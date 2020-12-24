@@ -84,7 +84,7 @@ jobs:
         id: rocksdb-cache
         uses: actions/cache@v2
         with:
-          path: rocksdb_cache
+          path: rocks-db-cache
           key: 'rocksdb-${{ matrix.target.os }}-${{ matrix.target.cpu }}'
 
       - name: Build and install rocksdb/lmdb (Linux)
@@ -92,8 +92,7 @@ jobs:
         shell: bash
         run: |
           curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_rocksdb.sh
-          bash build_rocksdb.sh rocksdb_cache
-          dir rocksdb_cache
+          bash build_rocksdb.sh rocks-db-cache
           LMDBVER="0.9.22"
           curl -L "https://github.com/LMDB/lmdb/archive/LMDB_$LMDBVER.tar.gz" -o "LMDB_$LMDBVER.tar.gz"
           tar xzf "LMDB_$LMDBVER.tar.gz"
@@ -109,7 +108,7 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ccache
           echo "/usr/local/opt/ccache/libexec" >> $GITHUB_PATH
           curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_rocksdb.sh
-          bash build_rocksdb.sh rocksdb_cache
+          bash build_rocksdb.sh rocks-db-cache
           LMDBVER="0.9.22"
           curl -L "https://github.com/LMDB/lmdb/archive/LMDB_$LMDBVER.tar.gz" -o "LMDB_$LMDBVER.tar.gz"
           tar xzf "LMDB_$LMDBVER.tar.gz"
