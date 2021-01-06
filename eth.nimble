@@ -18,9 +18,11 @@ requires "nim >= 1.2.0",
          "confutils",
          "testutils"
 
-proc runTest(path: string) =
+proc runTest(path: string, release: bool = true) =
   echo "\nRunning: ", path
-  exec "nim c -r -d:release -d:chronicles_log_level=ERROR --verbosity:0 --hints:off " & path
+  let releaseMode = if release: "-d:release" else: ""
+  exec "nim c -r " & releaseMode &
+    " -d:chronicles_log_level=ERROR --verbosity:0 --hints:off " & path
   rmFile path
 
 proc runKeyfileTests() =
@@ -61,7 +63,15 @@ task test_p2p, "run p2p tests":
   runP2pTests()
 
 proc runRlpTests() =
-  runTest("tests/rlp/all_tests")
+  # workaround for github action CI
+  # mysterious crash on windows-2019 64bit mode
+  # cannot reproduce locally on windows-2019
+  # running in virtualbox
+  let releaseMode = if existsEnv"PLATFORM":
+                      getEnv"PLATFORM" != "windows-amd64"
+                    else: true
+
+  runTest("tests/rlp/all_tests", releaseMode)
 
 task test_rlp, "run rlp tests":
   runRlpTests()
