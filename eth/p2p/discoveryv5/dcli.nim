@@ -22,6 +22,11 @@ type
       desc: "UDP listening port."
       name: "udp-port" .}: uint16
 
+    listenAddress* {.
+      defaultValue: defaultListenAddress(config)
+      desc: "Listening address for the Discovery v5 traffic"
+      name: "listen-address" }: ValidIpAddress
+
     bootnodes* {.
       desc: "ENR URI of node to bootstrap discovery with. Argument may be repeated."
       name: "bootnode" .}: seq[enr.Record]
@@ -42,7 +47,7 @@ type
       name: "metrics" .}: bool
 
     metricsAddress* {.
-      defaultValue: ValidIpAddress.init("127.0.0.1")
+      defaultValue: defaultAdminListenAddress(config)
       desc: "Listening address of the metrics server."
       name: "metrics-address" .}: ValidIpAddress
 
@@ -77,6 +82,12 @@ type
         argument
         desc: "ENR URI of the node to send a talkreq message"
         name: "node" .}: Node
+
+func defaultListenAddress*(conf: DiscoveryConf): ValidIpAddress =
+  (static ValidIpAddress.init("0.0.0.0"))
+
+func defaultAdminListenAddress*(conf: DiscoveryConf): ValidIpAddress =
+  (static ValidIpAddress.init("127.0.0.1"))
 
 proc parseCmdArg*(T: type enr.Record, p: TaintedString): T =
   if not fromURI(result, p):

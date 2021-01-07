@@ -102,6 +102,7 @@ const
   ## refresh the routing table.
   revalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
+  initialLookups = 1 ## Amount of lookups done when populating the routing table
   handshakeTimeout* = 2.seconds ## timeout for the reply on the
   ## whoareyou message
   responseTimeout* = 4.seconds ## timeout for the response of a request-response
@@ -818,6 +819,32 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]]
 
   return node
 
+proc seedTable*(d: Protocol) =
+  ## Seed the table with known nodes.
+  for record in d.bootstrapRecords:
+    if d.addNode(record):
+      debug "Added bootstrap node", uri = toURI(record)
+    else:
+      debug "Bootstrap node could not be added", uri = toURI(record)
+
+  # TODO:
+  # Persistent stored nodes could be added to seed from here
+  # See: https://github.com/status-im/nim-eth/issues/189
+
+proc populateTable*(d: Protocol) {.async, raises: [Exception, Defect].} =
+  ## Do a set of initial lookups to quickly populate the table.
+  # start with a self target query (neighbour nodes)
+  let selfQuery = await d.query(d.localNode.id)
+  trace "Discovered nodes in self target query", nodes = selfQuery.len
+
+  # `initialLookups` random queries
+  for i in 0..<initialLookups:
+    let randomQuery = await d.queryRandom()
+    trace "Discovered nodes in random target query", nodes = randomQuery.len
+
+  debug "Total nodes in routing table after populate",
+    total = d.routingTable.len()
+
 proc revalidateNode*(d: Protocol, n: Node)
     {.async, raises: [Exception, Defect].} = # TODO: Exception
   let pong = await d.ping(n)
@@ -847,9 +874,8 @@ proc refreshLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   ## no queries were done since `refreshInterval` or more.
   # TODO: General Exception raised.
   try:
-    # start with a query target self (neighbour nodes)
-    let selfQuery = await d.query(d.localNode.id)
-    trace "Discovered nodes in self target query", nodes = selfQuery.len
+    await d.populateTable()
+
     while true:
       let currentTime = now(chronos.Moment)
       if currentTime > (d.lastLookup + refreshInterval):
@@ -915,11 +941,7 @@ proc open*(d: Protocol) {.raises: [Exception, Defect].} =
   # object of Exception. In Nim devel this got changed to CatchableError.
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
-  for record in d.bootstrapRecords:
-    if d.addNode(record):
-      debug "Added bootstrap node", uri = toURI(record)
-    else:
-      debug "Bootstrap node could not be added", uri = toURI(record)
+  d.seedTable()
 
 proc start*(d: Protocol) {.raises: [Exception, Defect].} =
   d.refreshLoop = refreshLoop(d)
