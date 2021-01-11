@@ -163,7 +163,7 @@ proc run(config: DiscoveryConf) =
   let
     (ip, tcpPort, udpPort) = setupNat(config)
     d = newProtocol(config.nodeKey, ip, tcpPort, udpPort,
-      bootstrapRecords = config.bootnodes)
+      bootstrapRecords = config.bootnodes, bindIp = config.listenAddress)
 
   d.open()
 
