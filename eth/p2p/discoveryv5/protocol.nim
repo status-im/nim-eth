@@ -85,8 +85,12 @@ export options
 
 {.push raises: [Defect].}
 
-declarePublicGauge discovery_message_requests,
-  "Discovery protocol message requests", labels = ["response"]
+declarePublicGauge discovery_message_requests_outgoing,
+  "Discovery protocol outgoing message requests", labels = ["response"]
+declarePublicGauge discovery_message_requests_incoming,
+  "Discovery protocol incoming message requests", labels = ["response"]
+declarePublicGauge discovery_unsolicited_messages,
+  "Discovery protocol unsolicited or timed-out messages"
 
 logScope:
   topics = "discv5"
@@ -311,12 +315,17 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
     message: Message) {.raises:[Exception].} =
   case message.kind
   of ping:
+    discovery_message_requests_incoming.inc()
     d.handlePing(srcId, fromAddr, message.ping, message.reqId)
   of findNode:
+    discovery_message_requests_incoming.inc()
     d.handleFindNode(srcId, fromAddr, message.findNode, message.reqId)
   of talkreq:
+    discovery_message_requests_incoming.inc()
     d.handleTalkReq(srcId, fromAddr, message.talkreq, message.reqId)
   of regtopic, topicquery:
+    discovery_message_requests_incoming.inc()
+    discovery_message_requests_incoming.inc(labelValues = ["no_response"])
     trace "Received unimplemented message kind", kind = message.kind,
       origin = fromAddr
   else:
@@ -324,6 +333,7 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
     if d.awaitedMessages.take((srcId, message.reqId), waiter):
       waiter.complete(some(message)) # TODO: raises: [Exception]
     else:
+      discovery_unsolicited_messages.inc()
       trace "Timed out or unrequested message", kind = message.kind,
         origin = fromAddr
 
@@ -584,7 +594,7 @@ proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
   d.registerRequest(toNode, message, nonce)
   trace "Send message packet", dstId = toNode.id, address, kind = messageKind(T)
   d.send(toNode, data)
-  discovery_message_requests.inc()
+  discovery_message_requests_outgoing.inc()
   return reqId
 
 proc ping*(d: Protocol, toNode: Node):
@@ -601,7 +611,7 @@ proc ping*(d: Protocol, toNode: Node):
     return ok(resp.get().pong)
   else:
     d.replaceNode(toNode)
-    discovery_message_requests.inc(labelValues = ["timed_out"])
+    discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Pong message not received in time")
 
 proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
@@ -619,7 +629,7 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
     return ok(res)
   else:
     d.replaceNode(toNode)
-    discovery_message_requests.inc(labelValues = ["timed_out"])
+    discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err(nodes.error)
 
 proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
@@ -636,7 +646,7 @@ proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
     return ok(resp.get().talkresp)
   else:
     d.replaceNode(toNode)
-    discovery_message_requests.inc(labelValues = ["timed_out"])
+    discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Talk response message not received in time")
 
 proc lookupDistances(target, dest: NodeId): seq[uint32] {.raises: [Defect].} =
