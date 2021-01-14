@@ -40,26 +40,32 @@ d = newProtocol(privKey, ddb, ip, tcpPort, udpPort,
 d.open() # Start listening and add bootstrap nodes to the routing table.
 ```
 
-Now there are two ways to run the protocol.
+Next there are two ways to run the protocol.
 
 One can call `d.start()` and two loops will be started:
-1. Random lookup loop
+1. Refresh loop
 2. Revalidation loop
 
-The first loop will at specific interval do a lookup with a random `NodeId`.
-This lookup will add discovered nodes to the routing table.
+The first loop will at specific interval do a query with a random `NodeId` if no
+manual queries were done for more than that interval period.
+This query will add discovered nodes to the routing table.
 The second loop will at random ranged interval send a ping to the least recently
 seen node in a random bucket. This is to keep the routing table cleared of
 unreachable/dead nodes.
 
-Or, one can decide to do this manually within its application by using the
-available calls:
-- `lookupRandom` and `lookup` for discovering more peers.
-- `revalidateNode` or directly `ping` for revalidating nodes.
+Now within the application, manual queries or lookups can be done, for which
+the discovered nodes can be used. Nodes discovered during this process will be
+attempted to be added to the routing table. One can use the `query`, `queryRandom`
+or `lookup` calls for this. `randomNodes` can also be used to find nodes,
+but this will only look into the current routing table and not actively 
+search for nodes on the network.
 
-In the future, the random lookup loop might be altered to only run in case no
-lookup was done in the last x minutes. This way `d.start()` could still be run
-while maintaining control over the lookups.
+
+
+Or, one can decide not to run `d.start()` and do this manually within its
+application by using the available calls:
+- `query`, `queryRandom` or `lookup` for discovering more peers.
+- `revalidateNode` or directly `ping` for revalidating nodes.
 
 Of course, in either scenario, lookups can still be done for actually finding a
 specific node. There is a `resolve` call that can help with this, it will first
