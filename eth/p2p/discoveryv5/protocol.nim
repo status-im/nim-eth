@@ -975,6 +975,10 @@ proc newProtocol*(privKey: PrivateKey,
   else:
     record = enr.Record.init(1, privKey, externalIp, some(tcpPort),
       some(udpPort), extraFields).expect("Record within size limits")
+
+  info "ENR initialized", ip = externalIp, tcp = tcpPort, udp = udpPort,
+    seqNum = record.seqNum, uri = toURI(record)
+
   let node = newNode(record).expect("Properly initialized record")
 
   # TODO Consider whether this should be a Defect

@@ -7,10 +7,10 @@
 # those terms.
 
 import
-  options, os, strutils, times,
+  std/[options, os, strutils, times],
   stew/results, nat_traversal/[miniupnpc, natpmp],
-  chronicles, json_serialization/std/net,
-  eth/common/utils
+  chronicles, json_serialization/std/net, chronos,
+  eth/common/utils, ./utils as netutils
 
 type
   NatStrategy* = enum
@@ -123,7 +123,7 @@ proc doPortMapping(tcpPort, udpPort: Port, description: string): Option[(Port, P
         if cres.isErr:
           warn "UPnP port mapping check failed. Assuming the check itself is broken and the port mapping was done.", msg = cres.error
 
-        debug "UPnP: added port mapping", externalPort = port, internalPort = port, protocol = protocol
+        info "UPnP: added port mapping", externalPort = port, internalPort = port, protocol = protocol
         case protocol:
           of UPNPProtocol.TCP:
             extTcpPort = port
@@ -142,7 +142,7 @@ proc doPortMapping(tcpPort, udpPort: Port, description: string): Option[(Port, P
         return
       else:
         let extPort = Port(pmres.value)
-        debug "NAT-PMP: added port mapping", externalPort = extPort, internalPort = port, protocol = protocol
+        info "NAT-PMP: added port mapping", externalPort = extPort, internalPort = port, protocol = protocol
         case protocol:
           of NatPmpProtocol.TCP:
             extTcpPort = extPort
@@ -237,3 +237,88 @@ proc redirectPorts*(tcpPort, udpPort: Port, description: string): Option[(Port, 
     # atexit() in disguise
     addQuitProc(stopNatThread)
 
+proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
+    clientId: string):
+    tuple[ip: Option[ValidIpAddress], tcpPort: Port, udpPort: Port] =
+  # TODO: check and forward actual errors?
+
+  let extIp = getExternalIP(natStrategy)
+  if extIP.isSome:
+    let ip = some(ValidIpAddress.init extIp.get)
+    let extPorts = ({.gcsafe.}:
+      redirectPorts(tcpPort = tcpPort,
+                    udpPort = udpPort,
+                    description = clientId))
+    if extPorts.isSome:
+      let (extTcpPort, extUdpPort) = extPorts.get()
+      (ip, extTcpPort, extUdpPort)
+    else:
+      error "UPnP/NAT-PMP port forwarding failed"
+      (none(ValidIpAddress), tcpPort, udpPort)
+  else:
+    error "UPnP/NAT-PMP failed"
+    (none(ValidIpAddress), tcpPort, udpPort)
+
+proc getBestRoutePublicIp*(): Option[ValidIpAddress] {.raises: [Defect].} =
+  # Avoiding Exception with initTAddress and can't make it work with static.
+  let publicAddress = TransportAddress(family: AddressFamily.IPv4,
+    address_v4: [1'u8, 1, 1, 1], port: Port(0))
+  # Note: `publicAddress` is only used an "example" IP to find the best route,
+  # no data is send over the network to this IP!
+  let route = getBestRoute(publicAddress)
+  if (not route.source.isUnspecified()) and route.source.isPublic():
+    let ip = try: route.source.address()
+             except ValueError as e:
+               error "Not a valid IP address", exception = e.name, msg = e.msg
+               return none(ValidIpAddress)
+
+    return some(ValidIpAddress.init(ip))
+
+proc setupAddress*(nat: string, bindIP: ValidIpAddress, tcpPort, udpPort: Port,
+    clientId: string):
+    tuple[ip: Option[ValidIpAddress], tcpPort: Port, udpPort: Port] {.gcsafe.} =
+  case nat.toLowerAscii:
+    of "any":
+      let bindAddress = initTAddress(bindIP, Port(0))
+      if bindAddress.isAnyLocal() or not bindAddress.isSiteLocal():
+        # Note: could also treat the bindAddress case different so that
+        # we always use that address and never fail when it is a public IP.
+        let ip = getBestRoutePublicIp()
+        if ip.isSome():
+          return (ip, tcpPort, udpPort)
+        else:
+          # Best route IP is private, thus this is an internal network and the
+          # node is either behind a gateway with NAT or for example a container
+          # or VM bridge (or both). Lets default try UPnP and NAT-PMP for in
+          # the node is behind a gateway with UPnP or NAT-PMP support.
+          return setupNat(NatAny, tcpPort, udpPort, clientId)
+      else:
+        return setupNat(NatAny, tcpPort, udpPort, clientId)
+    of "none":
+      let bindAddress = initTAddress(bindIP, Port(0))
+      if bindAddress.isAnyLocal() or not bindAddress.isSiteLocal():
+        # Note: could also treat the bindAddress case different so that
+        # we always use that address and never fail when it is a public IP.
+        let ip = getBestRoutePublicIp()
+        if ip.isNone():
+          warn "No public IP address found. Should not use --nat:none option"
+        return (ip, tcpPort, udpPort)
+      else:
+        warn "Private IP address used as bind address. Should not use --nat:none option"
+        return (none(ValidIpAddress), tcpPort, udpPort)
+    of "upnp":
+      return setupNat(NatUpnp, tcpPort, udpPort, clientId)
+    of "pmp":
+      return setupNat(NatPmp, tcpPort, udpPort, clientId)
+    else:
+      if nat.startsWith("extip:"):
+        try:
+          # any required port redirection is must be done by hand
+          let ip = some(ValidIpAddress.init(nat[6..^1]))
+          return (ip, tcpPort, udpPort)
+        except ValueError:
+          error "Not a valid IP address", address = nat[6..^1]
+          quit QuitFailure
+      else:
+        error "Not a valid NAT option", value = nat
+        quit QuitFailure
