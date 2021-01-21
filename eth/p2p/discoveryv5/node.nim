@@ -3,6 +3,8 @@ import
   nimcrypto, stint, chronos, stew/shims/net, chronicles,
   eth/keys, enr
 
+export stint
+
 {.push raises: [Defect].}
 
 type
@@ -60,9 +62,16 @@ proc updateNode*(n: Node, pk: PrivateKey, ip: Option[ValidIpAddress],
   ok()
 
 func hash*(n: Node): hashes.Hash = hash(n.pubkey.toRaw)
+
 func `==`*(a, b: Node): bool =
   (a.isNil and b.isNil) or
     (not a.isNil and not b.isNil and a.pubkey == b.pubkey)
+
+proc random*(T: type NodeId, rng: var BrHmacDrbgContext): T =
+  var id: NodeId
+  brHmacDrbgGenerate(addr rng, addr id, csize_t(sizeof(id)))
+
+  id
 
 func `$`*(id: NodeId): string =
   id.toHex()
@@ -80,6 +89,9 @@ func shortLog*(id: NodeId): string =
     for i in (len(sid) - 6)..sid.high:
       result.add(sid[i])
 chronicles.formatIt(NodeId): shortLog(it)
+
+func hash*(a: Address): hashes.Hash =
+  hashData(unsafeAddr a, sizeof(a))
 
 func `$`*(a: Address): string =
   result.add($a.ip)

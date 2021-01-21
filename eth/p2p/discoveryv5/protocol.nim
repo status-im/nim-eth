@@ -77,7 +77,7 @@ import
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/endians2, chronicles, chronos, stint, bearssl, metrics,
   eth/[rlp, keys, async_utils],
-  types, encoding, node, routing_table, enr, random2, sessions
+  types, encoding, node, routing_table, enr, random2, sessions, ip_vote
 
 import nimcrypto except toHex
 
@@ -126,6 +126,7 @@ type
     revalidateLoop: Future[void]
     lastLookup: chronos.Moment
     bootstrapRecords*: seq[Record]
+    ipVote: IpVote
     rng*: ref BrHmacDrbgContext
 
   PendingRequest = object
@@ -783,12 +784,7 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
 proc queryRandom*(d: Protocol): Future[seq[Node]]
     {.async, raises:[Exception, Defect].} =
   ## Perform a query for a random target, return all nodes discovered.
-  var id: NodeId
-  var buf: array[sizeof(id), byte]
-  brHmacDrbgGenerate(d.rng[], buf)
-  copyMem(addr id, addr buf[0], sizeof(id))
-
-  return await d.query(id)
+  return await d.query(NodeId.random(d.rng[]))
 
 proc queryRandom*(d: Protocol, enrField: (string, seq[byte])):
     Future[seq[Node]] {.async, raises:[Exception, Defect].} =
@@ -860,11 +856,26 @@ proc revalidateNode*(d: Protocol, n: Node)
   let pong = await d.ping(n)
 
   if pong.isOK():
-    if pong.get().enrSeq > n.record.seqNum:
+    let res = pong.get()
+    if res.enrSeq > n.record.seqNum:
       # Request new ENR
       let nodes = await d.findNode(n, @[0'u32])
       if nodes.isOk() and nodes[].len > 0:
         discard d.addNode(nodes[][0])
+
+    # Get IP and port from pong message and add it to the ip votes
+    if res.ip.len == 4:
+      var ip: array[4, byte]
+      copyMem(addr ip, unsafeAddr res.ip[0], sizeof(ip))
+      let a = Address(ip: ipv4(ip), port: Port(res.port))
+      d.ipVote.insert(n.id, a);
+    elif res.ip.len == 16:
+      var ip: array[16, byte]
+      copyMem(addr ip, unsafeAddr res.ip[0], sizeof(ip))
+      let a = Address(ip: ipv6(ip), port: Port(res.port))
+      d.ipVote.insert(n.id, a);
+    else:
+      warn "Invalid IP address format", ip = res.ip, node = n
 
 proc revalidateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   ## Loop which revalidates the nodes in the routing table by sending the ping
@@ -882,6 +893,7 @@ proc revalidateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
 proc refreshLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   ## Loop that refreshes the routing table by starting a random query in case
   ## no queries were done since `refreshInterval` or more.
+  ## It also refreshes the majority address voted for via pong responses.
   # TODO: General Exception raised.
   try:
     await d.populateTable()
@@ -892,6 +904,11 @@ proc refreshLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
         let randomQuery = await d.queryRandom()
         trace "Discovered nodes in random target query", nodes = randomQuery.len
         debug "Total nodes in discv5 routing table", total = d.routingTable.len()
+
+      let majority = d.ipVote.majority()
+      if majority.isSome():
+        let address = majority.get()
+        debug "Majority on voted address", address
 
       await sleepAsync(refreshInterval)
   except CancelledError:
@@ -935,6 +952,7 @@ proc newProtocol*(privKey: PrivateKey,
     codec: Codec(localNode: node, privKey: privKey,
       sessions: Sessions.init(256)),
     bootstrapRecords: @bootstrapRecords,
+    ipVote: IpVote.init(),
     rng: rng)
 
   result.routingTable.init(node, DefaultBitsPerHop, tableIpLimits, rng)
