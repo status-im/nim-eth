@@ -30,7 +30,7 @@ const IpVoteTimeout = 5.minutes ## Duration until a vote expires
 
 type
   IpVote* = object
-    votes: Table[NodeId, (Address, chronos.Moment)]
+    votes: Table[NodeId, tuple[address: Address, expiry: chronos.Moment]]
     threshold: uint ## Minimum threshold to allow for a majority to count
 
 func init*(T: type IpVote, threshold: uint = 10): T =
@@ -59,10 +59,10 @@ proc majority*(ipvote: var IpVote): Option[Address] =
     pruneList: seq[NodeId]
     ipCount: CountTable[Address]
   for k, v in ipvote.votes:
-    if now > v[1]:
+    if now > v.expiry:
       pruneList.add(k)
     else:
-      ipCount.inc(v[0])
+      ipCount.inc(v.address)
 
   for id in pruneList:
     ipvote.votes.del(id)
