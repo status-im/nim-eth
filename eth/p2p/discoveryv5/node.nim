@@ -73,6 +73,9 @@ proc random*(T: type NodeId, rng: var BrHmacDrbgContext): T =
 
   id
 
+func toBytes*(id: NodeId): array[32, byte] =
+  id.toByteArrayBE()
+
 func `$`*(id: NodeId): string =
   id.toHex()
 

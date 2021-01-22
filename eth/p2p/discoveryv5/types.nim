@@ -1,6 +1,5 @@
 import
   std/hashes,
-  stint,
   eth/rlp, enr, node
 
 {.push raises: [Defect].}
@@ -116,17 +115,6 @@ proc append*(writer: var RlpWriter, value: RequestId) =
 
 proc hash*(reqId: RequestId): Hash =
   hash(reqId.id)
-
-proc toBytes*(id: NodeId): array[32, byte] {.inline.} =
-  id.toByteArrayBE()
-
-proc hash*(id: NodeId): Hash {.inline.} =
-  result = hashData(unsafeAddr id, sizeof(id))
-
-# TODO: To make this work I think we also need to implement `==` due to case
-# fields in object
-proc hash*(address: Address): Hash {.inline.} =
-  hashData(unsafeAddr address, sizeof(address))
 
 proc hash*(key: HandshakeKey): Hash =
   result = key.nodeId.hash !& key.address.hash

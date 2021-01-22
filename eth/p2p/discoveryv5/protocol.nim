@@ -75,7 +75,7 @@
 import
   std/[tables, sets, options, math, sequtils, algorithm],
   stew/shims/net as stewNet, json_serialization/std/net,
-  stew/endians2, chronicles, chronos, stint, bearssl, metrics,
+  stew/[endians2, arrayops], chronicles, chronos, stint, bearssl, metrics,
   eth/[rlp, keys, async_utils],
   types, encoding, node, routing_table, enr, random2, sessions, ip_vote
 
@@ -866,12 +866,12 @@ proc revalidateNode*(d: Protocol, n: Node)
     # Get IP and port from pong message and add it to the ip votes
     if res.ip.len == 4:
       var ip: array[4, byte]
-      copyMem(addr ip, unsafeAddr res.ip[0], sizeof(ip))
+      discard copyFrom(ip, res.ip)
       let a = Address(ip: ipv4(ip), port: Port(res.port))
       d.ipVote.insert(n.id, a);
     elif res.ip.len == 16:
       var ip: array[16, byte]
-      copyMem(addr ip, unsafeAddr res.ip[0], sizeof(ip))
+      discard copyFrom(ip, res.ip)
       let a = Address(ip: ipv6(ip), port: Port(res.port))
       d.ipVote.insert(n.id, a);
     else:
