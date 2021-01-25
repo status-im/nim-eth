@@ -1,5 +1,6 @@
 import
-  std/hashes,
+  std/[hashes, net],
+  stew/arrayops,
   eth/rlp, enr, node
 
 {.push raises: [Defect].}
@@ -39,7 +40,7 @@ type
 
   PongMessage* = object
     enrSeq*: uint64
-    ip*: seq[byte]
+    ip*: IpAddress
     port*: uint16
 
   FindNodeMessage* = object
@@ -112,6 +113,29 @@ proc read*(rlp: var Rlp, T: type RequestId): T
 
 proc append*(writer: var RlpWriter, value: RequestId) =
   writer.append(value.id)
+
+proc read*(rlp: var Rlp, T: type IpAddress): T
+    {.raises: [RlpError, Defect].} =
+  let ipBytes = rlp.toBytes()
+  rlp.skipElem()
+
+  if ipBytes.len == 4:
+    var ip: array[4, byte]
+    discard copyFrom(ip, ipBytes)
+    IpAddress(family: IPv4, address_v4: ip)
+  elif ipBytes.len == 16:
+    var ip: array[16, byte]
+    discard copyFrom(ip, ipBytes)
+    IpAddress(family: IPv6, address_v6: ip)
+  else:
+    raise newException(RlpTypeMismatch,
+      "Amount of bytes for IP address is different from 4 or 16")
+
+proc append*(writer: var RlpWriter, ip: IpAddress) =
+  case ip.family:
+  of IpAddressFamily.IPv4:
+    writer.append(ip.address_v4)
+  of IpAddressFamily.IPv6: writer.append(ip.address_v6)
 
 proc hash*(reqId: RequestId): Hash =
   hash(reqId.id)

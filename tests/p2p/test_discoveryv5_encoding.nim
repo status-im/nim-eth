@@ -28,7 +28,7 @@ suite "Discovery v5.1 Protocol Message Encodings":
   test "Pong Response":
     let
       enrSeq = 1'u64
-      ip = @[127.byte, 0, 0, 1]
+      ip = IpAddress(family: IPv4, address_v4: [127.byte, 0, 0, 1])
       port = 5000'u16
       p = PongMessage(enrSeq: enrSeq, ip: ip, port: port)
       reqId = RequestId(id: @[1.byte])
@@ -118,6 +118,13 @@ suite "Discovery v5.1 Protocol Message Encodings":
     check encoded.toHex == "01cb8900010203040506070801"
 
     let decoded = decodeMessage(encoded)
+    check decoded.isErr()
+
+  test "Pong with invalid IP address size":
+    # pong message with ip field of 5 bytes
+    let encodedPong = "02cb0101857f00000102821388"
+
+    let decoded = decodeMessage(hexToSeqByte(encodedPong))
     check decoded.isErr()
 
 # According to test vectors:
