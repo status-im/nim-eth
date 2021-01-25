@@ -75,7 +75,7 @@
 import
   std/[tables, sets, options, math, sequtils, algorithm],
   stew/shims/net as stewNet, json_serialization/std/net,
-  stew/[endians2, arrayops], chronicles, chronos, stint, bearssl, metrics,
+  stew/endians2, chronicles, chronos, stint, bearssl, metrics,
   eth/[rlp, keys, async_utils],
   types, encoding, node, routing_table, enr, random2, sessions, ip_vote
 
@@ -266,13 +266,8 @@ proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
 
 proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
     ping: PingMessage, reqId: RequestId) =
-  let a = fromAddr
-  var pong: PongMessage
-  pong.enrSeq = d.localNode.record.seqNum
-  pong.ip = case a.ip.family
-    of IpAddressFamily.IPv4: @(a.ip.address_v4)
-    of IpAddressFamily.IPv6: @(a.ip.address_v6)
-  pong.port = a.port.uint16
+  let pong = PongMessage(enrSeq: d.localNode.record.seqNum, ip: fromAddr.ip,
+    port: fromAddr.port.uint16)
 
   let (data, _) = encodeMessagePacket(d.rng[], d.codec, fromId, fromAddr,
     encodeMessage(pong, reqId))
@@ -864,18 +859,8 @@ proc revalidateNode*(d: Protocol, n: Node)
         discard d.addNode(nodes[][0])
 
     # Get IP and port from pong message and add it to the ip votes
-    if res.ip.len == 4:
-      var ip: array[4, byte]
-      discard copyFrom(ip, res.ip)
-      let a = Address(ip: ipv4(ip), port: Port(res.port))
-      d.ipVote.insert(n.id, a);
-    elif res.ip.len == 16:
-      var ip: array[16, byte]
-      discard copyFrom(ip, res.ip)
-      let a = Address(ip: ipv6(ip), port: Port(res.port))
-      d.ipVote.insert(n.id, a);
-    else:
-      warn "Invalid IP address format", ip = res.ip, node = n
+    let a = Address(ip: ValidIpAddress.init(res.ip), port: Port(res.port))
+    d.ipVote.insert(n.id, a)
 
 proc revalidateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   ## Loop which revalidates the nodes in the routing table by sending the ping
