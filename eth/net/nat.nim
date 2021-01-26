@@ -42,7 +42,9 @@ proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] 
   var externalIP: IPAddress
 
   if natStrategy == NatAny or natStrategy == NatUpnp:
-    upnp = newMiniupnp()
+    if upnp == nil:
+      upnp = newMiniupnp()
+
     upnp.discoverDelay = UPNP_TIMEOUT
     let dres = upnp.discover()
     if dres.isErr:
@@ -78,7 +80,8 @@ proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] 
             return
 
   if natStrategy == NatAny or natStrategy == NatPmp:
-    npmp = newNatPmp()
+    if npmp == nil:
+      npmp = newNatPmp()
     let nres = npmp.init()
     if nres.isErr:
       debug "NAT-PMP", msg = nres.error
