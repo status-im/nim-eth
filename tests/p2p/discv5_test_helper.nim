@@ -38,7 +38,7 @@ proc generateNode*(privKey: PrivateKey, port: int = 20302,
     localEnrFields: openarray[FieldPair] = []): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, some(ip),
-    port, port, localEnrFields).expect("Properly intialized private key")
+    some(port), some(port), localEnrFields).expect("Properly intialized private key")
   result = newNode(enr).expect("Properly initialized node")
 
 proc nodeAndPrivKeyAtDistance*(n: Node, rng: var BrHmacDrbgContext, d: uint32,

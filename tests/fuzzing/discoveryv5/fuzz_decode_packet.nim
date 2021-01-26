@@ -1,6 +1,6 @@
 import
   testutils/fuzzing, stew/shims/net, stew/byteutils,
-  eth/p2p/discoveryv5/[encodingv1, enr, sessions, node]
+  eth/p2p/discoveryv5/[encoding, enr, sessions, node]
 
 init:
   const
@@ -12,13 +12,13 @@ init:
     privKeyB = PrivateKey.fromHex(nodeBKey)[] # receive -> decode
 
     enrRecA = enr.Record.init(1, privKeyA,
-      some(ValidIpAddress.init("127.0.0.1")), Port(9000),
-      Port(9000)).expect("Properly intialized private key")
+      some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+      some(Port(9000))).expect("Properly intialized private key")
     nodeA = newNode(enrRecA).expect("Properly initialized record")
 
     enrRecB = enr.Record.init(1, privKeyB,
-      some(ValidIpAddress.init("127.0.0.1")), Port(9000),
-      Port(9000)).expect("Properly intialized private key")
+      some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+      some(Port(9000))).expect("Properly intialized private key")
     nodeB = newNode(enrRecB).expect("Properly initialized record")
 
   var codecB = Codec(localNode: nodeB, privKey: privKeyB,

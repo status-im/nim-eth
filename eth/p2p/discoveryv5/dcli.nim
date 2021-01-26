@@ -14,12 +14,12 @@ type
   DiscoveryConf* = object
     logLevel* {.
       defaultValue: LogLevel.DEBUG
-      desc: "Sets the log level."
+      desc: "Sets the log level"
       name: "log-level" .}: LogLevel
 
     udpPort* {.
       defaultValue: 9009
-      desc: "UDP listening port."
+      desc: "UDP listening port"
       name: "udp-port" .}: uint16
 
     listenAddress* {.
@@ -28,32 +28,39 @@ type
       name: "listen-address" }: ValidIpAddress
 
     bootnodes* {.
-      desc: "ENR URI of node to bootstrap discovery with. Argument may be repeated."
+      desc: "ENR URI of node to bootstrap discovery with. Argument may be repeated"
       name: "bootnode" .}: seq[enr.Record]
 
     nat* {.
       desc: "Specify method to use for determining public address. " &
-            "Must be one of: any, none, upnp, pmp, extip:<IP>."
+            "Must be one of: any, none, upnp, pmp, extip:<IP>"
       defaultValue: "any" .}: string
 
+    enrAutoUpdate* {.
+      defaultValue: false
+      desc: "Discovery can automatically update its ENR with the IP address " &
+            "and UDP port as seen by other nodes it communicates with. " &
+            "This option allows to enable/disable this functionality"
+      name: "enr-auto-update" .}: bool
+
     nodeKey* {.
-      desc: "P2P node private key as hex.",
+      desc: "P2P node private key as hex",
       defaultValue: PrivateKey.random(keys.newRng()[])
       name: "nodekey" .}: PrivateKey
 
     metricsEnabled* {.
       defaultValue: false
-      desc: "Enable the metrics server."
+      desc: "Enable the metrics server"
       name: "metrics" .}: bool
 
     metricsAddress* {.
       defaultValue: defaultAdminListenAddress(config)
-      desc: "Listening address of the metrics server."
+      desc: "Listening address of the metrics server"
       name: "metrics-address" .}: ValidIpAddress
 
     metricsPort* {.
       defaultValue: 8008
-      desc: "Listening HTTP port of the metrics server."
+      desc: "Listening HTTP port of the metrics server"
       name: "metrics-port" .}: Port
 
     case cmd* {.
@@ -163,7 +170,8 @@ proc run(config: DiscoveryConf) =
   let
     (ip, tcpPort, udpPort) = setupNat(config)
     d = newProtocol(config.nodeKey, ip, tcpPort, udpPort,
-      bootstrapRecords = config.bootnodes, bindIp = config.listenAddress)
+      bootstrapRecords = config.bootnodes, bindIp = config.listenAddress,
+      enrAutoUpdate = config.enrAutoUpdate)
 
   d.open()
 

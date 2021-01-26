@@ -472,8 +472,9 @@ suite "Routing Table Tests":
 
     let updatedNode1 = generateNode(pk)
     # Need to do an update to get seqNum increased
-    let updated = updatedNode1.updateNode(pk,
-      some(ValidIpAddress.init("192.168.0.1")), Port(9000), Port(9000))
+    let updated = updatedNode1.update(pk,
+      some(ValidIpAddress.init("192.168.0.1")),
+      some(Port(9000)), some(Port(9000)))
     check updated.isOk()
     check table.addNode(updatedNode1) == Existing
 
@@ -524,8 +525,9 @@ suite "Routing Table Tests":
 
     for i in 0..<DefaultTableIpLimits.bucketIpLimit + 1:
       # Need to do an update to get seqNum increased
-      let updated = updatedNode1.updateNode(pk,
-        some(ValidIpAddress.init("192.168.0.1")), Port(9000+i), Port(9000+i))
+      let updated = updatedNode1.update(pk,
+        some(ValidIpAddress.init("192.168.0.1")),
+        some(Port(9000+i)), some(Port(9000+i)))
       check updated.isOk()
       check table.addNode(updatedNode1) == Existing
 

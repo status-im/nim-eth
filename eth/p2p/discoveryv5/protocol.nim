@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020 Status Research & Development GmbH
+# Copyright (c) 2020-2021 Status Research & Development GmbH
 # Licensed under either of
 #   * Apache License, version 2.0, (LICENSE-APACHEv2)
 #   * MIT license (LICENSE-MIT)
@@ -106,6 +106,8 @@ const
   ## refresh the routing table.
   revalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
+  ipMajorityInterval = 5.minutes ## Interval for checking the latest IP:Port
+  ## majority and updating this when ENR auto update is set.
   initialLookups = 1 ## Amount of lookups done when populating the routing table
   handshakeTimeout* = 2.seconds ## timeout for the reply on the
   ## whoareyou message
@@ -124,9 +126,11 @@ type
     awaitedMessages: Table[(NodeId, RequestId), Future[Option[Message]]]
     refreshLoop: Future[void]
     revalidateLoop: Future[void]
+    ipMajorityLoop: Future[void]
     lastLookup: chronos.Moment
     bootstrapRecords*: seq[Record]
     ipVote: IpVote
+    enrAutoUpdate: bool
     rng*: ref BrHmacDrbgContext
 
   PendingRequest = object
@@ -890,21 +894,46 @@ proc refreshLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
         trace "Discovered nodes in random target query", nodes = randomQuery.len
         debug "Total nodes in discv5 routing table", total = d.routingTable.len()
 
-      let majority = d.ipVote.majority()
-      if majority.isSome():
-        let address = majority.get()
-        debug "Majority on voted address", address
-
       await sleepAsync(refreshInterval)
   except CancelledError:
     trace "refreshLoop canceled"
 
+proc ipMajorityLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
+  try:
+    while true:
+      let majority = d.ipVote.majority()
+      if majority.isSome():
+        if d.localNode.address != majority:
+          let address = majority.get()
+          let previous = d.localNode.address
+          if d.enrAutoUpdate:
+            let res = d.localNode.update(d.privateKey,
+              ip = some(address.ip), udpPort = some(address.port))
+            if res.isErr:
+              warn "Failed updating ENR with newly discovered external address",
+                majority, previous, error = res.error
+            else:
+              info "Updated ENR with newly discovered external address",
+                majority, previous, uri = toURI(d.localNode.record)
+          else:
+            warn "Discovered new external address but ENR auto update is off",
+              majority, previous
+        else:
+          debug "Discovered external address matches current address", majority,
+            current = d.localNode.address
+
+      await sleepAsync(ipMajorityInterval)
+  except CancelledError:
+    trace "ipMajorityLoop canceled"
+
 proc newProtocol*(privKey: PrivateKey,
-                  externalIp: Option[ValidIpAddress], tcpPort, udpPort: Port,
+                  externalIp: Option[ValidIpAddress],
+                  tcpPort, udpPort: Port,
                   localEnrFields: openarray[(string, seq[byte])] = [],
                   bootstrapRecords: openarray[Record] = [],
                   previousRecord = none[enr.Record](),
                   bindIp = IPv4_any(),
+                  enrAutoUpdate = false,
                   tableIpLimits = DefaultTableIpLimits,
                   rng = newRng()):
                   Protocol {.raises: [Defect].} =
@@ -920,11 +949,11 @@ proc newProtocol*(privKey: PrivateKey,
   var record: Record
   if previousRecord.isSome():
     record = previousRecord.get()
-    record.update(privKey, externalIp, tcpPort, udpPort,
+    record.update(privKey, externalIp, some(tcpPort), some(udpPort),
       extraFields).expect("Record within size limits and correct key")
   else:
-    record = enr.Record.init(1, privKey, externalIp, tcpPort, udpPort,
-     extraFields).expect("Record within size limits")
+    record = enr.Record.init(1, privKey, externalIp, some(tcpPort),
+      some(udpPort), extraFields).expect("Record within size limits")
   let node = newNode(record).expect("Properly initialized record")
 
   # TODO Consider whether this should be a Defect
@@ -938,6 +967,7 @@ proc newProtocol*(privKey: PrivateKey,
       sessions: Sessions.init(256)),
     bootstrapRecords: @bootstrapRecords,
     ipVote: IpVote.init(),
+    enrAutoUpdate: enrAutoUpdate,
     rng: rng)
 
   result.routingTable.init(node, DefaultBitsPerHop, tableIpLimits, rng)
@@ -959,6 +989,7 @@ proc open*(d: Protocol) {.raises: [Exception, Defect].} =
 proc start*(d: Protocol) {.raises: [Exception, Defect].} =
   d.refreshLoop = refreshLoop(d)
   d.revalidateLoop = revalidateLoop(d)
+  d.ipMajorityLoop = ipMajorityLoop(d)
 
 proc close*(d: Protocol) {.raises: [Exception, Defect].} =
   doAssert(not d.transp.closed)
@@ -968,6 +999,8 @@ proc close*(d: Protocol) {.raises: [Exception, Defect].} =
     d.revalidateLoop.cancel()
   if not d.refreshLoop.isNil:
     d.refreshLoop.cancel()
+  if not d.ipMajorityLoop.isNil:
+    d.ipMajorityLoop.cancel()
 
   d.transp.close()
 
@@ -979,5 +1012,7 @@ proc closeWait*(d: Protocol) {.async, raises: [Exception, Defect].} =
     await d.revalidateLoop.cancelAndWait()
   if not d.refreshLoop.isNil:
     await d.refreshLoop.cancelAndWait()
+  if not d.ipMajorityLoop.isNil:
+    await d.ipMajorityLoop.cancelAndWait()
 
   await d.transp.closeWait()

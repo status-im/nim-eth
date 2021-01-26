@@ -60,8 +60,9 @@ suite "ENR":
     let
       keypair = KeyPair.random(rng[])
       ip = ValidIpAddress.init("10.20.30.40")
+      port = some(Port(9000))
       enr = Record.init(
-        100, keypair.seckey, some(ip), Port(9000), Port(9000),@[])[]
+        100, keypair.seckey, some(ip), port, port,@[])[]
       typedEnr = get enr.toTypedRecord()
 
     check:
@@ -80,8 +81,9 @@ suite "ENR":
   test "ENR without address":
     let
       keypair = KeyPair.random(rng[])
+      port = some(Port(9000))
       enr = Record.init(
-        100, keypair.seckey, none(ValidIpAddress), Port(9000), Port(9000))[]
+        100, keypair.seckey, none(ValidIpAddress), port, port)[]
       typedEnr = get enr.toTypedRecord()
 
     check:
@@ -89,11 +91,8 @@ suite "ENR":
       typedEnr.secp256k1.get() == keypair.pubkey.toRawCompressed()
 
       typedEnr.ip.isNone()
-      typedEnr.tcp.isSome()
-      typedEnr.tcp.get() == 9000
-
-      typedEnr.udp.isSome()
-      typedEnr.udp.get() == 9000
+      typedEnr.tcp.isNone()
+      typedEnr.udp.isNone()
 
       typedEnr.ip6.isNone()
       typedEnr.tcp6.isNone()
@@ -115,7 +114,7 @@ suite "ENR":
       pk = PrivateKey.fromHex(
         "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
       newField = toFieldPair("test", 123'u)
-    var r = Record.init(1, pk, none(ValidIpAddress), Port(9000), Port(9000))[]
+    var r = Record.init(1, pk, none(ValidIpAddress), none(Port), none(Port))[]
 
     block: # Insert new k:v pair, update of seqNum should occur.
       let updated = r.update(pk, [newField])
@@ -182,20 +181,63 @@ suite "ENR":
     let
       pk = PrivateKey.fromHex(
         "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
-    var r = Record.init(1, pk, none(ValidIpAddress), Port(9000), Port(9000))[]
+    var r = Record.init(1, pk, none(ValidIpAddress),
+      some(Port(9000)), some(Port(9000)))[]
 
     block:
-      let updated = r.update(pk, none(ValidIpAddress), Port(9000), Port(9000))
+      let updated = r.update(pk, none(ValidIpAddress),
+        some(Port(9000)), some(Port(9000)))
       check updated.isOk()
       check:
-        r.get("tcp", uint) == 9000
-        r.get("udp", uint) == 9000
+        r.tryGet("ip", uint).isNone()
+        r.tryGet("tcp", uint).isNone()
+        r.tryGet("udp", uint).isNone()
         r.seqNum == 1
 
     block:
-      let updated = r.update(pk, none(ValidIpAddress), Port(9001), Port(9002))
+      let updated = r.update(pk, none(ValidIpAddress),
+        some(Port(9001)), some(Port(9002)))
       check updated.isOk()
       check:
-        r.get("tcp", uint) == 9001
-        r.get("udp", uint) == 9002
+        r.tryGet("ip", uint).isNone()
+        r.tryGet("tcp", uint).isNone()
+        r.tryGet("udp", uint).isNone()
+        r.seqNum == 1
+
+    block:
+      let updated = r.update(pk, some(ValidIpAddress.init("10.20.30.40")),
+        some(Port(9000)), some(Port(9000)))
+      check updated.isOk()
+
+      let typedEnr = r.toTypedRecord().get()
+
+      check:
+        typedEnr.ip.isSome()
+        typedEnr.ip.get() == [byte 10, 20, 30, 40]
+
+        typedEnr.tcp.isSome()
+        typedEnr.tcp.get() == 9000
+
+        typedEnr.udp.isSome()
+        typedEnr.udp.get() == 9000
+
         r.seqNum == 2
+
+    block:
+      let updated = r.update(pk, some(ValidIpAddress.init("10.20.30.40")),
+        some(Port(9001)), some(Port(9001)))
+      check updated.isOk()
+
+      let typedEnr = r.toTypedRecord().get()
+
+      check:
+        typedEnr.ip.isSome()
+        typedEnr.ip.get() == [byte 10, 20, 30, 40]
+
+        typedEnr.tcp.isSome()
+        typedEnr.tcp.get() == 9001
+
+        typedEnr.udp.isSome()
+        typedEnr.udp.get() == 9001
+
+        r.seqNum == 3
