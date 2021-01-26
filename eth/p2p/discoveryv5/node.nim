@@ -48,14 +48,20 @@ func newNode*(r: Record): Result[Node, cstring] =
     ok(Node(id: pk.get().toNodeId(), pubkey: pk.get(), record: r,
        address: none(Address)))
 
-proc updateNode*(n: Node, pk: PrivateKey, ip: Option[ValidIpAddress],
-    tcpPort, udpPort: Port, extraFields: openarray[FieldPair] = []):
-    Result[void, cstring] =
+proc update*(n: Node, pk: PrivateKey, ip: Option[ValidIpAddress],
+    tcpPort, udpPort: Option[Port] = none[Port](),
+    extraFields: openarray[FieldPair] = []): Result[void, cstring] =
   ? n.record.update(pk, ip, tcpPort, udpPort, extraFields)
 
   if ip.isSome():
-    let a = Address(ip: ip.get(), port: udpPort)
-    n.address = some(a)
+    if udpPort.isSome():
+      let a = Address(ip: ip.get(), port: udpPort.get())
+      n.address = some(a)
+    elif n.address.isSome():
+      let a = Address(ip: ip.get(), port: n.address.get().port)
+      n.address = some(a)
+    else:
+      n.address = none(Address)
   else:
     n.address = none(Address)
 

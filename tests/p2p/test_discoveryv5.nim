@@ -463,7 +463,7 @@ procSuite "Discovery v5 Tests":
       port = Port(9000)
       fromNoderecord = enr.Record.init(1, PrivateKey.random(rng[]),
         some(ValidIpAddress.init("11.12.13.14")),
-        port, port)[]
+        some(port), some(port))[]
       fromNode = newNode(fromNoderecord)[]
       pk = PrivateKey.random(rng[])
       targetDistance = logDist(fromNode.id, pk.toPublicKey().toNodeId())
@@ -471,7 +471,8 @@ procSuite "Discovery v5 Tests":
     block: # Duplicates
       let
         record = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("12.13.14.15")), port, port)[]
+          1, pk, some(ValidIpAddress.init("12.13.14.15")),
+          some(port), some(port))[]
 
       # Exact duplicates
       var records = @[record, record]
@@ -480,7 +481,8 @@ procSuite "Discovery v5 Tests":
 
       # Node id duplicates
       let recordSameId = enr.Record.init(
-        1, pk, some(ValidIpAddress.init("212.13.14.15")), port, port)[]
+        1, pk, some(ValidIpAddress.init("212.13.14.15")),
+        some(port), some(port))[]
       records.add(recordSameId)
       nodes = verifyNodesRecords(records, fromNode, targetDistance)
       check nodes.len == 1
@@ -488,7 +490,7 @@ procSuite "Discovery v5 Tests":
     block: # No address
       let
         recordNoAddress = enr.Record.init(
-          1, pk, none(ValidIpAddress), port, port)[]
+          1, pk, none(ValidIpAddress), some(port), some(port))[]
         records = [recordNoAddress]
         test = verifyNodesRecords(records, fromNode, targetDistance)
       check test.len == 0
@@ -497,7 +499,7 @@ procSuite "Discovery v5 Tests":
       let
         recordInvalidAddress = enr.Record.init(
           1, pk, some(ValidIpAddress.init("10.1.2.3")),
-          port, port)[]
+          some(port), some(port))[]
         records = [recordInvalidAddress]
         test = verifyNodesRecords(records, fromNode, targetDistance)
       check test.len == 0
@@ -505,7 +507,8 @@ procSuite "Discovery v5 Tests":
     block: # Invalid address - loopback
       let
         recordInvalidAddress = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("127.0.0.1")), port, port)[]
+          1, pk, some(ValidIpAddress.init("127.0.0.1")),
+          some(port), some(port))[]
         records = [recordInvalidAddress]
         test = verifyNodesRecords(records, fromNode, targetDistance)
       check test.len == 0
@@ -513,7 +516,8 @@ procSuite "Discovery v5 Tests":
     block: # Invalid distance
       let
         recordInvalidDistance = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("12.13.14.15")), port, port)[]
+          1, pk, some(ValidIpAddress.init("12.13.14.15")),
+          some(port), some(port))[]
         records = [recordInvalidDistance]
         test = verifyNodesRecords(records, fromNode, 0'u32)
       check test.len == 0
@@ -530,8 +534,8 @@ procSuite "Discovery v5 Tests":
       let
         privKey = PrivateKey.random(rng[])
         enrRec = enr.Record.init(1, privKey,
-          some(ValidIpAddress.init("127.0.0.1")), Port(9000),
-          Port(9000)).expect("Properly intialized private key")
+          some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+          some(Port(9000))).expect("Properly intialized private key")
         sendNode = newNode(enrRec).expect("Properly initialized record")
       var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 
@@ -559,8 +563,8 @@ procSuite "Discovery v5 Tests":
     let
       privKey = PrivateKey.random(rng[])
       enrRec = enr.Record.init(1, privKey,
-        some(ValidIpAddress.init("127.0.0.1")), Port(9000),
-        Port(9000)).expect("Properly intialized private key")
+        some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+        some(Port(9000))).expect("Properly intialized private key")
       sendNode = newNode(enrRec).expect("Properly initialized record")
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
     for i in 0 ..< 5:
@@ -590,8 +594,8 @@ procSuite "Discovery v5 Tests":
       a = localAddress(20303)
       privKey = PrivateKey.random(rng[])
       enrRec = enr.Record.init(1, privKey,
-        some(ValidIpAddress.init("127.0.0.1")), Port(9000),
-        Port(9000)).expect("Properly intialized private key")
+        some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+        some(Port(9000))).expect("Properly intialized private key")
       sendNode = newNode(enrRec).expect("Properly initialized record")
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 

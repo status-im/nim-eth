@@ -144,7 +144,8 @@ template toFieldPair*(key: string, value: auto): FieldPair =
   (key, toField(value))
 
 proc addAddress(fields: var seq[FieldPair], ip: Option[ValidIpAddress],
-    tcpPort, udpPort: Port) =
+    tcpPort, udpPort: Option[Port]) =
+  # It makes sense to add ports only when there is an IP provided
   if ip.isSome():
     let
       ipExt = ip.get()
@@ -152,16 +153,15 @@ proc addAddress(fields: var seq[FieldPair], ip: Option[ValidIpAddress],
 
     fields.add(if isV6: ("ip6", ipExt.address_v6.toField)
                else: ("ip", ipExt.address_v4.toField))
-    fields.add(((if isV6: "tcp6" else: "tcp"), tcpPort.uint16.toField))
-    fields.add(((if isV6: "udp6" else: "udp"), udpPort.uint16.toField))
-  else:
-    fields.add(("tcp", tcpPort.uint16.toField))
-    fields.add(("udp", udpPort.uint16.toField))
+    if tcpPort.isSome():
+      fields.add(((if isV6: "tcp6" else: "tcp"), tcpPort.get().uint16.toField))
+    if udpPort.isSome():
+      fields.add(((if isV6: "udp6" else: "udp"), udpPort.get().uint16.toField))
 
 proc init*(T: type Record, seqNum: uint64,
                            pk: PrivateKey,
                            ip: Option[ValidIpAddress],
-                           tcpPort, udpPort: Port,
+                           tcpPort, udpPort: Option[Port],
                            extraFields: openarray[FieldPair] = []):
                            EnrResult[T] =
   ## Initialize a `Record` with given sequence number, private key, optional
@@ -281,7 +281,7 @@ proc update*(record: var Record, pk: PrivateKey,
 
 proc update*(r: var Record, pk: PrivateKey,
                             ip: Option[ValidIpAddress],
-                            tcpPort, udpPort: Port,
+                            tcpPort, udpPort: Option[Port] = none[Port](),
                             extraFields: openarray[FieldPair] = []):
                             EnrResult[void] =
   ## Update a `Record` with given ip address, tcp port, udp port and optional
