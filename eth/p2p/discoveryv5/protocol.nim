@@ -85,12 +85,14 @@ export options
 
 {.push raises: [Defect].}
 
-declarePublicGauge discovery_message_requests_outgoing,
+declareCounter discovery_message_requests_outgoing,
   "Discovery protocol outgoing message requests", labels = ["response"]
-declarePublicGauge discovery_message_requests_incoming,
+declareCounter discovery_message_requests_incoming,
   "Discovery protocol incoming message requests", labels = ["response"]
-declarePublicGauge discovery_unsolicited_messages,
+declareCounter discovery_unsolicited_messages,
   "Discovery protocol unsolicited or timed-out messages"
+declareCounter discovery_enr_auto_update,
+  "Amount of discovery IP:port address ENR auto updates"
 
 logScope:
   topics = "discv5"
@@ -899,6 +901,24 @@ proc refreshLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
     trace "refreshLoop canceled"
 
 proc ipMajorityLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
+  ## When `enrAutoUpdate` is enabled, the IP:port combination returned
+  ## by the majority will be used to update the local ENR.
+  ## This should be safe as long as the routing table is not overwhelmed by
+  ## malicious nodes trying to provide invalid addresses.
+  ## Why is that?
+  ## - Only one vote per NodeId is counted, and they are removed over time.
+  ## - IP:port values are provided through the pong message. The local node
+  ## initiates this by first sending a ping message. Unsolicited pong messages
+  ## are ignored.
+  ## - At interval pings are send to the least recently contacted node (tail of
+  ## bucket) from a random bucket from the routing table.
+  ## - Only messages that our node initiates (ping, findnode, talkreq) and that
+  ## successfully get a response move a node to the head of the bucket.
+  ## Additionally, findNode requests have typically a randomness to it, as they
+  ## usually come from a query for random NodeId.
+  ## - Currently, when a peer fails the respond, it gets replaced. It doesn't
+  ## remain at the tail of the bucket.
+  ## - There are IP limits on the buckets and the whole routing table.
   try:
     while true:
       let majority = d.ipVote.majority()
@@ -913,6 +933,7 @@ proc ipMajorityLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
               warn "Failed updating ENR with newly discovered external address",
                 majority, previous, error = res.error
             else:
+              discovery_enr_auto_update.inc()
               info "Updated ENR with newly discovered external address",
                 majority, previous, uri = toURI(d.localNode.record)
           else:
