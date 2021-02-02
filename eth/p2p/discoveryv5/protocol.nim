@@ -341,7 +341,7 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
 
 proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
     requestNonce: AESGCMNonce, node: Option[Node]) {.raises: [Exception].} =
-  let key = HandShakeKey(nodeId: toId, address: $a)
+  let key = HandShakeKey(nodeId: toId, address: a)
   if not d.codec.hasHandshake(key):
     let
       recordSeq = if node.isSome(): node.get().record.seqNum

@@ -310,7 +310,7 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
         challengeData: hexToSeqByte(whoareyouChallengeData))
       pubkey = some(privKeyA.toPublicKey())
       challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey)
-      key = HandShakeKey(nodeId: nodeA.id, address: $(nodeA.address.get()))
+      key = HandShakeKey(nodeId: nodeA.id, address: nodeA.address.get())
 
     check: not codecB.handshakes.hasKeyOrPut(key, challenge)
 
@@ -357,7 +357,7 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
         challengeData: hexToSeqByte(whoareyouChallengeData))
       pubkey = none(PublicKey)
       challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey)
-      key = HandShakeKey(nodeId: nodeA.id, address: $(nodeA.address.get()))
+      key = HandShakeKey(nodeId: nodeA.id, address: nodeA.address.get())
 
     check: not codecB.handshakes.hasKeyOrPut(key, challenge)
 
@@ -472,7 +472,7 @@ suite "Discovery v5.1 Additional Encode/Decode":
 
     let decoded = codecB.decodePacket(nodeA.address.get(), data)
 
-    let key = HandShakeKey(nodeId: nodeB.id, address: $nodeB.address.get())
+    let key = HandShakeKey(nodeId: nodeB.id, address: nodeB.address.get())
     var challenge: Challenge
 
     check:

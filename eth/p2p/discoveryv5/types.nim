@@ -13,7 +13,7 @@ type
 
   HandshakeKey* = object
     nodeId*: NodeId
-    address*: string # TODO: Replace with Address, need hash
+    address*: Address
 
   MessageKind* = enum
     # TODO This is needed only to make Nim 1.2.6 happy
@@ -143,3 +143,6 @@ proc hash*(reqId: RequestId): Hash =
 proc hash*(key: HandshakeKey): Hash =
   result = key.nodeId.hash !& key.address.hash
   result = !$result
+
+func `==`*(a, b: HandshakeKey): bool =
+  (a.nodeId == b.nodeId) and (a.address == b.address)

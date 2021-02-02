@@ -238,7 +238,7 @@ proc encodeWhoareyouPacket*(rng: var BrHmacDrbgContext, c: var Codec,
       recordSeq: recordSeq,
       challengeData: @iv & header)
     challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey)
-    key = HandShakeKey(nodeId: toId, address: $toAddr)
+    key = HandShakeKey(nodeId: toId, address: toAddr)
 
   c.handshakes[key] = challenge
 
@@ -455,7 +455,7 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   if header.len < staticHeaderSize + authdataHeadSize + int(sigSize) + int(ephKeySize):
     return err("Invalid header for handshake message packet")
 
-  let key = HandShakeKey(nodeId: srcId, address: $fromAddr)
+  let key = HandShakeKey(nodeId: srcId, address: fromAddr)
   var challenge: Challenge
   if not c.handshakes.pop(key, challenge):
     return err("No challenge found: timed out or unsolicited packet")
