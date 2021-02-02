@@ -2,7 +2,7 @@ import
   std/[unittest, options, sequtils, tables],
   stint, stew/byteutils, stew/shims/net,
   eth/[rlp, keys],
-  eth/p2p/discoveryv5/[types, encoding, enr, node, sessions]
+  eth/p2p/discoveryv5/[messages, encoding, enr, node, sessions]
 
 let rng = newRng()
 

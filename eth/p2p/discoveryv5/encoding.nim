@@ -6,7 +6,7 @@
 import
   std/[tables, options, hashes, net],
   nimcrypto, stint, chronicles, bearssl, stew/[results, byteutils],
-  eth/[rlp, keys], types, node, enr, hkdf, sessions
+  eth/[rlp, keys], messages, node, enr, hkdf, sessions
 
 from stew/objects import checkedEnumAssign
 

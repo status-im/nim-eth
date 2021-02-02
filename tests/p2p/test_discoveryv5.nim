@@ -2,7 +2,7 @@ import
   std/tables,
   chronos, chronicles, stint, testutils/unittests,
   stew/shims/net, eth/keys, bearssl,
-  eth/p2p/discoveryv5/[enr, node, routing_table, encoding, sessions, types],
+  eth/p2p/discoveryv5/[enr, node, routing_table, encoding, sessions, messages],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./discv5_test_helper
 
