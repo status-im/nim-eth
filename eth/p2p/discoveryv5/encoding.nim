@@ -1,7 +1,12 @@
+## Discovery v5 packet encoding as specified at
+## https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire.md#packet-encoding
+## And handshake/sessions as specified at
+## https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions
+##
 import
-  std/[tables, options],
+  std/[tables, options, hashes, net],
   nimcrypto, stint, chronicles, bearssl, stew/[results, byteutils],
-  eth/[rlp, keys], types, node, enr, hkdf, sessions
+  eth/[rlp, keys], messages, node, enr, hkdf, sessions
 
 from stew/objects import checkedEnumAssign
 
@@ -68,6 +73,10 @@ type
       node*: Option[Node]
       srcIdHs*: NodeId
 
+  HandshakeKey* = object
+    nodeId*: NodeId
+    address*: Address
+
   Codec* = object
     localNode*: Node
     privKey*: PrivateKey
@@ -75,6 +84,13 @@ type
     sessions*: Sessions
 
   DecodeResult*[T] = Result[T, cstring]
+
+func `==`*(a, b: HandshakeKey): bool =
+  (a.nodeId == b.nodeId) and (a.address == b.address)
+
+func hash*(key: HandshakeKey): Hash =
+  result = key.nodeId.hash !& key.address.hash
+  result = !$result
 
 proc idHash(challengeData, ephkey: openarray[byte], nodeId: NodeId):
     MDigest[256] =
@@ -238,7 +254,7 @@ proc encodeWhoareyouPacket*(rng: var BrHmacDrbgContext, c: var Codec,
       recordSeq: recordSeq,
       challengeData: @iv & header)
     challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey)
-    key = HandShakeKey(nodeId: toId, address: $toAddr)
+    key = HandShakeKey(nodeId: toId, address: toAddr)
 
   c.handshakes[key] = challenge
 
@@ -455,7 +471,7 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   if header.len < staticHeaderSize + authdataHeadSize + int(sigSize) + int(ephKeySize):
     return err("Invalid header for handshake message packet")
 
-  let key = HandShakeKey(nodeId: srcId, address: $fromAddr)
+  let key = HandShakeKey(nodeId: srcId, address: fromAddr)
   var challenge: Challenge
   if not c.handshakes.pop(key, challenge):
     return err("No challenge found: timed out or unsolicited packet")

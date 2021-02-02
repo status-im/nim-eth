@@ -1,22 +1,28 @@
+## Session cache as mentioned at
+## https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#session-cache
+##
 import
   std/options,
   stint, stew/endians2, stew/shims/net,
-  types, node, lru
+  node, lru
 
 export lru
 
 {.push raises: [Defect].}
 
-const keySize = sizeof(NodeId) +
-                16 + # max size of ip address (ipv6)
-                2 # Sizeof port
+const
+  aesKeySize* = 128 div 8
+  keySize = sizeof(NodeId) +
+            16 + # max size of ip address (ipv6)
+            2 # Sizeof port
 
 type
+  AesKey* = array[aesKeySize, byte]
   SessionKey* = array[keySize, byte]
   SessionValue* = array[sizeof(AesKey) + sizeof(AesKey), byte]
   Sessions* = LRUCache[SessionKey, SessionValue]
 
-proc makeKey(id: NodeId, address: Address): SessionKey =
+func makeKey(id: NodeId, address: Address): SessionKey =
   var pos = 0
   result[pos ..< pos+sizeof(id)] = toBytes(id)
   pos.inc(sizeof(id))
@@ -28,13 +34,13 @@ proc makeKey(id: NodeId, address: Address): SessionKey =
   pos.inc(sizeof(address.ip.address_v6))
   result[pos ..< pos+sizeof(address.port)] = toBytes(address.port.uint16)
 
-proc store*(s: var Sessions, id: NodeId, address: Address, r, w: AesKey) =
+func store*(s: var Sessions, id: NodeId, address: Address, r, w: AesKey) =
   var value: array[sizeof(r) + sizeof(w), byte]
   value[0 .. 15] = r
   value[16 .. ^1] = w
   s.put(makeKey(id, address), value)
 
-proc load*(s: var Sessions, id: NodeId, address: Address, r, w: var AesKey): bool =
+func load*(s: var Sessions, id: NodeId, address: Address, r, w: var AesKey): bool =
   let res = s.get(makeKey(id, address))
   if res.isSome():
     let val = res.get()
@@ -44,5 +50,5 @@ proc load*(s: var Sessions, id: NodeId, address: Address, r, w: var AesKey): boo
   else:
     return false
 
-proc del*(s: var Sessions, id: NodeId, address: Address) =
+func del*(s: var Sessions, id: NodeId, address: Address) =
   s.del(makeKey(id, address))

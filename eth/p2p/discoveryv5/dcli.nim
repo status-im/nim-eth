@@ -166,6 +166,12 @@ proc setupNat(conf: DiscoveryConf): tuple[ip: Option[ValidIpAddress],
       if extPorts.isSome:
         (result.tcpPort, result.udpPort) = extPorts.get()
 
+proc discover(d: protocol.Protocol) {.async.} =
+  while true:
+    let discovered = await d.queryRandom()
+    info "Lookup finished", nodes = discovered.len
+    await sleepAsync(30.seconds)
+
 proc run(config: DiscoveryConf) =
   let
     (ip, tcpPort, udpPort) = setupNat(config)
@@ -206,7 +212,7 @@ proc run(config: DiscoveryConf) =
       echo "No Talk Response message returned"
   of noCommand:
     d.start()
-    runForever()
+    waitfor(discover(d))
 
 when isMainModule:
   let config = DiscoveryConf.load()

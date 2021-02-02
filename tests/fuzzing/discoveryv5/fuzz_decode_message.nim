@@ -1,6 +1,6 @@
 import
   testutils/fuzzing, stew/byteutils,
-  eth/rlp, eth/p2p/discoveryv5/[encoding, types]
+  eth/rlp, eth/p2p/discoveryv5/[encoding, messages]
 
 test:
   block:

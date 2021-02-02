@@ -8,10 +8,10 @@ type
     table: Table[K, DoublyLinkedNode[(K, V)]] # DoublyLinkedNode is alraedy ref
     capacity: int
 
-proc init*[K, V](T: type LRUCache[K, V], capacity: int): LRUCache[K, V] =
+func init*[K, V](T: type LRUCache[K, V], capacity: int): LRUCache[K, V] =
   LRUCache[K, V](capacity: capacity) # Table and list init is done default
 
-proc get*[K, V](lru: var LRUCache[K, V], key: K): Option[V] =
+func get*[K, V](lru: var LRUCache[K, V], key: K): Option[V] =
   let node = lru.table.getOrDefault(key, nil)
   if node.isNil:
     return none(V)
@@ -20,7 +20,7 @@ proc get*[K, V](lru: var LRUCache[K, V], key: K): Option[V] =
   lru.list.prepend(node)
   return some(node.value[1])
 
-proc put*[K, V](lru: var LRUCache[K, V], key: K, value: V) =
+func put*[K, V](lru: var LRUCache[K, V], key: K, value: V) =
   let node = lru.table.getOrDefault(key, nil)
   if not node.isNil:
     lru.list.remove(node)
@@ -32,10 +32,10 @@ proc put*[K, V](lru: var LRUCache[K, V], key: K, value: V) =
   lru.list.prepend((key, value))
   lru.table[key] = lru.list.head
 
-proc del*[K, V](lru: var LRUCache[K, V], key: K) =
+func del*[K, V](lru: var LRUCache[K, V], key: K) =
   var node: DoublyLinkedNode[(K, V)]
   if lru.table.pop(key, node):
     lru.list.remove(node)
 
-proc len*[K, V](lru: LRUCache[K, V]): int =
+func len*[K, V](lru: LRUCache[K, V]): int =
   lru.table.len
