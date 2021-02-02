@@ -1,20 +1,15 @@
+## Discovery v5 Protocol Messages as specified at
+## https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire.md#protocol-messages
+## These messages get RLP encoded.
+##
 import
   std/[hashes, net],
   stew/arrayops,
-  eth/rlp, enr, node
+  eth/rlp, enr
 
 {.push raises: [Defect].}
 
-const
-  aesKeySize* = 128 div 8
-
 type
-  AesKey* = array[aesKeySize, byte]
-
-  HandshakeKey* = object
-    nodeId*: NodeId
-    address*: Address
-
   MessageKind* = enum
     # TODO This is needed only to make Nim 1.2.6 happy
     #      Without it, the `MessageKind` type cannot be used as
@@ -139,10 +134,3 @@ proc append*(writer: var RlpWriter, ip: IpAddress) =
 
 proc hash*(reqId: RequestId): Hash =
   hash(reqId.id)
-
-proc hash*(key: HandshakeKey): Hash =
-  result = key.nodeId.hash !& key.address.hash
-  result = !$result
-
-func `==`*(a, b: HandshakeKey): bool =
-  (a.nodeId == b.nodeId) and (a.address == b.address)

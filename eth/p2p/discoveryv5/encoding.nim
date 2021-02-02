@@ -1,5 +1,10 @@
+## Discovery v5 packet encoding as specified at
+## https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire.md#packet-encoding
+## And handshake/sessions as specified at
+## https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions
+##
 import
-  std/[tables, options],
+  std/[tables, options, hashes, net],
   nimcrypto, stint, chronicles, bearssl, stew/[results, byteutils],
   eth/[rlp, keys], types, node, enr, hkdf, sessions
 
@@ -68,6 +73,10 @@ type
       node*: Option[Node]
       srcIdHs*: NodeId
 
+  HandshakeKey* = object
+    nodeId*: NodeId
+    address*: Address
+
   Codec* = object
     localNode*: Node
     privKey*: PrivateKey
@@ -75,6 +84,13 @@ type
     sessions*: Sessions
 
   DecodeResult*[T] = Result[T, cstring]
+
+func `==`*(a, b: HandshakeKey): bool =
+  (a.nodeId == b.nodeId) and (a.address == b.address)
+
+func hash*(key: HandshakeKey): Hash =
+  result = key.nodeId.hash !& key.address.hash
+  result = !$result
 
 proc idHash(challengeData, ephkey: openarray[byte], nodeId: NodeId):
     MDigest[256] =
