@@ -7,8 +7,10 @@ const
   useSnappy* = defined(useSnappy)
 
 type
+  NetworkId* = distinct uint
+
   EthereumNode* = ref object
-    networkId*: uint
+    networkId*: NetworkId
     chain*: AbstractChainDB
     clientId*: string
     connectionState*: ConnectionState
@@ -46,7 +48,7 @@ type
     # Private fields:
     network*: EthereumNode
     keyPair*: KeyPair
-    networkId*: uint
+    networkId*: NetworkId
     minPeers*: int
     clientId*: string
     discovery*: DiscoveryProtocol
@@ -171,3 +173,15 @@ proc `$`*(peer: Peer): string = $peer.remote
 
 proc toENode*(v: EthereumNode): ENode =
   ENode(pubkey: v.keys.pubkey, address: v.address)
+
+proc append*(rlpWriter: var RlpWriter, id: NetworkId) {.inline.} =
+  rlpWriter.append(id.uint)
+
+proc read*(rlp: var Rlp, T: type NetworkId): T {.inline.} =
+  rlp.read(uint).NetworkId
+
+func `==`*(a, b: NetworkId): bool {.inline.} =
+  a.uint == b.uint
+
+func `$`*(x: NetworkId): string {.inline.} =
+  `$`(uint(x))

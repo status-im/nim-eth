@@ -64,7 +64,7 @@ p2pProtocol eth(version = protocolVersion,
   handshake:
     proc status(peer: Peer,
                 protocolVersion: uint,
-                networkId: uint,
+                networkId: NetworkId,
                 totalDifficulty: DifficultyInt,
                 bestHash: KeccakHash,
                 genesisHash: KeccakHash)

@@ -11,7 +11,7 @@ const
   connectLoopSleep = chronos.milliseconds(2000)
 
 proc newPeerPool*(network: EthereumNode,
-                  networkId: uint, keyPair: KeyPair,
+                  networkId: NetworkId, keyPair: KeyPair,
                   discovery: DiscoveryProtocol, clientId: string,
                   listenPort = Port(30303), minPeers = 10): PeerPool =
   new result
