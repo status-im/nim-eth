@@ -33,7 +33,7 @@ template addCapability*(node: var EthereumNode, Protocol: type) =
 
 proc newEthereumNode*(keys: KeyPair,
                       address: Address,
-                      networkId: uint,
+                      networkId: NetworkId,
                       chain: AbstractChainDB,
                       clientId = "nim-eth-p2p/0.2.0", # TODO: read this value from nimble somehow
                       addAllCapabilities = true,

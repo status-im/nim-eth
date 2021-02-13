@@ -206,7 +206,7 @@ p2pProtocol les(version = lesVersion,
 
     let
       s = await peer.status(lesProperties, timeout = chronos.seconds(10))
-      peerNetworkId   = s.values.getRequiredValue(keyNetworkId, uint)
+      peerNetworkId   = s.values.getRequiredValue(keyNetworkId, NetworkId)
       peerGenesisHash = s.values.getRequiredValue(keyGenesisHash, KeccakHash)
       peerLesVersion = s.values.getRequiredValue(keyProtocolVersion, uint)
 
