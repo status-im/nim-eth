@@ -1,18 +1,15 @@
-# Discovery v5
+# Node Discovery Protocol v5
 ## Introduction
-This `eth/p2p/discoveryv5` directory holds a Nim implementation of the
-discovery v5 protocol specified
-[here](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md).
+The `eth/p2p/discoveryv5` directory holds a Nim implementation of the
+[Node Discovery Protocol v5.1](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md).
 
-This specification is still in DRAFT and thus subject to change. In fact, it is
-likely that the current packet format will change, see
-https://github.com/ethereum/devp2p/issues/152.
+The implemented specification is Protocol version v5.1.
 
-This implementation does not support "Topic Advertisement" yet.
+This implementation does not support "Topic Advertisement" yet as this part of
+the specification is not complete.
 
 The implementation relies on other modules in the `eth` package, namely: `keys`,
-`rlp`, `async_utils` and `trie/db`. The latter is likely to change, see
-https://github.com/status-im/nim-eth/issues/242
+`rlp` and `async_utils`.
 
 ## How to use
 
@@ -21,8 +18,7 @@ let
   rng = keys.newRng
   privKey = PrivateKey.random(rng[])
   (ip, tcpPort, udpPort) = setupNat(config) # Or fill in external IP/ports manually
-  ddb = DiscoveryDB.init(newMemoryDB())
-  d = newProtocol(privKey, ddb, ip, tcpPort, udpPort, rng = rng)
+  d = newProtocol(privKey, ip, tcpPort, udpPort, rng = rng)
 
 d.open() # Start listening
 ```
@@ -35,7 +31,7 @@ other nodes in the network.
 To initialize with a bootnode or a set of bootnodes, the ENRs need to be passed
 as parameter in `newProtocol`.
 ```Nim
-d = newProtocol(privKey, ddb, ip, tcpPort, udpPort,
+d = newProtocol(privKey, ip, tcpPort, udpPort,
       bootstrapRecords = bootnodes)
 d.open() # Start listening and add bootstrap nodes to the routing table.
 ```
@@ -59,8 +55,6 @@ attempted to be added to the routing table. One can use the `query`, `queryRando
 or `lookup` calls for this. `randomNodes` can also be used to find nodes,
 but this will only look into the current routing table and not actively 
 search for nodes on the network.
-
-
 
 Or, one can decide not to run `d.start()` and do this manually within its
 application by using the available calls:
@@ -104,14 +98,11 @@ nim c -d:chronicles_log_level:trace -d:release --threads:on eth/p2p/discoveryv5/
 ```
 
 ### Metrics
-Metrics are available for `routing_table_nodes`, which holds the amount of nodes
-in the routing table.
-
 To compile in an HTTP endpoint for accessing the metrics add the `insecure`
 compile time flag:
 ```sh
 # Build dcli with metrics
-nim c -d:insecure -d:chronicles_log_level:trace -d:release eth/p2p/discoveryv5/dcli
+nim c -d:insecure -d:chronicles_log_level:trace -d:release --threads:on eth/p2p/discoveryv5/dcli
 # Run dcli with metrics
 ./eth/p2p/discoveryv5/dcli --metrics --bootnode:enr:<base64 encoding of ENR>
 ```
