@@ -114,7 +114,7 @@ proc doPortMapping(tcpPort, udpPort: Port, description: string): Option[(Port, P
                                     desc = description,
                                     leaseDuration = 0)
       if pmres.isErr:
-        error "UPnP port mapping", msg = pmres.error
+        error "UPnP port mapping", msg = pmres.error, port
         return
       else:
         # let's check it
@@ -138,7 +138,7 @@ proc doPortMapping(tcpPort, udpPort: Port, description: string): Option[(Port, P
                                     protocol = protocol,
                                     lifetime = NATPMP_LIFETIME)
       if pmres.isErr:
-        error "NAT-PMP port mapping", msg = pmres.error
+        error "NAT-PMP port mapping", msg = pmres.error, port
         return
       else:
         let extPort = Port(pmres.value)
@@ -239,73 +239,92 @@ proc redirectPorts*(tcpPort, udpPort: Port, description: string): Option[(Port, 
 
 proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
     clientId: string):
-    tuple[ip: Option[ValidIpAddress], tcpPort: Port, udpPort: Port] =
+    tuple[ip: Option[ValidIpAddress], tcpPort, udpPort: Option[Port]] =
   # TODO: check and forward actual errors?
 
   let extIp = getExternalIP(natStrategy)
   if extIP.isSome:
-    let ip = some(ValidIpAddress.init extIp.get)
+    let ip = ValidIpAddress.init(extIp.get)
     let extPorts = ({.gcsafe.}:
       redirectPorts(tcpPort = tcpPort,
                     udpPort = udpPort,
                     description = clientId))
     if extPorts.isSome:
       let (extTcpPort, extUdpPort) = extPorts.get()
-      (ip, extTcpPort, extUdpPort)
+      (some(ip), some(extTcpPort), some(extUdpPort))
     else:
-      error "UPnP/NAT-PMP port forwarding failed"
-      (none(ValidIpAddress), tcpPort, udpPort)
+      error "UPnP/NAT-PMP available but port forwarding failed"
+      (none(ValidIpAddress), none(Port), none(Port))
   else:
-    error "UPnP/NAT-PMP failed"
-    (none(ValidIpAddress), tcpPort, udpPort)
+    warn "UPnP/NAT-PMP not available"
+    (none(ValidIpAddress), none(Port), none(Port))
 
-proc getBestRoutePublicIp*(): Option[ValidIpAddress] {.raises: [Defect].} =
+proc getRouteIpv4*(): Result[ValidIpAddress, cstring] {.raises: [Defect].} =
   # Avoiding Exception with initTAddress and can't make it work with static.
   let publicAddress = TransportAddress(family: AddressFamily.IPv4,
     address_v4: [1'u8, 1, 1, 1], port: Port(0))
   # Note: `publicAddress` is only used an "example" IP to find the best route,
   # no data is send over the network to this IP!
   let route = getBestRoute(publicAddress)
-  if (not route.source.isUnspecified()) and route.source.isPublic():
+  if route.source.isUnspecified():
+    err("No best ipv4 route found")
+  else:
     let ip = try: route.source.address()
              except ValueError as e:
-               error "Not a valid IP address", exception = e.name, msg = e.msg
-               return none(ValidIpAddress)
+               # This should not occur really.
+               error "Address convertion error", exception = e.name, msg = e.msg
+               return err("Invalid IP address")
+    ok(ValidIpAddress.init(ip))
 
-    return some(ValidIpAddress.init(ip))
-
-proc setupAddress*(nat: string, bindIP: ValidIpAddress, tcpPort, udpPort: Port,
+proc setupAddress*(nat: string, bindIp: ValidIpAddress, tcpPort, udpPort: Port,
     clientId: string):
-    tuple[ip: Option[ValidIpAddress], tcpPort: Port, udpPort: Port] {.gcsafe.} =
+    tuple[ip: Option[ValidIpAddress], tcpPort, udpPort: Option[Port]]
+    {.gcsafe.} =
   case nat.toLowerAscii:
     of "any":
       let bindAddress = initTAddress(bindIP, Port(0))
-      if bindAddress.isAnyLocal() or not bindAddress.isSiteLocal():
-        # Note: could also treat the bindAddress case different so that
-        # we always use that address and never fail when it is a public IP.
-        let ip = getBestRoutePublicIp()
-        if ip.isSome():
-          return (ip, tcpPort, udpPort)
+      if bindAddress.isAnyLocal():
+        let ip = getRouteIpv4()
+        if ip.isErr():
+          # No route was found, log error and continue without IP.
+          # Could also `quit QuitFailure` here.
+          error "No routable IP address found, check your network connection",
+            error = ip.error
+          return (none(ValidIpAddress), none(Port), none(Port))
+        elif ip.get().isPublic():
+          return (some(ip.get()), some(tcpPort), some(udpPort))
         else:
-          # Best route IP is private, thus this is an internal network and the
+          # Best route IP is not public, might be an internal network and the
           # node is either behind a gateway with NAT or for example a container
-          # or VM bridge (or both). Lets default try UPnP and NAT-PMP for in
+          # or VM bridge (or both). Lets try UPnP and NAT-PMP for the case where
           # the node is behind a gateway with UPnP or NAT-PMP support.
           return setupNat(NatAny, tcpPort, udpPort, clientId)
+      elif bindAddress.isPublic():
+        # When a specific public interface is provided, use that one.
+        return (some(ValidIpAddress.init(bindIP)), some(tcpPort), some(udpPort))
       else:
         return setupNat(NatAny, tcpPort, udpPort, clientId)
     of "none":
       let bindAddress = initTAddress(bindIP, Port(0))
-      if bindAddress.isAnyLocal() or not bindAddress.isSiteLocal():
-        # Note: could also treat the bindAddress case different so that
-        # we always use that address and never fail when it is a public IP.
-        let ip = getBestRoutePublicIp()
-        if ip.isNone():
-          warn "No public IP address found. Should not use --nat:none option"
-        return (ip, tcpPort, udpPort)
+      if bindAddress.isAnyLocal():
+        let ip = getRouteIpv4()
+        if ip.isErr():
+          # No route was found, log error and continue without IP.
+          # Could also `quit QuitFailure` here.
+          error "No routable IP address found, check your network connection",
+            error = ip.error
+          return (none(ValidIpAddress), none(Port), none(Port))
+        elif ip.get().isPublic():
+          return (some(ip.get()), some(tcpPort), some(udpPort))
+        else:
+          error "No public IP address found. Should not use --nat:none option"
+          return (none(ValidIpAddress), none(Port), none(Port))
+      elif bindAddress.isPublic():
+        # When a specific public interface is provided, use that one.
+        return (some(ValidIpAddress.init(bindIP)), some(tcpPort), some(udpPort))
       else:
-        warn "Private IP address used as bind address. Should not use --nat:none option"
-        return (none(ValidIpAddress), tcpPort, udpPort)
+        error "Bind IP is not a public IP address. Should not use --nat:none option"
+        return (none(ValidIpAddress), none(Port), none(Port))
     of "upnp":
       return setupNat(NatUpnp, tcpPort, udpPort, clientId)
     of "pmp":
@@ -313,9 +332,9 @@ proc setupAddress*(nat: string, bindIP: ValidIpAddress, tcpPort, udpPort: Port,
     else:
       if nat.startsWith("extip:"):
         try:
-          # any required port redirection is must be done by hand
-          let ip = some(ValidIpAddress.init(nat[6..^1]))
-          return (ip, tcpPort, udpPort)
+          # any required port redirection must be done by hand
+          let ip = ValidIpAddress.init(nat[6..^1])
+          return (some(ip), some(tcpPort), some(udpPort))
         except ValueError:
           error "Not a valid IP address", address = nat[6..^1]
           quit QuitFailure

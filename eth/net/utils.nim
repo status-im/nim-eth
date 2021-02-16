@@ -35,3 +35,7 @@ proc isPublic*(address: TransportAddress): bool {.raises: [Defect].} =
     false
   else:
     true
+
+proc isPublic*(address: IpAddress): bool {.raises: [Defect].} =
+  let a = initTAddress(address, Port(0))
+  a.isPublic

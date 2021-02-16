@@ -137,11 +137,17 @@ proc discover(d: protocol.Protocol) {.async.} =
 
 proc run(config: DiscoveryConf) =
   let
-    (ip, tcpPort, udpPort) = setupAddress(config.nat, config.listenAddress,
-      Port(config.udpPort), Port(config.udpPort), "dcli")
-    d = newProtocol(config.nodeKey, ip, tcpPort, udpPort,
-      bootstrapRecords = config.bootnodes, bindIp = config.listenAddress,
-      enrAutoUpdate = config.enrAutoUpdate)
+    bindIp = config.listenAddress
+    udpPort = Port(config.udpPort)
+    # TODO: allow for no TCP port mapping!
+    (extIp, _, extUdpPort) = setupAddress(config.nat,
+      config.listenAddress, udpPort, udpPort, "dcli")
+
+  let d = newProtocol(config.nodeKey,
+          extIp, none(Port), extUdpPort,
+          bootstrapRecords = config.bootnodes,
+          bindIp = bindIp, bindPort = udpPort,
+          enrAutoUpdate = config.enrAutoUpdate)
 
   d.open()
 
