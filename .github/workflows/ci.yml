@@ -52,6 +52,7 @@ jobs:
 
     name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ matrix.target.TEST_LANG }} (${{ matrix.branch }})'
     runs-on: ${{ matrix.builder }}
+    timeout-minutes: 60
     steps:
       - name: Checkout nim-eth
         uses: actions/checkout@v2
