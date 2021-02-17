@@ -261,11 +261,18 @@ proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
 
 proc getRouteIpv4*(): Result[ValidIpAddress, cstring] {.raises: [Defect].} =
   # Avoiding Exception with initTAddress and can't make it work with static.
-  let publicAddress = TransportAddress(family: AddressFamily.IPv4,
-    address_v4: [1'u8, 1, 1, 1], port: Port(0))
   # Note: `publicAddress` is only used an "example" IP to find the best route,
   # no data is send over the network to this IP!
-  let route = getBestRoute(publicAddress)
+  let publicAddress = TransportAddress(family: AddressFamily.IPv4,
+    address_v4: [1'u8, 1, 1, 1], port: Port(0))
+  # The Windows version of `getBestRoute` can raise `Exception`
+  let route = try: getBestRoute(publicAddress)
+              except Exception as e:
+                if e of Defect:
+                  raise (ref Defect)(e)
+                debug "getBestRoute failed", exception = e.name, msg = e.msg
+                return err("getBestRoute call failed")
+
   if route.source.isUnspecified():
     err("No best ipv4 route found")
   else:
