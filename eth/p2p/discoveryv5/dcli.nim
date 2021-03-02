@@ -129,43 +129,6 @@ proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T =
 proc completeCmdArg*(T: type PrivateKey, val: TaintedString): seq[string] =
   return @[]
 
-proc setupNat(conf: DiscoveryConf): tuple[ip: Option[ValidIpAddress],
-                                          tcpPort: Port,
-                                          udpPort: Port] {.gcsafe.} =
-  # defaults
-  result.tcpPort = Port(conf.udpPort)
-  result.udpPort = Port(conf.udpPort)
-
-  var nat: NatStrategy
-  case conf.nat.toLowerAscii:
-    of "any":
-      nat = NatAny
-    of "none":
-      nat = NatNone
-    of "upnp":
-      nat = NatUpnp
-    of "pmp":
-      nat = NatPmp
-    else:
-      if conf.nat.startsWith("extip:") and isIpAddress(conf.nat[6..^1]):
-        # any required port redirection is assumed to be done by hand
-        result.ip = some(ValidIpAddress.init(conf.nat[6..^1]))
-        nat = NatNone
-      else:
-        error "not a valid NAT mechanism, nor a valid IP address", value = conf.nat
-        quit(QuitFailure)
-
-  if nat != NatNone:
-    let extIp = getExternalIP(nat)
-    if extIP.isSome:
-      result.ip = some(ValidIpAddress.init extIp.get)
-      let extPorts = ({.gcsafe.}:
-        redirectPorts(tcpPort = result.tcpPort,
-                      udpPort = result.udpPort,
-                      description = "Discovery v5 ports"))
-      if extPorts.isSome:
-        (result.tcpPort, result.udpPort) = extPorts.get()
-
 proc discover(d: protocol.Protocol) {.async.} =
   while true:
     let discovered = await d.queryRandom()
@@ -174,10 +137,17 @@ proc discover(d: protocol.Protocol) {.async.} =
 
 proc run(config: DiscoveryConf) =
   let
-    (ip, tcpPort, udpPort) = setupNat(config)
-    d = newProtocol(config.nodeKey, ip, tcpPort, udpPort,
-      bootstrapRecords = config.bootnodes, bindIp = config.listenAddress,
-      enrAutoUpdate = config.enrAutoUpdate)
+    bindIp = config.listenAddress
+    udpPort = Port(config.udpPort)
+    # TODO: allow for no TCP port mapping!
+    (extIp, _, extUdpPort) = setupAddress(config.nat,
+      config.listenAddress, udpPort, udpPort, "dcli")
+
+  let d = newProtocol(config.nodeKey,
+          extIp, none(Port), extUdpPort,
+          bootstrapRecords = config.bootnodes,
+          bindIp = bindIp, bindPort = udpPort,
+          enrAutoUpdate = config.enrAutoUpdate)
 
   d.open()
 
