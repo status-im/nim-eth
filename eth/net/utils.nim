@@ -1,6 +1,6 @@
 import
   std/[tables, hashes],
-  stew/shims/net as stewNet, chronos
+  stew/results, stew/shims/net as stewNet, chronos, chronicles
 
 {.push raises: [Defect].}
 
@@ -26,7 +26,7 @@ proc dec*(ipLimits: var IpLimits, ip: ValidIpAddress) =
   elif val > 1:
     ipLimits.ips[ip] = val - 1
 
-proc isPublic*(address: TransportAddress): bool {.raises: [Defect].} =
+proc isPublic*(address: TransportAddress): bool =
   # TODO: Some are still missing, for special reserved addresses see:
   # https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
   # https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
@@ -36,6 +36,25 @@ proc isPublic*(address: TransportAddress): bool {.raises: [Defect].} =
   else:
     true
 
-proc isPublic*(address: IpAddress): bool {.raises: [Defect].} =
+proc isPublic*(address: IpAddress): bool =
   let a = initTAddress(address, Port(0))
   a.isPublic
+
+proc getRouteIpv4*(): Result[ValidIpAddress, cstring] =
+  # Avoiding Exception with initTAddress and can't make it work with static.
+  # Note: `publicAddress` is only used an "example" IP to find the best route,
+  # no data is send over the network to this IP!
+  let
+    publicAddress = TransportAddress(family: AddressFamily.IPv4,
+      address_v4: [1'u8, 1, 1, 1], port: Port(0))
+    route = getBestRoute(publicAddress)
+
+  if route.source.isUnspecified():
+    err("No best ipv4 route found")
+  else:
+    let ip = try: route.source.address()
+             except ValueError as e:
+               # This should not occur really.
+               error "Address convertion error", exception = e.name, msg = e.msg
+               return err("Invalid IP address")
+    ok(ValidIpAddress.init(ip))
