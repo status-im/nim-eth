@@ -264,7 +264,7 @@ type
       of true: extIp*: ValidIpAddress
       of false: nat*: NatStrategy
 
-proc parseCmdArg*(T: type NatConfig, p: TaintedString): T =
+func parseCmdArg*(T: type NatConfig, p: TaintedString): T =
   case p.toLowerAscii:
     of "any":
       NatConfig(hasExtIp: false, nat: NatAny)
@@ -286,7 +286,7 @@ proc parseCmdArg*(T: type NatConfig, p: TaintedString): T =
         let error = "Not a valid NAT option: " & p
         raise newException(ConfigurationError, error)
 
-proc completeCmdArg*(T: type NatConfig, val: TaintedString): seq[string] =
+func completeCmdArg*(T: type NatConfig, val: TaintedString): seq[string] =
   return @[]
 
 proc setupAddress*(natConfig: NatConfig, bindIp: ValidIpAddress,
