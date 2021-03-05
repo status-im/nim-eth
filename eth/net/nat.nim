@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2020 Status Research & Development GmbH
+# Copyright (c) 2019-2021 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -240,7 +240,6 @@ proc redirectPorts*(tcpPort, udpPort: Port, description: string): Option[(Port, 
 proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
     clientId: string):
     tuple[ip: Option[ValidIpAddress], tcpPort, udpPort: Option[Port]] =
-  # TODO: check and forward actual errors?
 
   let extIp = getExternalIP(natStrategy)
   if extIP.isSome:
@@ -259,37 +258,53 @@ proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
     warn "UPnP/NAT-PMP not available"
     (none(ValidIpAddress), none(Port), none(Port))
 
-proc getRouteIpv4*(): Result[ValidIpAddress, cstring] {.raises: [Defect].} =
-  # Avoiding Exception with initTAddress and can't make it work with static.
-  # Note: `publicAddress` is only used an "example" IP to find the best route,
-  # no data is send over the network to this IP!
-  let
-    publicAddress = TransportAddress(family: AddressFamily.IPv4,
-      address_v4: [1'u8, 1, 1, 1], port: Port(0))
-    route = getBestRoute(publicAddress)
+type
+  NatConfig* = object
+    case hasExtIp*: bool
+      of true: extIp*: ValidIpAddress
+      of false: nat*: NatStrategy
 
-  if route.source.isUnspecified():
-    err("No best ipv4 route found")
-  else:
-    let ip = try: route.source.address()
-             except ValueError as e:
-               # This should not occur really.
-               error "Address convertion error", exception = e.name, msg = e.msg
-               return err("Invalid IP address")
-    ok(ValidIpAddress.init(ip))
+func parseCmdArg*(T: type NatConfig, p: TaintedString): T =
+  case p.toLowerAscii:
+    of "any":
+      NatConfig(hasExtIp: false, nat: NatAny)
+    of "none":
+      NatConfig(hasExtIp: false, nat: NatNone)
+    of "upnp":
+      NatConfig(hasExtIp: false, nat: NatUpnp)
+    of "pmp":
+      NatConfig(hasExtIp: false, nat: NatPmp)
+    else:
+      if p.startsWith("extip:"):
+        try:
+          let ip = ValidIpAddress.init(p[6..^1])
+          NatConfig(hasExtIp: true, extIp: ip)
+        except ValueError:
+          let error = "Not a valid IP address: " & p[6..^1]
+          raise newException(ConfigurationError, error)
+      else:
+        let error = "Not a valid NAT option: " & p
+        raise newException(ConfigurationError, error)
 
-proc setupAddress*(nat: string, bindIp: ValidIpAddress, tcpPort, udpPort: Port,
-    clientId: string):
+func completeCmdArg*(T: type NatConfig, val: TaintedString): seq[string] =
+  return @[]
+
+proc setupAddress*(natConfig: NatConfig, bindIp: ValidIpAddress,
+    tcpPort, udpPort: Port, clientId: string):
     tuple[ip: Option[ValidIpAddress], tcpPort, udpPort: Option[Port]]
     {.gcsafe.} =
-  case nat.toLowerAscii:
-    of "any":
+
+  if natConfig.hasExtIp:
+    # any required port redirection must be done by hand
+    return (some(natConfig.extIp), some(tcpPort), some(udpPort))
+
+  case natConfig.nat:
+    of NatAny:
       let bindAddress = initTAddress(bindIP, Port(0))
       if bindAddress.isAnyLocal():
         let ip = getRouteIpv4()
         if ip.isErr():
           # No route was found, log error and continue without IP.
-          # Could also `quit QuitFailure` here.
           error "No routable IP address found, check your network connection",
             error = ip.error
           return (none(ValidIpAddress), none(Port), none(Port))
@@ -300,19 +315,18 @@ proc setupAddress*(nat: string, bindIp: ValidIpAddress, tcpPort, udpPort: Port,
           # node is either behind a gateway with NAT or for example a container
           # or VM bridge (or both). Lets try UPnP and NAT-PMP for the case where
           # the node is behind a gateway with UPnP or NAT-PMP support.
-          return setupNat(NatAny, tcpPort, udpPort, clientId)
+          return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
       elif bindAddress.isPublic():
         # When a specific public interface is provided, use that one.
         return (some(ValidIpAddress.init(bindIP)), some(tcpPort), some(udpPort))
       else:
-        return setupNat(NatAny, tcpPort, udpPort, clientId)
-    of "none":
+        return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
+    of NatNone:
       let bindAddress = initTAddress(bindIP, Port(0))
       if bindAddress.isAnyLocal():
         let ip = getRouteIpv4()
         if ip.isErr():
           # No route was found, log error and continue without IP.
-          # Could also `quit QuitFailure` here.
           error "No routable IP address found, check your network connection",
             error = ip.error
           return (none(ValidIpAddress), none(Port), none(Port))
@@ -327,19 +341,5 @@ proc setupAddress*(nat: string, bindIp: ValidIpAddress, tcpPort, udpPort: Port,
       else:
         error "Bind IP is not a public IP address. Should not use --nat:none option"
         return (none(ValidIpAddress), none(Port), none(Port))
-    of "upnp":
-      return setupNat(NatUpnp, tcpPort, udpPort, clientId)
-    of "pmp":
-      return setupNat(NatPmp, tcpPort, udpPort, clientId)
-    else:
-      if nat.startsWith("extip:"):
-        try:
-          # any required port redirection must be done by hand
-          let ip = ValidIpAddress.init(nat[6..^1])
-          return (some(ip), some(tcpPort), some(udpPort))
-        except ValueError:
-          error "Not a valid IP address", address = nat[6..^1]
-          quit QuitFailure
-      else:
-        error "Not a valid NAT option", value = nat
-        quit QuitFailure
+    of NatUpnp, NatPmp:
+      return setupNat(natConfig.nat, tcpPort, udpPort, clientId)

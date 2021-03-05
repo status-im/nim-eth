@@ -34,7 +34,8 @@ type
     nat* {.
       desc: "Specify method to use for determining public address. " &
             "Must be one of: any, none, upnp, pmp, extip:<IP>"
-      defaultValue: "any" .}: string
+      defaultValue: NatConfig(hasExtIp: false, nat: NatAny)
+      name: "nat" .}: NatConfig
 
     enrAutoUpdate* {.
       defaultValue: false
