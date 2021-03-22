@@ -314,7 +314,7 @@ proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
   d.send(fromAddr, data)
 
 proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
-    message: Message) {.raises:[Exception].} =
+    message: Message) =
   case message.kind
   of ping:
     discovery_message_requests_incoming.inc()
@@ -333,14 +333,14 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
   else:
     var waiter: Future[Option[Message]]
     if d.awaitedMessages.take((srcId, message.reqId), waiter):
-      waiter.complete(some(message)) # TODO: raises: [Exception]
+      waiter.complete(some(message))
     else:
       discovery_unsolicited_messages.inc()
       trace "Timed out or unrequested message", kind = message.kind,
         origin = fromAddr
 
 proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
-    requestNonce: AESGCMNonce, node: Option[Node]) {.raises: [Exception].} =
+    requestNonce: AESGCMNonce, node: Option[Node]) =
   let key = HandShakeKey(nodeId: toId, address: a)
   if not d.codec.hasHandshake(key):
     let
@@ -361,15 +361,7 @@ proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
   else:
     debug "Node with this id already has ongoing handshake, ignoring packet"
 
-proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
-  raises: [
-    Defect,
-    # This just comes now from a future.complete() and `sendWhoareyou` which
-    # has it because of `sleepAsync` with `addCallback`, but practically, no
-    # CatchableError should be raised here, we just can't enforce it for now.
-    Exception
-  ].} =
-
+proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
   let decoded = d.codec.decodePacket(a, packet)
   if decoded.isOk:
     let packet = decoded[]
@@ -417,33 +409,16 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
   else:
     trace "Packet decoding error", error = decoded.error, address = a
 
-# TODO: Not sure why but need to pop the raises here as it is apparently not
-# enough to put it in the raises pragma of `processClient` and other async procs.
-{.pop.}
-# Next, below there is no more effort done in catching the general `Exception`
-# as async procs always require `Exception` in the raises pragma, see also:
-# https://github.com/status-im/nim-chronos/issues/98
-# So I don't bother for now and just add them in the raises pragma until this
-# gets fixed. It does not mean that we expect these calls to be raising
-# CatchableErrors, in fact, we really don't, but hey, they might, considering we
-# can't enforce it.
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
-    Future[void] {.async, gcsafe.} =
+    Future[void] {.async.} =
   let proto = getUserData[Protocol](transp)
 
   # TODO: should we use `peekMessage()` to avoid allocation?
-  # TODO: This can still raise general `Exception` while it probably should
-  # only give TransportOsError.
   let buf = try: transp.getMessage()
             except TransportOsError as e:
               # This is likely to be local network connection issues.
               warn "Transport getMessage", exception = e.name, msg = e.msg
               return
-            except Exception as e:
-              if e of Defect:
-                raise (ref Defect)(e)
-              else: doAssert(false)
-              return # Make compiler happy
 
   let ip = try: raddr.address()
            except ValueError as e:
@@ -451,14 +426,9 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
              return
   let a = Address(ip: ValidIpAddress.init(ip), port: raddr.port)
 
-  try:
-    proto.receive(a, buf)
-  except Exception as e:
-    if e of Defect:
-      raise (ref Defect)(e)
-    else: doAssert(false)
+  proto.receive(a, buf)
 
-proc validIp(sender, address: IpAddress): bool {.raises: [Defect].} =
+proc validIp(sender, address: IpAddress): bool =
   let
     s = initTAddress(sender, Port(0))
     a = initTAddress(address, Port(0))
@@ -488,27 +458,25 @@ proc replaceNode(d: Protocol, n: Node) =
 # whoareyou response does arrive, but we would need to store the AuthTag
 # somewhere
 proc registerRequest(d: Protocol, n: Node, message: seq[byte],
-    nonce: AESGCMNonce) {.raises: [Exception, Defect].} =
+    nonce: AESGCMNonce) =
   let request = PendingRequest(node: n, message: message)
   if not d.pendingRequests.hasKeyOrPut(nonce, request):
-    # TODO: raises: [Exception]
     sleepAsync(responseTimeout).addCallback() do(data: pointer):
       d.pendingRequests.del(nonce)
 
 proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
-    Future[Option[Message]] {.raises: [Exception, Defect].} =
+    Future[Option[Message]] =
   result = newFuture[Option[Message]]("waitMessage")
   let res = result
   let key = (fromNode.id, reqId)
-  # TODO: raises: [Exception]
   sleepAsync(responseTimeout).addCallback() do(data: pointer):
     d.awaitedMessages.del(key)
     if not res.finished:
-      res.complete(none(Message)) # TODO: raises: [Exception]
+      res.complete(none(Message))
   d.awaitedMessages[key] = result
 
 proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node,
-    distances: varargs[uint32]): seq[Node] {.raises: [Defect].} =
+    distances: varargs[uint32]): seq[Node] =
   ## Verify and convert ENRs to a sequence of nodes. Only ENRs that pass
   ## verification will be added. ENRs are verified for duplicates, invalid
   ## addresses and invalid distances.
@@ -560,7 +528,7 @@ proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node,
       result.add(n)
 
 proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
-    Future[DiscResult[seq[Record]]] {.async, raises: [Exception, Defect].} =
+    Future[DiscResult[seq[Record]]] {.async.} =
   ## Wait for one or more nodes replies.
   ##
   ## The first reply will hold the total number of replies expected, and based
@@ -583,7 +551,7 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
     return err("Nodes message not received in time")
 
 proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
-    RequestId {.raises: [Exception, Defect].} =
+    RequestId =
   doAssert(toNode.address.isSome())
   let
     address = toNode.address.get()
@@ -600,7 +568,7 @@ proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
   return reqId
 
 proc ping*(d: Protocol, toNode: Node):
-    Future[DiscResult[PongMessage]] {.async, raises: [Exception, Defect].} =
+    Future[DiscResult[PongMessage]] {.async.} =
   ## Send a discovery ping message.
   ##
   ## Returns the received pong message or an error.
@@ -617,7 +585,7 @@ proc ping*(d: Protocol, toNode: Node):
     return err("Pong message not received in time")
 
 proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
-    Future[DiscResult[seq[Node]]] {.async, raises: [Exception, Defect].} =
+    Future[DiscResult[seq[Node]]] {.async.} =
   ## Send a discovery findNode message.
   ##
   ## Returns the received nodes or an error.
@@ -635,7 +603,7 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
     return err(nodes.error)
 
 proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
-    Future[DiscResult[TalkRespMessage]] {.async, raises: [Exception, Defect].} =
+    Future[DiscResult[TalkRespMessage]] {.async.} =
   ## Send a discovery talkreq message.
   ##
   ## Returns the received talkresp message or an error.
@@ -663,7 +631,7 @@ proc lookupDistances(target, dest: NodeId): seq[uint32] {.raises: [Defect].} =
     inc i
 
 proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
-    Future[seq[Node]] {.async, raises: [Exception, Defect].} =
+    Future[seq[Node]] {.async.} =
   let dists = lookupDistances(target, destNode.id)
 
   # Instead of doing max `lookupRequestLimit` findNode requests,  make use
@@ -676,8 +644,7 @@ proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
     for n in result:
       discard d.addNode(n)
 
-proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
-    {.async, raises: [Exception, Defect].} =
+proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -734,7 +701,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]]
   return closestNodes
 
 proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
-    {.async, raises: [Exception, Defect].} =
+    {.async.} =
   ## Query k nodes for the given target, returns all nodes found, including the
   ## nodes queried.
   ##
@@ -782,13 +749,12 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
   d.lastLookup = now(chronos.Moment)
   return queryBuffer
 
-proc queryRandom*(d: Protocol): Future[seq[Node]]
-    {.async, raises:[Exception, Defect].} =
+proc queryRandom*(d: Protocol): Future[seq[Node]] =
   ## Perform a query for a random target, return all nodes discovered.
-  return await d.query(NodeId.random(d.rng[]))
+  d.query(NodeId.random(d.rng[]))
 
 proc queryRandom*(d: Protocol, enrField: (string, seq[byte])):
-    Future[seq[Node]] {.async, raises:[Exception, Defect].} =
+    Future[seq[Node]] {.async.} =
   ## Perform a query for a random target, return all nodes discovered which
   ## contain enrField.
   let nodes = await d.queryRandom()
@@ -799,8 +765,7 @@ proc queryRandom*(d: Protocol, enrField: (string, seq[byte])):
 
   return filtered
 
-proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]]
-    {.async, raises: [Exception, Defect].} =
+proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
   ## Resolve a `Node` based on provided `NodeId`.
   ##
   ## This will first look in the own routing table. If the node is known, it
@@ -838,7 +803,7 @@ proc seedTable*(d: Protocol) =
   # Persistent stored nodes could be added to seed from here
   # See: https://github.com/status-im/nim-eth/issues/189
 
-proc populateTable*(d: Protocol) {.async, raises: [Exception, Defect].} =
+proc populateTable*(d: Protocol) {.async.} =
   ## Do a set of initial lookups to quickly populate the table.
   # start with a self target query (neighbour nodes)
   let selfQuery = await d.query(d.localNode.id)
@@ -852,8 +817,7 @@ proc populateTable*(d: Protocol) {.async, raises: [Exception, Defect].} =
   debug "Total nodes in routing table after populate",
     total = d.routingTable.len()
 
-proc revalidateNode*(d: Protocol, n: Node)
-    {.async, raises: [Exception, Defect].} = # TODO: Exception
+proc revalidateNode*(d: Protocol, n: Node) {.async.} =
   let pong = await d.ping(n)
 
   if pong.isOK():
@@ -868,7 +832,7 @@ proc revalidateNode*(d: Protocol, n: Node)
     let a = Address(ip: ValidIpAddress.init(res.ip), port: Port(res.port))
     d.ipVote.insert(n.id, a)
 
-proc revalidateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
+proc revalidateLoop(d: Protocol) {.async.} =
   ## Loop which revalidates the nodes in the routing table by sending the ping
   ## message.
   # TODO: General Exception raised.
@@ -881,7 +845,7 @@ proc revalidateLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   except CancelledError:
     trace "revalidateLoop canceled"
 
-proc refreshLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
+proc refreshLoop(d: Protocol) {.async.} =
   ## Loop that refreshes the routing table by starting a random query in case
   ## no queries were done since `refreshInterval` or more.
   ## It also refreshes the majority address voted for via pong responses.
@@ -900,7 +864,7 @@ proc refreshLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
   except CancelledError:
     trace "refreshLoop canceled"
 
-proc ipMajorityLoop(d: Protocol) {.async, raises: [Exception, Defect].} =
+proc ipMajorityLoop(d: Protocol) {.async.} =
   ## When `enrAutoUpdate` is enabled, the IP:port combination returned
   ## by the majority will be used to update the local ENR.
   ## This should be safe as long as the routing table is not overwhelmed by
@@ -958,7 +922,7 @@ proc newProtocol*(privKey: PrivateKey,
                   enrAutoUpdate = false,
                   tableIpLimits = DefaultTableIpLimits,
                   rng = newRng()):
-                  Protocol {.raises: [Defect].} =
+                  Protocol =
   # TODO: Tried adding bindPort = udpPort as parameter but that gave
   # "Error: internal error: environment misses: udpPort" in nim-beacon-chain.
   # Anyhow, nim-beacon-chain would also require some changes to support port
@@ -1000,24 +964,22 @@ proc newProtocol*(privKey: PrivateKey,
 
   result.routingTable.init(node, DefaultBitsPerHop, tableIpLimits, rng)
 
-proc open*(d: Protocol) {.raises: [Exception, Defect].} =
+proc open*(d: Protocol) {.raises: [Defect, CatchableError].} =
   info "Starting discovery node", node = d.localNode,
     bindAddress = d.bindAddress
 
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(d.bindAddress.ip, d.bindAddress.port)
-  # TODO: raises `OSError` and `IOSelectorsException`, the latter which is
-  # object of Exception. In Nim devel this got changed to CatchableError.
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
   d.seedTable()
 
-proc start*(d: Protocol) {.raises: [Exception, Defect].} =
+proc start*(d: Protocol) =
   d.refreshLoop = refreshLoop(d)
   d.revalidateLoop = revalidateLoop(d)
   d.ipMajorityLoop = ipMajorityLoop(d)
 
-proc close*(d: Protocol) {.raises: [Exception, Defect].} =
+proc close*(d: Protocol) =
   doAssert(not d.transp.closed)
 
   debug "Closing discovery node", node = d.localNode
@@ -1030,7 +992,7 @@ proc close*(d: Protocol) {.raises: [Exception, Defect].} =
 
   d.transp.close()
 
-proc closeWait*(d: Protocol) {.async, raises: [Exception, Defect].} =
+proc closeWait*(d: Protocol) {.async.} =
   doAssert(not d.transp.closed)
 
   debug "Closing discovery node", node = d.localNode
