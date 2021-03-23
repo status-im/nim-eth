@@ -428,7 +428,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) {.gcsafe,
 # CatchableErrors, in fact, we really don't, but hey, they might, considering we
 # can't enforce it.
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
-    Future[void] {.async, gcsafe, raises: [Exception, Defect].} =
+    Future[void] {.async, gcsafe.} =
   let proto = getUserData[Protocol](transp)
 
   # TODO: should we use `peekMessage()` to avoid allocation?
