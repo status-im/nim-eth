@@ -60,7 +60,8 @@ chronicles.formatIt(Peer): $(it.remote)
 
 include p2p_backends_helpers
 
-proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
+proc requestResolver[MsgType](msg: pointer, future: FutureBase)
+    {.gcsafe, raises:[Defect].} =
   var f = Future[Option[MsgType]](future)
   if not f.finished:
     if msg != nil:
@@ -72,10 +73,13 @@ proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
     # here. The only reasonable explanation is that the request should
     # have timed out.
     if msg != nil:
-      if f.read.isSome:
-        doAssert false, "trying to resolve a request twice"
-      else:
-        doAssert false, "trying to resolve a timed out request with a value"
+      try:
+        if f.read.isSome:
+          doAssert false, "trying to resolve a request twice"
+        else:
+          doAssert false, "trying to resolve a timed out request with a value"
+      except CatchableError as e:
+        debug "Exception in requestResolver()", exc = e.name, err = e.msg
     else:
       try:
         if not f.read.isSome:
@@ -88,9 +92,8 @@ proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
         trace "TransportOsError during request", err = e.msg
       except TransportError:
         trace "Transport got closed during request"
-      except Exception as e:
+      except CatchableError as e:
         debug "Exception in requestResolver()", exc = e.name, err = e.msg
-        raise e
 
 proc linkSendFailureToReqFuture[S, R](sendFut: Future[S], resFut: Future[R]) =
   sendFut.addCallback() do (arg: pointer):
@@ -360,7 +363,8 @@ proc registerRequest(peer: Peer,
 
   doAssert(not peer.dispatcher.isNil)
   let requestResolver = peer.dispatcher.messages[responseMsgId].requestResolver
-  proc timeoutExpired(udata: pointer) = requestResolver(nil, responseFuture)
+  proc timeoutExpired(udata: pointer) {.gcsafe, raises:[Defect].} =
+    requestResolver(nil, responseFuture)
 
   addTimer(timeoutAt, timeoutExpired, nil)
 
