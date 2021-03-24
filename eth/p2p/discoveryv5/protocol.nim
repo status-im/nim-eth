@@ -619,7 +619,7 @@ proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Talk response message not received in time")
 
-proc lookupDistances(target, dest: NodeId): seq[uint32] {.raises: [Defect].} =
+proc lookupDistances(target, dest: NodeId): seq[uint32] =
   let td = logDist(target, dest)
   result.add(td)
   var i = 1'u32
