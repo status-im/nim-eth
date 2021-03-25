@@ -110,7 +110,7 @@ type
     ## XXX: really big messages can cause excessive mem usage when using msg \
     ##      count
 
-  FilterMsgHandler* = proc(msg: ReceivedMessage) {.gcsafe, closure.}
+  FilterMsgHandler* = proc(msg: ReceivedMessage) {.gcsafe, raises: [Defect].}
 
   Filter* = object
     src*: Option[PublicKey]
