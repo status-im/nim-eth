@@ -213,27 +213,20 @@ proc updateRecord*(
 
 proc send(d: Protocol, a: Address, data: seq[byte]) =
   let ta = initTAddress(a.ip, a.port)
-  try:
-    let f = d.transp.sendTo(ta, data)
-    f.callback = proc(data: pointer) {.gcsafe.} =
-      if f.failed:
-        # Could be `TransportUseClosedError` in case the transport is already
-        # closed, or could be `TransportOsError` in case of a socket error.
-        # In the latter case this would probably mostly occur if the network
-        # interface underneath gets disconnected or similar.
-        # TODO: Should this kind of error be propagated upwards? Probably, but
-        # it should not stop the process as that would reset the discovery
-        # progress in case there is even a small window of no connection.
-        # One case that needs this error available upwards is when revalidating
-        # nodes. Else the revalidation might end up clearing the routing tabl
-        # because of ping failures due to own network connection failure.
-        warn "Discovery send failed", msg = f.readError.msg
-  except Exception as e:
-    # TODO: General exception still being raised from Chronos, but in practice
-    # all CatchableErrors should be grabbed by the above `f.failed`.
-    if e of Defect:
-      raise (ref Defect)(e)
-    else: doAssert(false)
+  let f = d.transp.sendTo(ta, data)
+  f.callback = proc(data: pointer) {.gcsafe.} =
+    if f.failed:
+      # Could be `TransportUseClosedError` in case the transport is already
+      # closed, or could be `TransportOsError` in case of a socket error.
+      # In the latter case this would probably mostly occur if the network
+      # interface underneath gets disconnected or similar.
+      # TODO: Should this kind of error be propagated upwards? Probably, but
+      # it should not stop the process as that would reset the discovery
+      # progress in case there is even a small window of no connection.
+      # One case that needs this error available upwards is when revalidating
+      # nodes. Else the revalidation might end up clearing the routing tabl
+      # because of ping failures due to own network connection failure.
+      warn "Discovery send failed", msg = f.readError.msg
 
 proc send(d: Protocol, n: Node, data: seq[byte]) =
   doAssert(n.address.isSome())
@@ -835,7 +828,6 @@ proc revalidateNode*(d: Protocol, n: Node) {.async.} =
 proc revalidateLoop(d: Protocol) {.async.} =
   ## Loop which revalidates the nodes in the routing table by sending the ping
   ## message.
-  # TODO: General Exception raised.
   try:
     while true:
       await sleepAsync(milliseconds(d.rng[].rand(revalidateMax)))
@@ -849,7 +841,6 @@ proc refreshLoop(d: Protocol) {.async.} =
   ## Loop that refreshes the routing table by starting a random query in case
   ## no queries were done since `refreshInterval` or more.
   ## It also refreshes the majority address voted for via pong responses.
-  # TODO: General Exception raised.
   try:
     await d.populateTable()
 
