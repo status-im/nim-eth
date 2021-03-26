@@ -18,10 +18,12 @@ requires "nim >= 1.2.0",
          "confutils",
          "testutils"
 
-proc runTest(path: string, release: bool = true) =
+proc runTest(path: string, release: bool = true, chronosStrict = true) =
   echo "\nRunning: ", path
   let releaseMode = if release: "-d:release" else: ""
-  exec "nim c -r " & releaseMode &
+  let chronosMode =
+    if chronosStrict: "-d:chronosStrictException" else: ""
+  exec "nim c -r " & releaseMode & " " & chronosMode &
     " -d:chronicles_log_level=ERROR --verbosity:0 --hints:off " & path
   rmFile path
 
@@ -37,7 +39,21 @@ proc runKeysTests() =
 task test_keys, "run keys tests":
   runKeysTests()
 
+proc runDiscv5Tests() =
+  for filename in [
+      "test_enr",
+      "test_hkdf",
+      "test_lru",
+      "test_ip_vote",
+      "test_discoveryv5",
+      "test_discoveryv5_encoding",
+      "test_routing_table"
+    ]:
+    runTest("tests/p2p/" & filename)
+
 proc runP2pTests() =
+  runDiscv5Tests()
+
   for filename in [
       "les/test_flow_control",
       "test_auth",
@@ -49,16 +65,9 @@ proc runP2pTests() =
       "test_shh",
       "test_shh_config",
       "test_shh_connect",
-      "test_protocol_handlers",
-      "test_enr",
-      "test_hkdf",
-      "test_lru",
-      "test_ip_vote",
-      "test_discoveryv5",
-      "test_discoveryv5_encoding",
-      "test_routing_table"
+      "test_protocol_handlers"
     ]:
-    runTest("tests/p2p/" & filename)
+    runTest("tests/p2p/" & filename, chronosStrict = false)
 
 task test_p2p, "run p2p tests":
   runP2pTests()
@@ -89,7 +98,7 @@ proc runDbTests() =
 task test_db, "run db tests":
   runDbTests()
 
-task test, "run tests":
+task test, "run all tests":
   for filename in [
       "test_bloom",
     ]:
@@ -101,18 +110,6 @@ task test, "run tests":
   runRlpTests()
   runTrieTests()
   runDbTests()
-
-proc runDiscv5Tests() =
-  for filename in [
-      "test_enr",
-      "test_hkdf",
-      "test_lru",
-      "test_ip_vote",
-      "test_discoveryv5",
-      "test_discoveryv5_encoding",
-      "test_routing_table"
-    ]:
-    runTest("tests/p2p/" & filename)
 
 task test_discv5, "run tests of discovery v5 and its dependencies":
   runKeysTests()
