@@ -1,3 +1,5 @@
+{.used.}
+
 import
   std/[unittest, options],
   eth/p2p/discoveryv5/lru

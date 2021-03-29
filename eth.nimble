@@ -27,32 +27,17 @@ proc runTest(path: string, release: bool = true, chronosStrict = true) =
     " -d:chronicles_log_level=ERROR --verbosity:0 --hints:off " & path
   rmFile path
 
-proc runKeyfileTests() =
+task test_keyfile, "Run keyfile tests":
   runTest("tests/keyfile/all_tests")
 
-task test_keyfile, "run keyfile tests":
-  runKeyfileTests()
-
-proc runKeysTests() =
+task test_keys, "Run keys tests":
   runTest("tests/keys/all_tests")
 
-task test_keys, "run keys tests":
-  runKeysTests()
+task test_discv5, "Run discovery v5 tests":
+  runTest("tests/p2p/all_discv5_tests")
 
-proc runDiscv5Tests() =
-  for filename in [
-      "test_enr",
-      "test_hkdf",
-      "test_lru",
-      "test_ip_vote",
-      "test_discoveryv5",
-      "test_discoveryv5_encoding",
-      "test_routing_table"
-    ]:
-    runTest("tests/p2p/" & filename)
-
-proc runP2pTests() =
-  runDiscv5Tests()
+task test_p2p, "Run p2p tests":
+  test_discv5_task()
 
   for filename in [
       "les/test_flow_control",
@@ -69,10 +54,7 @@ proc runP2pTests() =
     ]:
     runTest("tests/p2p/" & filename, chronosStrict = false)
 
-task test_p2p, "run p2p tests":
-  runP2pTests()
-
-proc runRlpTests() =
+task test_rlp, "Run rlp tests":
   # workaround for github action CI
   # mysterious crash on windows-2019 64bit mode
   # cannot reproduce locally on windows-2019
@@ -83,35 +65,26 @@ proc runRlpTests() =
 
   runTest("tests/rlp/all_tests", releaseMode)
 
-task test_rlp, "run rlp tests":
-  runRlpTests()
-
-proc runTrieTests() =
+task test_trie, "Run trie tests":
   runTest("tests/trie/all_tests")
 
-task test_trie, "run trie tests":
-  runTrieTests()
-
-proc runDbTests() =
+task test_db, "Run db tests":
   runTest("tests/db/all_tests")
 
-task test_db, "run db tests":
-  runDbTests()
-
-task test, "run all tests":
+task test, "Run all tests":
   for filename in [
       "test_bloom",
     ]:
     runTest("tests/" & filename)
 
-  runKeyfileTests()
-  runKeysTests()
-  runP2pTests()
-  runRlpTests()
-  runTrieTests()
-  runDbTests()
+  test_keyfile_task()
+  test_keys_task()
+  test_rlp_task()
+  test_p2p_task()
+  test_trie_task()
+  test_db_task()
 
-task test_discv5, "run tests of discovery v5 and its dependencies":
-  runKeysTests()
-  runRlpTests()
-  runDiscv5Tests()
+task test_discv5_full, "Run discovery v5 and its dependencies tests":
+  test_keys_task()
+  test_rlp_task()
+  test_discv5_task()

@@ -1,3 +1,5 @@
+{.used.}
+
 import
   std/tables,
   chronos, chronicles, stint, testutils/unittests,

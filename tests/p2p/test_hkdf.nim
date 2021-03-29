@@ -1,3 +1,5 @@
+{.used.}
+
 import
   std/unittest,
   nimcrypto, stew/byteutils,

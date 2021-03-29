@@ -1,3 +1,5 @@
+{.used.}
+
 import
   std/unittest,
   eth/keys, stew/shims/net,
