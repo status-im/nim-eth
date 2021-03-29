@@ -1,7 +1,9 @@
+{.used.}
+
 import
   std/[unittest, options, sequtils, tables],
   stint, stew/byteutils, stew/shims/net,
-  eth/[rlp, keys],
+  eth/keys,
   eth/p2p/discoveryv5/[messages, encoding, enr, node, sessions]
 
 let rng = newRng()

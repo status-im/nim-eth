@@ -1,3 +1,5 @@
+{.used.}
+
 import
   std/[unittest, options, sequtils],
   nimcrypto/utils, stew/shims/net,
