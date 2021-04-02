@@ -1,8 +1,9 @@
 import
-  std/[options, strutils],
-  chronos, chronicles, chronicles/topics_registry, confutils, metrics,
-  stew/byteutils, confutils/std/net,
-  eth/keys, eth/net/nat, enr, node, protocol
+  std/[options, strutils, tables],
+  confutils, confutils/std/net, chronicles, chronicles/topics_registry,
+  chronos, metrics, metrics/chronos_httpserver, stew/byteutils,
+  ../../keys, ../../net/nat,
+  ./enr, ./node, ./protocol
 
 type
   DiscoveryCmd* = enum
@@ -124,7 +125,7 @@ proc completeCmdArg*(T: type Node, val: TaintedString): seq[string] =
 proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T =
   try:
     result = PrivateKey.fromHex(string(p)).tryGet()
-  except CatchableError as e:
+  except CatchableError:
     raise newException(ConfigurationError, "Invalid private key")
 
 proc completeCmdArg*(T: type PrivateKey, val: TaintedString): seq[string] =
@@ -152,13 +153,16 @@ proc run(config: DiscoveryConf) =
 
   d.open()
 
-  when defined(insecure):
-    if config.metricsEnabled:
-      let
-        address = config.metricsAddress
-        port = config.metricsPort
-      info "Starting metrics HTTP server", address, port
-      metrics.startHttpServer($address, port)
+  if config.metricsEnabled:
+    let
+      address = config.metricsAddress
+      port = config.metricsPort
+    notice "Starting metrics HTTP server",
+      url = "http://" & $address & ":" & $port & "/metrics"
+    try:
+      chronos_httpserver.startMetricsHttpServer($address, port)
+    except CatchableError as exc: raise exc
+    except Exception as exc: raiseAssert exc.msg # TODO fix metrics
 
   case config.cmd
   of ping:
@@ -188,7 +192,6 @@ proc run(config: DiscoveryConf) =
 when isMainModule:
   let config = DiscoveryConf.load()
 
-  if config.logLevel != LogLevel.NONE:
-    setLogLevel(config.logLevel)
+  setLogLevel(config.logLevel)
 
   run(config)

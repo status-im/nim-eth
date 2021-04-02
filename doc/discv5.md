@@ -98,11 +98,9 @@ nim c -d:chronicles_log_level:trace -d:release --threads:on eth/p2p/discoveryv5/
 ```
 
 ### Metrics
-To compile in an HTTP endpoint for accessing the metrics add the `insecure`
-compile time flag:
+To run dcli with metrics enabled provide the `metrics` flag:
+
 ```sh
-# Build dcli with metrics
-nim c -d:insecure -d:chronicles_log_level:trace -d:release --threads:on eth/p2p/discoveryv5/dcli
 # Run dcli with metrics
 ./eth/p2p/discoveryv5/dcli --metrics --bootnode:enr:<base64 encoding of ENR>
 ```
