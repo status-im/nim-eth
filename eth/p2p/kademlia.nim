@@ -371,6 +371,13 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
   var nodesSeen = initHashSet[Node]()
 
   proc findNode(nodeId: NodeId, remote: Node): Future[seq[Node]] {.async.} =
+    if remote in k.neighboursCallbacks:
+      # Sometimes findNode is called while another findNode is already in flight.
+      # It's a bug when this happens, and the logic should probably be fixed
+      # elsewhere.  However, this small fix has been tested and proven adequate.
+      debug "Peer in k.neighboursCallbacks already", peer = remote
+      result = newSeqOfCap[Node](BUCKET_SIZE)
+      return
     k.wire.sendFindNode(remote, nodeId)
     var candidates = await k.waitNeighbours(remote)
     if candidates.len == 0:
