@@ -5,7 +5,7 @@
 import
   std/[hashes, net],
   stew/arrayops,
-  eth/rlp, enr
+  ../../rlp, ./enr
 
 {.push raises: [Defect].}
 

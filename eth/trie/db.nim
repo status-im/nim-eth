@@ -1,7 +1,7 @@
 import
-  tables, hashes, sets,
+  std/[tables, hashes, sets],
   nimcrypto/[hash, keccak],
-  trie_defs, db_tracing
+  "."/[trie_defs, db_tracing]
 
 type
   MemDBRec = object

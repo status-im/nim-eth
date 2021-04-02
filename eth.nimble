@@ -31,6 +31,7 @@ proc buildBinary(path: string) =
   echo "\nBuilding: ", path
   exec "nim c -d:release -d:chronosStrictException " &
     "-d:chronicles_log_level=trace --verbosity:0 --hints:off --threads:on " &
+    "--warning[CaseTransition]:off --warning[ObservableStores]:off " &
     path
 
 task test_keyfile, "Run keyfile tests":

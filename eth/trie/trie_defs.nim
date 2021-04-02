@@ -1,5 +1,6 @@
 import
-  eth/rlp, nimcrypto/hash
+  nimcrypto/hash,
+  ../rlp
 
 type
   KeccakHash* = MDigest[256]

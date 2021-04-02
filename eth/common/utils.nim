@@ -6,9 +6,13 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import nimcrypto/hash, hashes, stew/byteutils, eth_types, metrics, os
+import
+  std/[hashes, os],
+  nimcrypto/hash, stew/byteutils, metrics,
+  ./eth_types
+
 when defined(posix):
-  import posix
+  import std/posix
 
 export metrics
 
