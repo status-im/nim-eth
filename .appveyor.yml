@@ -76,6 +76,7 @@ build_script:
 
 test_script:
   - nimble test
+  - nimble build_dcli
 
 deploy: off
 
