@@ -12,9 +12,10 @@
 
 {.push raises: [Defect].}
 
-import bearssl
-import eth/keys, nimcrypto/[rijndael, bcmode, hash, hmac, sha2, utils]
-import stew/[results, endians2]
+import
+  bearssl, stew/[results, endians2],
+  nimcrypto/[rijndael, bcmode, hash, hmac, sha2, utils],
+  ../keys
 
 export results
 

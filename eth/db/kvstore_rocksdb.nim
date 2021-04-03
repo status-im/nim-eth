@@ -1,6 +1,9 @@
 {.push raises: [Defect].}
 
-import os, rocksdb, ./kvstore, stew/results
+import
+  std/os,
+  rocksdb, stew/results,
+  ./kvstore
 
 export results
 

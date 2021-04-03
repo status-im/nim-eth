@@ -1,5 +1,6 @@
 import
-  eth/[common, rlp, keys], nimcrypto/keccak
+  nimcrypto/keccak,
+  ".."/[common, rlp, keys]
 
 proc initTransaction*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAddress,
   value: UInt256, payload: Blob, V: byte, R, S: UInt256, isContractCreation = false): Transaction =

@@ -2,7 +2,7 @@ const tracingEnabled = defined(p2pdump)
 
 when tracingEnabled:
   import
-    typetraits,
+    std/typetraits,
     json_serialization, chronicles #, chronicles_tail/configuration
 
   export

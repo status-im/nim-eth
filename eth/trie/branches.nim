@@ -1,5 +1,5 @@
 import
-  ./trie_defs, ./binary, ./binaries, ./db, ./trie_utils, ./trie_bitseq
+  "."/[trie_defs, binary, binaries, db, trie_utils, trie_bitseq]
 
 type
   DB = TrieDatabaseRef

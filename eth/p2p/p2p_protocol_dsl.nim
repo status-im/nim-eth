@@ -1,5 +1,5 @@
 import
-  options, sequtils,
+  std/[options, sequtils],
   stew/shims/macros, chronos, faststreams/outputs
 
 type

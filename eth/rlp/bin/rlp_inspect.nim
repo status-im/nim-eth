@@ -1,4 +1,6 @@
-import os, ../../rlp
+import
+  std/os,
+  ../../rlp
 
 if paramCount() > 0:
   echo rlpFromHex(paramStr(1)).inspect

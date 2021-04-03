@@ -3,9 +3,10 @@
 ## https://ethereum.github.io/yellowpaper/paper.pdf
 
 import
-  macros, strutils, stew/byteutils,
-  rlp/[writer, object_serialization],
-  rlp/priv/defs
+  std/[macros, strutils],
+  stew/byteutils,
+  ./rlp/[writer, object_serialization],
+  ./rlp/priv/defs
 
 export
   writer, object_serialization

@@ -11,8 +11,8 @@
 {.push raises: [Defect].}
 
 import
-  stew/results,
-  tables, hashes, sets
+  std/[tables, hashes, sets],
+  stew/results
 
 export results
 

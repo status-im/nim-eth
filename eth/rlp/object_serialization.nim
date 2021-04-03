@@ -1,4 +1,4 @@
-import macros
+import std/macros
 
 template rlpIgnore* {.pragma.}
   ## Specifies that a certain field should be ignored for the purposes

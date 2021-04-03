@@ -9,11 +9,11 @@
 #
 
 import
-  times,
+  std/times,
   chronos, stint, nimcrypto/keccak, chronicles, bearssl,
-  eth/[keys, rlp],
-  kademlia, enode,
-  stew/[objects, results]
+  stew/[objects, results],
+  ".."/[keys, rlp],
+  "."/[kademlia, enode]
 
 export
   Node, results

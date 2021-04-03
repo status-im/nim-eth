@@ -1,6 +1,6 @@
 import
-  eth/trie/[trie_defs, db, hexary], eth/rlp,
-  eth_types
+  ../trie/[trie_defs, db, hexary], ../rlp,
+  ./eth_types
 
 proc getAccount*(db: TrieDatabaseRef,
                  rootHash: KeccakHash,

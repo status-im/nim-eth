@@ -10,8 +10,9 @@
 
 {.push raises: [Defect].}
 
-import uri, strutils, net
-import eth/keys
+import
+  std/[uri, strutils, net],
+  ../keys
 
 export keys
 

@@ -1,4 +1,6 @@
-import times, chronos
+import
+  std/times,
+  chronos
 
 type
   FullNodeSyncer* = ref object

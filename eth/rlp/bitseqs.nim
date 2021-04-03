@@ -1,5 +1,6 @@
 import
-  stew/bitseqs, ../rlp
+  stew/bitseqs,
+  ../rlp
 
 type
   Bytes = seq[byte]

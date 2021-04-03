@@ -1,7 +1,8 @@
 import
-  tables, algorithm, deques, hashes, options, typetraits,
-  stew/shims/macros, chronicles, nimcrypto, chronos, eth/[rlp, common, keys, async_utils],
-  private/p2p_types, kademlia, auth, rlpxcrypt, enode, p2p_protocol_dsl
+  std/[tables, algorithm, deques, hashes, options, typetraits],
+  stew/shims/macros, chronicles, nimcrypto, chronos,
+  ".."/[rlp, common, keys, async_utils],
+  ./private/p2p_types, "."/[kademlia, auth, rlpxcrypt, enode, p2p_protocol_dsl]
 
 when useSnappy:
   import snappy

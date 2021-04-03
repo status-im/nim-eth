@@ -2,9 +2,10 @@
 # on the given network.
 
 import
-  os, tables, times, random, sequtils, options,
-  chronos, chronicles, eth/[rlp, keys, common],
-  private/p2p_types, discovery, kademlia, rlpx
+  std/[os, tables, times, random, sequtils, options],
+  chronos, chronicles,
+  ".."/[rlp, keys, common],
+  ./private/p2p_types, "."/[discovery, kademlia, rlpx]
 
 const
   lookupInterval = 5

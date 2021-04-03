@@ -9,11 +9,10 @@
 #
 
 import
-  tables, algorithm, random, bearssl,
-  chronos, chronos/timer, chronicles,
-  eth/keys, eth/common/eth_types,
-  eth/p2p/[kademlia, discovery, enode, peer_pool, rlpx],
-  eth/p2p/private/p2p_types
+  std/[tables, algorithm, random],
+  bearssl, chronos, chronos/timer, chronicles,
+  ./keys, ./common/eth_types, ./p2p/private/p2p_types,
+  ./p2p/[kademlia, discovery, enode, peer_pool, rlpx]
 
 export
   p2p_types, rlpx, enode, kademlia

@@ -1,6 +1,7 @@
 import
-  times, net,
-  json_serialization, nimcrypto/[hash, utils], eth_types
+  std/[times, net],
+  json_serialization, nimcrypto/[hash, utils],
+  ./eth_types
 
 export
   json_serialization
