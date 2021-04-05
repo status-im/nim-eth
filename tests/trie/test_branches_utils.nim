@@ -1,8 +1,9 @@
 {.used.}
 
 import
-  sets, unittest, strutils, stew/byteutils,
-  eth/trie/[db, binary, branches]
+  std/[sets, unittest, strutils],
+  stew/byteutils,
+  ../../eth/trie/[db, binary, branches]
 
 suite "branches utils":
 

@@ -12,8 +12,9 @@
 ## https://github.com/ethereum/wiki/wiki/Ethereum-Wire-Protocol
 
 import
-  chronos, stint, chronicles, eth/rlp, eth/common/eth_types,
-  ../rlpx, ../private/p2p_types, ../blockchain_utils, ../../p2p
+  chronos, stint, chronicles,
+  ../../rlp, ../../common/eth_types, ../../p2p,
+  ../rlpx, ../private/p2p_types, ../blockchain_utils
 
 type
   NewBlockHashesAnnounce* = object

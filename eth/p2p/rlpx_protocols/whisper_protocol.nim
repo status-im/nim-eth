@@ -33,8 +33,10 @@
 ## else there will be no peers to send and receive messages from.
 
 import
-  options, tables, times, chronos, chronicles, metrics,
-  eth/[keys, async_utils, p2p], whisper/whisper_types
+  std/[options, tables, times],
+  chronos, chronicles, metrics,
+  ".."/../[keys, async_utils, p2p],
+  ./whisper/whisper_types
 
 export
   whisper_types

@@ -1,7 +1,7 @@
 import
-  random, sets,
-  eth/trie/trie_bitseq,
-  nimcrypto/[utils, sysrand]
+  std/[random, sets],
+  nimcrypto/[utils, sysrand],
+  ../../eth/trie/trie_bitseq
 
 type
   RandGen*[T] = object

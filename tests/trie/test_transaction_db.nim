@@ -1,8 +1,9 @@
 {.used.}
 
 import
-  unittest,
-  eth/trie/[db], ./testutils
+  std/unittest,
+  ../../eth/trie/db,
+  ./testutils
 
 suite "transaction db":
   setup:

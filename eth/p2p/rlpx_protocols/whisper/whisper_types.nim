@@ -9,10 +9,10 @@
 #
 
 import
-  algorithm, bitops, math, options, tables, times, strutils, hashes,
+  std/[algorithm, bitops, math, options, tables, times, strutils, hashes],
   chronicles, stew/[byteutils, endians2], metrics, bearssl,
   nimcrypto/[bcmode, hash, keccak, rijndael],
-  eth/[keys, rlp, p2p], eth/p2p/ecies
+  ".."/../../[keys, rlp, p2p], ../../ecies
 
 logScope:
   topics = "whisper_types"

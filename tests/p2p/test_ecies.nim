@@ -7,9 +7,10 @@
 #    distribution, for details about the copyright.
 #
 
-import unittest
-import eth/keys, nimcrypto/[utils, sha2, hmac, rijndael]
-import eth/p2p/ecies
+import
+  std/unittest,
+  nimcrypto/[utils, sha2, hmac, rijndael],
+  ../../eth/keys, ../../eth/p2p/ecies
 
 proc compare[A, B](x: openarray[A], y: openarray[B], s: int = 0): bool =
   result = true

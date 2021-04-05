@@ -3,7 +3,8 @@
 # The testing framework from Chronicles can be extracted in a separate package.
 
 import
-  chronos, ../eth/async_utils
+  chronos,
+  ../eth/async_utils
 
 type
   SomeRecoverableError = object of CatchableError

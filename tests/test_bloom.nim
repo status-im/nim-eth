@@ -1,4 +1,7 @@
-import eth/bloom, stint, unittest
+import
+  std/unittest,
+  stint,
+  ../eth/bloom
 
 suite "Simple Bloom Filter tests":
   test "incl proc":

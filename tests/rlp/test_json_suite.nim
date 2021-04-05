@@ -1,8 +1,8 @@
 {.used.}
 
 import
-  os, strutils, strformat,
-  util/json_testing
+  std/[os, strutils, strformat],
+  ./util/json_testing
 
 template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 

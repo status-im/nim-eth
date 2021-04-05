@@ -3,8 +3,8 @@
 import
   std/[unittest, options, sequtils, tables],
   stint, stew/byteutils, stew/shims/net,
-  eth/keys,
-  eth/p2p/discoveryv5/[messages, encoding, enr, node, sessions]
+  ../../eth/keys,
+  ../../eth/p2p/discoveryv5/[messages, encoding, enr, node, sessions]
 
 let rng = newRng()
 

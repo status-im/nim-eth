@@ -1,5 +1,6 @@
 import
-  chronos, chronicles, eth/p2p
+  chronos, chronicles,
+  ../../p2p
 
 # Limited bzz protocol that allows for doing a handshake with a peer running
 # ethersphere/swarm client rev. c535b271536d0dee5bd97c2541ca32a42f272d4f

@@ -1,7 +1,9 @@
 {.used.}
 
 import
-  unittest, times, eth/rlp, stew/byteutils
+  std/[unittest, times],
+  stew/byteutils,
+  ../../eth/rlp
 
 type
   Transaction = object

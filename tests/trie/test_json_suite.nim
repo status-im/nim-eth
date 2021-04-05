@@ -1,9 +1,9 @@
 {.used.}
 
 import
-  os, json, tables, strutils, algorithm,
-  eth/trie/[db, hexary],
-  stew/byteutils
+  std/[os, json, tables, strutils, algorithm],
+  stew/byteutils,
+  ../../eth/trie/[db, hexary]
 
 type
   TestOp = object

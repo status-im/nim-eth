@@ -8,8 +8,10 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  sequtils, options, unittest, tables, nimcrypto/hash,
-  eth/[keys, rlp], eth/p2p/rlpx_protocols/whisper/whisper_types as whisper
+  std/[sequtils, options, unittest, tables],
+  nimcrypto/hash,
+  ../../eth/[keys, rlp],
+  ../../eth/p2p/rlpx_protocols/whisper/whisper_types as whisper
 
 let rng = newRng()
 

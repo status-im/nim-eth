@@ -8,8 +8,8 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  sequtils, options, unittest, times,
-  eth/p2p/rlpx_protocols/whisper_protocol as whisper
+  std/[sequtils, options, unittest, times],
+  ../../eth/p2p/rlpx_protocols/whisper_protocol as whisper
 
 suite "Whisper envelope validation":
   test "should validate and allow envelope according to config":

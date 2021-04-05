@@ -1,9 +1,10 @@
 {.used.}
 
 import
-  unittest, random,
-  eth/trie/[db, binary],
-  ./testutils, stew/byteutils
+  std/[unittest, random],
+  stew/byteutils,
+  ../../eth/trie/[db, binary],
+  ./testutils
 
 suite "binary trie":
 

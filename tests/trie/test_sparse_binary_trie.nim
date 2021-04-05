@@ -1,8 +1,9 @@
 {.used.}
 
 import
-  unittest, random, stew/byteutils,
-  eth/trie/[db, sparse_binary, sparse_proofs],
+  std/[unittest, random],
+  stew/byteutils,
+  ../../eth/trie/[db, sparse_binary, sparse_proofs],
   ./testutils
 
 suite "sparse binary trie":

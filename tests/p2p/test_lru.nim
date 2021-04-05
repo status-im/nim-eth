@@ -2,7 +2,7 @@
 
 import
   std/[unittest, options],
-  eth/p2p/discoveryv5/lru
+  ../../eth/p2p/discoveryv5/lru
 
 suite "LRUCache":
   const

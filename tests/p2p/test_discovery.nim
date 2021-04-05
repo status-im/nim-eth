@@ -8,8 +8,9 @@
 #
 
 import
-  sequtils, unittest, chronos, stew/byteutils,
-  eth/[keys, rlp], eth/p2p/[discovery, kademlia, enode],
+  std/[sequtils, unittest],
+  chronos, stew/byteutils,
+  ../../eth/[keys, rlp], ../../eth/p2p/[discovery, kademlia, enode],
   ./p2p_test_helper
 
 proc nodeIdInNodes(id: NodeId, nodes: openarray[Node]): bool =

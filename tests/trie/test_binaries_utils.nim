@@ -1,10 +1,10 @@
 {.used.}
 
 import
-  unittest, strutils,
-  nimcrypto/[keccak, hash],
-  eth/trie/[binaries, trie_bitseq],
-  ./testutils, stew/byteutils
+  std/[unittest, strutils],
+  nimcrypto/[keccak, hash], stew/byteutils,
+  ../../eth/trie/[binaries, trie_bitseq],
+  ./testutils
 
 proc parseBitVector(x: string): TrieBitSeq =
   result = genBitVec(x.len)

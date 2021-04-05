@@ -1,9 +1,10 @@
 {.used.}
 
 import
-  unittest, sequtils, os, stew/byteutils,
-  eth/trie/[hexary, db, trie_defs], nimcrypto/utils,
-  ./testutils, algorithm, random
+  std/[unittest, sequtils, os, algorithm, random],
+  stew/byteutils, nimcrypto/utils,
+  ../../eth/trie/[hexary, db, trie_defs],
+  ./testutils
 
 from strutils import split
 

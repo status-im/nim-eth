@@ -8,8 +8,10 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  options, unittest, chronos, eth/[rlp, keys, p2p],
-  eth/p2p/mock_peers, eth/p2p/rlpx_protocols/[whisper_protocol]
+  std/[options, unittest],
+  chronos,
+  ../../eth/[rlp, keys, p2p],
+  ../../eth/p2p/mock_peers, ../../eth/p2p/rlpx_protocols/[whisper_protocol]
 
 proc localAddress(port: int): Address =
   let port = Port(port)
