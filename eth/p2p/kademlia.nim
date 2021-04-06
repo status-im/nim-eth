@@ -313,6 +313,36 @@ proc waitNeighbours(k: KademliaProtocol, remote: Node): Future[seq[Node]] =
       k.neighboursCallbacks.del(remote)
       fut.complete(neighbours)
 
+# Exported for test.
+proc findNode*(k: KademliaProtocol, nodesSeen: ref HashSet[Node],
+               nodeId: NodeId, remote: Node): Future[seq[Node]] {.async.} =
+  if remote in k.neighboursCallbacks:
+    # Sometimes findNode is called while another findNode is already in flight.
+    # It's a bug when this happens, and the logic should probably be fixed
+    # elsewhere.  However, this small fix has been tested and proven adequate.
+    debug "Ignoring peer already in k.neighboursCallbacks", peer = remote
+    result = newSeq[Node]()
+    return
+  k.wire.sendFindNode(remote, nodeId)
+  var candidates = await k.waitNeighbours(remote)
+  if candidates.len == 0:
+    trace "Got no candidates from peer, returning", peer = remote
+    result = candidates
+  else:
+    # The following line:
+    # 1. Add new candidates to nodesSeen so that we don't attempt to bond with failing ones
+    # in the future
+    # 2. Removes all previously seen nodes from candidates
+    # 3. Deduplicates candidates
+    candidates.keepItIf(not nodesSeen[].containsOrIncl(it))
+    trace "Got new candidates", count = candidates.len
+    let bonded = await all(candidates.mapIt(k.bond(it)))
+    for i in 0 ..< bonded.len:
+      if not bonded[i]: candidates[i] = nil
+    candidates.keepItIf(not it.isNil)
+    trace "Bonded with candidates", count = candidates.len
+    result = candidates
+
 proc populateNotFullBuckets(k: KademliaProtocol) =
   ## Go through all buckets that are not full and try to fill them.
   ##
@@ -369,35 +399,7 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
   ## It approaches the target by querying nodes that are closer to it on each iteration.  The
   ## given target does not need to be an actual node identifier.
   var nodesAsked = initHashSet[Node]()
-  var nodesSeen = initHashSet[Node]()
-
-  proc findNode(nodeId: NodeId, remote: Node): Future[seq[Node]] {.async.} =
-    if remote in k.neighboursCallbacks:
-      # Sometimes findNode is called while another findNode is already in flight.
-      # It's a bug when this happens, and the logic should probably be fixed
-      # elsewhere.  However, this small fix has been tested and proven adequate.
-      debug "Peer in k.neighboursCallbacks already", peer = remote
-      result = newSeqOfCap[Node](BUCKET_SIZE)
-      return
-    k.wire.sendFindNode(remote, nodeId)
-    var candidates = await k.waitNeighbours(remote)
-    if candidates.len == 0:
-      trace "Got no candidates from peer, returning", peer = remote
-      result = candidates
-    else:
-      # The following line:
-      # 1. Add new candidates to nodesSeen so that we don't attempt to bond with failing ones
-      # in the future
-      # 2. Removes all previously seen nodes from candidates
-      # 3. Deduplicates candidates
-      candidates.keepItIf(not nodesSeen.containsOrIncl(it))
-      trace "Got new candidates", count = candidates.len
-      let bonded = await all(candidates.mapIt(k.bond(it)))
-      for i in 0 ..< bonded.len:
-        if not bonded[i]: candidates[i] = nil
-      candidates.keepItIf(not it.isNil)
-      trace "Bonded with candidates", count = candidates.len
-      result = candidates
+  let nodesSeen = new(HashSet[Node])
 
   proc excludeIfAsked(nodes: seq[Node]): seq[Node] =
     result = toSeq(items(nodes.toHashSet() - nodesAsked))
@@ -409,7 +411,7 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
   while nodesToAsk.len != 0:
     trace "Node lookup; querying ", nodesToAsk
     nodesAsked.incl(nodesToAsk.toHashSet())
-    let results = await all(nodesToAsk.mapIt(findNode(nodeId, it)))
+    let results = await all(nodesToAsk.mapIt(k.findNode(nodesSeen, nodeId, it)))
     for candidates in results:
       closest.add(candidates)
     sortByDistance(closest, nodeId, BUCKET_SIZE)

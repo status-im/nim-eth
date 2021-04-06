@@ -35,7 +35,7 @@ type
     address: Address
     bootstrapNodes*: seq[Node]
     thisNode*: Node
-    kademlia: KademliaProtocol[DiscoveryProtocol]
+    kademlia*: KademliaProtocol[DiscoveryProtocol]
     transp: DatagramTransport
 
   CommandId = enum
