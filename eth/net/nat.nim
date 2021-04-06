@@ -10,7 +10,7 @@ import
   std/[options, os, strutils, times],
   stew/results, nat_traversal/[miniupnpc, natpmp],
   chronicles, json_serialization/std/net, chronos,
-  eth/common/utils, ./utils as netutils
+  ../common/utils, ./utils as netutils
 
 type
   NatStrategy* = enum

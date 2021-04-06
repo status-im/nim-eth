@@ -1,7 +1,8 @@
 import
-  json, os, stew/byteutils, unittest, chronos,
-  eth/p2p, eth/p2p/rlpx_protocols/[whisper_protocol, eth_protocol],
-  ../p2p/p2p_test_helper
+  std/[json, os, unittest],
+  chronos, stew/byteutils,
+  ../../eth/p2p, ../../eth/p2p/rlpx_protocols/[whisper_protocol, eth_protocol],
+  ./p2p_test_helper
 
 let rng = newRng()
 

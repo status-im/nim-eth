@@ -7,8 +7,9 @@
 #
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  eth/keys, #../src/private/conversion_bytes,
-        ./config
+import
+  ../../eth/keys, #../src/private/conversion_bytes,
+  ./config
 
 import  unittest
 

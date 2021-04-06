@@ -1,5 +1,5 @@
 import
-  ./trie_bitseq, ./trie_defs, /trie_utils
+  "."/[trie_bitseq, trie_defs, trie_utils]
 
 const
   treeHeight* = 160

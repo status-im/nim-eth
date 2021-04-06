@@ -1,6 +1,9 @@
 import
-  tables, chronos, eth/p2p, eth/p2p/peer_pool,
-  eth/p2p/rlpx_protocols/bzz_protocol, ./p2p_test_helper
+  std/tables,
+  chronos,
+  ../../eth/p2p, ../../eth/p2p/peer_pool,
+  ../../eth/p2p/rlpx_protocols/bzz_protocol,
+  ./p2p_test_helper
 
 # Basic bzz test to test handshake with ethersphere/swarm node
 # Fixed enode string for now

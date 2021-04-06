@@ -1,5 +1,7 @@
 import
-  json, stew/byteutils, unittest, eth/rlp
+  std/[json, unittest],
+  stew/byteutils,
+  ../../../eth/rlp
 
 proc append(output: var RlpWriter, js: JsonNode) =
   case js.kind

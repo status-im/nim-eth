@@ -15,9 +15,9 @@
 {.push raises: [Defect].}
 
 import
-  secp256k1, bearssl,
-  nimcrypto/hash, nimcrypto/keccak,
-  stew/[byteutils, objects, results], strformat
+  std/strformat,
+  secp256k1, bearssl, stew/[byteutils, objects, results],
+  nimcrypto/[hash, keccak]
 
 from nimcrypto/utils import burnMem
 

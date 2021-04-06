@@ -2,7 +2,8 @@
 
 import
   std/unittest,
-  bearssl, eth/keys, eth/p2p/discoveryv5/[routing_table, node, enr],
+  bearssl,
+  ../../eth/keys, ../../eth/p2p/discoveryv5/[routing_table, node, enr],
   ./discv5_test_helper
 
 suite "Routing Table Tests":

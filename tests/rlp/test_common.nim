@@ -1,6 +1,8 @@
 {.used.}
 
-import unittest, eth/common, eth/rlp
+import
+  std/unittest,
+  ../../eth/[common, rlp]
 
 proc `==`(a, b: HashOrStatus): bool =
   result = a.isHash == b.isHash

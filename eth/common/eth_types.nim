@@ -1,7 +1,7 @@
 import
-  strutils,
-  stew/[endians2, byteutils], options, times, chronicles,
-  stint, nimcrypto/[keccak, hash], eth/rlp, eth/trie/[trie_defs, db]
+  std/[strutils, options, times],
+  stew/[endians2, byteutils], chronicles, stint, nimcrypto/[keccak, hash],
+  ../rlp, ../trie/[trie_defs, db]
 
 export
   stint, read, append, KeccakHash

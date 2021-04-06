@@ -9,7 +9,9 @@
 
 {.used.}
 
-import eth/keys, eth/keyfile/[keyfile], json, os, unittest
+import
+  std/[json, os, unittest],
+  ../../eth/keys, ../../eth/keyfile/[keyfile]
 
 # Test vectors copied from
 # https://github.com/ethereum/tests/blob/develop/KeyStoreTests/basic_tests.json

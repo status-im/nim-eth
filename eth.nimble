@@ -24,8 +24,15 @@ proc runTest(path: string, release: bool = true, chronosStrict = true) =
   let chronosMode =
     if chronosStrict: "-d:chronosStrictException" else: ""
   exec "nim c -r " & releaseMode & " " & chronosMode &
-    " -d:chronicles_log_level=ERROR --verbosity:0 --hints:off " & path
+    " -d:chronicles_log_level=error --verbosity:0 --hints:off " & path
   rmFile path
+
+proc buildBinary(path: string) =
+  echo "\nBuilding: ", path
+  exec "nim c -d:release -d:chronosStrictException " &
+    "-d:chronicles_log_level=trace --verbosity:0 --hints:off --threads:on " &
+    "--warning[CaseTransition]:off --warning[ObservableStores]:off " &
+    path
 
 task test_keyfile, "Run keyfile tests":
   runTest("tests/keyfile/all_tests")
@@ -88,3 +95,6 @@ task test_discv5_full, "Run discovery v5 and its dependencies tests":
   test_keys_task()
   test_rlp_task()
   test_discv5_task()
+
+task build_dcli, "Build dcli":
+  buildBinary("eth/p2p/discoveryv5/dcli")

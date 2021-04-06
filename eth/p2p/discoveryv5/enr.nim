@@ -4,7 +4,7 @@
 import
   std/[strutils, macros, algorithm, options],
   stew/shims/net, stew/base64, nimcrypto,
-  eth/[rlp, keys]
+  ".."/../[rlp, keys]
 
 export options
 

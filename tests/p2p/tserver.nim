@@ -8,9 +8,9 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  sequtils, strformat, options, testutils/unittests,
-  chronicles, chronos, eth/[rlp, keys, p2p],
-  eth/p2p/mock_peers
+  std/[sequtils, strformat, options],
+  testutils/unittests, chronicles, chronos,
+  ../../eth/[rlp, keys, p2p], ../../eth/p2p/mock_peers
 
 const
   clientId = "nim-eth-p2p/0.0.1"

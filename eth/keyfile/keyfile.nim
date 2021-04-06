@@ -9,8 +9,12 @@
 
 {.push raises: [Defect].}
 
-import nimcrypto/[bcmode, hmac, rijndael, pbkdf2, sha2, sysrand, utils, keccak, scrypt],
-       eth/keys, json, uuid, strutils, stew/results
+import
+  std/[strutils, json],
+  nimcrypto/[bcmode, hmac, rijndael, pbkdf2, sha2, sysrand, utils, keccak, scrypt],
+  stew/results,
+  ../keys,
+  ./uuid
 
 export results
 

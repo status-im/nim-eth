@@ -3,7 +3,7 @@ import
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, stew/byteutils,
   ../../keys, ../../net/nat,
-  ./enr, ./node, ./protocol
+  "."/[enr, node, protocol]
 
 type
   DiscoveryCmd* = enum

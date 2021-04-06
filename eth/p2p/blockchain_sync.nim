@@ -1,8 +1,8 @@
 import
-  sets, options, random, hashes,
-  chronos, chronicles, eth/common/eth_types,
-  private/p2p_types, rlpx, peer_pool, rlpx_protocols/eth_protocol,
-  ../p2p
+  std/[sets, options, random, hashes],
+  chronos, chronicles,
+  ../common/eth_types, ../p2p,
+  ./private/p2p_types, ./rlpx_protocols/eth_protocol, "."/[rlpx, peer_pool]
 
 const
   minPeersToStartSync* = 2 # Wait for consensus of at least this

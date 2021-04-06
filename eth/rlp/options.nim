@@ -1,5 +1,6 @@
 import
-  std/options, ../rlp
+  std/options,
+  ../rlp
 
 proc read*[T](rlp: var Rlp, O: type Option[T]): O {.inline.} =
   mixin read
@@ -14,4 +15,3 @@ proc append*(writer: var RlpWriter, value: Option) =
 
 export
   options, rlp
-

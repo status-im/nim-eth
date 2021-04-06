@@ -1,7 +1,7 @@
 {.used.}
 
 import
-  os,
+  std/os,
   testutils/unittests,
   ../../eth/db/[kvstore, kvstore_sqlite3],
   ./test_kvstore

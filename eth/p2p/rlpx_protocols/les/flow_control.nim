@@ -1,7 +1,9 @@
 import
-  tables, sets,
-  chronicles, chronos, eth/rlp, eth/common/eth_types,
-  ../../rlpx, ../../private/p2p_types, private/les_types
+  std/[tables, sets],
+  chronicles, chronos,
+  ../../../rlp, ../../..//common/eth_types,
+  ../../rlpx, ../../private/p2p_types,
+  ./private/les_types
 
 const
   maxSamples = 100000

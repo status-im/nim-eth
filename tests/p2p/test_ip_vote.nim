@@ -2,8 +2,8 @@
 
 import
   std/unittest,
-  eth/keys, stew/shims/net,
-  eth/p2p/discoveryv5/[node, ip_vote]
+  stew/shims/net,
+  ../../eth/keys, ../../eth/p2p/discoveryv5/[node, ip_vote]
 
 suite "IP vote":
   let rng = newRng()

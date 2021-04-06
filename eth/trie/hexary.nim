@@ -1,7 +1,8 @@
 import
-  tables,
-  nimcrypto/[keccak, hash], eth/rlp,
-  trie_defs, nibbles, db
+  std/tables,
+  nimcrypto/[keccak, hash],
+  ../rlp,
+  "."/[trie_defs, nibbles, db]
 
 type
   TrieNodeKey = object

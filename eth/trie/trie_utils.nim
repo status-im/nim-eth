@@ -1,7 +1,7 @@
 import
   stew/byteutils,
   nimcrypto/[hash, keccak],
-  trie_defs
+  ./trie_defs
 
 template checkValidHashZ*(x: untyped) =
   when x.type isnot KeccakHash:

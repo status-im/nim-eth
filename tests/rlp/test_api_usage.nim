@@ -1,8 +1,9 @@
 {.used.}
 
 import
-  math, unittest, strutils, stew/byteutils,
-  eth/rlp
+  std/[math, unittest, strutils],
+  stew/byteutils,
+  ../../eth/rlp
 
 proc q(s: string): string = "\"" & s & "\""
 proc i(s: string): string = s.replace(" ").replace("\n")

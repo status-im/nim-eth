@@ -1,6 +1,5 @@
 import
-  ./trie_bitseq,
-  ./trie_defs, ./db, ./binaries, ./trie_utils
+  "."/[trie_bitseq, trie_defs, db, binaries, trie_utils]
 
 export
   trie_utils

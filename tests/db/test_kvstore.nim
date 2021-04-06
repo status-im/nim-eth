@@ -1,7 +1,7 @@
 {.used.}
 
 import
-  unittest,
+  std/unittest,
   ../../eth/db/kvstore
 
 const

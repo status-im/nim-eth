@@ -1,6 +1,7 @@
 import
-  unittest, chronos, nimcrypto, strutils, bearssl,
-  eth/[keys, p2p], eth/p2p/[discovery, enode]
+  std/[unittest, strutils],
+  chronos, nimcrypto, bearssl,
+  ../../eth/[keys, p2p], ../../eth/p2p/[discovery, enode]
 
 var nextPort = 30303
 

@@ -1,7 +1,7 @@
 import
-  sequtils,
-  stew/ranges/ptr_arith, trie_defs,
-  ./trie_bitseq
+  std/sequtils,
+  stew/ranges/ptr_arith,
+  "."/[trie_defs, trie_bitseq]
 
 type
   TrieNodeKind* = enum

@@ -1,6 +1,6 @@
 import
-  hashes, tables, sets,
-  eth/common/eth_types
+  std/[hashes, tables, sets],
+  ../../../../common/eth_types
 
 type
   AnnounceType* = enum

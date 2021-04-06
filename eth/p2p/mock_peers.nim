@@ -1,7 +1,8 @@
 import
-  macros, deques, algorithm,
-  chronos, eth/[keys, rlp], eth/common/eth_types,
-  private/p2p_types, rlpx, ../p2p
+  std/[macros, deques, algorithm],
+  chronos,
+  ".."/[keys, rlp, p2p], ../common/eth_types,
+  ./private/p2p_types, ./rlpx
 
 type
   Action = proc (p: Peer, data: Rlp): Future[void] {.gcsafe.}

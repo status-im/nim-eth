@@ -9,9 +9,10 @@
 #
 
 import
-  tables, hashes, times, algorithm, sets, sequtils, bearssl, random,
-  chronos, eth/keys, chronicles, stint, nimcrypto/keccak,
-  enode
+  std/[tables, hashes, times, algorithm, sets, sequtils, random],
+  chronos, bearssl, chronicles, stint, nimcrypto/keccak,
+  ../keys,
+  ./enode
 
 export sets # TODO: This should not be needed, but compilation fails otherwise
 

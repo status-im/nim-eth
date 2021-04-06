@@ -1,8 +1,8 @@
 {.used.}
 
 import
-  random, unittest,
-  eth/trie/trie_bitseq
+  std/[random, unittest],
+  ../../eth/trie/trie_bitseq
 
 proc randomBytes(n: int): seq[byte] =
   result = newSeq[byte](n)

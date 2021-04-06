@@ -1,7 +1,8 @@
 import
-  deques, tables, bearssl,
-  eth/[rlp, keys], chronos, eth/common/eth_types,
-  ../enode, ../kademlia, ../discovery, ../rlpxcrypt
+  std/[deques, tables],
+  bearssl, chronos,
+  ".."/../[rlp, keys], ".."/../common/eth_types,
+  ".."/[enode, kademlia, discovery, rlpxcrypt]
 
 const
   useSnappy* = defined(useSnappy)

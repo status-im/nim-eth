@@ -9,11 +9,11 @@
 #
 
 import
-  times, tables, options, sets, hashes, strutils, stew/shims/macros,
-  chronicles, chronos, nimcrypto/[keccak, hash],
-  eth/[rlp, keys], eth/common/eth_types,
-  ../rlpx, ../kademlia, ../private/p2p_types, ../blockchain_utils,
-  les/private/les_types, les/flow_control
+  std/[times, tables, options, sets, hashes, strutils],
+  stew/shims/macros, chronicles, chronos, nimcrypto/[keccak, hash],
+  ../../[rlp, keys], ../../common/eth_types,
+  ../[rlpx, kademlia, blockchain_utils], ../private/p2p_types,
+  ./les/private/les_types, ./les/flow_control
 
 export
   les_types

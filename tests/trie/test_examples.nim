@@ -1,9 +1,9 @@
 {.used.}
 
 import
-  unittest, stew/byteutils,
-  nimcrypto/[keccak, hash],
-  eth/trie/[db, binary, binaries, trie_utils, branches]
+  std/unittest,
+  stew/byteutils, nimcrypto/[keccak, hash],
+  ../../eth/trie/[db, binary, binaries, trie_utils, branches]
 
 suite "examples":
 

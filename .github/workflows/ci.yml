@@ -270,3 +270,4 @@ jobs:
           export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
           nimble install -y --depsOnly
           env TEST_LANG="${{ matrix.target.TEST_LANG }}" PLATFORM="$PLATFORM" nimble test
+          env TEST_LANG="${{ matrix.target.TEST_LANG }}" PLATFORM="$PLATFORM" nimble build_dcli

@@ -1,6 +1,6 @@
 import
-  macros,
-  object_serialization, priv/defs
+  std/macros,
+  ./object_serialization, ./priv/defs
 
 type
   RlpWriter* = object

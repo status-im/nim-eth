@@ -9,8 +9,9 @@
 
 {.used.}
 
-import  eth/keys,
-        ./config
+import
+  ../../eth/keys,
+  ./config
 
 import unittest
 

@@ -12,7 +12,8 @@
 
 {.push raises: [Defect].}
 
-import nimcrypto, stew/results
+import
+  nimcrypto, stew/results
 from auth import ConnectionSecret
 
 export results

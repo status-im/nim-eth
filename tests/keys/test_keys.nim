@@ -9,12 +9,12 @@
 
 {.used.}
 
-import unittest
-import eth/keys, bearssl
-import nimcrypto/hash, nimcrypto/keccak, nimcrypto/utils
-from strutils import toLowerAscii
+import
+  std/unittest,
+  nimcrypto/hash, nimcrypto/keccak, nimcrypto/utils, bearssl, stew/byteutils,
+  ../../eth/keys
 
-import stew/byteutils
+from strutils import toLowerAscii
 
 proc compare(x: openarray[byte], y: openarray[byte]): bool =
   result = len(x) == len(y)

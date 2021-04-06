@@ -12,9 +12,11 @@
 
 {.push raises: [Defect].}
 
-import eth/[keys, rlp], nimcrypto/[rijndael, keccak, utils], bearssl
-import ecies
-import stew/[byteutils, endians2, objects, results]
+import
+  nimcrypto/[rijndael, keccak, utils], bearssl,
+  stew/[byteutils, endians2, objects, results],
+  ".."/[keys, rlp],
+  ./ecies
 
 export results
 

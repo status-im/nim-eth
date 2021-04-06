@@ -9,7 +9,9 @@
 
 {.used.}
 
-import eth/keyfile/uuid, unittest
+import
+  unittest,
+  ../../eth/keyfile/uuid
 
 suite "Cross-platform UUID test suite":
   test "Platform UUID check":

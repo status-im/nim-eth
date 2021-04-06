@@ -8,9 +8,10 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  sequtils, options, strutils, parseopt, chronos,
-  eth/[keys, rlp, p2p], eth/p2p/rlpx_protocols/[whisper_protocol],
-  eth/p2p/[discovery, enode, peer_pool, bootnodes, whispernodes]
+  std/[sequtils, options, strutils, parseopt],
+  chronos,
+  ../../eth/[keys, rlp, p2p], eth/p2p/rlpx_protocols/[whisper_protocol],
+  ../../eth/p2p/[discovery, enode, peer_pool, bootnodes, whispernodes]
 
 const
   DefaultListeningPort = 30303
