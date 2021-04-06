@@ -43,6 +43,9 @@ task test_keys, "Run keys tests":
 task test_discv5, "Run discovery v5 tests":
   runTest("tests/p2p/all_discv5_tests")
 
+task test_discv4, "Run discovery v4 tests":
+  runTest("tests/p2p/test_discovery", chronosStrict = false)
+
 task test_p2p, "Run p2p tests":
   test_discv5_task()
 

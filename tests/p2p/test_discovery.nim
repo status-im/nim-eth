@@ -93,8 +93,33 @@ proc test() {.async.} =
         expect DiscProtocolError:
           bootNode.receive(address, packData(hexToSeqByte(data), nodeKey))
 
-      # empty msg id and payload, doesn't raise, just fails abd prints wrong
+      # empty msg id and payload, doesn't raise, just fails and prints wrong
       # msg mac
       bootNode.receive(address, packData(@[], nodeKey))
+
+    test "Two findNode calls for the same peer in rapid succession":
+      let targetKey = PrivateKey.fromHex(
+          "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")[]
+      let peerKey = PrivateKey.fromHex(
+          "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a619")[]
+
+      let targetNodeId = kademlia.toNodeId(targetKey.toPublicKey)
+      let peerNode = kademlia.newNode(peerKey.toPublicKey, localAddress(20302))
+      let nodesSeen = new(HashSet[Node])
+
+      # Start `findNode` but don't `await` yet, so the reply can't be processed yet.
+      let neighbours1Future = bootNode.kademlia.findNode(nodesSeen, targetNodeId, peerNode)
+
+      # This will raise an assertion error if `findNode` doesn't check for and ignore
+      # this second call to the same target and peer in rapid successfion.
+      let neighbours2Future = bootNode.kademlia.findNode(nodesSeen, targetNodeId, peerNode)
+
+      # Just for completness, verify the result is empty from the second call.
+      let neighbours2 = await neighbours2Future
+      check(neighbours2.len == 0)
+
+      # Just for completeness, wait for the first result out of order.
+      # Max delay 5 seconds.
+      discard await neighbours1Future
 
 waitFor test()
