@@ -103,14 +103,14 @@ proc expiration(): uint32 =
 
 # Wire protocol
 
-proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) =
+proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) {.raises: [Defect].} =
   let ta = initTAddress(n.node.address.ip, n.node.address.udpPort)
   let f = d.transp.sendTo(ta, data)
   f.callback = proc(data: pointer) {.gcsafe.} =
     if f.failed:
       debug "Discovery send failed", msg = f.readError.msg
 
-proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] =
+proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] {.raises: [Defect].} =
   let payload = rlp.encode((PROTO_VERSION, d.address, n.node.address,
                             expiration()))
   let msg = pack(cmdPing, payload, d.privKey)
@@ -233,8 +233,8 @@ proc expirationValid(cmdId: CommandId, rlpEncodedPayload: openArray[byte]):
   else:
     raise newException(DiscProtocolError, "Invalid RLP list for this packet id")
 
-proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte]) {.gcsafe.} =
-  ## Can raise `DiscProtocolError` and all of `RlpError`
+proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte])
+    {.raises: [DiscProtocolError, RlpError, ValueError, Defect].} =
   # Note: export only needed for testing
   let msgHash = validateMsgHash(msg)
   if msgHash.isOk():
@@ -260,23 +260,23 @@ proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte]) {.gcsafe.}
   else:
     notice "Wrong msg mac from ", a
 
-proc processClient(transp: DatagramTransport,
-                   raddr: TransportAddress): Future[void] {.async, gcsafe.} =
+proc processClient(transp: DatagramTransport, raddr: TransportAddress):
+    Future[void] {.async, raises: [Defect].} =
   var proto = getUserData[DiscoveryProtocol](transp)
+  let buf = try: transp.getMessage()
+            except TransportOsError as e:
+              # This is likely to be local network connection issues.
+              warn "Transport getMessage", exception = e.name, msg = e.msg
+              return
+  let a = Address(ip: raddr.address, udpPort: raddr.port, tcpPort: raddr.port)
   try:
-    # TODO: Maybe here better to use `peekMessage()` to avoid allocation,
-    # but `Bytes` object is just a simple seq[byte], and `ByteRange` object
-    # do not support custom length.
-    var buf = transp.getMessage()
-    let a = Address(ip: raddr.address, udpPort: raddr.port, tcpPort: raddr.port)
     proto.receive(a, buf)
   except RlpError as e:
     debug "Receive failed", exc = e.name, err = e.msg
   except DiscProtocolError as e:
     debug "Receive failed", exc = e.name, err = e.msg
-  except Exception as e:
+  except ValueError as e:
     debug "Receive failed", exc = e.name, err = e.msg
-    raise e
 
 proc open*(d: DiscoveryProtocol) =
   # TODO allow binding to specific IP / IPv6 / etc

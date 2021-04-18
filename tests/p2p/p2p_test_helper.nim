@@ -10,12 +10,6 @@ proc localAddress*(port: int): Address =
   result = Address(udpPort: port, tcpPort: port,
                    ip: parseIpAddress("127.0.0.1"))
 
-proc startDiscoveryNode*(privKey: PrivateKey, address: Address,
-                        bootnodes: seq[ENode]): Future[DiscoveryProtocol] {.async.} =
-  result = newDiscoveryProtocol(privKey, address, bootnodes)
-  result.open()
-  await result.bootstrap()
-
 proc setupTestNode*(
     rng: ref BrHmacDrbgContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode {.gcsafe.} =
@@ -26,13 +20,6 @@ proc setupTestNode*(
   nextPort.inc
   for capability in capabilities:
     result.addCapability capability
-
-proc packData*(payload: openArray[byte], pk: PrivateKey): seq[byte] =
-  let
-    payloadSeq = @payload
-    signature = @(pk.sign(payload).toRaw())
-    msgHash = keccak256.digest(signature & payloadSeq)
-  result = @(msgHash.data) & signature & payloadSeq
 
 template sourceDir*: string = currentSourcePath.rsplit(DirSep, 1)[0]
 

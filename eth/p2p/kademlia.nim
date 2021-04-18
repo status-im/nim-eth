@@ -26,7 +26,7 @@ type
     routing: RoutingTable
     pongFutures: Table[seq[byte], Future[bool]]
     pingFutures: Table[Node, Future[bool]]
-    neighboursCallbacks: Table[Node, proc(n: seq[Node]) {.gcsafe.}]
+    neighboursCallbacks: Table[Node, proc(n: seq[Node]) {.gcsafe, raises: [Defect].}]
     rng: ref BrHmacDrbgContext
 
   NodeId* = UInt256
@@ -255,7 +255,7 @@ proc updateRoutingTable(k: KademliaProtocol, n: Node) {.gcsafe.} =
       # replacement cache.
       asyncCheck k.bond(evictionCandidate)
 
-proc doSleep(p: proc() {.gcsafe.}) {.async, gcsafe.} =
+proc doSleep(p: proc() {.gcsafe, raises: [Defect].}) {.async, gcsafe.} =
   await sleepAsync(REQUEST_TIMEOUT)
   p()
 
@@ -276,7 +276,7 @@ proc waitPong(k: KademliaProtocol, n: Node, pingid: seq[byte]): Future[bool] =
       k.pongFutures.del(pingid)
       fut.complete(false)
 
-proc ping(k: KademliaProtocol, n: Node): seq[byte] =
+proc ping(k: KademliaProtocol, n: Node): seq[byte] {.raises: [Defect].} =
   doAssert(n != k.thisNode)
   result = k.wire.sendPing(n)
 
@@ -290,12 +290,13 @@ proc waitPing(k: KademliaProtocol, n: Node): Future[bool] {.gcsafe.} =
       k.pingFutures.del(n)
       fut.complete(false)
 
-proc waitNeighbours(k: KademliaProtocol, remote: Node): Future[seq[Node]] =
+proc waitNeighbours(k: KademliaProtocol, remote: Node):
+    Future[seq[Node]] {.raises: [Defect].} =
   doAssert(remote notin k.neighboursCallbacks)
   result = newFuture[seq[Node]]("waitNeighbours")
   let fut = result
   var neighbours = newSeqOfCap[Node](BUCKET_SIZE)
-  k.neighboursCallbacks[remote] = proc(n: seq[Node]) =
+  k.neighboursCallbacks[remote] = proc(n: seq[Node]) {.gcsafe, raises: [Defect].} =
     # This callback is expected to be called multiple times because nodes usually
     # split the neighbours replies into multiple packets, so we only complete the
     # future event.set() we've received enough neighbours.
