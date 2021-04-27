@@ -289,7 +289,7 @@ proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] {.inline.} =
 proc run(d: DiscoveryProtocol) {.async.} =
   while true:
     discard await d.lookupRandom()
-    await sleepAsync(3000)
+    await sleepAsync(chronos.seconds(3))
     trace "Discovered nodes", nodes = d.kademlia.nodesDiscovered
 
 proc bootstrap*(d: DiscoveryProtocol) {.async.} =
