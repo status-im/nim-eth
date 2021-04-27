@@ -1,3 +1,5 @@
+{.used.}
+
 import
   ./test_enr,
   ./test_hkdf,

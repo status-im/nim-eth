@@ -47,8 +47,6 @@ task test_discv4, "Run discovery v4 tests":
   runTest("tests/p2p/test_discovery", chronosStrict = false)
 
 task test_p2p, "Run p2p tests":
-  test_discv5_task()
-
   runTest("tests/p2p/all_tests")
 
   # Code that still requires chronosStrict = false

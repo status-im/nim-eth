@@ -18,6 +18,8 @@ import
 export
   Node, results
 
+{.push raises: [Defect].}
+
 logScope:
   topics = "discovery"
 
@@ -57,9 +59,9 @@ proc append*(w: var RlpWriter, a: IpAddress) =
   of IpAddressFamily.IPv4:
     w.append(a.address_v4)
 
-proc append(w: var RlpWriter, p: Port) {.inline.} = w.append(p.int)
-proc append(w: var RlpWriter, pk: PublicKey) {.inline.} = w.append(pk.toRaw())
-proc append(w: var RlpWriter, h: MDigest[256]) {.inline.} = w.append(h.data)
+proc append(w: var RlpWriter, p: Port) = w.append(p.int)
+proc append(w: var RlpWriter, pk: PublicKey) = w.append(pk.toRaw())
+proc append(w: var RlpWriter, h: MDigest[256]) = w.append(h.data)
 
 proc pack(cmdId: CommandId, payload: openArray[byte], pk: PrivateKey): seq[byte] =
   ## Create and sign a UDP message to be sent to a remote node.
@@ -90,7 +92,8 @@ proc recoverMsgPublicKey(msg: openArray[byte]): DiscResult[PublicKey] =
   let sig = ? Signature.fromRaw(msg.toOpenArray(MAC_SIZE, HEAD_SIZE))
   recover(sig, msg.toOpenArray(HEAD_SIZE, msg.high))
 
-proc unpack(msg: openArray[byte]): tuple[cmdId: CommandId, payload: seq[byte]] =
+proc unpack(msg: openArray[byte]): tuple[cmdId: CommandId, payload: seq[byte]]
+    {.raises: [DiscProtocolError, Defect].} =
   # Check against possible RangeError
   if msg[HEAD_SIZE].int < CommandId.low.ord or
      msg[HEAD_SIZE].int > CommandId.high.ord:
@@ -165,17 +168,18 @@ proc newDiscoveryProtocol*(privKey: PrivateKey, address: Address,
   result.thisNode = newNode(privKey.toPublicKey(), address)
   result.kademlia = newKademliaProtocol(result.thisNode, result, rng = rng)
 
-proc recvPing(d: DiscoveryProtocol, node: Node,
-              msgHash: MDigest[256]) {.inline.} =
+proc recvPing(d: DiscoveryProtocol, node: Node, msgHash: MDigest[256])
+    {.raises: [ValueError, Defect].} =
   d.kademlia.recvPing(node, msgHash)
 
-proc recvPong(d: DiscoveryProtocol, node: Node, payload: seq[byte]) {.inline.} =
+proc recvPong(d: DiscoveryProtocol, node: Node, payload: seq[byte])
+    {.raises: [RlpError, Defect].} =
   let rlp = rlpFromBytes(payload)
   let tok = rlp.listElem(1).toBytes()
   d.kademlia.recvPong(node, tok)
 
-proc recvNeighbours(d: DiscoveryProtocol, node: Node,
-                    payload: seq[byte]) {.inline.} =
+proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
+    {.raises: [RlpError, Defect].} =
   let rlp = rlpFromBytes(payload)
   let neighboursList = rlp.listElem(0)
   let sz = neighboursList.listLen()
@@ -206,7 +210,8 @@ proc recvNeighbours(d: DiscoveryProtocol, node: Node,
     neighbours.add(newNode(pk[], Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
   d.kademlia.recvNeighbours(node, neighbours)
 
-proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte]) {.inline, gcsafe.} =
+proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
+    {.raises: [RlpError, ValueError, Defect].} =
   let rlp = rlpFromBytes(payload)
   trace "<<< find_node from ", node
   let rng = rlp.listElem(0).toBytes
@@ -218,7 +223,7 @@ proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte]) {.
     trace "Invalid target public key received"
 
 proc expirationValid(cmdId: CommandId, rlpEncodedPayload: openArray[byte]):
-    bool {.inline, raises:[DiscProtocolError, RlpError].} =
+    bool {.raises: [DiscProtocolError, RlpError].} =
   ## Can only raise `DiscProtocolError` and all of `RlpError`
   # Check if there is a payload
   if rlpEncodedPayload.len <= 0:
@@ -278,12 +283,12 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
   except ValueError as e:
     debug "Receive failed", exc = e.name, err = e.msg
 
-proc open*(d: DiscoveryProtocol) =
+proc open*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(IPv4_any(), d.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
-proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] {.inline.} =
+proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] =
   d.kademlia.lookupRandom()
 
 proc run(d: DiscoveryProtocol) {.async.} =
@@ -299,7 +304,7 @@ proc bootstrap*(d: DiscoveryProtocol) {.async.} =
 proc resolve*(d: DiscoveryProtocol, n: NodeId): Future[Node] =
   d.kademlia.resolve(n)
 
-proc randomNodes*(d: DiscoveryProtocol, count: int): seq[Node] {.inline.} =
+proc randomNodes*(d: DiscoveryProtocol, count: int): seq[Node] =
   d.kademlia.randomNodes(count)
 
 when isMainModule:
