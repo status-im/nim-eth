@@ -1,12 +1,10 @@
 # nim-eth - Node Discovery Protocol v5
 # Copyright (c) 2021 Status Research & Development GmbH
-# Licensed under either of
-#   * Apache License, version 2.0, (LICENSE-APACHEv2)
-#   * MIT license (LICENSE-MIT)
-# at your option.
-# This file may not be copied, modified, or distributed except
-# according to those terms.
-
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#
 ## IP:port address votes implemented similarly as in
 ## https://github.com/sigp/discv5
 ##
@@ -17,14 +15,14 @@
 ## To select the right address, a majority count is done. This is done over a
 ## sort of moving window as votes expire after `IpVoteTimeout`.
 
+{.push raises: [Defect].}
+
 import
   std/[tables, options],
   chronos,
   ./node
 
 export options
-
-{.push raises: [Defect].}
 
 const IpVoteTimeout = 5.minutes ## Duration until a vote expires
 
