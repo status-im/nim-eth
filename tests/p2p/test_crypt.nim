@@ -7,6 +7,8 @@
 #    distribution, for details about the copyright.
 #
 
+{.used.}
+
 import
   std/unittest,
   nimcrypto/[utils, sysrand, keccak],

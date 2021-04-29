@@ -1,3 +1,12 @@
+# nim-eth - Node Discovery Protocol v5
+# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.push raises: [Defect].}
+
 import
   std/[algorithm, times, sequtils, bitops, sets, options],
   stint, chronicles, metrics, bearssl, chronos, stew/shims/net as stewNet,
@@ -5,8 +14,6 @@ import
   "."/[node, random2, enr]
 
 export options
-
-{.push raises: [Defect].}
 
 declarePublicGauge routing_table_nodes,
   "Discovery routing table nodes", labels = ["state"]

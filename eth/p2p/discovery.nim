@@ -1,12 +1,11 @@
-#
-#                 Ethereum P2P
-#              (c) Copyright 2018
-#       Status Research & Development GmbH
-#
-#            Licensed under either of
-#  Apache License, version 2.0, (LICENSE-APACHEv2)
-#            MIT license (LICENSE-MIT)
-#
+# nim-eth
+# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.push raises: [Defect].}
 
 import
   std/times,
@@ -57,9 +56,9 @@ proc append*(w: var RlpWriter, a: IpAddress) =
   of IpAddressFamily.IPv4:
     w.append(a.address_v4)
 
-proc append(w: var RlpWriter, p: Port) {.inline.} = w.append(p.int)
-proc append(w: var RlpWriter, pk: PublicKey) {.inline.} = w.append(pk.toRaw())
-proc append(w: var RlpWriter, h: MDigest[256]) {.inline.} = w.append(h.data)
+proc append(w: var RlpWriter, p: Port) = w.append(p.int)
+proc append(w: var RlpWriter, pk: PublicKey) = w.append(pk.toRaw())
+proc append(w: var RlpWriter, h: MDigest[256]) = w.append(h.data)
 
 proc pack(cmdId: CommandId, payload: openArray[byte], pk: PrivateKey): seq[byte] =
   ## Create and sign a UDP message to be sent to a remote node.
@@ -90,7 +89,8 @@ proc recoverMsgPublicKey(msg: openArray[byte]): DiscResult[PublicKey] =
   let sig = ? Signature.fromRaw(msg.toOpenArray(MAC_SIZE, HEAD_SIZE))
   recover(sig, msg.toOpenArray(HEAD_SIZE, msg.high))
 
-proc unpack(msg: openArray[byte]): tuple[cmdId: CommandId, payload: seq[byte]] =
+proc unpack(msg: openArray[byte]): tuple[cmdId: CommandId, payload: seq[byte]]
+    {.raises: [DiscProtocolError, Defect].} =
   # Check against possible RangeError
   if msg[HEAD_SIZE].int < CommandId.low.ord or
      msg[HEAD_SIZE].int > CommandId.high.ord:
@@ -103,14 +103,14 @@ proc expiration(): uint32 =
 
 # Wire protocol
 
-proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) =
+proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) {.raises: [Defect].} =
   let ta = initTAddress(n.node.address.ip, n.node.address.udpPort)
   let f = d.transp.sendTo(ta, data)
   f.callback = proc(data: pointer) {.gcsafe.} =
     if f.failed:
       debug "Discovery send failed", msg = f.readError.msg
 
-proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] =
+proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] {.raises: [Defect].} =
   let payload = rlp.encode((PROTO_VERSION, d.address, n.node.address,
                             expiration()))
   let msg = pack(cmdPing, payload, d.privKey)
@@ -165,17 +165,18 @@ proc newDiscoveryProtocol*(privKey: PrivateKey, address: Address,
   result.thisNode = newNode(privKey.toPublicKey(), address)
   result.kademlia = newKademliaProtocol(result.thisNode, result, rng = rng)
 
-proc recvPing(d: DiscoveryProtocol, node: Node,
-              msgHash: MDigest[256]) {.inline.} =
+proc recvPing(d: DiscoveryProtocol, node: Node, msgHash: MDigest[256])
+    {.raises: [ValueError, Defect].} =
   d.kademlia.recvPing(node, msgHash)
 
-proc recvPong(d: DiscoveryProtocol, node: Node, payload: seq[byte]) {.inline.} =
+proc recvPong(d: DiscoveryProtocol, node: Node, payload: seq[byte])
+    {.raises: [RlpError, Defect].} =
   let rlp = rlpFromBytes(payload)
   let tok = rlp.listElem(1).toBytes()
   d.kademlia.recvPong(node, tok)
 
-proc recvNeighbours(d: DiscoveryProtocol, node: Node,
-                    payload: seq[byte]) {.inline.} =
+proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
+    {.raises: [RlpError, Defect].} =
   let rlp = rlpFromBytes(payload)
   let neighboursList = rlp.listElem(0)
   let sz = neighboursList.listLen()
@@ -206,7 +207,8 @@ proc recvNeighbours(d: DiscoveryProtocol, node: Node,
     neighbours.add(newNode(pk[], Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
   d.kademlia.recvNeighbours(node, neighbours)
 
-proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte]) {.inline, gcsafe.} =
+proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
+    {.raises: [RlpError, ValueError, Defect].} =
   let rlp = rlpFromBytes(payload)
   trace "<<< find_node from ", node
   let rng = rlp.listElem(0).toBytes
@@ -218,7 +220,7 @@ proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte]) {.
     trace "Invalid target public key received"
 
 proc expirationValid(cmdId: CommandId, rlpEncodedPayload: openArray[byte]):
-    bool {.inline, raises:[DiscProtocolError, RlpError].} =
+    bool {.raises: [DiscProtocolError, RlpError].} =
   ## Can only raise `DiscProtocolError` and all of `RlpError`
   # Check if there is a payload
   if rlpEncodedPayload.len <= 0:
@@ -233,8 +235,8 @@ proc expirationValid(cmdId: CommandId, rlpEncodedPayload: openArray[byte]):
   else:
     raise newException(DiscProtocolError, "Invalid RLP list for this packet id")
 
-proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte]) {.gcsafe.} =
-  ## Can raise `DiscProtocolError` and all of `RlpError`
+proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte])
+    {.raises: [DiscProtocolError, RlpError, ValueError, Defect].} =
   # Note: export only needed for testing
   let msgHash = validateMsgHash(msg)
   if msgHash.isOk():
@@ -260,36 +262,36 @@ proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte]) {.gcsafe.}
   else:
     notice "Wrong msg mac from ", a
 
-proc processClient(transp: DatagramTransport,
-                   raddr: TransportAddress): Future[void] {.async, gcsafe.} =
+proc processClient(transp: DatagramTransport, raddr: TransportAddress):
+    Future[void] {.async, raises: [Defect].} =
   var proto = getUserData[DiscoveryProtocol](transp)
+  let buf = try: transp.getMessage()
+            except TransportOsError as e:
+              # This is likely to be local network connection issues.
+              warn "Transport getMessage", exception = e.name, msg = e.msg
+              return
+  let a = Address(ip: raddr.address, udpPort: raddr.port, tcpPort: raddr.port)
   try:
-    # TODO: Maybe here better to use `peekMessage()` to avoid allocation,
-    # but `Bytes` object is just a simple seq[byte], and `ByteRange` object
-    # do not support custom length.
-    var buf = transp.getMessage()
-    let a = Address(ip: raddr.address, udpPort: raddr.port, tcpPort: raddr.port)
     proto.receive(a, buf)
   except RlpError as e:
     debug "Receive failed", exc = e.name, err = e.msg
   except DiscProtocolError as e:
     debug "Receive failed", exc = e.name, err = e.msg
-  except Exception as e:
+  except ValueError as e:
     debug "Receive failed", exc = e.name, err = e.msg
-    raise e
 
-proc open*(d: DiscoveryProtocol) =
+proc open*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
   # TODO allow binding to specific IP / IPv6 / etc
   let ta = initTAddress(IPv4_any(), d.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
-proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] {.inline.} =
+proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] =
   d.kademlia.lookupRandom()
 
 proc run(d: DiscoveryProtocol) {.async.} =
   while true:
     discard await d.lookupRandom()
-    await sleepAsync(3000)
+    await sleepAsync(chronos.seconds(3))
     trace "Discovered nodes", nodes = d.kademlia.nodesDiscovered
 
 proc bootstrap*(d: DiscoveryProtocol) {.async.} =
@@ -299,7 +301,7 @@ proc bootstrap*(d: DiscoveryProtocol) {.async.} =
 proc resolve*(d: DiscoveryProtocol, n: NodeId): Future[Node] =
   d.kademlia.resolve(n)
 
-proc randomNodes*(d: DiscoveryProtocol, count: int): seq[Node] {.inline.} =
+proc randomNodes*(d: DiscoveryProtocol, count: int): seq[Node] =
   d.kademlia.randomNodes(count)
 
 when isMainModule:

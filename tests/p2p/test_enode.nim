@@ -7,6 +7,8 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #            MIT license (LICENSE-MIT)
 
+{.used.}
+
 import
   std/[unittest, net, options],
   ../../eth/p2p/enode
