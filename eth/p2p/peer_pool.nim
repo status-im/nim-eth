@@ -108,7 +108,7 @@ proc getRandomBootnode(p: PeerPool): Option[Node] =
   if p.discovery.bootstrapNodes.len != 0:
     result = option(p.discovery.bootstrapNodes.sample())
 
-proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe.} =
+proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe, raises: [Defect].} =
   doAssert(peer.remote notin pool.connectedNodes)
   pool.connectedNodes[peer.remote] = peer
   connected_peers.inc()

@@ -96,8 +96,9 @@ proc allowed*(msg: Message, config: WhisperConfig): bool =
 
   return true
 
-proc run(peer: Peer) {.gcsafe, async.}
-proc run(node: EthereumNode, network: WhisperNetwork) {.gcsafe, async.}
+proc run(peer: Peer) {.gcsafe, async, raises: [Defect].}
+proc run(node: EthereumNode, network: WhisperNetwork)
+  {.gcsafe, async, raises: [Defect].}
 
 proc initProtocolState*(network: WhisperNetwork, node: EthereumNode) {.gcsafe.} =
   new(network.queue)
@@ -107,7 +108,7 @@ proc initProtocolState*(network: WhisperNetwork, node: EthereumNode) {.gcsafe.} 
   network.config.powRequirement = defaultMinPow
   network.config.isLightNode = false
   network.config.maxMsgSize = defaultMaxMsgSize
-  asyncCheck node.run(network)
+  asyncSpawn node.run(network)
 
 p2pProtocol Whisper(version = whisperVersion,
                     rlpxName = "shh",
@@ -152,7 +153,7 @@ p2pProtocol Whisper(version = whisperVersion,
     whisperPeer.initialized = true
 
     if not whisperNet.config.isLightNode:
-      traceAsyncErrors peer.run()
+      asyncSpawn peer.run()
 
     debug "Whisper peer initialized", peer
 
@@ -249,7 +250,7 @@ p2pProtocol Whisper(version = whisperVersion,
 
 # 'Runner' calls ---------------------------------------------------------------
 
-proc processQueue(peer: Peer) =
+proc processQueue(peer: Peer) {.raises: [Defect].} =
   # Send to peer all valid and previously not send envelopes in the queue.
   var
     envelopes: seq[Envelope] = @[]
@@ -280,7 +281,7 @@ proc processQueue(peer: Peer) =
     # gets dropped
     traceAsyncErrors peer.messages(envelopes)
 
-proc run(peer: Peer) {.async.} =
+proc run(peer: Peer) {.async, raises: [Defect].} =
   while peer.connectionState notin {Disconnecting, Disconnected}:
     peer.processQueue()
     await sleepAsync(messageInterval)
@@ -298,7 +299,7 @@ proc pruneReceived(node: EthereumNode) {.raises: [].} =
       # the received sets.
       peer.received = intersection(peer.received, whisperNet.queue.itemHashes)
 
-proc run(node: EthereumNode, network: WhisperNetwork) {.async.} =
+proc run(node: EthereumNode, network: WhisperNetwork) {.async, raises: [Defect].} =
   while true:
     # prune message queue every second
     # TTL unit is in seconds, so this should be sufficient?

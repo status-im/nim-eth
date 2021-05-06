@@ -108,7 +108,7 @@ proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
   # result = $(cast[ptr MsgType](msg)[])
 
 proc disconnect*(peer: Peer, reason: DisconnectionReason,
-                 notifyOtherPeer = false) {.gcsafe, async.}
+                 notifyOtherPeer = false) {.gcsafe, raises: [Defect], async.}
 
 template raisePeerDisconnected(msg: string, r: DisconnectionReason) =
   var e = newException(PeerDisconnected, msg)
@@ -256,9 +256,11 @@ proc cmp*(lhs, rhs: ProtocolInfo): int =
       return int16(lhs.name[i]) - int16(rhs.name[i])
   return 0
 
-proc nextMsgResolver[MsgType](msgData: Rlp, future: FutureBase) {.gcsafe.} =
+proc nextMsgResolver[MsgType](msgData: Rlp, future: FutureBase)
+    {.gcsafe, raises: [RlpError, Defect].} =
   var reader = msgData
-  Future[MsgType](future).complete reader.readRecordType(MsgType, MsgType.rlpFieldsCount > 1)
+  Future[MsgType](future).complete reader.readRecordType(MsgType,
+    MsgType.rlpFieldsCount > 1)
 
 proc registerMsg(protocol: ProtocolInfo,
                  id: int, name: string,
@@ -307,7 +309,8 @@ proc supports*(peer: Peer, Protocol: type): bool {.inline.} =
 template perPeerMsgId(peer: Peer, MsgType: type): int =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
 
-proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void] =
+proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void]
+    {.raises: [UnsupportedMessageError, RlpError, Defect].} =
   template invalidIdError: untyped =
     raise newException(UnsupportedMessageError,
       "RLPx message with an invalid id " & $msgId &
@@ -766,7 +769,10 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       thunkName = ident(msgName & "Thunk")
 
     msg.defineThunk quote do:
-      proc `thunkName`(`peerVar`: `Peer`, _: int, data: Rlp) {.async, gcsafe.} =
+      proc `thunkName`(`peerVar`: `Peer`, _: int, data: Rlp)
+          # Fun error if you just use `RlpError` instead of `rlp.RlpError`:
+          # "Error: type expected, but got symbol 'RlpError' of kind 'EnumField'"
+          {.async, gcsafe, raises: [rlp.RlpError, Defect].} =
         var `receivedRlp` = data
         var `receivedMsg` {.noinit.}: `msgRecName`
         `readParamsPrelude`
@@ -866,12 +872,13 @@ p2pProtocol DevP2P(version = 5, rlpxName = "p2p"):
   proc pong(peer: Peer, emptyList: EmptyList) =
     discard
 
-proc removePeer(network: EthereumNode, peer: Peer) =
+proc removePeer(network: EthereumNode, peer: Peer) {.raises: [Defect].} =
   # It is necessary to check if peer.remote still exists. The connection might
   # have been dropped already from the peers side.
   # E.g. when receiving a p2p.disconnect message from a peer, a race will happen
   # between which side disconnects first.
-  if network.peerPool != nil and not peer.remote.isNil and peer.remote in network.peerPool.connectedNodes:
+  if network.peerPool != nil and not peer.remote.isNil and
+      peer.remote in network.peerPool.connectedNodes:
     network.peerPool.connectedNodes.del(peer.remote)
     connected_peers.dec()
 
@@ -883,16 +890,23 @@ proc removePeer(network: EthereumNode, peer: Peer) =
           if observer.protocol.isNil or peer.supports(observer.protocol):
             observer.onPeerDisconnected(peer)
 
-proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason): Future[void] =
+proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason):
+    Future[void] {.async.} =
   var futures = newSeqOfCap[Future[void]](allProtocols.len)
 
   for protocol in peer.dispatcher.activeProtocols:
     if protocol.disconnectHandler != nil:
       futures.add((protocol.disconnectHandler)(peer, reason))
 
-  return all(futures)
+  await allFutures(futures)
 
-proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = false) {.async.} =
+  for f in futures:
+    doAssert(f.finished())
+    if f.failed():
+      trace "Disconnection handler ended with an error", err = f.error.msg
+
+proc disconnect*(peer: Peer, reason: DisconnectionReason,
+    notifyOtherPeer = false) {.async, raises: [Defect].} =
   if peer.connectionState notin {Disconnecting, Disconnected}:
     peer.connectionState = Disconnecting
     # Do this first so sub-protocols have time to clean up and stop sending
@@ -901,7 +915,7 @@ proc disconnect*(peer: Peer, reason: DisconnectionReason, notifyOtherPeer = fals
       # In case of `CatchableError` in any of the handlers, this will be logged.
       # Other handlers will still execute.
       # In case of `Defect` in any of the handlers, program will quit.
-      traceAwaitErrors callDisconnectHandlers(peer, reason)
+      await callDisconnectHandlers(peer, reason)
 
     if notifyOtherPeer and not peer.transport.closed:
       var fut = peer.sendDisconnectMsg(DisconnectionReasonList(value: reason))
@@ -931,7 +945,8 @@ proc checkUselessPeer(peer: Peer) {.inline.} =
     # XXX: Send disconnect + UselessPeer
     raise newException(UselessPeerError, "Useless peer")
 
-proc initPeerState*(peer: Peer, capabilities: openarray[Capability]) =
+proc initPeerState*(peer: Peer, capabilities: openarray[Capability])
+    {.raises: [UselessPeerError, Defect].} =
   peer.dispatcher = getDispatcher(peer.network, capabilities)
   checkUselessPeer(peer)
 

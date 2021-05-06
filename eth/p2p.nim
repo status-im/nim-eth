@@ -17,7 +17,8 @@ import
 export
   p2p_types, rlpx, enode, kademlia
 
-proc addCapability*(node: var EthereumNode, p: ProtocolInfo) =
+proc addCapability*(node: var EthereumNode, p: ProtocolInfo)
+    {.raises: [Defect].} =
   doAssert node.connectionState == ConnectionState.None
 
   let pos = lowerBound(node.protocols, p, rlpx.cmp)
@@ -38,10 +39,10 @@ proc newEthereumNode*(keys: KeyPair,
                       addAllCapabilities = true,
                       useCompression: bool = false,
                       minPeers = 10,
-                      rng = newRng()): EthereumNode =
+                      rng = newRng()): EthereumNode {.raises: [Defect].} =
 
   if rng == nil: # newRng could fail
-    raise (ref CatchableError)(msg: "Cannot initialize RNG")
+    raise (ref Defect)(msg: "Cannot initialize RNG")
 
   new result
   result.keys = keys

@@ -61,8 +61,8 @@ type
     observers*: Table[int, PeerObserver]
 
   PeerObserver* = object
-    onPeerConnected*: proc(p: Peer) {.gcsafe.}
-    onPeerDisconnected*: proc(p: Peer) {.gcsafe.}
+    onPeerConnected*: proc(p: Peer) {.gcsafe, raises: [Defect].}
+    onPeerDisconnected*: proc(p: Peer) {.gcsafe, raises: [Defect].}
     protocol*: ProtocolInfo
 
   Capability* = object
@@ -138,16 +138,19 @@ type
 
   # Private types:
   MessageHandlerDecorator* = proc(msgId: int, n: NimNode): NimNode
-  ThunkProc* = proc(x: Peer, msgId: int, data: Rlp): Future[void] {.gcsafe.}
+  ThunkProc* = proc(x: Peer, msgId: int, data: Rlp): Future[void]
+    {.gcsafe, raises: [RlpError, Defect].}
   MessageContentPrinter* = proc(msg: pointer): string {.gcsafe.}
   RequestResolver* = proc(msg: pointer, future: FutureBase)
-    {.gcsafe, raises:[Defect].}
-  NextMsgResolver* = proc(msgData: Rlp, future: FutureBase) {.gcsafe.}
-  PeerStateInitializer* = proc(peer: Peer): RootRef {.gcsafe.}
-  NetworkStateInitializer* = proc(network: EthereumNode): RootRef {.gcsafe.}
-  HandshakeStep* = proc(peer: Peer): Future[void] {.gcsafe.}
+    {.gcsafe, raises: [Defect].}
+  NextMsgResolver* = proc(msgData: Rlp, future: FutureBase)
+    {.gcsafe, raises: [RlpError, Defect].}
+  PeerStateInitializer* = proc(peer: Peer): RootRef {.gcsafe, raises: [Defect].}
+  NetworkStateInitializer* = proc(network: EthereumNode): RootRef
+    {.gcsafe, raises: [Defect].}
+  HandshakeStep* = proc(peer: Peer): Future[void] {.gcsafe, raises: [Defect].}
   DisconnectionHandler* = proc(peer: Peer, reason: DisconnectionReason):
-    Future[void] {.gcsafe.}
+    Future[void] {.gcsafe, raises: [Defect].}
 
   ConnectionState* = enum
     None,
