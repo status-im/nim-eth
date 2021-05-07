@@ -373,7 +373,7 @@ method genesisHash*(db: AbstractChainDB): KeccakHash
   notImplemented()
 
 method getBlockHeader*(db: AbstractChainDB, b: HashOrNum,
-    output: var BlockHeader): bool {.base, gcsafe, raises: [Defect].} =
+    output: var BlockHeader): bool {.base, gcsafe, raises: [CatchableError, Defect].} =
   notImplemented()
 
 proc getBlockHeader*(db: AbstractChainDB, hash: KeccakHash): BlockHeaderRef {.gcsafe.} =
@@ -387,17 +387,17 @@ proc getBlockHeader*(db: AbstractChainDB, b: BlockNumber): BlockHeaderRef {.gcsa
     return nil
 
 method getBestBlockHeader*(self: AbstractChainDB): BlockHeader
-    {.base, gcsafe, raises: [Defect].} =
+    {.base, gcsafe, raises: [CatchableError, Defect].} =
   notImplemented()
 
 method getSuccessorHeader*(db: AbstractChainDB, h: BlockHeader,
     output: var BlockHeader, skip = 0'u): bool
-    {.base, gcsafe, raises: [Defect].} =
+    {.base, gcsafe, raises: [CatchableError, Defect].} =
   notImplemented()
 
 method getAncestorHeader*(db: AbstractChainDB, h: BlockHeader,
     output: var BlockHeader, skip = 0'u): bool
-    {.base, gcsafe, raises: [Defect].} =
+    {.base, gcsafe, raises: [CatchableError, Defect].} =
   notImplemented()
 
 method getBlockBody*(db: AbstractChainDB, blockHash: KeccakHash): BlockBodyRef

@@ -4,7 +4,7 @@ import
 # TODO: Perhaps we can move this to eth-common
 
 proc getBlockHeaders*(db: AbstractChainDB, req: BlocksRequest): seq[BlockHeader]
-    {.gcsafe, raises: [Defect].} =
+    {.gcsafe, raises: [CatchableError, Defect].} =
   result = newSeqOfCap[BlockHeader](req.maxResults)
 
   var foundBlock: BlockHeader
