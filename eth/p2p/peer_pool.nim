@@ -33,7 +33,7 @@ proc newPeerPool*(network: EthereumNode,
   result.observers = initTable[int, PeerObserver]()
   result.listenPort = listenPort
 
-proc nodesToConnect(p: PeerPool): seq[Node] {.inline.} =
+proc nodesToConnect(p: PeerPool): seq[Node] =
   p.discovery.randomNodes(p.minPeers).filterIt(it notin p.discovery.bootstrapNodes)
 
 proc addObserver(p: PeerPool, observerId: int, observer: PeerObserver) =
@@ -47,10 +47,10 @@ proc addObserver(p: PeerPool, observerId: int, observer: PeerObserver) =
 proc delObserver(p: PeerPool, observerId: int) =
   p.observers.del(observerId)
 
-proc addObserver*(p: PeerPool, observerId: ref, observer: PeerObserver) {.inline.} =
+proc addObserver*(p: PeerPool, observerId: ref, observer: PeerObserver) =
   p.addObserver(cast[int](observerId), observer)
 
-proc delObserver*(p: PeerPool, observerId: ref) {.inline.} =
+proc delObserver*(p: PeerPool, observerId: ref) =
   p.delObserver(cast[int](observerId))
 
 template setProtocol*(observer: PeerObserver, Protocol: type) =

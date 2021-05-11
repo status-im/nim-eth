@@ -43,7 +43,7 @@ type
     trustedPeers: HashSet[Peer]
     hasOutOfOrderBlocks: bool
 
-proc hash*(p: Peer): Hash {.inline.} = hash(cast[pointer](p))
+proc hash*(p: Peer): Hash = hash(cast[pointer](p))
 
 proc endIndex(b: WantedBlocks): BlockNumber =
   result = b.startIndex

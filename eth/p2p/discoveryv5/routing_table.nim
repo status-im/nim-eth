@@ -132,8 +132,8 @@ proc distanceTo(k: KBucket, id: NodeId): UInt256 = k.midpoint xor id
 proc nodesByDistanceTo(k: KBucket, id: NodeId): seq[Node] =
   sortedByIt(k.nodes, it.distanceTo(id))
 
-proc len(k: KBucket): int {.inline.} = k.nodes.len
-proc tail(k: KBucket): Node {.inline.} = k.nodes[high(k.nodes)]
+proc len(k: KBucket): int = k.nodes.len
+proc tail(k: KBucket): Node = k.nodes[high(k.nodes)]
 
 proc ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
   ## Check if the ip limits of the routing table and the bucket are reached for
@@ -194,7 +194,7 @@ proc split(k: KBucket): tuple[lower, upper: KBucket] =
     doAssert(bucket.ipLimits.inc(node.address.get().ip),
       "IpLimit increment should work as all buckets have the same limits")
 
-proc inRange(k: KBucket, n: Node): bool {.inline.} =
+proc inRange(k: KBucket, n: Node): bool =
   k.istart <= n.id and n.id <= k.iend
 
 proc contains(k: KBucket, n: Node): bool = n in k.nodes
@@ -234,7 +234,7 @@ proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
 proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = DefaultBitsPerHop,
-    ipLimits = DefaultTableIpLimits, rng: ref BrHmacDrbgContext) {.inline.} =
+    ipLimits = DefaultTableIpLimits, rng: ref BrHmacDrbgContext) =
   ## Initialize the routing table for provided `Node` and bitsPerHop value.
   ## `bitsPerHop` is default set to 5 as recommended by original Kademlia paper.
   r.thisNode = thisNode

@@ -255,8 +255,6 @@ func nameStr*(p: ProtocolInfo): string =
   result = newStringOfCap(3)
   for c in p.name: result.add(c)
 
-# XXX: this used to be inline, but inline procs
-# cannot be passed to closure params
 proc cmp*(lhs, rhs: ProtocolInfo): int =
   for i in 0..2:
     if lhs.name[i] != rhs.name[i]:
@@ -297,7 +295,7 @@ proc registerProtocol(protocol: ProtocolInfo) =
 # Message composition and encryption
 #
 
-proc perPeerMsgIdImpl(peer: Peer, proto: ProtocolInfo, msgId: int): int {.inline.} =
+proc perPeerMsgIdImpl(peer: Peer, proto: ProtocolInfo, msgId: int): int =
   result = msgId
   if not peer.dispatcher.isNil:
     result += peer.dispatcher.protocolOffsets[proto.index]
@@ -306,10 +304,10 @@ template getPeer(peer: Peer): auto = peer
 template getPeer(responder: ResponderWithId): auto = responder.peer
 template getPeer(responder: ResponderWithoutId): auto = Peer(responder)
 
-proc supports*(peer: Peer, proto: ProtocolInfo): bool {.inline.} =
+proc supports*(peer: Peer, proto: ProtocolInfo): bool =
   peer.dispatcher.protocolOffsets[proto.index] != -1
 
-proc supports*(peer: Peer, Protocol: type): bool {.inline.} =
+proc supports*(peer: Peer, Protocol: type): bool =
   ## Checks whether a Peer supports a particular protocol
   peer.supports(Protocol.protocolInfo)
 
@@ -514,7 +512,7 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
     await peer.disconnectAndRaise(BreachOfProtocol,
                                   "Cannot read RLPx message id")
 
-proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type): auto {.inline.} =
+proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type): auto =
   when defined(release):
     return r.read(MsgType)
   else:
@@ -947,7 +945,7 @@ proc validatePubKeyInHello(msg: DevP2P.hello, pubKey: PublicKey): bool =
   let pk = PublicKey.fromRaw(msg.nodeId)
   pk.isOk and pk[] == pubKey
 
-proc checkUselessPeer(peer: Peer) {.inline.} =
+proc checkUselessPeer(peer: Peer) =
   if peer.dispatcher.numProtocols == 0:
     # XXX: Send disconnect + UselessPeer
     raise newException(UselessPeerError, "Useless peer")
