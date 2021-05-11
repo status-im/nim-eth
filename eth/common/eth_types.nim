@@ -4,7 +4,7 @@ import
   ../rlp, ../trie/[trie_defs, db]
 
 export
-  stint, read, append, KeccakHash
+  stint, read, append, KeccakHash, rlp
 
 type
   Hash256* = MDigest[256]
@@ -373,7 +373,7 @@ method genesisHash*(db: AbstractChainDB): KeccakHash
   notImplemented()
 
 method getBlockHeader*(db: AbstractChainDB, b: HashOrNum,
-    output: var BlockHeader): bool {.base, gcsafe, raises: [CatchableError, Defect].} =
+    output: var BlockHeader): bool {.base, gcsafe, raises: [RlpError, Defect].} =
   notImplemented()
 
 proc getBlockHeader*(db: AbstractChainDB, hash: KeccakHash): BlockHeaderRef {.gcsafe.} =
@@ -386,18 +386,22 @@ proc getBlockHeader*(db: AbstractChainDB, b: BlockNumber): BlockHeaderRef {.gcsa
   if not db.getBlockHeader(HashOrNum(isHash: false, number: b), result[]):
     return nil
 
+# Need to add `RlpError` and sometimes `CatchableError` as the implementations
+# of these methods in nimbus-eth1 will raise these. Using `CatchableError`
+# because some can raise for errors not know to this repository such as
+# `CanonicalHeadNotFound`. It would probably be better to use Result.
 method getBestBlockHeader*(self: AbstractChainDB): BlockHeader
-    {.base, gcsafe, raises: [CatchableError, Defect].} =
+    {.base, gcsafe, raises: [RlpError, CatchableError, Defect].} =
   notImplemented()
 
 method getSuccessorHeader*(db: AbstractChainDB, h: BlockHeader,
     output: var BlockHeader, skip = 0'u): bool
-    {.base, gcsafe, raises: [CatchableError, Defect].} =
+    {.base, gcsafe, raises: [RlpError, Defect].} =
   notImplemented()
 
 method getAncestorHeader*(db: AbstractChainDB, h: BlockHeader,
     output: var BlockHeader, skip = 0'u): bool
-    {.base, gcsafe, raises: [CatchableError, Defect].} =
+    {.base, gcsafe, raises: [RlpError, Defect].} =
   notImplemented()
 
 method getBlockBody*(db: AbstractChainDB, blockHash: KeccakHash): BlockBodyRef

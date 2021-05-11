@@ -1,3 +1,5 @@
+{.push raises: [Defect].}
+
 import
   std/[tables, hashes, sets],
   nimcrypto/[hash, keccak],
@@ -14,17 +16,17 @@ type
 
   # XXX: poor's man vtref types
   PutProc = proc (db: RootRef, key, val: openarray[byte]) {.
-    gcsafe, raises: [Defect, CatchableError] .}
+    gcsafe, raises: [Defect].}
 
   GetProc = proc (db: RootRef, key: openarray[byte]): seq[byte] {.
-    gcsafe, raises: [Defect, CatchableError] .}
+    gcsafe, raises: [Defect].}
     ## The result will be empty seq if not found
 
   DelProc = proc (db: RootRef, key: openarray[byte]) {.
-    gcsafe, raises: [Defect, CatchableError] .}
+    gcsafe, raises: [Defect].}
 
   ContainsProc = proc (db: RootRef, key: openarray[byte]): bool {.
-    gcsafe, raises: [Defect, CatchableError] .}
+    gcsafe, raises: [Defect].}
 
   TrieDatabaseRef* = ref object
     obj: RootRef
@@ -47,14 +49,10 @@ type
 
   TransactionID* = distinct DbTransaction
 
-proc put*(db: TrieDatabaseRef, key, val: openarray[byte])
-  {.gcsafe, raises: [CatchableError, Defect].}
-proc get*(db: TrieDatabaseRef, key: openarray[byte]): seq[byte]
-  {.gcsafe, raises: [CatchableError, Defect].}
-proc del*(db: TrieDatabaseRef, key: openarray[byte])
-  {.gcsafe, raises: [CatchableError, Defect].}
-proc beginTransaction*(db: TrieDatabaseRef): DbTransaction
-  {.gcsafe, raises: [CatchableError, Defect].}
+proc put*(db: TrieDatabaseRef, key, val: openarray[byte]) {.gcsafe.}
+proc get*(db: TrieDatabaseRef, key: openarray[byte]): seq[byte] {.gcsafe.}
+proc del*(db: TrieDatabaseRef, key: openarray[byte]) {.gcsafe.}
+proc beginTransaction*(db: TrieDatabaseRef): DbTransaction {.gcsafe.}
 
 proc keccak*(r: openArray[byte]): KeccakHash =
   keccak256.digest r
@@ -137,8 +135,7 @@ iterator pairsInMemoryDB*(db: TrieDatabaseRef): (seq[byte], seq[byte]) =
   for k, v in db.mostInnerTransaction.modifications.records:
     yield (k, v.value)
 
-proc beginTransaction*(db: TrieDatabaseRef): DbTransaction
-    {.raises: [CatchableError, Defect].} =
+proc beginTransaction*(db: TrieDatabaseRef): DbTransaction =
   new result
   result.db = db
   init result.modifications
@@ -197,16 +194,14 @@ proc trieDB*[T: RootRef](x: T): TrieDatabaseRef =
   result.delProc = delImpl[T]
   result.containsProc = containsImpl[T]
 
-proc put*(db: TrieDatabaseRef, key, val: openarray[byte])
-    {.raises: [CatchableError, Defect].} =
+proc put*(db: TrieDatabaseRef, key, val: openarray[byte]) =
   var t = db.mostInnerTransaction
   if t != nil:
     t.modifications.put(key, val)
   else:
     db.putProc(db.obj, key, val)
 
-proc get*(db: TrieDatabaseRef, key: openarray[byte]): seq[byte]
-    {.raises: [CatchableError, Defect].} =
+proc get*(db: TrieDatabaseRef, key: openarray[byte]): seq[byte] =
   # TODO: This is quite inefficient and it won't be necessary once
   # https://github.com/nim-lang/Nim/issues/7457 is developed.
   let key = @key
@@ -221,8 +216,7 @@ proc get*(db: TrieDatabaseRef, key: openarray[byte]): seq[byte]
   if db.getProc != nil:
     result = db.getProc(db.obj, key)
 
-proc del*(db: TrieDatabaseRef, key: openarray[byte])
-    {.raises: [CatchableError, Defect].} =
+proc del*(db: TrieDatabaseRef, key: openarray[byte]) =
   var t = db.mostInnerTransaction
   if t != nil:
     t.modifications.del(key)

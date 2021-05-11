@@ -11,7 +11,7 @@ import
 # TODO: Perhaps we can move this to eth-common
 
 proc getBlockHeaders*(db: AbstractChainDB, req: BlocksRequest): seq[BlockHeader]
-    {.gcsafe, raises: [CatchableError, Defect].} =
+    {.gcsafe, raises: [RlpError, Defect].} =
   result = newSeqOfCap[BlockHeader](req.maxResults)
 
   var foundBlock: BlockHeader
@@ -50,4 +50,3 @@ proc getHelperTrieProofs*(db: AbstractChainDB,
                           reqs: openarray[HelperTrieProofRequest],
                           outNodes: var seq[Blob], outAuxData: var seq[Blob]) =
   discard
-
