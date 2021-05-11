@@ -193,7 +193,7 @@ proc neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
   ## Return up to k neighbours (closest node ids) of the given node id.
   d.routingTable.neighbours(id, k)
 
-proc nodesDiscovered*(d: Protocol): int {.inline.} = d.routingTable.len
+proc nodesDiscovered*(d: Protocol): int = d.routingTable.len
 
 func privKey*(d: Protocol): lent PrivateKey =
   d.privateKey

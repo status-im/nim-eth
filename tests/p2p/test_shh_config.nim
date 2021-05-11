@@ -7,6 +7,8 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #            MIT license (LICENSE-MIT)
 
+{.used.}
+
 import
   std/[sequtils, options, unittest, times],
   ../../eth/p2p/rlpx_protocols/whisper_protocol as whisper

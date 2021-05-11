@@ -1,12 +1,9 @@
-#
-#                 Whisper
-#              (c) Copyright 2018-2019
-#       Status Research & Development GmbH
-#
-#            Licensed under either of
-#  Apache License, version 2.0, (LICENSE-APACHEv2)
-#            MIT license (LICENSE-MIT)
-#
+# nim-eth - Whisper
+# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 ## Whisper
 ## *******
@@ -96,8 +93,9 @@ proc allowed*(msg: Message, config: WhisperConfig): bool =
 
   return true
 
-proc run(peer: Peer) {.gcsafe, async.}
-proc run(node: EthereumNode, network: WhisperNetwork) {.gcsafe, async.}
+proc run(peer: Peer) {.gcsafe, async, raises: [Defect].}
+proc run(node: EthereumNode, network: WhisperNetwork)
+  {.gcsafe, async, raises: [Defect].}
 
 proc initProtocolState*(network: WhisperNetwork, node: EthereumNode) {.gcsafe.} =
   new(network.queue)
@@ -107,7 +105,7 @@ proc initProtocolState*(network: WhisperNetwork, node: EthereumNode) {.gcsafe.} 
   network.config.powRequirement = defaultMinPow
   network.config.isLightNode = false
   network.config.maxMsgSize = defaultMaxMsgSize
-  asyncCheck node.run(network)
+  asyncSpawn node.run(network)
 
 p2pProtocol Whisper(version = whisperVersion,
                     rlpxName = "shh",
@@ -152,7 +150,7 @@ p2pProtocol Whisper(version = whisperVersion,
     whisperPeer.initialized = true
 
     if not whisperNet.config.isLightNode:
-      traceAsyncErrors peer.run()
+      asyncSpawn peer.run()
 
     debug "Whisper peer initialized", peer
 
@@ -249,7 +247,7 @@ p2pProtocol Whisper(version = whisperVersion,
 
 # 'Runner' calls ---------------------------------------------------------------
 
-proc processQueue(peer: Peer) =
+proc processQueue(peer: Peer) {.raises: [Defect].} =
   # Send to peer all valid and previously not send envelopes in the queue.
   var
     envelopes: seq[Envelope] = @[]
@@ -280,7 +278,7 @@ proc processQueue(peer: Peer) =
     # gets dropped
     traceAsyncErrors peer.messages(envelopes)
 
-proc run(peer: Peer) {.async.} =
+proc run(peer: Peer) {.async, raises: [Defect].} =
   while peer.connectionState notin {Disconnecting, Disconnected}:
     peer.processQueue()
     await sleepAsync(messageInterval)
@@ -298,7 +296,7 @@ proc pruneReceived(node: EthereumNode) {.raises: [].} =
       # the received sets.
       peer.received = intersection(peer.received, whisperNet.queue.itemHashes)
 
-proc run(node: EthereumNode, network: WhisperNetwork) {.async.} =
+proc run(node: EthereumNode, network: WhisperNetwork) {.async, raises: [Defect].} =
   while true:
     # prune message queue every second
     # TTL unit is in seconds, so this should be sufficient?
@@ -313,7 +311,13 @@ proc run(node: EthereumNode, network: WhisperNetwork) {.async.} =
 proc sendP2PMessage(node: EthereumNode, peerId: NodeId, env: Envelope): bool =
   for peer in node.peers(Whisper):
     if peer.remote.id == peerId:
-      asyncCheck peer.p2pMessage(env)
+      let f = peer.p2pMessage(env)
+      # Can't make p2pMessage not raise so this is the "best" option I can think
+      # of instead of using asyncSpawn and still keeping the call not async.
+      f.callback = proc(data: pointer) {.gcsafe, raises: [Defect].} =
+        if f.failed:
+          warn "P2PMessage send failed", msg = f.readError.msg
+
       return true
 
 proc queueMessage(node: EthereumNode, msg: Message): bool =

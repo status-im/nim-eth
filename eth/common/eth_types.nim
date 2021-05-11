@@ -368,10 +368,12 @@ template deref*(b: Blob): auto = b
 template deref*(o: Option): auto = o.get
 template deref*(r: EthResourceRefs): auto = r[]
 
-method genesisHash*(db: AbstractChainDB): KeccakHash {.base, gcsafe.} =
+method genesisHash*(db: AbstractChainDB): KeccakHash
+    {.base, gcsafe, raises: [Defect].} =
   notImplemented()
 
-method getBlockHeader*(db: AbstractChainDB, b: HashOrNum, output: var BlockHeader): bool {.base, gcsafe.} =
+method getBlockHeader*(db: AbstractChainDB, b: HashOrNum,
+    output: var BlockHeader): bool {.base, gcsafe, raises: [CatchableError, Defect].} =
   notImplemented()
 
 proc getBlockHeader*(db: AbstractChainDB, hash: KeccakHash): BlockHeaderRef {.gcsafe.} =
@@ -384,22 +386,29 @@ proc getBlockHeader*(db: AbstractChainDB, b: BlockNumber): BlockHeaderRef {.gcsa
   if not db.getBlockHeader(HashOrNum(isHash: false, number: b), result[]):
     return nil
 
-method getBestBlockHeader*(self: AbstractChainDB): BlockHeader {.base, gcsafe.} =
+method getBestBlockHeader*(self: AbstractChainDB): BlockHeader
+    {.base, gcsafe, raises: [CatchableError, Defect].} =
   notImplemented()
 
-method getSuccessorHeader*(db: AbstractChainDB, h: BlockHeader, output: var BlockHeader, skip = 0'u): bool {.base, gcsafe.} =
+method getSuccessorHeader*(db: AbstractChainDB, h: BlockHeader,
+    output: var BlockHeader, skip = 0'u): bool
+    {.base, gcsafe, raises: [CatchableError, Defect].} =
   notImplemented()
 
-method getAncestorHeader*(db: AbstractChainDB, h: BlockHeader, output: var BlockHeader, skip = 0'u): bool {.base, gcsafe.} =
+method getAncestorHeader*(db: AbstractChainDB, h: BlockHeader,
+    output: var BlockHeader, skip = 0'u): bool
+    {.base, gcsafe, raises: [CatchableError, Defect].} =
   notImplemented()
 
-method getBlockBody*(db: AbstractChainDB, blockHash: KeccakHash): BlockBodyRef {.base, gcsafe.} =
+method getBlockBody*(db: AbstractChainDB, blockHash: KeccakHash): BlockBodyRef
+    {.base, gcsafe, raises: [Defect].} =
   notImplemented()
 
 method getReceipt*(db: AbstractChainDB, hash: KeccakHash): ReceiptRef {.base, gcsafe.} =
   notImplemented()
 
-method getTrieDB*(db: AbstractChainDB): TrieDatabaseRef {.base, gcsafe.} =
+method getTrieDB*(db: AbstractChainDB): TrieDatabaseRef
+    {.base, gcsafe, raises: [Defect].} =
   notImplemented()
 
 method getCodeByHash*(db: AbstractChainDB, hash: KeccakHash): Blob {.base, gcsafe.} =

@@ -1,3 +1,5 @@
+{.used.}
+
 import
   std/[json, os, unittest],
   chronos, stew/byteutils,

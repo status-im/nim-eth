@@ -1,3 +1,10 @@
+# nim-eth
+# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 # PeerPool attempts to keep connections to at least min_peers
 # on the given network.
 
@@ -26,9 +33,7 @@ proc newPeerPool*(network: EthereumNode,
   result.observers = initTable[int, PeerObserver]()
   result.listenPort = listenPort
 
-template ensureFuture(f: untyped) = asyncCheck f
-
-proc nodesToConnect(p: PeerPool): seq[Node] {.inline.} =
+proc nodesToConnect(p: PeerPool): seq[Node] =
   p.discovery.randomNodes(p.minPeers).filterIt(it notin p.discovery.bootstrapNodes)
 
 proc addObserver(p: PeerPool, observerId: int, observer: PeerObserver) =
@@ -42,10 +47,10 @@ proc addObserver(p: PeerPool, observerId: int, observer: PeerObserver) =
 proc delObserver(p: PeerPool, observerId: int) =
   p.observers.del(observerId)
 
-proc addObserver*(p: PeerPool, observerId: ref, observer: PeerObserver) {.inline.} =
+proc addObserver*(p: PeerPool, observerId: ref, observer: PeerObserver) =
   p.addObserver(cast[int](observerId), observer)
 
-proc delObserver*(p: PeerPool, observerId: ref) {.inline.} =
+proc delObserver*(p: PeerPool, observerId: ref) =
   p.delObserver(cast[int](observerId))
 
 template setProtocol*(observer: PeerObserver, Protocol: type) =
@@ -95,20 +100,15 @@ proc connect(p: PeerPool, remote: Node): Future[Peer] {.async.} =
   #   self.logger.exception("Unexpected error during auth/p2p handshake with %s", remote)
   # return None
 
-proc lookupRandomNode(p: PeerPool) {.async.} =
-  # This method runs in the background, so we must catch OperationCancelled
-  # ere otherwise asyncio will warn that its exception was never retrieved.
-  try:
-    discard await p.discovery.lookupRandom()
-  except: # OperationCancelled
-    discard
+proc lookupRandomNode(p: PeerPool) {.async, raises: [Defect].} =
+  discard await p.discovery.lookupRandom()
   p.lastLookupTime = epochTime()
 
 proc getRandomBootnode(p: PeerPool): Option[Node] =
   if p.discovery.bootstrapNodes.len != 0:
     result = option(p.discovery.bootstrapNodes.sample())
 
-proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe.} =
+proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe, raises: [Defect].} =
   doAssert(peer.remote notin pool.connectedNodes)
   pool.connectedNodes[peer.remote] = peer
   connected_peers.inc()
@@ -149,7 +149,7 @@ proc maybeConnectToMorePeers(p: PeerPool) {.async.} =
     return
 
   if p.lastLookupTime + lookupInterval < epochTime():
-    ensureFuture p.lookupRandomNode()
+    asyncSpawn p.lookupRandomNode()
 
   let debugEnode = getEnv("ETH_DEBUG_ENODE")
   if debugEnode.len != 0:
@@ -163,7 +163,7 @@ proc maybeConnectToMorePeers(p: PeerPool) {.async.} =
   if p.connectedNodes.len == 0 and (let n = p.getRandomBootnode(); n.isSome):
     await p.connectToNode(n.get())
 
-proc run(p: PeerPool) {.async.} =
+proc run(p: PeerPool) {.async, raises: [Defect].} =
   trace "Running PeerPool..."
   p.running = true
   while p.running:
@@ -184,7 +184,7 @@ proc run(p: PeerPool) {.async.} =
 
 proc start*(p: PeerPool) =
   if not p.running:
-    asyncCheck p.run()
+    asyncSpawn p.run()
 
 proc len*(p: PeerPool): int = p.connectedNodes.len
 # @property

@@ -379,7 +379,7 @@ proc decodeMessage*(body: openarray[byte]): DecodeResult[Message] =
       return err("Invalid request-id")
 
     proc decode[T](rlp: var Rlp, v: var T)
-        {.inline, nimcall, raises:[RlpError, ValueError, Defect].} =
+        {.nimcall, raises:[RlpError, ValueError, Defect].} =
       for k, v in v.fieldPairs:
         v = rlp.read(typeof(v))
 

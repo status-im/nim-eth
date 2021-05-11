@@ -44,21 +44,10 @@ task test_discv5, "Run discovery v5 tests":
   runTest("tests/p2p/all_discv5_tests")
 
 task test_discv4, "Run discovery v4 tests":
-  runTest("tests/p2p/test_discovery", chronosStrict = false)
+  runTest("tests/p2p/test_discovery")
 
 task test_p2p, "Run p2p tests":
   runTest("tests/p2p/all_tests")
-
-  # Code that still requires chronosStrict = false
-  for filename in [
-      "les/test_flow_control",
-      "test_rlpx_thunk",
-      "test_shh",
-      "test_shh_config",
-      "test_shh_connect",
-      "test_protocol_handlers"
-    ]:
-    runTest("tests/p2p/" & filename, chronosStrict = false)
 
 task test_rlp, "Run rlp tests":
   # workaround for github action CI

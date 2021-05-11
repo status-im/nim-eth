@@ -18,6 +18,7 @@ proc getContractCode*(chain: AbstractChainDB, req: ContractCodeRequest): Blob {.
     let acc = getAccount(chain.getTrieDB, b.stateRoot, req.key)
     result = chain.getCodeByHash(acc.codeHash)
 
-proc getStorageNode*(chain: AbstractChainDB, hash: KeccakHash): Blob =
+proc getStorageNode*(chain: AbstractChainDB, hash: KeccakHash): Blob
+    {.raises: [CatchableError, Defect].} =
   let db = chain.getTrieDB
   return db.get(hash.data)

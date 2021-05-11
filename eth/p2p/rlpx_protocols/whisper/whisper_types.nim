@@ -1,18 +1,18 @@
-#
-#                 Whisper
-#              (c) Copyright 2018-2019
-#       Status Research & Development GmbH
-#
-#            Licensed under either of
-#  Apache License, version 2.0, (LICENSE-APACHEv2)
-#            MIT license (LICENSE-MIT)
-#
+# nim-eth - Whisper
+# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[algorithm, bitops, math, options, tables, times, strutils, hashes],
+  std/[algorithm, bitops, math, options, tables, times, hashes],
   chronicles, stew/[byteutils, endians2], metrics, bearssl,
   nimcrypto/[bcmode, hash, keccak, rijndael],
   ".."/../../[keys, rlp, p2p], ../../ecies
+
+when chronicles.enabledLogLevel == LogLevel.TRACE:
+  import std/strutils
 
 logScope:
   topics = "whisper_types"
