@@ -26,8 +26,6 @@ proc newPeerPool*(network: EthereumNode,
   result.observers = initTable[int, PeerObserver]()
   result.listenPort = listenPort
 
-template ensureFuture(f: untyped) = asyncCheck f
-
 proc nodesToConnect(p: PeerPool): seq[Node] {.inline.} =
   p.discovery.randomNodes(p.minPeers).filterIt(it notin p.discovery.bootstrapNodes)
 
@@ -95,13 +93,8 @@ proc connect(p: PeerPool, remote: Node): Future[Peer] {.async.} =
   #   self.logger.exception("Unexpected error during auth/p2p handshake with %s", remote)
   # return None
 
-proc lookupRandomNode(p: PeerPool) {.async.} =
-  # This method runs in the background, so we must catch OperationCancelled
-  # ere otherwise asyncio will warn that its exception was never retrieved.
-  try:
-    discard await p.discovery.lookupRandom()
-  except: # OperationCancelled
-    discard
+proc lookupRandomNode(p: PeerPool) {.async, raises: [Defect].} =
+  discard await p.discovery.lookupRandom()
   p.lastLookupTime = epochTime()
 
 proc getRandomBootnode(p: PeerPool): Option[Node] =
@@ -149,7 +142,7 @@ proc maybeConnectToMorePeers(p: PeerPool) {.async.} =
     return
 
   if p.lastLookupTime + lookupInterval < epochTime():
-    ensureFuture p.lookupRandomNode()
+    asyncSpawn p.lookupRandomNode()
 
   let debugEnode = getEnv("ETH_DEBUG_ENODE")
   if debugEnode.len != 0:
@@ -163,7 +156,7 @@ proc maybeConnectToMorePeers(p: PeerPool) {.async.} =
   if p.connectedNodes.len == 0 and (let n = p.getRandomBootnode(); n.isSome):
     await p.connectToNode(n.get())
 
-proc run(p: PeerPool) {.async.} =
+proc run(p: PeerPool) {.async, raises: [Defect].} =
   trace "Running PeerPool..."
   p.running = true
   while p.running:
@@ -184,7 +177,7 @@ proc run(p: PeerPool) {.async.} =
 
 proc start*(p: PeerPool) =
   if not p.running:
-    asyncCheck p.run()
+    asyncSpawn p.run()
 
 proc len*(p: PeerPool): int = p.connectedNodes.len
 # @property

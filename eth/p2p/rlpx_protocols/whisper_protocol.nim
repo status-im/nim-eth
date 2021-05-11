@@ -314,7 +314,13 @@ proc run(node: EthereumNode, network: WhisperNetwork) {.async, raises: [Defect].
 proc sendP2PMessage(node: EthereumNode, peerId: NodeId, env: Envelope): bool =
   for peer in node.peers(Whisper):
     if peer.remote.id == peerId:
-      asyncCheck peer.p2pMessage(env)
+      let f = peer.p2pMessage(env)
+      # Can't make p2pMessage not raise so this is the "best" option I can think
+      # of instead of using asyncSpawn and still keeping the call not async.
+      f.callback = proc(data: pointer) {.gcsafe, raises: [Defect].} =
+        if f.failed:
+          warn "P2PMessage send failed", msg = f.readError.msg
+
       return true
 
 proc queueMessage(node: EthereumNode, msg: Message): bool =

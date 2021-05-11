@@ -316,7 +316,7 @@ proc acceptRequest*(network: LesNetwork, peer: LesPeer,
   network.updateFlowControl t
 
   while not network.canServeRequest:
-    await sleepAsync(10)
+    await sleepAsync(10.milliseconds)
 
   if peer notin network.peers:
     # The peer was disconnected or the network

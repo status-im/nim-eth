@@ -370,7 +370,7 @@ proc registerRequest(peer: Peer,
   proc timeoutExpired(udata: pointer) {.gcsafe, raises:[Defect].} =
     requestResolver(nil, responseFuture)
 
-  addTimer(timeoutAt, timeoutExpired, nil)
+  discard setTimer(timeoutAt, timeoutExpired, nil)
 
 proc resolveResponseFuture(peer: Peer, msgId: int, msg: pointer, reqId: int) =
   logScope:
@@ -994,7 +994,12 @@ proc postHelloSteps(peer: Peer, h: DevP2P.hello) {.async.} =
   # The handshake may involve multiple async steps, so we wait
   # here for all of them to finish.
   #
-  await all(subProtocolsHandshakes)
+  await allFutures(subProtocolsHandshakes)
+
+  for handshake in subProtocolsHandshakes:
+    doAssert(handshake.finished())
+    if handshake.failed():
+      raise handshake.error
 
   # This is needed as a peer might have already disconnected. In this case
   # we need to raise so that rlpxConnect/rlpxAccept fails.

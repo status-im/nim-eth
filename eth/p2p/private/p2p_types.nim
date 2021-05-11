@@ -140,7 +140,8 @@ type
   MessageHandlerDecorator* = proc(msgId: int, n: NimNode): NimNode
   ThunkProc* = proc(x: Peer, msgId: int, data: Rlp): Future[void]
     {.gcsafe, raises: [RlpError, Defect].}
-  MessageContentPrinter* = proc(msg: pointer): string {.gcsafe.}
+  MessageContentPrinter* = proc(msg: pointer): string
+    {.gcsafe, raises: [Defect].}
   RequestResolver* = proc(msg: pointer, future: FutureBase)
     {.gcsafe, raises: [Defect].}
   NextMsgResolver* = proc(msgData: Rlp, future: FutureBase)
