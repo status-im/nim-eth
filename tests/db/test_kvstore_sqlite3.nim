@@ -10,8 +10,10 @@ procSuite "SqStoreRef":
   test "KvStore interface":
     let db = SqStoreRef.init("", "test", inMemory = true)[]
     defer: db.close()
+    let kv = db.openKvStore()
+    defer: kv.get()[].close()
 
-    testKvStore(kvStore db)
+    testKvStore(kvStore kv.get(), true)
 
   test "Prepare and execute statements":
     let db = SqStoreRef.init("", "test", inMemory = true)[]
