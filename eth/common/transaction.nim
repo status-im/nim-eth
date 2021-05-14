@@ -3,8 +3,8 @@ import
   ".."/[common, rlp, keys]
 
 proc initLegacyTx*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAddress,
-  value: UInt256, payload: Blob, V: uint64, R, S: UInt256, isContractCreation = false): LegacyTx =
-  result.accountNonce = nonce
+  value: UInt256, payload: Blob, V: int64, R, S: UInt256, isContractCreation = false): LegacyTx =
+  result.nonce = nonce
   result.gasPrice = gasPrice
   result.gasLimit = gasLimit
   result.to = to
@@ -16,58 +16,101 @@ proc initLegacyTx*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAddre
   result.isContractCreation = isContractCreation
 
 type
-  TransHashObj = object
-    accountNonce:  AccountNonce
-    gasPrice:      GasInt
-    gasLimit:      GasInt
-    to {.rlpCustomSerialization.}: EthAddress
-    value:         UInt256
-    payload:       Blob
-    mIsContractCreation {.rlpIgnore.}: bool
+  LegacyUnsignedTx* = object
+    nonce*:  AccountNonce
+    gasPrice*:      GasInt
+    gasLimit*:      GasInt
+    to* {.rlpCustomSerialization.}: EthAddress
+    value*:         UInt256
+    payload*:       Blob
+    isContractCreation* {.rlpIgnore.}: bool
 
-proc read(rlp: var Rlp, t: var TransHashObj, _: type EthAddress): EthAddress {.inline.} =
+  AccessListUnsignedTx* = object
+    chainId* {.rlpCustomSerialization.}: ChainId
+    nonce*     : AccountNonce
+    gasPrice*  : GasInt
+    gasLimit*  : GasInt
+    to* {.rlpCustomSerialization.}: EthAddress
+    value*     : UInt256
+    payload*   : Blob
+    accessList*: AccessList
+    isContractCreation* {.rlpIgnore.}: bool
+
+  UnsignedTxTypes* = LegacyUnsignedTx | AccessListUnsignedTx
+
+proc read*(rlp: var Rlp, t: var UnsignedTxTypes, _: type EthAddress): EthAddress {.inline.} =
   if rlp.blobLen != 0:
     result = rlp.read(EthAddress)
   else:
-    t.mIsContractCreation = true
+    t.isContractCreation = true
 
-proc append(rlpWriter: var RlpWriter, t: TransHashObj, a: EthAddress) {.inline.} =
-  if t.mIsContractCreation:
+proc append*(rlpWriter: var RlpWriter, t: UnsignedTxTypes, a: EthAddress) {.inline.} =
+  if t.isContractCreation:
     rlpWriter.append("")
   else:
     rlpWriter.append(a)
 
-const
-  EIP155_CHAIN_ID_OFFSET* = 35
+proc read*(rlp: var Rlp, t: var AccessListUnsignedTx, _: type ChainId): ChainId  {.inline.} =
+  rlp.read(uint64).ChainId
 
-func rlpEncode*(transaction: LegacyTx): auto =
+proc append*(rlpWriter: var RlpWriter, t: AccessListUnsignedTx, a: ChainId) {.inline.} =
+  rlpWriter.append(a.uint64)
+
+const
+  EIP155_CHAIN_ID_OFFSET* = 35'i64
+
+func rlpEncode*(tx: LegacyTx): auto =
   # Encode transaction without signature
-  return rlp.encode(TransHashObj(
-    accountNonce: transaction.accountNonce,
-    gasPrice: transaction.gasPrice,
-    gasLimit: transaction.gasLimit,
-    to: transaction.to,
-    value: transaction.value,
-    payload: transaction.payload,
-    mIsContractCreation: transaction.isContractCreation
+  return rlp.encode(LegacyUnsignedTx(
+    nonce: tx.nonce,
+    gasPrice: tx.gasPrice,
+    gasLimit: tx.gasLimit,
+    to: tx.to,
+    value: tx.value,
+    payload: tx.payload,
+    isContractCreation: tx.isContractCreation
     ))
 
 func rlpEncodeEIP155*(tx: LegacyTx): auto =
-  let V = (tx.V.int - EIP155_CHAIN_ID_OFFSET) div 2
+  let V = (tx.V - EIP155_CHAIN_ID_OFFSET) div 2
   # Encode transaction without signature
-  return rlp.encode(Transaction(
-    accountNonce: tx.accountNonce,
+  return rlp.encode(LegacyTx(
+    nonce: tx.nonce,
     gasPrice: tx.gasPrice,
     gasLimit: tx.gasLimit,
     to: tx.to,
     value: tx.value,
     payload: tx.payload,
     isContractCreation: tx.isContractCreation,
-    V: V.uint64,
+    V: V,
     R: 0.u256,
     S: 0.u256
     ))
 
 func txHashNoSignature*(tx: LegacyTx): Hash256 =
   # Hash transaction without signature
-  return keccak256.digest(if tx.V.int >= EIP155_CHAIN_ID_OFFSET: tx.rlpEncodeEIP155 else: tx.rlpEncode)
+  return keccak256.digest(if tx.V >= EIP155_CHAIN_ID_OFFSET: tx.rlpEncodeEIP155 else: tx.rlpEncode)
+
+func txHashNoSignature*(tx: AccessListTx): Hash256 =
+  let unsignedTx = AccessListUnsignedTx(
+    chainId: tx.chainId,
+    nonce: tx.nonce,
+    gasPrice: tx.gasPrice,
+    gasLimit: tx.gasLimit,
+    to: tx.to,
+    value: tx.value,
+    payload: tx.payload,
+    accessList: tx.accessList,
+    isContractCreation: tx.isContractCreation
+    )
+  var rw = initRlpWriter()
+  rw.append(1)
+  rw.append(unsignedTx)
+  let rlpBytes = rlp.encode(rw.finish())
+  return keccak256.digest(rlpBytes)
+
+func txHashNoSignature*(tx: Transaction): Hash256 =
+  if tx.txType == LegacyTxType:
+    txHashNoSignature(tx.legacyTx)
+  else:
+    txHashNoSignature(tx.accessListTx)

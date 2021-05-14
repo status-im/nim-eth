@@ -330,7 +330,7 @@ proc append*(rlpWriter: var RlpWriter, value: Stint) =
   discard
 
 type
-  TxTypes = LegacyTx | AccessListTx
+  TxTypes* = LegacyTx | AccessListTx
 
 proc read*(rlp: var Rlp, t: var TxTypes, _: type EthAddress): EthAddress {.inline.} =
   if rlp.blobLen != 0:
