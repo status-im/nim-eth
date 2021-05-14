@@ -2,8 +2,8 @@ import
   nimcrypto/keccak,
   ".."/[common, rlp, keys]
 
-proc initTransaction*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAddress,
-  value: UInt256, payload: Blob, V: byte, R, S: UInt256, isContractCreation = false): Transaction =
+proc initLegacyTx*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAddress,
+  value: UInt256, payload: Blob, V: uint64, R, S: UInt256, isContractCreation = false): LegacyTx =
   result.accountNonce = nonce
   result.gasPrice = gasPrice
   result.gasLimit = gasLimit
@@ -40,7 +40,7 @@ proc append(rlpWriter: var RlpWriter, t: TransHashObj, a: EthAddress) {.inline.}
 const
   EIP155_CHAIN_ID_OFFSET* = 35
 
-func rlpEncode*(transaction: Transaction): auto =
+func rlpEncode*(transaction: LegacyTx): auto =
   # Encode transaction without signature
   return rlp.encode(TransHashObj(
     accountNonce: transaction.accountNonce,
@@ -52,7 +52,7 @@ func rlpEncode*(transaction: Transaction): auto =
     mIsContractCreation: transaction.isContractCreation
     ))
 
-func rlpEncodeEIP155*(tx: Transaction): auto =
+func rlpEncodeEIP155*(tx: LegacyTx): auto =
   let V = (tx.V.int - EIP155_CHAIN_ID_OFFSET) div 2
   # Encode transaction without signature
   return rlp.encode(Transaction(
@@ -63,11 +63,11 @@ func rlpEncodeEIP155*(tx: Transaction): auto =
     value: tx.value,
     payload: tx.payload,
     isContractCreation: tx.isContractCreation,
-    V: V.byte,
+    V: V.uint64,
     R: 0.u256,
     S: 0.u256
     ))
 
-func txHashNoSignature*(tx: Transaction): Hash256 =
+func txHashNoSignature*(tx: LegacyTx): Hash256 =
   # Hash transaction without signature
   return keccak256.digest(if tx.V.int >= EIP155_CHAIN_ID_OFFSET: tx.rlpEncodeEIP155 else: tx.rlpEncode)

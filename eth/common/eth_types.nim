@@ -8,11 +8,8 @@ export
 
 type
   Hash256* = MDigest[256]
-
   EthTime* = Time
-
   VMWord* = UInt256
-
   BlockNonce* = array[8, byte]
   AccountNonce* = uint64
   Blob* = seq[byte]
@@ -33,22 +30,60 @@ type
   ForkID* = tuple[crc: uint32, nextFork: uint64]
   # EIP 2364/2124
 
+  BlockNumber* = UInt256
+  StorageKey* = array[32, byte]
+
+  # beware that although in some cases
+  # chainId have identical value to networkId
+  # they are separate entity
+  ChainId* = distinct uint64
+
   Account* = object
     nonce*:             AccountNonce
     balance*:           UInt256
     storageRoot*:       Hash256
     codeHash*:          Hash256
 
-  Transaction* = object
-    accountNonce*:  AccountNonce
-    gasPrice*:      GasInt
-    gasLimit*:      GasInt
+  LegacyTx* = object
+    nonce*   : AccountNonce
+    gasPrice*: GasInt
+    gasLimit*: GasInt
     to* {.rlpCustomSerialization.}: EthAddress
-    value*:         UInt256
-    payload*:       Blob
-    V*:             byte
-    R*, S*:         UInt256
+    value*   : UInt256
+    payload* : Blob
+    V*       : int64
+    R*, S*   : UInt256
     isContractCreation* {.rlpIgnore.}: bool
+
+  AccessPair* = object
+    address*    : EthAddress
+    storageKeys*: seq[StorageKey]
+
+  AccessList* = seq[AccessPair]
+
+  AccessListTx* = object
+    chainId* {.rlpCustomSerialization.}: ChainId
+    nonce*     : AccountNonce
+    gasPrice*  : GasInt
+    gasLimit*  : GasInt
+    to* {.rlpCustomSerialization.}: EthAddress
+    value*     : UInt256
+    payload*   : Blob
+    accessList*: AccessList
+    V*         : int64
+    R*, S*     : UInt256
+    isContractCreation* {.rlpIgnore.}: bool
+
+  TxType* = enum
+    LegacyTxType
+    AccessListTxType
+
+  Transaction* = object
+    case txType*: TxType
+    of LegacyTxType:
+      legacyTx*: LegacyTx
+    of AccessListTxType:
+      accessListTx*: AccessListTx
 
   TransactionStatus* = enum
     Unknown,
@@ -60,8 +95,6 @@ type
   TransactionStatusMsg* = object
     status*: TransactionStatus
     data*: Blob
-
-  BlockNumber* = UInt256
 
   BlockHeader* = object
     parentHash*:    Hash256
@@ -96,24 +129,33 @@ type
     else:
       status*: bool
 
-  Receipt* = object
+  LegacyReceipt* = object
     stateRootOrStatus*: HashOrStatus
     cumulativeGasUsed*: GasInt
-    bloom*:         BloomFilter
-    logs*:          seq[Log]
+    bloom*: BloomFilter
+    logs* : seq[Log]
 
-  AccessList* = object
-    # XXX: Specify the structure of this
+  AccessListReceipt* = object
+    status*: bool
+    cumulativeGasUsed*: GasInt
+    bloom* : BloomFilter
+    logs*  : seq[Log]
 
-  ShardTransaction* = object
-    chain*:         uint
-    shard*:         uint
-    to*:            EthAddress
-    data*:          Blob
-    gas*:           GasInt
-    accessList*:    AccessList
-    code*:          Blob
-    salt*:          Hash256
+  ReceiptType* = enum
+    LegacyReceiptType
+    AccessListReceiptType
+
+  Receipt* = object
+    case receiptType*: ReceiptType
+    of LegacyReceiptType:
+      legacyReceipt*: LegacyReceipt
+    of AccessListReceiptType:
+      accessListReceipt*: AccessListReceipt
+
+  EthBlock* = object
+    header*: BlockHeader
+    txs*   : seq[Transaction]
+    uncles*: seq[BlockHeader]
 
   CollationHeader* = object
     shard*:         uint
@@ -232,17 +274,17 @@ proc hashOrStatus*(hash: Hash256): HashOrStatus =
 proc hashOrStatus*(status: bool): HashOrStatus =
   HashOrStatus(isHash: false, status: status)
 
-proc hasStatus*(rec: Receipt): bool {.inline.} =
+proc hasStatus*(rec: LegacyReceipt): bool {.inline.} =
   rec.stateRootOrStatus.isHash == false
 
-proc hasStateRoot*(rec: Receipt): bool {.inline.} =
+proc hasStateRoot*(rec: LegacyReceipt): bool {.inline.} =
   rec.stateRootOrStatus.isHash == true
 
-proc stateRoot*(rec: Receipt): Hash256 {.inline.} =
+proc stateRoot*(rec: LegacyReceipt): Hash256 {.inline.} =
   doAssert(rec.hasStateRoot)
   rec.stateRootOrStatus.hash
 
-proc status*(rec: Receipt): int {.inline.} =
+proc status*(rec: LegacyReceipt): int {.inline.} =
   doAssert(rec.hasStatus)
   if rec.stateRootOrStatus.status: 1 else: 0
 
@@ -250,7 +292,7 @@ proc status*(rec: Receipt): int {.inline.} =
 # Rlp serialization:
 #
 
-proc read*(rlp: var Rlp, T: typedesc[StUint]): T {.inline.} =
+proc read*(rlp: var Rlp, T: type StUint): T {.inline.} =
   if rlp.isBlob:
     let bytes = rlp.toBytes
     if bytes.len > 0:
@@ -275,7 +317,7 @@ proc append*(rlpWriter: var RlpWriter, value: StUint) =
   else:
     rlpWriter.append(value.truncate(int))
 
-proc read*(rlp: var Rlp, T: typedesc[Stint]): T {.inline.} =
+proc read*(rlp: var Rlp, T: type Stint): T {.inline.} =
   # The Ethereum Yellow Paper defines the RLP serialization only
   # for unsigned integers:
   {.fatal: "RLP serialization of signed integers is not allowed".}
@@ -287,20 +329,53 @@ proc append*(rlpWriter: var RlpWriter, value: Stint) =
   {.fatal: "RLP serialization of signed integers is not allowed".}
   discard
 
-proc read*(rlp: var Rlp, t: var Transaction, _: type EthAddress): EthAddress {.inline.} =
+type
+  TxTypes = LegacyTx | AccessListTx
+
+proc read*(rlp: var Rlp, t: var TxTypes, _: type EthAddress): EthAddress {.inline.} =
   if rlp.blobLen != 0:
     result = rlp.read(EthAddress)
   else:
     t.isContractCreation = true
     rlp.skipElem()
 
-proc append*(rlpWriter: var RlpWriter, t: Transaction, a: EthAddress) {.inline.} =
+proc append*(rlpWriter: var RlpWriter, t: TxTypes, a: EthAddress) {.inline.} =
   if t.isContractCreation:
     rlpWriter.append("")
   else:
     rlpWriter.append(a)
 
-proc read*(rlp: var Rlp, T: typedesc[HashOrStatus]): T {.inline.} =
+proc read*(rlp: var Rlp, t: var AccessListTx, _: type ChainId): ChainId  {.inline.} =
+  rlp.read(uint64).ChainId
+
+proc append*(rlpWriter: var RlpWriter, t: AccessListTx, a: ChainId) {.inline.} =
+  rlpWriter.append(a.uint64)
+
+proc append*(rlpWriter: var RlpWriter, tx: Transaction) =
+  if tx.txType == LegacyTxType:
+    rlpWriter.append(tx.legacyTx)
+  else:
+    var rw = initRlpWriter()
+    rw.append(1)
+    rw.append(tx.accessListTx)
+    rlpWriter.append(rw.finish())
+
+proc read*(rlp: var Rlp, T: type Transaction): T =
+  if rlp.isList:
+    result = Transaction(
+      txType: LegacyTxType,
+      legacyTx: rlp.read(LegacyTx)
+    )
+  else:
+    let bytes = rlp.read(Blob)
+    var rr = rlpFromBytes(bytes)
+    assert(rr.read(int) == 1)
+    result = Transaction(
+      txType: AccessListTxType,
+      accessListTx: rr.read(AccessListTx)
+    )
+
+proc read*(rlp: var Rlp, T: type HashOrStatus): T {.inline.} =
   if rlp.isBlob() and (rlp.blobLen() == 32 or rlp.blobLen() == 1):
     if rlp.blobLen == 1:
       result = hashOrStatus(rlp.read(uint8) == 1)
@@ -334,7 +409,31 @@ proc append*(rlpWriter: var RlpWriter, value: HashOrStatus) {.inline.} =
   else:
     rlpWriter.append(if value.status: 1'u8 else: 0'u8)
 
-proc read*(rlp: var Rlp, T: typedesc[Time]): T {.inline.} =
+proc append*(rlpWriter: var RlpWriter, rec: Receipt) =
+  if rec.receiptType == LegacyReceiptType:
+    rlpWriter.append(rec.legacyReceipt)
+  else:
+    var rw = initRlpWriter()
+    rw.append(1)
+    rw.append(rec.accessListReceipt)
+    rlpWriter.append(rw.finish())
+
+proc read*(rlp: var Rlp, T: type Receipt): T =
+  if rlp.isList:
+    result = Receipt(
+      receiptType: LegacyReceiptType,
+      legacyReceipt: rlp.read(LegacyReceipt)
+    )
+  else:
+    let bytes = rlp.read(Blob)
+    var rr = rlpFromBytes(bytes)
+    assert(rr.read(int) == 1)
+    result = Receipt(
+      receiptType: AccessListReceiptType,
+      accessListReceipt: rr.read(AccessListReceipt)
+    )
+
+proc read*(rlp: var Rlp, T: type Time): T {.inline.} =
   result = fromUnix(rlp.read(int64))
 
 proc append*(rlpWriter: var RlpWriter, value: HashOrNum) =
@@ -344,7 +443,7 @@ proc append*(rlpWriter: var RlpWriter, value: HashOrNum) =
   else:
     rlpWriter.append(value.number)
 
-proc read*(rlp: var Rlp, T: typedesc[HashOrNum]): T =
+proc read*(rlp: var Rlp, T: type HashOrNum): T =
   if rlp.blobLen == 32:
     result = HashOrNum(isHash: true, hash: rlp.read(Hash256))
   else:
