@@ -396,7 +396,7 @@ proc init*(
       return err("Invalid pragma result: " & $x)
 
   # TODO: check current version and implement schema versioning
-  checkExec "PRAGMA user_version = 1;"
+  checkExec "PRAGMA user_version = 2;"
 
   let journalModePragma = prepare("PRAGMA journal_mode = WAL;"): discard
   checkWalPragmaResult(journalModePragma)
@@ -417,7 +417,7 @@ proc init*(
       CREATE TABLE IF NOT EXISTS """ & keyspace & """ (
          key BLOB PRIMARY KEY,
          value BLOB
-      ) WITHOUT ROWID;
+      );
     """
 
     let
