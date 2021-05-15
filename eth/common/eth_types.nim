@@ -369,7 +369,10 @@ proc read*(rlp: var Rlp, T: type Transaction): T =
   else:
     let bytes = rlp.read(Blob)
     var rr = rlpFromBytes(bytes)
-    assert(rr.read(int) == 1)
+    let txType = rr.read(int)
+    if txType != 1:
+      raise newException(UnsupportedRlpError,
+        "TxType expect 1 got " & $txType)
     result = Transaction(
       txType: AccessListTxType,
       accessListTx: rr.read(AccessListTx)
@@ -427,7 +430,10 @@ proc read*(rlp: var Rlp, T: type Receipt): T =
   else:
     let bytes = rlp.read(Blob)
     var rr = rlpFromBytes(bytes)
-    assert(rr.read(int) == 1)
+    let recType = rr.read(int)
+    if recType != 1:
+      raise newException(UnsupportedRlpError,
+        "TxType expect 1 got " & $recType)
     result = Receipt(
       receiptType: AccessListReceiptType,
       accessListReceipt: rr.read(AccessListReceipt)

@@ -87,11 +87,7 @@ func rlpEncodeEIP155*(tx: LegacyTx): auto =
     S: 0.u256
     ))
 
-func txHashNoSignature*(tx: LegacyTx): Hash256 =
-  # Hash transaction without signature
-  return keccak256.digest(if tx.V >= EIP155_CHAIN_ID_OFFSET: tx.rlpEncodeEIP155 else: tx.rlpEncode)
-
-func txHashNoSignature*(tx: AccessListTx): Hash256 =
+func rlpEncode*(tx: AccessListTx): auto =
   let unsignedTx = AccessListUnsignedTx(
     chainId: tx.chainId,
     nonce: tx.nonce,
@@ -106,8 +102,14 @@ func txHashNoSignature*(tx: AccessListTx): Hash256 =
   var rw = initRlpWriter()
   rw.append(1)
   rw.append(unsignedTx)
-  let rlpBytes = rlp.encode(rw.finish())
-  return keccak256.digest(rlpBytes)
+  rlp.encode(rw.finish())
+
+func txHashNoSignature*(tx: LegacyTx): Hash256 =
+  # Hash transaction without signature
+  keccak256.digest(if tx.V >= EIP155_CHAIN_ID_OFFSET: tx.rlpEncodeEIP155 else: tx.rlpEncode)
+
+func txHashNoSignature*(tx: AccessListTx): Hash256 =
+  keccak256.digest(tx.rlpEncode)
 
 func txHashNoSignature*(tx: Transaction): Hash256 =
   if tx.txType == LegacyTxType:
