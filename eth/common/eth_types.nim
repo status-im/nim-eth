@@ -379,6 +379,9 @@ proc read*(rlp: var Rlp, T: type Transaction): T =
 proc read*(rlp: var Rlp, t: var EthBlock, _: type seq[Transaction]): seq[Transaction] {.inline.} =
   # EIP 2718/2930: we have to override this field
   # for reasons described below in `append` proc
+  if not rlp.isList:
+    raise newException(MalformedRlpError,
+      "List expected, but got blob.")
   for tx in rlp:
     if tx.isList:
       result.add tx.read(Transaction)
