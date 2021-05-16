@@ -88,6 +88,7 @@ func rlpEncodeEIP155*(tx: LegacyTx): auto =
     ))
 
 func rlpEncode*(tx: AccessListTx): auto =
+  # EIP 2718/2930
   let unsignedTx = AccessListUnsignedTx(
     chainId: tx.chainId,
     nonce: tx.nonce,
@@ -102,7 +103,7 @@ func rlpEncode*(tx: AccessListTx): auto =
   var rw = initRlpWriter()
   rw.append(1)
   rw.append(unsignedTx)
-  rlp.encode(rw.finish())
+  rw.finish()
 
 func txHashNoSignature*(tx: LegacyTx): Hash256 =
   # Hash transaction without signature

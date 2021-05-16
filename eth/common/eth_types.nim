@@ -154,7 +154,7 @@ type
 
   EthBlock* = object
     header*: BlockHeader
-    txs*   : seq[Transaction]
+    txs* {.rlpCustomSerialization.}: seq[Transaction]
     uncles*: seq[BlockHeader]
 
   CollationHeader* = object
@@ -355,28 +355,47 @@ proc append*(rlpWriter: var RlpWriter, tx: Transaction) =
   if tx.txType == LegacyTxType:
     rlpWriter.append(tx.legacyTx)
   else:
-    var rw = initRlpWriter()
-    rw.append(1)
-    rw.append(tx.accessListTx)
-    rlpWriter.append(rw.finish())
+    # EIP 2718/2930
+    rlpWriter.append(1)
+    rlpWriter.append(tx.accessListTx)
 
 proc read*(rlp: var Rlp, T: type Transaction): T =
   if rlp.isList:
-    result = Transaction(
+    return Transaction(
       txType: LegacyTxType,
       legacyTx: rlp.read(LegacyTx)
     )
-  else:
-    let bytes = rlp.read(Blob)
-    var rr = rlpFromBytes(bytes)
-    let txType = rr.read(int)
-    if txType != 1:
-      raise newException(UnsupportedRlpError,
-        "TxType expect 1 got " & $txType)
-    result = Transaction(
-      txType: AccessListTxType,
-      accessListTx: rr.read(AccessListTx)
-    )
+
+  # EIP 2718/2930
+  let txType = rlp.read(int)
+  if txType != 1:
+    raise newException(UnsupportedRlpError,
+      "TxType expect 1 got " & $txType)
+  return Transaction(
+    txType: AccessListTxType,
+    accessListTx: rlp.read(AccessListTx)
+  )
+
+proc read*(rlp: var Rlp, t: var EthBlock, _: type seq[Transaction]): seq[Transaction] {.inline.} =
+  # EIP 2718/2930: we have to override this field
+  # for reasons described below in `append` proc
+  for tx in rlp:
+    if tx.isList:
+      result.add tx.read(Transaction)
+    else:
+      let bytes = rlp.read(Blob)
+      var rr = rlpFromBytes(bytes)
+      result.add rr.read(Transaction)
+
+proc append*(rlpWriter: var RlpWriter, blk: EthBlock, txs: seq[Transaction]) {.inline.} =
+  # EIP 2718/2930: the new Tx is rlp(txType || txPlayload) -> one blob/one list elem
+  # not rlp(txType, txPayload) -> two list elem, wrong!
+  rlpWriter.startList(txs.len)
+  for tx in txs:
+    if tx.txType == LegacyTxType:
+      rlpWriter.append(tx)
+    else:
+      rlpWriter.append(rlp.encode(tx))
 
 proc read*(rlp: var Rlp, T: type HashOrStatus): T {.inline.} =
   if rlp.isBlob() and (rlp.blobLen() == 32 or rlp.blobLen() == 1):
@@ -416,28 +435,26 @@ proc append*(rlpWriter: var RlpWriter, rec: Receipt) =
   if rec.receiptType == LegacyReceiptType:
     rlpWriter.append(rec.legacyReceipt)
   else:
-    var rw = initRlpWriter()
-    rw.append(1)
-    rw.append(rec.accessListReceipt)
-    rlpWriter.append(rw.finish())
+    # EIP 2718/2930
+    rlpWriter.append(1)
+    rlpWriter.append(rec.accessListReceipt)
 
 proc read*(rlp: var Rlp, T: type Receipt): T =
   if rlp.isList:
-    result = Receipt(
+    return Receipt(
       receiptType: LegacyReceiptType,
       legacyReceipt: rlp.read(LegacyReceipt)
     )
-  else:
-    let bytes = rlp.read(Blob)
-    var rr = rlpFromBytes(bytes)
-    let recType = rr.read(int)
-    if recType != 1:
-      raise newException(UnsupportedRlpError,
-        "TxType expect 1 got " & $recType)
-    result = Receipt(
-      receiptType: AccessListReceiptType,
-      accessListReceipt: rr.read(AccessListReceipt)
-    )
+
+  # EIP 2718/2930
+  let recType = rlp.read(int)
+  if recType != 1:
+    raise newException(UnsupportedRlpError,
+      "TxType expect 1 got " & $recType)
+  return Receipt(
+    receiptType: AccessListReceiptType,
+    accessListReceipt: rlp.read(AccessListReceipt)
+  )
 
 proc read*(rlp: var Rlp, T: type Time): T {.inline.} =
   result = fromUnix(rlp.read(int64))
