@@ -5,6 +5,10 @@ import
   stew/byteutils,
   ../../eth/[common, rlp]
 
+type
+  EthHeader = object
+    header: BlockHeader
+
 proc `==`(a, b: HashOrStatus): bool =
   result = a.isHash == b.isHash
   if not result: return
@@ -37,13 +41,22 @@ proc loadFile(x: int) =
   test fileName:
     let n = json.parseFile(fileName)
     let data = n["rlp"].getStr()
-    var bytes = hexToSeqByte(data)
-    var blk = rlp.decode(bytes, EthBlock)
+    var bytes1 = hexToSeqByte(data)
+    var blk1   = rlp.decode(bytes1, EthBlock)
 
-    let rlpbytes = rlp.encode(blk)
-    var blk2 = rlp.decode(rlpbytes, EthBlock)
-    check blk == blk2
-    check bytes == rlpbytes
+    let bytes2 = rlp.encode(blk1)
+    var blk2   = rlp.decode(bytes2, EthBlock)
+    check blk1 == blk2
+    check bytes1 == bytes2
+
+    var r      = rlpFromBytes(bytes1)
+    let header = r.read(EthHeader).header
+    let body   = r.readRecordType(BlockBody, false)
+
+    let blk3 = EthBlock(header: header, txs: body.transactions, uncles: body.uncles)
+    let bytes3 = rlp.encode(blk3)
+    check blk1 == blk3
+    check bytes1 == bytes3
 
 proc suite1() =
   suite "rlp encoding":

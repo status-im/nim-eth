@@ -114,7 +114,7 @@ type
     nonce*:         BlockNonce
 
   BlockBody* = object
-    transactions*:  seq[Transaction]
+    transactions*{.rlpCustomSerialization.}: seq[Transaction]
     uncles*:        seq[BlockHeader]
 
   Log* = object
@@ -376,7 +376,7 @@ proc read*(rlp: var Rlp, T: type Transaction): T =
     accessListTx: rlp.read(AccessListTx)
   )
 
-proc read*(rlp: var Rlp, t: var EthBlock, _: type seq[Transaction]): seq[Transaction] {.inline.} =
+proc read*(rlp: var Rlp, t: var (EthBlock | BlockBody), _: type seq[Transaction]): seq[Transaction] {.inline.} =
   # EIP 2718/2930: we have to override this field
   # for reasons described below in `append` proc
   if not rlp.isList:
@@ -390,7 +390,7 @@ proc read*(rlp: var Rlp, t: var EthBlock, _: type seq[Transaction]): seq[Transac
       var rr = rlpFromBytes(bytes)
       result.add rr.read(Transaction)
 
-proc append*(rlpWriter: var RlpWriter, blk: EthBlock, txs: seq[Transaction]) {.inline.} =
+proc append*(rlpWriter: var RlpWriter, blk: EthBlock | BlockBody, txs: seq[Transaction]) {.inline.} =
   # EIP 2718/2930: the new Tx is rlp(txType || txPlayload) -> one blob/one list elem
   # not rlp(txType, txPayload) -> two list elem, wrong!
   rlpWriter.startList(txs.len)
