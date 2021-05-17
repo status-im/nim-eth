@@ -14,4 +14,4 @@ suite "RocksStoreRef":
     let db = RocksStoreRef.init(tmp, "test")[]
     defer: db.close()
 
-    testKvStore(kvStore db)
+    testKvStore(kvStore db, false)

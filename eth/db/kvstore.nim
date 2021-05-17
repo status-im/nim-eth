@@ -26,9 +26,11 @@ type
   KvResult*[T] = Result[T, string]
 
   DataProc* = proc(val: openArray[byte]) {.gcsafe, raises: [Defect].}
+  KeyValueProc* = proc(key, val: openArray[byte]) {.gcsafe, raises: [Defect].}
 
   PutProc = proc (db: RootRef, key, val: openArray[byte]): KvResult[void] {.nimcall, gcsafe, raises: [Defect].}
   GetProc = proc (db: RootRef, key: openArray[byte], onData: DataProc): KvResult[bool] {.nimcall, gcsafe, raises: [Defect].}
+  FindProc = proc (db: RootRef, prefix: openArray[byte], onFind: KeyValueProc): KvResult[int] {.nimcall, gcsafe, raises: [Defect].}
   DelProc = proc (db: RootRef, key: openArray[byte]): KvResult[void] {.nimcall, gcsafe, raises: [Defect].}
   ContainsProc = proc (db: RootRef, key: openArray[byte]): KvResult[bool] {.nimcall, gcsafe, raises: [Defect].}
   CloseProc = proc (db: RootRef): KvResult[void] {.nimcall, gcsafe, raises: [Defect].}
@@ -38,6 +40,7 @@ type
     obj: RootRef
     putProc: PutProc
     getProc: GetProc
+    findProc: FindProc
     delProc: DelProc
     containsProc: ContainsProc
     closeProc: CloseProc
@@ -54,6 +57,16 @@ template get*(dbParam: KvStoreRef, key: openArray[byte], onData: untyped): KvRes
   ## returns true if found and false otherwise.
   let db = dbParam
   db.getProc(db.obj, key, onData)
+
+template find*(
+    dbParam: KvStoreRef, prefix: openArray[byte], onFind: untyped): KvResult[int] =
+  ## Perform a prefix find, returning all data starting with the given prefix.
+  ## An empty prefix returns all rows in the store.
+  ## The data is valid for the duration of the callback.
+  ## ``onFind``: ``proc(key, value: openArray[byte])``
+  ## returns the number of rows found
+  let db = dbParam
+  db.findProc(db.obj, prefix, onFind)
 
 template del*(dbParam: KvStoreRef, key: openArray[byte]): KvResult[void] =
   ## Remove value at ``key`` from store - do nothing if the value is not present
@@ -78,6 +91,10 @@ proc getImpl[T](db: RootRef, key: openArray[byte], onData: DataProc): KvResult[b
   mixin get
   get(T(db), key, onData)
 
+proc findImpl[T](db: RootRef, key: openArray[byte], onFind: KeyValueProc): KvResult[int] =
+  mixin get
+  find(T(db), key, onFind)
+
 proc delImpl[T](db: RootRef, key: openArray[byte]): KvResult[void] =
   mixin del
   del(T(db), key)
@@ -97,6 +114,7 @@ func kvStore*[T: RootRef](x: T): KvStoreRef =
     obj: x,
     putProc: putImpl[T],
     getProc: getImpl[T],
+    findProc: findImpl[T],
     delProc: delImpl[T],
     containsProc: containsImpl[T],
     closeProc: closeImpl[T]
@@ -108,6 +126,18 @@ proc get*(db: MemStoreRef, key: openArray[byte], onData: DataProc): KvResult[boo
     return ok(true)
 
   ok(false)
+
+proc find*(
+    db: MemStoreRef, prefix: openArray[byte],
+    onFind: KeyValueProc): KvResult[int] =
+  var total = 0
+  # Should use lower/upper bounds instead
+  for k, v in db.records:
+    if k.len() >= prefix.len and k.toOpenArray(0, prefix.len() - 1) == prefix:
+      onFind(k, v)
+      total += 1
+
+  ok(total)
 
 proc del*(db: MemStoreRef, key: openArray[byte]): KvResult[void] =
   db.records.del(@key)
