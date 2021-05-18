@@ -132,11 +132,15 @@ type
     bootstrapRecords*: seq[Record]
     ipVote: IpVote
     enrAutoUpdate: bool
+    talkProtocols: Table[seq[byte], TalkProtocolHandler]
     rng*: ref BrHmacDrbgContext
 
   PendingRequest = object
     node: Node
     message: seq[byte]
+
+  TalkProtocolHandler* = proc(request: seq[byte]): seq[byte]
+    {.gcsafe, raises: [Defect].}
 
   DiscResult*[T] = Result[T, cstring]
 
@@ -295,9 +299,15 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
 
 proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
     talkreq: TalkReqMessage, reqId: RequestId) =
-  # No support for any protocol yet so an empty response is send as per
-  # specification.
-  let talkresp = TalkRespMessage(response: @[])
+  let protocolHandler = d.talkProtocols.getOrDefault(talkreq.protocol)
+
+  let talkresp =
+    if protocolHandler.isNil():
+      # Protocol identifier that is not registered and thus not supported. An
+      # empty response is send as per specification.
+      TalkRespMessage(response: @[])
+    else:
+      TalkRespMessage(response: protocolHandler(talkreq.request))
   let (data, _) = encodeMessagePacket(d.rng[], d.codec, fromId, fromAddr,
     encodeMessage(talkresp, reqId))
 
@@ -330,6 +340,14 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
       discovery_unsolicited_messages.inc()
       trace "Timed out or unrequested message", kind = message.kind,
         origin = fromAddr
+
+proc registerTalkProtocol*(d: Protocol, protocol: seq[byte],
+    handler: TalkProtocolHandler): DiscResult[void] =
+  # Currently allow only for one handler per talk protocol.
+  if d.talkProtocols.hasKeyOrPut(protocol, handler):
+    err("Protocol identifier already registered")
+  else:
+    ok()
 
 proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
     requestNonce: AESGCMNonce, node: Option[Node]) =

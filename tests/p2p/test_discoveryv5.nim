@@ -2,7 +2,8 @@
 
 import
   std/tables,
-  chronos, chronicles, stint, testutils/unittests, stew/shims/net, bearssl,
+  chronos, chronicles, stint, testutils/unittests, stew/shims/net,
+  stew/byteutils, bearssl,
   ../../eth/keys,
   ../../eth/p2p/discoveryv5/[enr, node, routing_table, encoding, sessions, messages],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol,
@@ -619,3 +620,60 @@ procSuite "Discovery v5 Tests":
       firstRequestNonce
 
     await receiveNode.closeWait()
+
+  asyncTest "Talkreq no protocol":
+    let
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+      talkresp = await discv5_protocol.talkreq(node1, node2.localNode,
+        @[byte 0x01], @[])
+
+    check:
+      talkresp.isOk()
+      talkresp.get().response.len == 0
+
+    await node1.closeWait()
+    await node2.closeWait()
+
+  asyncTest "Talkreq echo protocol":
+    let
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+      talkProtocol = "echo".toBytes()
+
+    proc handler(request: seq[byte]): seq[byte] {.gcsafe, raises: [Defect].} =
+      request
+
+    check node2.registerTalkProtocol(talkProtocol, handler).isOk()
+    let talkresp = await discv5_protocol.talkreq(node1, node2.localNode,
+      talkProtocol, "hello".toBytes())
+
+    check:
+      talkresp.isOk()
+      talkresp.get().response == "hello".toBytes()
+
+    await node1.closeWait()
+    await node2.closeWait()
+
+  asyncTest "Talkreq register protocols":
+    let
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+      talkProtocol = "echo".toBytes()
+
+    proc handler(request: seq[byte]): seq[byte] {.gcsafe, raises: [Defect].} =
+      request
+
+    check:
+      node2.registerTalkProtocol(talkProtocol, handler).isOk()
+      node2.registerTalkProtocol(talkProtocol, handler).isErr()
+      node2.registerTalkProtocol("test".toBytes(), handler).isOk()
+
+    await node1.closeWait()
+    await node2.closeWait()
