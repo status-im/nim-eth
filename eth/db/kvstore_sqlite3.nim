@@ -466,7 +466,9 @@ proc init*(
       return err("Invalid pragma result: " & $x)
 
   if not readOnly:
-    # TODO: check current version and implement schema versioning
+    # user_version = 1: single kvstore table without rowid
+    # user_version = 2: single kvstore table with rowid
+    # user_version = 3: multiple named kvstore tables via openKvStore
     checkExec env.val, "PRAGMA user_version = 3;"
 
     let journalModePragma = prepare(env.val, "PRAGMA journal_mode = WAL;")
