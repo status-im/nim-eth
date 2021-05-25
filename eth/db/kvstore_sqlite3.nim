@@ -438,7 +438,9 @@ proc init*(
       if inMemory: ":memory:"
       else: basepath / name & ".sqlite3"
     flags =
-      if readOnly: SQLITE_OPEN_READONLY
+      # For some reason, opening multiple in-memory databases doesn't work if
+      # one of them is read-only - for now, disable read-only mode for them
+      if readOnly and not inMemory: SQLITE_OPEN_READONLY
       else: SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE
 
   if not inMemory:
@@ -463,12 +465,15 @@ proc init*(
       discard sqlite3_finalize(journalModePragma)
       return err("Invalid pragma result: " & $x)
 
-  # TODO: check current version and implement schema versioning
-  checkExec env.val, "PRAGMA user_version = 3;"
+  if not readOnly:
+    # user_version = 1: single kvstore table without rowid
+    # user_version = 2: single kvstore table with rowid
+    # user_version = 3: multiple named kvstore tables via openKvStore
+    checkExec env.val, "PRAGMA user_version = 3;"
 
-  let journalModePragma = prepare(env.val, "PRAGMA journal_mode = WAL;")
-  checkWalPragmaResult(journalModePragma)
-  checkExec journalModePragma
+    let journalModePragma = prepare(env.val, "PRAGMA journal_mode = WAL;")
+    checkWalPragmaResult(journalModePragma)
+    checkExec journalModePragma
 
   if manualCheckpoint:
     checkErr sqlite3_wal_autocheckpoint(env.val, 0)
