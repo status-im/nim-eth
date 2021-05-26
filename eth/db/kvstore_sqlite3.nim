@@ -93,10 +93,13 @@ proc bindParam(s: RawStmtPtr, n: int, val: auto): cint =
         sqlite3_bind_blob(s, n.cint, nil, 0.cint, nil)
     else:
       {.fatal: "Please add support for the '" & $typeof(val) & "' type".}
-  elif val is int32:
-    sqlite3_bind_int(s, n.cint, val)
-  elif val is int64:
-    sqlite3_bind_int64(s, n.cint, val)
+  elif val is SomeInteger:
+    sqlite3_bind_int64(s, n.cint, val.clong)
+  elif val is Option:
+    if val.isNone():
+      sqlite3_bind_null(s, n.cint)
+    else:
+      bindParam(s, n, val.get())
   else:
     {.fatal: "Please add support for the '" & $typeof(val) & "' type".}
 
@@ -125,13 +128,15 @@ proc exec*[P](s: SqliteStmt[P, void], params: P): KvResult[void] =
 
   res
 
-template readResult(s: RawStmtPtr, column: cint, T: type): auto =
-  when T is int32:
-    sqlite3_column_int(s, column)
-  elif T is int64:
+template readSimpleResult(s: RawStmtPtr, column: cint, T: type): auto =
+  when T is int64:
     sqlite3_column_int64(s, column)
-  elif T is int:
-    {.fatal: "Please use specify either int32 or int64 precisely".}
+  elif T is SomeInteger:
+    # sqlite integers are "up to" 8 bytes in size, so rather than silently
+    # truncate them, we support only 64-bit integers when reading and let the
+    # calling code deal with it - careful though, anything that is not an
+    # integer (ie TEXT) is returned as 0
+    {.fatal: "Use int64 for reading integers".}
   elif T is openArray[byte]:
     let
       p = cast[ptr UncheckedArray[byte]](sqlite3_column_blob(s, column))
@@ -160,6 +165,15 @@ template readResult(s: RawStmtPtr, column: cint, T: type): auto =
       {.fatal: "Please add support for the '" & $(T) & "' type".}
   else:
     {.fatal: "Please add support for the '" & $(T) & "' type".}
+
+template readResult(s: RawStmtPtr, column: cint, T: type): auto =
+  when T is Option:
+    if sqlite3_column_type(s, column) == SQLITE_NULL:
+      none(typeof(default(T).get()))
+    else:
+      some(readSimpleResult(s, column, typeof(default(T).get())))
+  else:
+    readSimpleResult(s, column, T)
 
 template readResult(s: RawStmtPtr, T: type): auto =
   when T is tuple:
