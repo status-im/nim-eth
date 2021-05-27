@@ -226,6 +226,16 @@ proc exec*[Params: tuple](db: SqStoreRef,
   if finalizeStatus != SQLITE_OK and result.isOk:
     return err($sqlite3_errstr(finalizeStatus))
 
+proc exec*[Params: tuple, Res](db: SqStoreRef,
+                              stmt: string,
+                              params: Params,
+                              onData: ResultHandler[Res]): KvResult[bool] =
+  let stmt = ? db.prepareStmt(stmt, Params, Res, managed = false)
+  result = exec(stmt, params, onData)
+  let finalizeStatus = sqlite3_finalize(RawStmtPtr stmt)
+  if finalizeStatus != SQLITE_OK and result.isOk:
+    return err($sqlite3_errstr(finalizeStatus))
+
 template exec*(db: SqStoreRef, stmt: string): KvResult[void] =
   exec(db, stmt, ())
 
