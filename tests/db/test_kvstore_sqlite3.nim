@@ -52,6 +52,15 @@ procSuite "SqStoreRef":
       countRes.isOk and countRes.get == true
       totalRecords == 3
 
+    # Without prepare..
+    totalRecords = 0
+    check:
+      (db.exec("SELECT COUNT(*) FROM records;", ()) do (res: int64):
+        totalRecords = int res).get()
+
+    check:
+      totalRecords == 3
+
     let selectRangeStmt = db.prepareStmt(
       "SELECT value FROM records WHERE key >= ? and key < ?;",
       (int64, int64), openarray[byte]).get
