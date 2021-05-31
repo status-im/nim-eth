@@ -132,15 +132,19 @@ type
     bootstrapRecords*: seq[Record]
     ipVote: IpVote
     enrAutoUpdate: bool
-    talkProtocols: Table[seq[byte], TalkProtocolHandler]
+    talkProtocols*: Table[seq[byte], TalkProtocol] # TODO: Table is a bit of
+    # overkill here, use sequence
     rng*: ref BrHmacDrbgContext
 
   PendingRequest = object
     node: Node
     message: seq[byte]
 
-  TalkProtocolHandler* = proc(request: seq[byte]): seq[byte]
+  TalkProtocolHandler* = proc(p: TalkProtocol, request: seq[byte]): seq[byte]
     {.gcsafe, raises: [Defect].}
+
+  TalkProtocol* = ref object of RootObj
+    protocolHandler*: TalkProtocolHandler
 
   DiscResult*[T] = Result[T, cstring]
 
@@ -299,15 +303,16 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
 
 proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
     talkreq: TalkReqMessage, reqId: RequestId) =
-  let protocolHandler = d.talkProtocols.getOrDefault(talkreq.protocol)
+  let talkProtocol = d.talkProtocols.getOrDefault(talkreq.protocol)
 
   let talkresp =
-    if protocolHandler.isNil():
+    if talkProtocol.isNil() or talkProtocol.protocolHandler.isNil():
       # Protocol identifier that is not registered and thus not supported. An
       # empty response is send as per specification.
       TalkRespMessage(response: @[])
     else:
-      TalkRespMessage(response: protocolHandler(talkreq.request))
+      TalkRespMessage(response: talkProtocol.protocolHandler(talkProtocol,
+        talkreq.request))
   let (data, _) = encodeMessagePacket(d.rng[], d.codec, fromId, fromAddr,
     encodeMessage(talkresp, reqId))
 
@@ -341,10 +346,10 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
       trace "Timed out or unrequested message", kind = message.kind,
         origin = fromAddr
 
-proc registerTalkProtocol*(d: Protocol, protocol: seq[byte],
-    handler: TalkProtocolHandler): DiscResult[void] =
+proc registerTalkProtocol*(d: Protocol, protocolId: seq[byte],
+    protocol: TalkProtocol): DiscResult[void] =
   # Currently allow only for one handler per talk protocol.
-  if d.talkProtocols.hasKeyOrPut(protocol, handler):
+  if d.talkProtocols.hasKeyOrPut(protocolId, protocol):
     err("Protocol identifier already registered")
   else:
     ok()
