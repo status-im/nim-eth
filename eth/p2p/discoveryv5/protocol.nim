@@ -546,18 +546,23 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
   ## If one reply is lost here (timed out), others are ignored too.
   ## Same counts for out of order receival.
   var op = await d.waitMessage(fromNode, reqId)
-  if op.isSome and op.get.kind == nodes:
-    var res = op.get.nodes.enrs
-    let total = op.get.nodes.total
-    for i in 1 ..< total:
-      op = await d.waitMessage(fromNode, reqId)
-      if op.isSome and op.get.kind == nodes:
-        res.add(op.get.nodes.enrs)
-      else:
-        # No error on this as we received some nodes.
-        break
-    return ok(res)
+  if op.isSome:
+    if op.get.kind == nodes:
+      var res = op.get.nodes.enrs
+      let total = op.get.nodes.total
+      for i in 1 ..< total:
+        op = await d.waitMessage(fromNode, reqId)
+        if op.isSome and op.get.kind == nodes:
+          res.add(op.get.nodes.enrs)
+        else:
+          # No error on this as we received some nodes.
+          break
+      return ok(res)
+    else:
+      discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
+      return err("Invalid response to find node message")
   else:
+    discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Nodes message not received in time")
 
 proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
@@ -586,9 +591,14 @@ proc ping*(d: Protocol, toNode: Node):
     PingMessage(enrSeq: d.localNode.record.seqNum))
   let resp = await d.waitMessage(toNode, reqId)
 
-  if resp.isSome() and resp.get().kind == pong:
-    d.routingTable.setJustSeen(toNode)
-    return ok(resp.get().pong)
+  if resp.isSome():
+    if resp.get().kind == pong:
+      d.routingTable.setJustSeen(toNode)
+      return ok(resp.get().pong)
+    else:
+      d.replaceNode(toNode)
+      discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
+      return err("Invalid response to ping message")
   else:
     d.replaceNode(toNode)
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
@@ -609,7 +619,6 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
     return ok(res)
   else:
     d.replaceNode(toNode)
-    discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err(nodes.error)
 
 proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
@@ -621,9 +630,14 @@ proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
     TalkReqMessage(protocol: protocol, request: request))
   let resp = await d.waitMessage(toNode, reqId)
 
-  if resp.isSome() and resp.get().kind == talkresp:
-    d.routingTable.setJustSeen(toNode)
-    return ok(resp.get().talkresp)
+  if resp.isSome():
+    if resp.get().kind == talkresp:
+      d.routingTable.setJustSeen(toNode)
+      return ok(resp.get().talkresp)
+    else:
+      d.replaceNode(toNode)
+      discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
+      return err("Invalid response to talk request message")
   else:
     d.replaceNode(toNode)
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
