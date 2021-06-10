@@ -645,10 +645,13 @@ procSuite "Discovery v5 Tests":
         rng, PrivateKey.random(rng[]), localAddress(20303))
       talkProtocol = "echo".toBytes()
 
-    proc handler(request: seq[byte]): seq[byte] {.gcsafe, raises: [Defect].} =
+    proc handler(protocol: TalkProtocol, request: seq[byte]): seq[byte]
+        {.gcsafe, raises: [Defect].} =
       request
 
-    check node2.registerTalkProtocol(talkProtocol, handler).isOk()
+    let echoProtocol = TalkProtocol(protocolHandler: handler)
+
+    check node2.registerTalkProtocol(talkProtocol, echoProtocol).isOk()
     let talkresp = await discv5_protocol.talkreq(node1, node2.localNode,
       talkProtocol, "hello".toBytes())
 
@@ -667,13 +670,16 @@ procSuite "Discovery v5 Tests":
         rng, PrivateKey.random(rng[]), localAddress(20303))
       talkProtocol = "echo".toBytes()
 
-    proc handler(request: seq[byte]): seq[byte] {.gcsafe, raises: [Defect].} =
+    proc handler(protocol: TalkProtocol, request: seq[byte]): seq[byte]
+        {.gcsafe, raises: [Defect].} =
       request
 
+    let echoProtocol = TalkProtocol(protocolHandler: handler)
+
     check:
-      node2.registerTalkProtocol(talkProtocol, handler).isOk()
-      node2.registerTalkProtocol(talkProtocol, handler).isErr()
-      node2.registerTalkProtocol("test".toBytes(), handler).isOk()
+      node2.registerTalkProtocol(talkProtocol, echoProtocol).isOk()
+      node2.registerTalkProtocol(talkProtocol, echoProtocol).isErr()
+      node2.registerTalkProtocol("test".toBytes(), echoProtocol).isOk()
 
     await node1.closeWait()
     await node2.closeWait()
