@@ -74,7 +74,8 @@
 {.push raises: [Defect].}
 
 import
-  std/[tables, sets, options, math, sequtils, algorithm],
+  posix,
+  std/[tables, sets, options, math, sequtils, algorithm, nativesockets],
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/endians2, chronicles, chronos, stint, bearssl, metrics,
   ".."/../[rlp, keys, async_utils],
@@ -117,10 +118,10 @@ const
 
 type
   Protocol* = ref object
-    transp: DatagramTransport
+    transports*: seq[DatagramTransport]
     localNode*: Node
     privateKey: PrivateKey
-    bindAddress: Address ## UDP binding address
+    bindAddresses: seq[Address] ## UDP binding addresses
     pendingRequests: Table[AESGCMNonce, PendingRequest]
     routingTable: RoutingTable
     codec*: Codec
@@ -218,22 +219,29 @@ proc updateRecord*(
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
-proc send(d: Protocol, a: Address, data: seq[byte]) =
+proc sendAndWait(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async.} =
   let ta = initTAddress(a.ip, a.port)
-  let f = d.transp.sendTo(ta, data)
-  f.callback = proc(data: pointer) {.gcsafe.} =
-    if f.failed:
-      # Could be `TransportUseClosedError` in case the transport is already
-      # closed, or could be `TransportOsError` in case of a socket error.
-      # In the latter case this would probably mostly occur if the network
-      # interface underneath gets disconnected or similar.
-      # TODO: Should this kind of error be propagated upwards? Probably, but
-      # it should not stop the process as that would reset the discovery
-      # progress in case there is even a small window of no connection.
-      # One case that needs this error available upwards is when revalidating
-      # nodes. Else the revalidation might end up clearing the routing tabl
-      # because of ping failures due to own network connection failure.
-      warn "Discovery send failed", msg = f.readError.msg
+  var errors: seq[string]
+  for transp in d.transports:
+    try:
+      await transp.sendTo(ta, data)
+      return
+    except CatchableError as f:
+        # Could be `TransportUseClosedError` in case the transport is already
+        # closed, or could be `TransportOsError` in case of a socket error.
+        # In the latter case this would probably mostly occur if the network
+        # interface underneath gets disconnected or similar.
+        # TODO: Should this kind of error be propagated upwards? Probably, but
+        # it should not stop the process as that would reset the discovery
+        # progress in case there is even a small window of no connection.
+        # One case that needs this error available upwards is when revalidating
+        # nodes. Else the revalidation might end up clearing the routing table
+        # because of ping failures due to own network connection failure.
+        errors.add(getCurrentExceptionMsg())
+  warn "Discovery send failed on all transports", errors = errors
+
+proc send(d: Protocol, a: Address, data: seq[byte]) =
+  asyncSpawn d.sendAndWait(a, data)
 
 proc send(d: Protocol, n: Node, data: seq[byte]) =
   doAssert(n.address.isSome())
@@ -945,7 +953,7 @@ proc newProtocol*(privKey: PrivateKey,
                   bootstrapRecords: openarray[Record] = [],
                   previousRecord = none[enr.Record](),
                   bindPort: Port,
-                  bindIp = IPv4_any(),
+                  bindIps = @[IPv6_any(), IPv4_any()],
                   enrAutoUpdate = false,
                   tableIpLimits = DefaultTableIpLimits,
                   rng = newRng()):
@@ -981,7 +989,9 @@ proc newProtocol*(privKey: PrivateKey,
   result = Protocol(
     privateKey: privKey,
     localNode: node,
-    bindAddress: Address(ip: ValidIpAddress.init(bindIp), port: bindPort),
+    bindAddresses: bindIps.map(
+      proc (bindIp: IpAddress): Address = Address(ip: ValidIpAddress.init(bindIp), port: bindPort)
+    ),
     codec: Codec(localNode: node, privKey: privKey,
       sessions: Sessions.init(256)),
     bootstrapRecords: @bootstrapRecords,
@@ -993,11 +1003,20 @@ proc newProtocol*(privKey: PrivateKey,
 
 proc open*(d: Protocol) {.raises: [Defect, CatchableError].} =
   info "Starting discovery node", node = d.localNode,
-    bindAddress = d.bindAddress
+    bindAddresses = d.bindAddresses
 
-  # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(d.bindAddress.ip, d.bindAddress.port)
-  d.transp = newDatagramTransport(processClient, udata = d, local = ta)
+  for bindAddress in d.bindAddresses:
+    let ta = initTAddress(bindAddress.ip, bindAddress.port)
+    if ta.family == AddressFamily.IPv4:
+      d.transports.add(newDatagramTransport(processClient, udata = d, local = ta))
+    elif ta.family == AddressFamily.IPv6:
+      let localSock = AsyncFD(createNativeSocket(ta.getDomain(), SockType.SOCK_DGRAM,
+                                    nativesockets.Protocol.IPPROTO_UDP))
+      discard localSock.setSockOpt(posix.IPPROTO_IPV6, posix.IPV6_V6ONLY, 1)
+      d.transports.add(newDatagramTransport6(processClient, udata = d, local = ta, sock = localSock))
+    else:
+      error "Bind address should be either IPv4 or IPv6", address_family = ta.family, address = ta
+
 
   d.seedTable()
 
@@ -1007,7 +1026,8 @@ proc start*(d: Protocol) =
   d.ipMajorityLoop = ipMajorityLoop(d)
 
 proc close*(d: Protocol) =
-  doAssert(not d.transp.closed)
+  for transp in d.transports:
+    doAssert(not transp.closed)
 
   debug "Closing discovery node", node = d.localNode
   if not d.revalidateLoop.isNil:
@@ -1017,10 +1037,12 @@ proc close*(d: Protocol) =
   if not d.ipMajorityLoop.isNil:
     d.ipMajorityLoop.cancel()
 
-  d.transp.close()
+  for transp in d.transports:
+    transp.close()
 
 proc closeWait*(d: Protocol) {.async.} =
-  doAssert(not d.transp.closed)
+  for transp in d.transports:
+    doAssert(not transp.closed)
 
   debug "Closing discovery node", node = d.localNode
   if not d.revalidateLoop.isNil:
@@ -1030,4 +1052,6 @@ proc closeWait*(d: Protocol) {.async.} =
   if not d.ipMajorityLoop.isNil:
     await d.ipMajorityLoop.cancelAndWait()
 
-  await d.transp.closeWait()
+  for transp in d.transports:
+    await transp.closeWait()
+  
