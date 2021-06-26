@@ -2,118 +2,76 @@ import
   nimcrypto/keccak,
   ".."/[common, rlp, keys]
 
-proc initLegacyTx*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAddress,
-  value: UInt256, payload: Blob, V: int64, R, S: UInt256, isContractCreation = false): LegacyTx =
-  result.nonce = nonce
-  result.gasPrice = gasPrice
-  result.gasLimit = gasLimit
-  result.to = to
-  result.value = value
-  result.payload = payload
-  result.V = V
-  result.R = R
-  result.S = S
-  result.isContractCreation = isContractCreation
-
-type
-  LegacyUnsignedTx* = object
-    nonce*:  AccountNonce
-    gasPrice*:      GasInt
-    gasLimit*:      GasInt
-    to* {.rlpCustomSerialization.}: EthAddress
-    value*:         UInt256
-    payload*:       Blob
-    isContractCreation* {.rlpIgnore.}: bool
-
-  AccessListUnsignedTx* = object
-    chainId* {.rlpCustomSerialization.}: ChainId
-    nonce*     : AccountNonce
-    gasPrice*  : GasInt
-    gasLimit*  : GasInt
-    to* {.rlpCustomSerialization.}: EthAddress
-    value*     : UInt256
-    payload*   : Blob
-    accessList*: AccessList
-    isContractCreation* {.rlpIgnore.}: bool
-
-  UnsignedTxTypes* = LegacyUnsignedTx | AccessListUnsignedTx
-
-proc read*(rlp: var Rlp, t: var UnsignedTxTypes, _: type EthAddress): EthAddress {.inline.} =
-  if rlp.blobLen != 0:
-    result = rlp.read(EthAddress)
-  else:
-    t.isContractCreation = true
-
-proc append*(rlpWriter: var RlpWriter, t: UnsignedTxTypes, a: EthAddress) {.inline.} =
-  if t.isContractCreation:
-    rlpWriter.append("")
-  else:
-    rlpWriter.append(a)
-
-proc read*(rlp: var Rlp, t: var AccessListUnsignedTx, _: type ChainId): ChainId  {.inline.} =
-  rlp.read(uint64).ChainId
-
-proc append*(rlpWriter: var RlpWriter, t: AccessListUnsignedTx, a: ChainId) {.inline.} =
-  rlpWriter.append(a.uint64)
-
 const
   EIP155_CHAIN_ID_OFFSET* = 35'i64
 
-func rlpEncode*(tx: LegacyTx): auto =
-  # Encode transaction without signature
-  return rlp.encode(LegacyUnsignedTx(
-    nonce: tx.nonce,
-    gasPrice: tx.gasPrice,
-    gasLimit: tx.gasLimit,
-    to: tx.to,
-    value: tx.value,
-    payload: tx.payload,
-    isContractCreation: tx.isContractCreation
-    ))
+func rlpEncodeLegacy(tx: Transaction): auto =
+  var w = initRlpWriter()
+  w.startList(6)
+  w.append(tx.nonce)
+  w.append(tx.gasPrice)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.finish()
 
-func rlpEncodeEIP155*(tx: LegacyTx): auto =
-  let V = (tx.V - EIP155_CHAIN_ID_OFFSET) div 2
-  # Encode transaction without signature
-  return rlp.encode(LegacyTx(
-    nonce: tx.nonce,
-    gasPrice: tx.gasPrice,
-    gasLimit: tx.gasLimit,
-    to: tx.to,
-    value: tx.value,
-    payload: tx.payload,
-    isContractCreation: tx.isContractCreation,
-    V: V,
-    R: 0.u256,
-    S: 0.u256
-    ))
+func rlpEncodeEip155(tx: Transaction): auto =
+  let chainId = (tx.V - EIP155_CHAIN_ID_OFFSET) div 2
+  var w = initRlpWriter()
+  w.startList(9)
+  w.append(tx.nonce)
+  w.append(tx.gasPrice)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(chainId)
+  w.append(0)
+  w.append(0)
+  w.finish()
 
-func rlpEncode*(tx: AccessListTx): auto =
-  # EIP 2718/2930
-  let unsignedTx = AccessListUnsignedTx(
-    chainId: tx.chainId,
-    nonce: tx.nonce,
-    gasPrice: tx.gasPrice,
-    gasLimit: tx.gasLimit,
-    to: tx.to,
-    value: tx.value,
-    payload: tx.payload,
-    accessList: tx.accessList,
-    isContractCreation: tx.isContractCreation
-    )
-  var rw = initRlpWriter()
-  rw.append(1)
-  rw.append(unsignedTx)
-  rw.finish()
+func rlpEncodeEip2930(tx: Transaction): auto =
+  var w = initRlpWriter()
+  w.append(1)
+  w.startList(8)
+  w.append(tx.chainId.uint64)
+  w.append(tx.nonce)
+  w.append(tx.gasPrice)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.finish()
 
-func txHashNoSignature*(tx: LegacyTx): Hash256 =
-  # Hash transaction without signature
-  keccak256.digest(if tx.V >= EIP155_CHAIN_ID_OFFSET: tx.rlpEncodeEIP155 else: tx.rlpEncode)
+func rlpEncodeEip1559(tx: Transaction): auto =
+  var w = initRlpWriter()
+  w.append(2)
+  w.startList(9)
+  w.append(tx.chainId.uint64)
+  w.append(tx.nonce)
+  w.append(tx.maxPriorityFee)
+  w.append(tx.maxFee)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.finish()
 
-func txHashNoSignature*(tx: AccessListTx): Hash256 =
-  keccak256.digest(tx.rlpEncode)
+func rlpEncode*(tx: Transaction): auto =
+  case tx.txType
+  of TxLegacy:
+    if tx.V >= EIP155_CHAIN_ID_OFFSET:
+      tx.rlpEncodeEIP155
+    else:
+      tx.rlpEncodeLegacy
+  of TxEip2930:
+    tx.rlpEncodeEip2930
+  of TxEip1559:
+    tx.rlpEncodeEip1559
 
 func txHashNoSignature*(tx: Transaction): Hash256 =
-  if tx.txType == LegacyTxType:
-    txHashNoSignature(tx.legacyTx)
-  else:
-    txHashNoSignature(tx.accessListTx)
+  # Hash transaction without signature
+  keccak256.digest(rlpEncode(tx))

@@ -9,32 +9,8 @@ type
   EthHeader = object
     header: BlockHeader
 
-proc `==`(a, b: HashOrStatus): bool =
-  result = a.isHash == b.isHash
-  if not result: return
-  if a.isHash:
-    result = result and a.hash == b.hash
-  else:
-    result = result and a.status == b.status
-
 func `==`(a, b: ChainId): bool =
   a.uint64 == b.uint64
-
-func `==`(a, b: Transaction): bool =
-  if a.txType != b.txType:
-    return false
-  if a.txType == LegacyTxType:
-    return a.legacyTx == b.legacyTx
-  else:
-    return a.accessListTx == b.accessListTx
-
-func `==`(a, b: Receipt): bool =
-  if a.receiptType != b.receiptType:
-    return false
-  if a.receiptType == LegacyReceiptType:
-    return a.legacyReceipt == b.legacyReceipt
-  else:
-    return a.accessListReceipt == b.accessListReceipt
 
 proc loadFile(x: int) =
   let fileName = "tests" / "rlp" / "eip2718" / "acl_block_" & $x & ".json"
@@ -62,20 +38,18 @@ proc suite1() =
   suite "rlp encoding":
     test "receipt roundtrip":
       let a = Receipt(
-        receiptType: LegacyReceiptType,
-        legacyReceipt: LegacyReceipt(
-          stateRootOrStatus: hashOrStatus(true),
-          cumulativeGasUsed: 51000
-        )
+        receiptType: LegacyReceipt,
+        isHash: false,
+        status: false,
+        cumulativeGasUsed: 51000
       )
 
       let hash = rlpHash(a)
       let b = Receipt(
-        receiptType: LegacyReceiptType,
-        legacyReceipt: LegacyReceipt(
-          stateRootOrStatus: hashOrStatus(hash),
-          cumulativeGasUsed: 21000
-        )
+        receiptType: LegacyReceipt,
+        isHash: true,
+        hash: hash,
+        cumulativeGasUsed: 21000
       )
 
       let abytes = rlp.encode(a)
@@ -85,20 +59,16 @@ proc suite1() =
       check aa == a
       check bb == b
 
-    test "access list receipt":
+    test "EIP 2930 receipt":
       let a = Receipt(
-        receiptType: AccessListReceiptType,
-        accessListReceipt: AccessListReceipt(
-          status: true
-        )
+        receiptType: Eip2930Receipt,
+        status: true
       )
 
       let b = Receipt(
-        receiptType: AccessListReceiptType,
-        accessListReceipt: AccessListReceipt(
-          status: false,
-          cumulativeGasUsed: 21000
-        )
+        receiptType: Eip2930Receipt,
+        status: false,
+        cumulativeGasUsed: 21000
       )
 
       let abytes = rlp.encode(a)
@@ -112,6 +82,12 @@ proc suite2() =
   suite "eip 2718 transaction":
     for i in 0..<10:
       loadFile(i)
+
+    test "rlp roundtrip EIP1559":
+      var h: BlockHeader
+      let xy = rlp.encode(h)
+      let hh = rlp.decode(xy, BlockHeader)
+      check h == hh
 
 suite1()
 suite2()

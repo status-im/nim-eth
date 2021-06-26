@@ -4,7 +4,7 @@ import
   ../rlp, ../trie/[trie_defs, db]
 
 export
-  stint, read, append, KeccakHash, rlp
+  stint, read, append, KeccakHash, rlp, options
 
 type
   Hash256* = MDigest[256]
@@ -39,21 +39,10 @@ type
   ChainId* = distinct uint64
 
   Account* = object
-    nonce*:             AccountNonce
-    balance*:           UInt256
-    storageRoot*:       Hash256
-    codeHash*:          Hash256
-
-  LegacyTx* = object
-    nonce*   : AccountNonce
-    gasPrice*: GasInt
-    gasLimit*: GasInt
-    to* {.rlpCustomSerialization.}: EthAddress
-    value*   : UInt256
-    payload* : Blob
-    V*       : int64
-    R*, S*   : UInt256
-    isContractCreation* {.rlpIgnore.}: bool
+    nonce*:       AccountNonce
+    balance*:     UInt256
+    storageRoot*: Hash256
+    codeHash*:    Hash256
 
   AccessPair* = object
     address*    : EthAddress
@@ -61,29 +50,25 @@ type
 
   AccessList* = seq[AccessPair]
 
-  AccessListTx* = object
-    chainId* {.rlpCustomSerialization.}: ChainId
-    nonce*     : AccountNonce
-    gasPrice*  : GasInt
-    gasLimit*  : GasInt
-    to* {.rlpCustomSerialization.}: EthAddress
-    value*     : UInt256
-    payload*   : Blob
-    accessList*: AccessList
-    V*         : int64
-    R*, S*     : UInt256
-    isContractCreation* {.rlpIgnore.}: bool
-
   TxType* = enum
-    LegacyTxType
-    AccessListTxType
+    TxLegacy
+    TxEip2930
+    TxEip1559
 
   Transaction* = object
-    case txType*: TxType
-    of LegacyTxType:
-      legacyTx*: LegacyTx
-    of AccessListTxType:
-      accessListTx*: AccessListTx
+    txType*        : TxType               # EIP-2718
+    chainId*       : ChainId              # EIP-2930
+    nonce*         : AccountNonce
+    gasPrice*      : GasInt
+    maxPriorityFee*: GasInt               # EIP-1559
+    maxFee*        : GasInt               # EIP-1559
+    gasLimit*      : GasInt
+    to*            : Option[EthAddress]
+    value*         : UInt256
+    payload*       : Blob
+    accessList*    : AccessList           # EIP-2930
+    V*             : int64
+    R*, S*         : UInt256
 
   TransactionStatus* = enum
     Unknown,
@@ -112,6 +97,8 @@ type
     extraData*:     Blob
     mixDigest*:     Hash256
     nonce*:         BlockNonce
+    # `baseFee` is the get/set of `fee`
+    fee*:           Option[UInt256]   # EIP-1559
 
   BlockBody* = object
     transactions*{.rlpCustomSerialization.}: seq[Transaction]
@@ -122,35 +109,21 @@ type
     topics*:        seq[Topic]
     data*:          Blob
 
-  HashOrStatus* = object
-    case isHash*: bool
-    of true:
-      hash*: Hash256
-    else:
-      status*: bool
-
-  LegacyReceipt* = object
-    stateRootOrStatus*: HashOrStatus
-    cumulativeGasUsed*: GasInt
-    bloom*: BloomFilter
-    logs* : seq[Log]
-
-  AccessListReceipt* = object
-    status*: bool
-    cumulativeGasUsed*: GasInt
-    bloom* : BloomFilter
-    logs*  : seq[Log]
-
-  ReceiptType* = enum
-    LegacyReceiptType
-    AccessListReceiptType
+  # easily convertible between
+  # ReceiptType and TxType
+  ReceiptType* = TxType
+    # LegacyReceipt  = TxLegacy
+    # Eip2930Receipt = TxEip2930
+    # Eip1559Receipt = TxEip1559
 
   Receipt* = object
-    case receiptType*: ReceiptType
-    of LegacyReceiptType:
-      legacyReceipt*: LegacyReceipt
-    of AccessListReceiptType:
-      accessListReceipt*: AccessListReceipt
+    receiptType*      : ReceiptType
+    isHash*           : bool          # hash or status
+    status*           : bool          # EIP-658
+    hash*             : Hash256
+    cumulativeGasUsed*: GasInt
+    bloom*            : BloomFilter
+    logs*             : seq[Log]
 
   EthBlock* = object
     header*: BlockHeader
@@ -222,6 +195,11 @@ type
     OK
     Error
 
+const
+  LegacyReceipt*  = TxLegacy
+  Eip2930Receipt* = TxEip2930
+  Eip1559Receipt* = TxEip1559
+
 when BlockNumber is int64:
   ## The goal of these templates is to make it easier to switch
   ## the block number type to a different representation
@@ -256,6 +234,16 @@ else:
   template u256*(n: BlockNumber): UInt256 =
     n
 
+# EIP-1559 conveniences
+func baseFee*(h: BlockHeader | BlockHeaderRef): UInt256 =
+  if h.fee.isSome:
+    h.fee.get()
+  else:
+    0.u256
+
+template `baseFee=`*(h: BlockHeader | BlockHeaderRef, data: UInt256) =
+  h.fee = some(data)
+
 func toBlockNonce*(n: uint64): BlockNonce =
   n.toBytesBE()
 
@@ -268,25 +256,24 @@ proc newAccount*(nonce: AccountNonce = 0, balance: UInt256 = 0.u256): Account =
   result.storageRoot = emptyRlpHash
   result.codeHash = blankStringHash
 
-proc hashOrStatus*(hash: Hash256): HashOrStatus =
-  HashOrStatus(isHash: true, hash: hash)
+proc hasStatus*(rec: Receipt): bool {.inline.} =
+  rec.isHash == false
 
-proc hashOrStatus*(status: bool): HashOrStatus =
-  HashOrStatus(isHash: false, status: status)
+proc hasStateRoot*(rec: Receipt): bool {.inline.} =
+  rec.isHash == true
 
-proc hasStatus*(rec: LegacyReceipt): bool {.inline.} =
-  rec.stateRootOrStatus.isHash == false
-
-proc hasStateRoot*(rec: LegacyReceipt): bool {.inline.} =
-  rec.stateRootOrStatus.isHash == true
-
-proc stateRoot*(rec: LegacyReceipt): Hash256 {.inline.} =
+proc stateRoot*(rec: Receipt): Hash256 {.inline.} =
   doAssert(rec.hasStateRoot)
-  rec.stateRootOrStatus.hash
+  rec.hash
 
-proc status*(rec: LegacyReceipt): int {.inline.} =
-  doAssert(rec.hasStatus)
-  if rec.stateRootOrStatus.status: 1 else: 0
+template contractCreation*(tx: Transaction): bool =
+  tx.to.isNone
+
+func destination*(tx: Transaction): EthAddress =
+  # use getRecipient if you also want to get
+  # the contract address
+  if tx.to.isSome:
+    return tx.to.get
 
 #
 # Rlp serialization:
@@ -329,52 +316,132 @@ proc append*(rlpWriter: var RlpWriter, value: Stint) =
   {.fatal: "RLP serialization of signed integers is not allowed".}
   discard
 
-type
-  TxTypes* = LegacyTx | AccessListTx
+proc append*[T](w: var RlpWriter, val: Option[T]) =
+  if val.isSome:
+    w.append(val.get())
+  else:
+    w.append("")
 
-proc read*(rlp: var Rlp, t: var TxTypes, _: type EthAddress): EthAddress {.inline.} =
+proc appendTxLegacy(w: var RlpWriter, tx: Transaction) =
+  w.startList(9)
+  w.append(tx.nonce)
+  w.append(tx.gasPrice)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.V)
+  w.append(tx.R)
+  w.append(tx.S)
+
+proc appendTxEip2930(w: var RlpWriter, tx: Transaction) =
+  w.append(1)
+  w.startList(11)
+  w.append(tx.chainId.uint64)
+  w.append(tx.nonce)
+  w.append(tx.gasPrice)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.append(tx.V)
+  w.append(tx.R)
+  w.append(tx.S)
+
+proc appendTxEip1559(w: var RlpWriter, tx: Transaction) =
+  w.append(2)
+  w.startList(12)
+  w.append(tx.chainId.uint64)
+  w.append(tx.nonce)
+  w.append(tx.maxPriorityFee)
+  w.append(tx.maxFee)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.append(tx.V)
+  w.append(tx.R)
+  w.append(tx.S)
+
+proc append*(w: var RlpWriter, tx: Transaction) =
+  case tx.txType
+  of TxLegacy:
+    w.appendTxLegacy(tx)
+  of TxEip2930:
+    w.appendTxEip2930(tx)
+  of TxEip1559:
+    w.appendTxEip1559(tx)
+
+template read[T](rlp: var Rlp, val: var T)=
+  val = rlp.read(type val)
+
+proc read[T](rlp: var Rlp, val: var Option[T])=
   if rlp.blobLen != 0:
-    result = rlp.read(EthAddress)
+    val = some(rlp.read(T))
   else:
-    t.isContractCreation = true
-    rlp.skipElem()
+    rlp.skipElem
 
-proc append*(rlpWriter: var RlpWriter, t: TxTypes, a: EthAddress) {.inline.} =
-  if t.isContractCreation:
-    rlpWriter.append("")
-  else:
-    rlpWriter.append(a)
+proc readTxLegacy(rlp: var Rlp, tx: var Transaction)=
+  tx.txType = TxLegacy
+  rlp.tryEnterList()
+  rlp.read(tx.nonce)
+  rlp.read(tx.gasPrice)
+  rlp.read(tx.gasLimit)
+  rlp.read(tx.to)
+  rlp.read(tx.value)
+  rlp.read(tx.payload)
+  rlp.read(tx.V)
+  rlp.read(tx.R)
+  rlp.read(tx.S)
 
-proc read*(rlp: var Rlp, t: var AccessListTx, _: type ChainId): ChainId  {.inline.} =
-  rlp.read(uint64).ChainId
+proc readTxEip2930(rlp: var Rlp, tx: var Transaction)=
+  tx.txType = TxEip2930
+  rlp.tryEnterList()
+  tx.chainId = rlp.read(uint64).ChainId
+  rlp.read(tx.nonce)
+  rlp.read(tx.gasPrice)
+  rlp.read(tx.gasLimit)
+  rlp.read(tx.to)
+  rlp.read(tx.value)
+  rlp.read(tx.payload)
+  rlp.read(tx.accessList)
+  rlp.read(tx.V)
+  rlp.read(tx.R)
+  rlp.read(tx.S)
 
-proc append*(rlpWriter: var RlpWriter, t: AccessListTx, a: ChainId) {.inline.} =
-  rlpWriter.append(a.uint64)
-
-proc append*(rlpWriter: var RlpWriter, tx: Transaction) =
-  if tx.txType == LegacyTxType:
-    rlpWriter.append(tx.legacyTx)
-  else:
-    # EIP 2718/2930
-    rlpWriter.append(1)
-    rlpWriter.append(tx.accessListTx)
+proc readTxEip1559(rlp: var Rlp, tx: var Transaction)=
+  tx.txType = TxEip1559
+  rlp.tryEnterList()
+  tx.chainId = rlp.read(uint64).ChainId
+  rlp.read(tx.nonce)
+  rlp.read(tx.maxPriorityFee)
+  rlp.read(tx.maxFee)
+  rlp.read(tx.gasLimit)
+  rlp.read(tx.to)
+  rlp.read(tx.value)
+  rlp.read(tx.payload)
+  rlp.read(tx.accessList)
+  rlp.read(tx.V)
+  rlp.read(tx.R)
+  rlp.read(tx.S)
 
 proc read*(rlp: var Rlp, T: type Transaction): T =
   if rlp.isList:
-    return Transaction(
-      txType: LegacyTxType,
-      legacyTx: rlp.read(LegacyTx)
-    )
+    rlp.readTxLegacy(result)
+    return
 
-  # EIP 2718/2930
+  # EIP 2718
   let txType = rlp.read(int)
-  if txType != 1:
+  if txType notin {1, 2}:
     raise newException(UnsupportedRlpError,
-      "TxType expect 1 got " & $txType)
-  return Transaction(
-    txType: AccessListTxType,
-    accessListTx: rlp.read(AccessListTx)
-  )
+      "TxType expect 1 or 2 got " & $txType)
+
+  if TxType(txType) == TxEip2930:
+    rlp.readTxEip2930(result)
+  else:
+    rlp.readTxEip1559(result)
 
 proc read*(rlp: var Rlp, t: var (EthBlock | BlockBody), _: type seq[Transaction]): seq[Transaction] {.inline.} =
   # EIP 2718/2930: we have to override this field
@@ -395,20 +462,10 @@ proc append*(rlpWriter: var RlpWriter, blk: EthBlock | BlockBody, txs: seq[Trans
   # not rlp(txType, txPayload) -> two list elem, wrong!
   rlpWriter.startList(txs.len)
   for tx in txs:
-    if tx.txType == LegacyTxType:
+    if tx.txType == TxLegacy:
       rlpWriter.append(tx)
     else:
       rlpWriter.append(rlp.encode(tx))
-
-proc read*(rlp: var Rlp, T: type HashOrStatus): T {.inline.} =
-  if rlp.isBlob() and (rlp.blobLen() == 32 or rlp.blobLen() == 1):
-    if rlp.blobLen == 1:
-      result = hashOrStatus(rlp.read(uint8) == 1)
-    else:
-      result = hashOrStatus(rlp.read(Hash256))
-  else:
-    raise newException(RlpTypeMismatch,
-      "HashOrStatus expected, but the source RLP is not a blob of right size.")
 
 func init*(T: type BlockHashOrNumber, str: string): T
           {.raises: [ValueError, Defect].} =
@@ -428,36 +485,45 @@ func `$`*(x: BlockHashOrNumber): string =
   else:
     $x.number
 
-proc append*(rlpWriter: var RlpWriter, value: HashOrStatus) {.inline.} =
-  if value.isHash:
-    rlpWriter.append(value.hash)
-  else:
-    rlpWriter.append(if value.status: 1'u8 else: 0'u8)
+proc append*(w: var RlpWriter, rec: Receipt) =
+  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt}:
+    w.append(rec.receiptType.int)
 
-proc append*(rlpWriter: var RlpWriter, rec: Receipt) =
-  if rec.receiptType == LegacyReceiptType:
-    rlpWriter.append(rec.legacyReceipt)
+  w.startList(4)
+  if rec.isHash:
+    w.append(rec.hash)
   else:
-    # EIP 2718/2930
-    rlpWriter.append(1)
-    rlpWriter.append(rec.accessListReceipt)
+    w.append(rec.status.uint8)
+
+  w.append(rec.cumulativeGasUsed)
+  w.append(rec.bloom)
+  w.append(rec.logs)
 
 proc read*(rlp: var Rlp, T: type Receipt): T =
   if rlp.isList:
-    return Receipt(
-      receiptType: LegacyReceiptType,
-      legacyReceipt: rlp.read(LegacyReceipt)
-    )
+    result.receiptType = LegacyReceipt
+  else:
+    # EIP 2718
+    let recType = rlp.read(int)
+    if recType notin {1, 2}:
+      raise newException(UnsupportedRlpError,
+        "TxType expect 1 or 2 got " & $recType)
+    result.receiptType = ReceiptType(recType)
 
-  # EIP 2718/2930
-  let recType = rlp.read(int)
-  if recType != 1:
-    raise newException(UnsupportedRlpError,
-      "TxType expect 1 got " & $recType)
-  return Receipt(
-    receiptType: AccessListReceiptType,
-    accessListReceipt: rlp.read(AccessListReceipt)
-  )
+  rlp.tryEnterList()
+  if rlp.isBlob and rlp.blobLen in {0, 1}:
+    result.isHash = false
+    result.status = rlp.read(uint8) == 1
+  elif rlp.isBlob and rlp.blobLen == 32:
+    result.isHash = true
+    result.hash   = rlp.read(Hash256)
+  else:
+    raise newException(RlpTypeMismatch,
+      "HashOrStatus expected, but the source RLP is not a blob of right size.")
+
+  rlp.read(result.cumulativeGasUsed)
+  rlp.read(result.bloom)
+  rlp.read(result.logs)
 
 proc read*(rlp: var Rlp, T: type Time): T {.inline.} =
   result = fromUnix(rlp.read(int64))
@@ -477,6 +543,30 @@ proc read*(rlp: var Rlp, T: type HashOrNum): T =
 
 proc append*(rlpWriter: var RlpWriter, t: Time) {.inline.} =
   rlpWriter.append(t.toUnix())
+
+proc append*(w: var RlpWriter, h: BlockHeader) =
+  w.startList(if h.fee.isSome: 16 else: 15)
+  for k, v in fieldPairs(h):
+    when k != "fee":
+      w.append(v)
+  if h.fee.isSome:
+    w.append(h.fee.get())
+
+proc read*(rlp: var Rlp, T: type BlockHeader): T =
+  let len = rlp.listLen
+
+  if len notin {15, 16}:
+    raise newException(UnsupportedRlpError,
+      "BlockHeader elems should be 15 or 16 got " & $len)
+
+  rlp.tryEnterList()
+  for k, v in fieldPairs(result):
+    when k != "fee":
+      v = rlp.read(type v)
+
+  if len == 16:
+    # EIP-1559
+    result.baseFee = rlp.read(UInt256)
 
 proc rlpHash*[T](v: T): Hash256 =
   keccak256.digest(rlp.encode(v))
