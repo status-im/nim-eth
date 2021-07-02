@@ -550,7 +550,7 @@ proc openKvStore*(db: SqStoreRef, name = "kvstore", withoutRowid = false): KvRes
   ok res
 
 when defined(metrics):
-  import tables, times,
+  import locks, tables, times,
         chronicles, metrics
 
   type Sqlite3Info = ref object of Gauge
@@ -561,6 +561,7 @@ when defined(metrics):
                         help: help,
                         typ: "gauge",
                         creationThreadId: getThreadId())
+    result.lock.initLock()
     result.register(registry)
 
   var sqlite3Info* {.global.} = newSqlite3Info("sqlite3_info", "SQLite3 info")
