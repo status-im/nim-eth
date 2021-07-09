@@ -46,9 +46,6 @@ task test_discv5, "Run discovery v5 tests":
 task test_discv4, "Run discovery v4 tests":
   runTest("tests/p2p/test_discovery")
 
-task test_portal, "Run Portal network tests":
-  runTest("tests/p2p/all_portal_tests")
-
 task test_p2p, "Run p2p tests":
   runTest("tests/p2p/all_tests")
 
@@ -89,6 +86,3 @@ task test_discv5_full, "Run discovery v5 and its dependencies tests":
 
 task build_dcli, "Build dcli":
   buildBinary("eth/p2p/discoveryv5/dcli")
-
-task build_portalcli, "Build portalcli":
-  buildBinary("eth/p2p/portal/portalcli")
