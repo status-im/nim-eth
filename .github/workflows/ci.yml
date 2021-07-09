@@ -237,4 +237,3 @@ jobs:
           nimble install -y --depsOnly
           nimble test
           nimble build_dcli
-          nimble build_portalcli
