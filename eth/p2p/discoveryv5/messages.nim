@@ -47,7 +47,7 @@ type
     port*: uint16
 
   FindNodeMessage* = object
-    distances*: seq[uint32]
+    distances*: seq[uint16]
 
   NodesMessage* = object
     total*: uint32
