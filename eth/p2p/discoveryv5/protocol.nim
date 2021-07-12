@@ -197,9 +197,15 @@ proc randomNodes*(d: Protocol, maxAmount: int,
   ## the nodes selected are filtered by provided `enrField`.
   d.randomNodes(maxAmount, proc(x: Node): bool = x.record.contains(enrField))
 
-proc neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
+proc neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE,
+    seenOnly = false): seq[Node] =
   ## Return up to k neighbours (closest node ids) of the given node id.
-  d.routingTable.neighbours(id, k)
+  d.routingTable.neighbours(id, k, seenOnly)
+
+proc neighboursAtDistances*(d: Protocol, distances: seq[uint16],
+    k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
+  ## Return up to k neighbours (closest node ids) at given distances.
+  d.routingTable.neighboursAtDistances(distances, k, seenOnly)
 
 proc nodesDiscovered*(d: Protocol): int = d.routingTable.len
 
