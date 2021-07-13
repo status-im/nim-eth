@@ -2,6 +2,8 @@ import
   std/[options, sequtils],
   stew/shims/macros, chronos, faststreams/outputs
 
+{.push raises: [Defect].}
+
 type
   MessageKind* = enum
     msgHandshake
@@ -1004,7 +1006,10 @@ macro emitForSingleBackend(
     peerState.getType, networkState.getType)
 
   result = p.genCode()
-  result.storeMacroResult true
+  try:
+    result.storeMacroResult true
+  except IOError:
+    error "IOError: Unable to store macro result"
 
 macro emitForAllBackends(backendSyms: typed, options: untyped, body: untyped): untyped =
   let name = $(options[0])

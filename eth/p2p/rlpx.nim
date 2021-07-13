@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [Defect].}
+
 import
   std/[tables, algorithm, deques, hashes, options, typetraits],
   stew/shims/macros, chronicles, nimcrypto, chronos,
@@ -512,7 +514,8 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
     await peer.disconnectAndRaise(BreachOfProtocol,
                                   "Cannot read RLPx message id")
 
-proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type): auto =
+proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type): auto
+    {.raises: [Exception].} =
   when defined(release):
     return r.read(MsgType)
   else:
@@ -945,13 +948,13 @@ proc validatePubKeyInHello(msg: DevP2P.hello, pubKey: PublicKey): bool =
   let pk = PublicKey.fromRaw(msg.nodeId)
   pk.isOk and pk[] == pubKey
 
-proc checkUselessPeer(peer: Peer) =
+proc checkUselessPeer(peer: Peer) {.raises: [Exception].} =
   if peer.dispatcher.numProtocols == 0:
     # XXX: Send disconnect + UselessPeer
     raise newException(UselessPeerError, "Useless peer")
 
 proc initPeerState*(peer: Peer, capabilities: openarray[Capability])
-    {.raises: [UselessPeerError, Defect].} =
+    {.raises: [UselessPeerError, Defect, Exception].} =
   peer.dispatcher = getDispatcher(peer.network, capabilities)
   checkUselessPeer(peer)
 
@@ -1021,10 +1024,13 @@ template `^`(arr): auto =
   arr.toOpenArray(0, `arr Len` - 1)
 
 proc initSecretState(hs: var Handshake, authMsg, ackMsg: openarray[byte],
-                     p: Peer) =
-  var secrets = hs.getSecrets(authMsg, ackMsg).tryGet()
-  initSecretState(secrets, p.secretsState)
-  burnMem(secrets)
+                     p: Peer) {.raises: [Defect].}=
+  try:
+    var secrets = hs.getSecrets(authMsg, ackMsg).tryGet()
+    initSecretState(secrets, p.secretsState)
+    burnMem(secrets)
+  except:
+    error "Unable to init secret state"
 
 template checkSnappySupport(node: EthereumNode, handshake: Handshake, peer: Peer) =
   when useSnappy:
