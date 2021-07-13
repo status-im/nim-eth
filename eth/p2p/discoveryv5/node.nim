@@ -31,6 +31,8 @@ type
 
 func toNodeId*(pk: PublicKey): NodeId =
   ## Convert public key to a node identifier.
+  # Keccak256 hash is used as defined in ENR spec for scheme v4:
+  # https://github.com/ethereum/devp2p/blob/master/enr.md#v4-identity-scheme
   readUintBE[256](keccak256.digest(pk.toRaw()).data)
 
 func newNode*(r: Record): Result[Node, cstring] =

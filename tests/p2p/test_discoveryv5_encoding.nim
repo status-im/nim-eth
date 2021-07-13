@@ -51,7 +51,7 @@ suite "Discovery v5.1 Protocol Message Encodings":
 
   test "FindNode Request":
     let
-      distances = @[0x0100'u32]
+      distances = @[0x0100'u16]
       fn = FindNodeMessage(distances: distances)
       reqId = RequestId(id: @[1.byte])
 

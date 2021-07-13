@@ -62,19 +62,19 @@ procSuite "Discovery v5 Tests":
     const
       targetId = "0x0000"
       testValues = [
-        ("0x0001", 1'u32),
-        ("0x0002", 2'u32),
-        ("0x0003", 2'u32),
-        ("0x0004", 3'u32),
-        ("0x0007", 3'u32),
-        ("0x0008", 4'u32),
-        ("0x000f", 4'u32),
-        ("0x0080", 8'u32),
-        ("0x00ff", 8'u32),
-        ("0x0100", 9'u32),
-        ("0x01ff", 9'u32),
-        ("0x8000", 16'u32),
-        ("0xffff", 16'u32)
+        ("0x0001", 1'u16),
+        ("0x0002", 2'u16),
+        ("0x0003", 2'u16),
+        ("0x0004", 3'u16),
+        ("0x0007", 3'u16),
+        ("0x0008", 4'u16),
+        ("0x000f", 4'u16),
+        ("0x0080", 8'u16),
+        ("0x00ff", 8'u16),
+        ("0x0100", 9'u16),
+        ("0x01ff", 9'u16),
+        ("0x8000", 16'u16),
+        ("0xffff", 16'u16)
       ]
 
     for (id, d) in testValues:
@@ -84,12 +84,12 @@ procSuite "Discovery v5 Tests":
     const
       targetKey = "5d485bdcbe9bc89314a10ae9231e429d33853e3a8fa2af39f5f827370a2e4185e344ace5d16237491dad41f278f1d3785210d29ace76cd627b9147ee340b1125"
       testValues = [
-        ("29738ba0c1a4397d6a65f292eee07f02df8e58d41594ba2be3cf84ce0fc58169", 251'u32),
-        ("1c9b1cafbec00848d2c174b858219914b42a7d5c9359b1ca03fd650e8239ae94", 252'u32),
-        ("2d0511ae9bf590166597eeab86b6f27b1ab761761eaea8965487b162f8703847", 253'u32),
-        ("dec742079ec00ff4ec1284d7905bc3de2366f67a0769431fd16f80fd68c58a7c", 254'u32),
-        ("da8645f90826e57228d9ea72aff84500060ad111a5d62e4af831ed8e4b5acfb8", 255'u32),
-        ("8c5b422155d33ea8e9d46f71d1ad3e7b24cb40051413ffa1a81cff613d243ba9", 256'u32)
+        ("29738ba0c1a4397d6a65f292eee07f02df8e58d41594ba2be3cf84ce0fc58169", 251'u16),
+        ("1c9b1cafbec00848d2c174b858219914b42a7d5c9359b1ca03fd650e8239ae94", 252'u16),
+        ("2d0511ae9bf590166597eeab86b6f27b1ab761761eaea8965487b162f8703847", 253'u16),
+        ("dec742079ec00ff4ec1284d7905bc3de2366f67a0769431fd16f80fd68c58a7c", 254'u16),
+        ("da8645f90826e57228d9ea72aff84500060ad111a5d62e4af831ed8e4b5acfb8", 255'u16),
+        ("8c5b422155d33ea8e9d46f71d1ad3e7b24cb40051413ffa1a81cff613d243ba9", 256'u16)
       ]
 
     let targetId = toNodeId(PublicKey.fromHex(targetKey)[])
@@ -102,13 +102,13 @@ procSuite "Discovery v5 Tests":
     const
       targetId = "0x0000"
       testValues = [ # possible id in that distance range
-        ("0x0001", 1'u32),
-        ("0x0002", 2'u32),
-        ("0x0004", 3'u32),
-        ("0x0008", 4'u32),
-        ("0x0080", 8'u32),
-        ("0x0100", 9'u32),
-        ("0x8000", 16'u32)
+        ("0x0001", 1'u16),
+        ("0x0002", 2'u16),
+        ("0x0004", 3'u16),
+        ("0x0008", 4'u16),
+        ("0x0080", 8'u16),
+        ("0x0100", 9'u16),
+        ("0x8000", 16'u16)
       ]
 
     for (id, d) in testValues:
@@ -118,12 +118,12 @@ procSuite "Discovery v5 Tests":
     const
       targetKey = "5d485bdcbe9bc89314a10ae9231e429d33853e3a8fa2af39f5f827370a2e4185e344ace5d16237491dad41f278f1d3785210d29ace76cd627b9147ee340b1125"
       testValues = [ # possible id in that distance range
-        ("9e5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 251'u32),
-        ("925b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 252'u32),
-        ("8a5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 253'u32),
-        ("ba5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 254'u32),
-        ("da5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 255'u32),
-        ("1a5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 256'u32)
+        ("9e5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 251'u16),
+        ("925b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 252'u16),
+        ("8a5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 253'u16),
+        ("ba5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 254'u16),
+        ("da5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 255'u16),
+        ("1a5b34809116e3790b2258a45e7ef03b11af786503fb1a6d4b4a8ca021ad653c", 256'u16)
       ]
 
     let targetId = toNodeId(PublicKey.fromHex(targetKey)[])
@@ -132,7 +132,7 @@ procSuite "Discovery v5 Tests":
       check idAtDistance(targetId, d) == parse(id, UInt256, 16)
 
   asyncTest "FindNode Test":
-    const dist = 253'u32
+    const dist = 253'u16
     let
       mainNodeKey = PrivateKey.fromHex(
         "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
@@ -152,7 +152,7 @@ procSuite "Discovery v5 Tests":
 
     # Get ENR of the node itself
     var discovered =
-      await findNode(testNode, mainNode.localNode, @[0'u32])
+      await findNode(testNode, mainNode.localNode, @[0'u16])
     check:
       discovered.isOk
       discovered[].len == 1
@@ -167,14 +167,14 @@ procSuite "Discovery v5 Tests":
 
     # Too high logarithmic distance, should return no nodes.
     discovered =
-      await findNode(testNode, mainNode.localNode, @[4294967295'u32])
+      await findNode(testNode, mainNode.localNode, @[high(uint16)])
     check:
       discovered.isOk
       discovered[].len == 0
 
     # Logarithmic distance of 256 should only return the testNode
     discovered =
-      await findNode(testNode, mainNode.localNode, @[256'u32])
+      await findNode(testNode, mainNode.localNode, @[256'u16])
     check:
       discovered.isOk
       discovered[].len == 1
@@ -182,7 +182,7 @@ procSuite "Discovery v5 Tests":
 
     # Empty bucket
     discovered =
-      await findNode(testNode, mainNode.localNode, @[254'u32])
+      await findNode(testNode, mainNode.localNode, @[254'u16])
     check discovered.isOk
     check discovered[].len == 0
 
@@ -297,7 +297,7 @@ procSuite "Discovery v5 Tests":
       # Request the target ENR and manually add it to the routing table.
       # Ping for handshake based ENR passing will not work as our previous
       # session will still be in the LRU cache.
-      let nodes = await mainNode.findNode(targetNode.localNode, @[0'u32])
+      let nodes = await mainNode.findNode(targetNode.localNode, @[0'u16])
       check:
         nodes.isOk()
         nodes[].len == 1
@@ -524,7 +524,7 @@ procSuite "Discovery v5 Tests":
           1, pk, some(ValidIpAddress.init("12.13.14.15")),
           some(port), some(port))[]
         records = [recordInvalidDistance]
-        test = verifyNodesRecords(records, fromNode, 0'u32)
+        test = verifyNodesRecords(records, fromNode, 0'u16)
       check test.len == 0
 
   asyncTest "Handshake cleanup: different ids":

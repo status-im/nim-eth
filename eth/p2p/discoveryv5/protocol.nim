@@ -197,9 +197,15 @@ proc randomNodes*(d: Protocol, maxAmount: int,
   ## the nodes selected are filtered by provided `enrField`.
   d.randomNodes(maxAmount, proc(x: Node): bool = x.record.contains(enrField))
 
-proc neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
+proc neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE,
+    seenOnly = false): seq[Node] =
   ## Return up to k neighbours (closest node ids) of the given node id.
-  d.routingTable.neighbours(id, k)
+  d.routingTable.neighbours(id, k, seenOnly)
+
+proc neighboursAtDistances*(d: Protocol, distances: seq[uint16],
+    k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
+  ## Return up to k neighbours (closest node ids) at given distances.
+  d.routingTable.neighboursAtDistances(distances, k, seenOnly)
 
 proc nodesDiscovered*(d: Protocol): int = d.routingTable.len
 
@@ -293,7 +299,7 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
     d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
   else:
     # TODO: Still deduplicate also?
-    if fn.distances.all(proc (x: uint32): bool = return x <= 256):
+    if fn.distances.all(proc (x: uint16): bool = return x <= 256):
       d.sendNodes(fromId, fromAddr, reqId,
         d.routingTable.neighboursAtDistances(fn.distances, seenOnly = true))
     else:
@@ -491,7 +497,7 @@ proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
   d.awaitedMessages[key] = result
 
 proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node,
-    distances: varargs[uint32]): seq[Node] =
+    distances: varargs[uint16]): seq[Node] =
   ## Verify and convert ENRs to a sequence of nodes. Only ENRs that pass
   ## verification will be added. ENRs are verified for duplicates, invalid
   ## addresses and invalid distances.
@@ -609,7 +615,7 @@ proc ping*(d: Protocol, toNode: Node):
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Pong message not received in time")
 
-proc findNode*(d: Protocol, toNode: Node, distances: seq[uint32]):
+proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
     Future[DiscResult[seq[Node]]] {.async.} =
   ## Send a discovery findNode message.
   ##
@@ -648,14 +654,14 @@ proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Talk response message not received in time")
 
-proc lookupDistances(target, dest: NodeId): seq[uint32] =
+proc lookupDistances(target, dest: NodeId): seq[uint16] =
   let td = logDist(target, dest)
   result.add(td)
-  var i = 1'u32
+  var i = 1'u16
   while result.len < lookupRequestLimit:
     if td + i < 256:
       result.add(td + i)
-    if td - i > 0'u32:
+    if td - i > 0'u16:
       result.add(td - i)
     inc i
 
@@ -804,7 +810,7 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
 
   let node = d.getNode(id)
   if node.isSome():
-    let request = await d.findNode(node.get(), @[0'u32])
+    let request = await d.findNode(node.get(), @[0'u16])
 
     # TODO: Handle failures better. E.g. stop on different failures than timeout
     if request.isOk() and request[].len > 0:
@@ -853,7 +859,7 @@ proc revalidateNode*(d: Protocol, n: Node) {.async.} =
     let res = pong.get()
     if res.enrSeq > n.record.seqNum:
       # Request new ENR
-      let nodes = await d.findNode(n, @[0'u32])
+      let nodes = await d.findNode(n, @[0'u16])
       if nodes.isOk() and nodes[].len > 0:
         discard d.addNode(nodes[][0])
 

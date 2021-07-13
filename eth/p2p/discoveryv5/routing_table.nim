@@ -98,7 +98,7 @@ proc distanceTo*(n: Node, id: NodeId): UInt256 =
   ## Calculate the distance to a NodeId.
   n.id xor id
 
-proc logDist*(a, b: NodeId): uint32 =
+proc logDist*(a, b: NodeId): uint16 =
   ## Calculate the logarithmic distance between two `NodeId`s.
   ##
   ## According the specification, this is the log base 2 of the distance. But it
@@ -115,7 +115,7 @@ proc logDist*(a, b: NodeId): uint32 =
     else:
       lz += bitops.countLeadingZeroBits(x)
       break
-  return uint32(a.len * 8 - lz)
+  return uint16(a.len * 8 - lz)
 
 proc newKBucket(istart, iend: NodeId, bucketIpLimit: uint): KBucket =
   result.new()
@@ -421,7 +421,7 @@ proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
   if result.len > k:
     result.setLen(k)
 
-proc idAtDistance*(id: NodeId, dist: uint32): NodeId =
+proc idAtDistance*(id: NodeId, dist: uint16): NodeId =
   ## Calculate the "lowest" `NodeId` for given logarithmic distance.
   ## A logarithmic distance obviously covers a whole range of distances and thus
   ## potential `NodeId`s.
@@ -429,7 +429,7 @@ proc idAtDistance*(id: NodeId, dist: uint32): NodeId =
   # zeroes and xor those` with the id.
   id xor (1.stuint(256) shl (dist.int - 1))
 
-proc neighboursAtDistance*(r: RoutingTable, distance: uint32,
+proc neighboursAtDistance*(r: RoutingTable, distance: uint16,
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours at given logarithmic distance.
   result = r.neighbours(idAtDistance(r.thisNode.id, distance), k, seenOnly)
@@ -437,7 +437,7 @@ proc neighboursAtDistance*(r: RoutingTable, distance: uint32,
   # that are exactly the requested distance.
   keepIf(result, proc(n: Node): bool = logDist(n.id, r.thisNode.id) == distance)
 
-proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint32],
+proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours at given logarithmic distances.
   # TODO: This will currently return nodes with neighbouring distances on the
