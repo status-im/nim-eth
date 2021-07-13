@@ -118,8 +118,8 @@ suite "Ethereum RLPx encryption/decryption test suite":
     responder.decodeAuthMessage(authm).expect("success")
     initiator.decodeAckMessage(ackm).expect("success")
 
-    var csecInitiator = initiator.getSecrets(authm, ackm)[]
-    var csecResponder = responder.getSecrets(authm, ackm)[]
+    var csecInitiator = initiator.getSecrets(authm, ackm)
+    var csecResponder = responder.getSecrets(authm, ackm)
     initSecretState(csecInitiator, stateInitiator0)
     initSecretState(csecResponder, stateResponder0)
     initSecretState(csecInitiator, stateInitiator1)
@@ -184,8 +184,8 @@ suite "Ethereum RLPx encryption/decryption test suite":
     m1.setLen(k1)
     check initiator.decodeAckMessage(m1).isOk
 
-    var csecInitiator = initiator.getSecrets(m0, m1)[]
-    var csecResponder = responder.getSecrets(m0, m1)[]
+    var csecInitiator = initiator.getSecrets(m0, m1)
+    var csecResponder = responder.getSecrets(m0, m1)
     var stateInitiator: SecretState
     var stateResponder: SecretState
     var iheader, rheader: array[16, byte]
