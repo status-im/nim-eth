@@ -283,7 +283,7 @@ proc run(peer: Peer) {.async, raises: [Defect].} =
     peer.processQueue()
     await sleepAsync(messageInterval)
 
-proc pruneReceived(node: EthereumNode) {.raises: [].} =
+proc pruneReceived(node: EthereumNode) {.raises: [Defect].} =
   if node.peerPool != nil: # XXX: a bit dirty to need to check for this here ...
     var whisperNet = node.protocolState(Whisper)
 

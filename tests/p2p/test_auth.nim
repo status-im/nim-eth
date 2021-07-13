@@ -312,8 +312,8 @@ suite "Ethereum P2P handshake test suite":
 
       responder.decodeAuthMessage(authm).expect("decode success")
       initiator.decodeAckMessage(ackm).expect("ack success")
-      var csecInitiator = initiator.getSecrets(authm, ackm).expect("secrets success")
-      var csecResponder = responder.getSecrets(authm, ackm).expect("secrets success")
+      var csecInitiator = initiator.getSecrets(authm, ackm)
+      var csecResponder = responder.getSecrets(authm, ackm)
       check:
         csecInitiator.aesKey == csecResponder.aesKey
         csecInitiator.macKey == csecResponder.macKey
@@ -387,8 +387,8 @@ suite "Ethereum P2P handshake test suite":
       var taes = fromHex(stripSpaces(testE8Value("auth2ack2_aes_secret")))
       var tmac = fromHex(stripSpaces(testE8Value("auth2ack2_mac_secret")))
 
-      var csecInitiator = initiator.getSecrets(m0, m1).expect("secrets")
-      var csecResponder = responder.getSecrets(m0, m1).expect("secrets")
+      var csecInitiator = initiator.getSecrets(m0, m1)
+      var csecResponder = responder.getSecrets(m0, m1)
       check:
         int(initiator.version) == 4
         int(responder.version) == 4
@@ -439,8 +439,8 @@ suite "Ethereum P2P handshake test suite":
         responder.ackMessage(rng[], m1, k1).expect("ack success")
         m1.setLen(k1)
         initiator.decodeAckMessage(m1).expect("decode success")
-        var csecInitiator = initiator.getSecrets(m0, m1).expect("secrets")
-        var csecResponder = responder.getSecrets(m0, m1).expect("secrets")
+        var csecInitiator = initiator.getSecrets(m0, m1)
+        var csecResponder = responder.getSecrets(m0, m1)
         check:
           csecInitiator.aesKey == csecResponder.aesKey
           csecInitiator.macKey == csecResponder.macKey
@@ -461,8 +461,8 @@ suite "Ethereum P2P handshake test suite":
         m1.setLen(k1)
         initiator.decodeAckMessage(m1).expect("ack success")
 
-        var csecInitiator = initiator.getSecrets(m0, m1).expect("secrets")
-        var csecResponder = responder.getSecrets(m0, m1).expect("secrets")
+        var csecInitiator = initiator.getSecrets(m0, m1)
+        var csecResponder = responder.getSecrets(m0, m1)
         check:
           csecInitiator.aesKey == csecResponder.aesKey
           csecInitiator.macKey == csecResponder.macKey
