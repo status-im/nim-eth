@@ -485,7 +485,7 @@ proc decodeAckMessage*(h: var Handshake, input: openarray[byte]): AuthResult[voi
 
 proc getSecrets*(
   h: Handshake, authmsg: openarray[byte],
-  ackmsg: openarray[byte]): AuthResult[ConnectionSecret] =
+  ackmsg: openarray[byte]): ConnectionSecret =
   ## Derive secrets from handshake `h` using encrypted AuthMessage `authmsg` and
   ## encrypted AckMessage `ackmsg`.
   var
@@ -549,4 +549,4 @@ proc getSecrets*(
   ctx0.clear()
   ctx1.clear()
 
-  ok(secret)
+  secret
