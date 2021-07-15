@@ -8,6 +8,8 @@
 # PeerPool attempts to keep connections to at least min_peers
 # on the given network.
 
+{.push raises: [Defect].}
+
 import
   std/[os, tables, times, random, sequtils, options],
   chronos, chronicles,
@@ -100,7 +102,7 @@ proc connect(p: PeerPool, remote: Node): Future[Peer] {.async.} =
   #   self.logger.exception("Unexpected error during auth/p2p handshake with %s", remote)
   # return None
 
-proc lookupRandomNode(p: PeerPool) {.async, raises: [Defect].} =
+proc lookupRandomNode(p: PeerPool) {.async.} =
   discard await p.discovery.lookupRandom()
   p.lastLookupTime = epochTime()
 
@@ -108,7 +110,7 @@ proc getRandomBootnode(p: PeerPool): Option[Node] =
   if p.discovery.bootstrapNodes.len != 0:
     result = option(p.discovery.bootstrapNodes.sample())
 
-proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe, raises: [Defect].} =
+proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe.} =
   doAssert(peer.remote notin pool.connectedNodes)
   pool.connectedNodes[peer.remote] = peer
   connected_peers.inc()
@@ -163,7 +165,7 @@ proc maybeConnectToMorePeers(p: PeerPool) {.async.} =
   if p.connectedNodes.len == 0 and (let n = p.getRandomBootnode(); n.isSome):
     await p.connectToNode(n.get())
 
-proc run(p: PeerPool) {.async, raises: [Defect].} =
+proc run(p: PeerPool) {.async.} =
   trace "Running PeerPool..."
   p.running = true
   while p.running:

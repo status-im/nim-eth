@@ -70,8 +70,7 @@ chronicles.formatIt(Peer): $(it.remote)
 
 include p2p_backends_helpers
 
-proc requestResolver[MsgType](msg: pointer, future: FutureBase)
-    {.gcsafe, raises:[Defect].} =
+proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
   var f = Future[Option[MsgType]](future)
   if not f.finished:
     if msg != nil:
@@ -117,7 +116,7 @@ proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
   # result = $(cast[ptr MsgType](msg)[])
 
 proc disconnect*(peer: Peer, reason: DisconnectionReason,
-                 notifyOtherPeer = false) {.gcsafe, raises: [Defect], async.}
+  notifyOtherPeer = false) {.gcsafe, async.}
 
 template raisePeerDisconnected(msg: string, r: DisconnectionReason) =
   var e = newException(PeerDisconnected, msg)
@@ -374,7 +373,7 @@ proc registerRequest(peer: Peer,
 
   doAssert(not peer.dispatcher.isNil)
   let requestResolver = peer.dispatcher.messages[responseMsgId].requestResolver
-  proc timeoutExpired(udata: pointer) {.gcsafe, raises:[Defect].} =
+  proc timeoutExpired(udata: pointer) {.gcsafe.} =
     requestResolver(nil, responseFuture)
 
   discard setTimer(timeoutAt, timeoutExpired, nil)
@@ -880,7 +879,7 @@ p2pProtocol DevP2P(version = 5, rlpxName = "p2p"):
   proc pong(peer: Peer, emptyList: EmptyList) =
     discard
 
-proc removePeer(network: EthereumNode, peer: Peer) {.raises: [Defect].} =
+proc removePeer(network: EthereumNode, peer: Peer) =
   # It is necessary to check if peer.remote still exists. The connection might
   # have been dropped already from the peers side.
   # E.g. when receiving a p2p.disconnect message from a peer, a race will happen
@@ -914,7 +913,7 @@ proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason):
       trace "Disconnection handler ended with an error", err = f.error.msg
 
 proc disconnect*(peer: Peer, reason: DisconnectionReason,
-    notifyOtherPeer = false) {.async, raises: [Defect].} =
+    notifyOtherPeer = false) {.async.} =
   if peer.connectionState notin {Disconnecting, Disconnected}:
     peer.connectionState = Disconnecting
     # Do this first so sub-protocols have time to clean up and stop sending

@@ -1,3 +1,5 @@
+{.push raises: [Defect].}
+
 import
   std/[options, sequtils],
   stew/shims/macros, chronos, faststreams/outputs
@@ -1004,7 +1006,11 @@ macro emitForSingleBackend(
     peerState.getType, networkState.getType)
 
   result = p.genCode()
-  result.storeMacroResult true
+  try:
+    result.storeMacroResult true
+  except IOError:
+    # IO error so the generated nim code might not be stored, don't sweat it.
+    discard
 
 macro emitForAllBackends(backendSyms: typed, options: untyped, body: untyped): untyped =
   let name = $(options[0])

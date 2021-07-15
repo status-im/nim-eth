@@ -29,6 +29,8 @@
 ## However, they only make real sense after ``connectToNetwork`` was started. As
 ## else there will be no peers to send and receive messages from.
 
+{.push raises: [Defect].}
+
 import
   std/[options, tables, times],
   chronos, chronicles, metrics,
@@ -247,7 +249,7 @@ p2pProtocol Whisper(version = whisperVersion,
 
 # 'Runner' calls ---------------------------------------------------------------
 
-proc processQueue(peer: Peer) {.raises: [Defect].} =
+proc processQueue(peer: Peer) =
   # Send to peer all valid and previously not send envelopes in the queue.
   var
     envelopes: seq[Envelope] = @[]
@@ -278,12 +280,12 @@ proc processQueue(peer: Peer) {.raises: [Defect].} =
     # gets dropped
     traceAsyncErrors peer.messages(envelopes)
 
-proc run(peer: Peer) {.async, raises: [Defect].} =
+proc run(peer: Peer) {.async.} =
   while peer.connectionState notin {Disconnecting, Disconnected}:
     peer.processQueue()
     await sleepAsync(messageInterval)
 
-proc pruneReceived(node: EthereumNode) {.raises: [Defect].} =
+proc pruneReceived(node: EthereumNode) =
   if node.peerPool != nil: # XXX: a bit dirty to need to check for this here ...
     var whisperNet = node.protocolState(Whisper)
 
@@ -296,7 +298,7 @@ proc pruneReceived(node: EthereumNode) {.raises: [Defect].} =
       # the received sets.
       peer.received = intersection(peer.received, whisperNet.queue.itemHashes)
 
-proc run(node: EthereumNode, network: WhisperNetwork) {.async, raises: [Defect].} =
+proc run(node: EthereumNode, network: WhisperNetwork) {.async.} =
   while true:
     # prune message queue every second
     # TTL unit is in seconds, so this should be sufficient?
@@ -401,7 +403,8 @@ proc unsubscribeFilter*(node: EthereumNode, filterId: string): bool =
   var filter: Filter
   return node.protocolState(Whisper).filters.take(filterId, filter)
 
-proc getFilterMessages*(node: EthereumNode, filterId: string): seq[ReceivedMessage] =
+proc getFilterMessages*(node: EthereumNode, filterId: string):
+    seq[ReceivedMessage] {.raises: [KeyError, Defect].} =
   ## Get all the messages currently in the filter queue. This will reset the
   ## filter message queue.
   return node.protocolState(Whisper).filters.getFilterMessages(filterId)
