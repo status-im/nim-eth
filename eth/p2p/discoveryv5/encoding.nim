@@ -326,7 +326,7 @@ proc decodeHeader*(id: NodeId, iv, maskedHeader: openarray[byte]):
   # No need to check staticHeader size as that is included in minimum packet
   # size check in decodePacket
   var ectx: CTR[aes128]
-  ectx.init(id.toByteArrayBE().toOpenArray(0, ivSize - 1), iv)
+  ectx.init(id.toByteArrayBE().toOpenArray(0, aesKeySize - 1), iv)
   # Decrypt static-header part of the header
   var staticHeader = newSeq[byte](staticHeaderSize)
   ectx.decrypt(maskedHeader.toOpenArray(0, staticHeaderSize - 1), staticHeader)
