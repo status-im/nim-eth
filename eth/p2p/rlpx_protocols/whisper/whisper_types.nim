@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [Defect].}
+
 import
   std/[algorithm, bitops, math, options, tables, times, hashes],
   chronicles, stew/[byteutils, endians2], metrics, bearssl,
@@ -519,7 +521,7 @@ proc initQueue*(capacity: int): Queue =
   result.capacity = capacity
   result.itemHashes.init()
 
-proc prune*(self: var Queue) {.raises: [].} =
+proc prune*(self: var Queue) =
   ## Remove items that are past their expiry time
   let now = epochTime().uint32
 
@@ -654,7 +656,8 @@ proc notify*(filters: var Filters, msg: Message) {.gcsafe.} =
    else:
      filter.handler(receivedMsg)
 
-proc getFilterMessages*(filters: var Filters, filterId: string): seq[ReceivedMessage] =
+proc getFilterMessages*(filters: var Filters, filterId: string):
+    seq[ReceivedMessage] {.raises: [KeyError, Defect].} =
   result = @[]
   if filters.contains(filterId):
     if filters[filterId].handler.isNil():
