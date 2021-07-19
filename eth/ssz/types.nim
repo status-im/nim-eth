@@ -10,7 +10,7 @@
 import
   std/[tables, options, typetraits, strformat],
   stew/shims/macros, stew/[byteutils, bitops2, objects],
-  serialization/[object_serialization, errors],
+  nimcrypto/hash, serialization/[object_serialization, errors],
   ./bitseqs
 
 export bitseqs
@@ -27,6 +27,7 @@ type
 
   List*[T; maxLen: static Limit] = distinct seq[T]
   BitList*[maxLen: static Limit] = distinct BitSeq
+  Digest* = MDigest[32 * 8]
 
   # Note for readers:
   # We use `array` for `Vector` and
@@ -40,6 +41,49 @@ type
     deserializedType*: cstring
     actualSszSize*: int
     elementSize*: int
+
+# A few index types from here onwards:
+# * dataIdx - leaf index starting from 0 to maximum length of collection
+# * chunkIdx - leaf data index after chunking starting from 0
+# * vIdx - virtual index in merkle tree - the root is found at index 1, its
+#          two children at 2, 3 then 4, 5, 6, 7 etc
+
+func nextPow2Int64(x: int64): int64 =
+  # TODO the nextPow2 in bitops2 works with uint64 - there's a bug in the nim
+  #      compiler preventing it to be used - it seems that a conversion to
+  #      uint64 cannot be done with the static maxLen :(
+  var v = x - 1
+
+  # round down, make sure all bits are 1 below the threshold, then add 1
+  v = v or v shr 1
+  v = v or v shr 2
+  v = v or v shr 4
+  when bitsof(x) > 8:
+    v = v or v shr 8
+  when bitsof(x) > 16:
+    v = v or v shr 16
+  when bitsof(x) > 32:
+    v = v or v shr 32
+
+  v + 1
+
+template dataPerChunk(T: type): int =
+  # How many data items fit in a chunk
+  when T is BasicType:
+    bytesPerChunk div sizeof(T)
+  else:
+    1
+
+template chunkIdx*(T: type, dataIdx: int64): int64 =
+  # Given a data index, which chunk does it belong to?
+  dataIdx div dataPerChunk(T)
+
+template maxChunkIdx*(T: type, maxLen: Limit): int64 =
+  # Given a number of data items, how many chunks are needed?
+  # TODO compiler bug:
+  # beacon_chain/ssz/types.nim(75, 53) Error: cannot generate code for: maxLen
+  # nextPow2(chunkIdx(T, maxLen + dataPerChunk(T) - 1).uint64).int64
+  nextPow2Int64(chunkIdx(T, maxLen.int64 + dataPerChunk(T) - 1))
 
 template asSeq*(x: List): auto = distinctBase(x)
 
