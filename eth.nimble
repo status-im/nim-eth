@@ -67,7 +67,7 @@ task test_db, "Run db tests":
   runTest("tests/db/all_tests")
 
 task test_ssz, "Run ssz tests":
-  runTest("tests/ssz/merkleization")
+  runTest("tests/ssz/test_merkleization")
 
 task test, "Run all tests":
   for filename in [
