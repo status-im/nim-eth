@@ -1,6 +1,6 @@
 import 
   sequtils, unittest,
-  nimcrypto/[hash, sha2], stew/[byteutils, endians2], 
+  nimcrypto/[hash, sha2], stew/endians2, 
   ../eth/ssz/merkleization
 
 proc h(a, b: seq[byte]): seq[byte] =
@@ -60,7 +60,7 @@ let cases = (
 )
 
 suite "Merkleization":
-  test "calculate correct root from provided hashes":
+  test "calculate correct root from provided chunks":
     for testCase in cases.fields:
       var merk = createMerkleizer(testCase.limit)
       var i: uint32 = 0

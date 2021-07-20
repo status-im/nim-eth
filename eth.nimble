@@ -66,7 +66,7 @@ task test_trie, "Run trie tests":
 task test_db, "Run db tests":
   runTest("tests/db/all_tests")
 
-test test_ssz, "Run ssz tests":
+task test_ssz, "Run ssz tests":
   runTest("tests/ssz/merkleization")
 
 task test, "Run all tests":
