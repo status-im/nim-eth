@@ -362,10 +362,12 @@ template createMerkleizer*(totalElements: static Limit): SszMerkleizerImpl =
 
   const treeHeight = binaryTreeHeight totalElements
   var combinedChunks {.noInit.}: array[treeHeight, Digest]
-
+  
+  let topIndex = treeHeight - 1
+  
   SszMerkleizerImpl(
     combinedChunks: cast[ptr UncheckedArray[Digest]](addr combinedChunks),
-    topIndex: treeHeight - 1,
+    topIndex: if (topIndex < 0): 0 else: topIndex,
     totalChunks: 0)
 
 func getFinalHash*(merkleizer: SszMerkleizerImpl): Digest =

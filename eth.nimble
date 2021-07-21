@@ -66,6 +66,9 @@ task test_trie, "Run trie tests":
 task test_db, "Run db tests":
   runTest("tests/db/all_tests")
 
+task test_ssz, "Run ssz tests":
+  runTest("tests/ssz/test_merkleization")
+
 task test, "Run all tests":
   for filename in [
       "test_bloom",
@@ -78,6 +81,7 @@ task test, "Run all tests":
   test_p2p_task()
   test_trie_task()
   test_db_task()
+  test_ssz_task()
 
 task test_discv5_full, "Run discovery v5 and its dependencies tests":
   test_keys_task()
