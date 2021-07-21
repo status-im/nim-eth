@@ -281,9 +281,24 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
     debug "Receive failed", exc = e.name, err = e.msg
 
 proc open*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
-  # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(IPv4_any(), d.address.udpPort)
-  d.transp = newDatagramTransport(processClient, udata = d, local = ta)
+  # TODO allow binding to specific IP
+
+  var ta: TransportAddress
+
+  ta = initTAddress(IPv6_any(), d.bindPort)
+  let nativeSock = createNativeSocket(ta.getDomain(), SockType.SOCK_DGRAM,
+                                nativesockets.Protocol.IPPROTO_UDP)
+  let asyncSock = AsyncFD(nativeSock)
+  let dualstack = asyncSock.setSockOpt(posix.IPPROTO_IPV6, posix.IPV6_V6ONLY, 0)
+
+  if nativeSock == osInvalidSocket or dualstack == false:
+    ## If this fails (because IPv6 is disabled or this is a very old system) we
+    ## will stick to IPv4 only.
+    ta = initTAddress(IPv4_any(), d.bindPort)
+    d.transp = newDatagramTransport(processClient, udata = d, local = ta)
+  else:
+    ## Otherwise our dual-stack socket should be good to go!
+    d.transp = newDatagramTransport6(processClient, udata = d, local = ta, sock = asyncSock)
 
 proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] =
   d.kademlia.lookupRandom()

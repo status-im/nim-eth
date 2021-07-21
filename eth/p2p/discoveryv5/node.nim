@@ -25,6 +25,7 @@ type
     id*: NodeId
     pubkey*: PublicKey
     address*: Option[Address]
+    address6*: Option[Address]
     record*: Record
     seen*: bool ## Indicates if there was at least one successful
     ## request-response with this node.
@@ -35,7 +36,6 @@ func toNodeId*(pk: PublicKey): NodeId =
 
 func newNode*(r: Record): Result[Node, cstring] =
   ## Create a new `Node` from a `Record`.
-  # TODO: Handle IPv6
 
   let pk = r.get(PublicKey)
   # This check is redundant for a properly created record as the deserialization
@@ -46,19 +46,22 @@ func newNode*(r: Record): Result[Node, cstring] =
   # Also this can not fail for a properly created record as id is checked upon
   # deserialization.
   let tr = ? r.toTypedRecord()
+
+  var address, address6: Option[Address]
+
   if tr.ip.isSome() and tr.udp.isSome():
-    let a = Address(ip: ipv4(tr.ip.get()), port: Port(tr.udp.get()))
+    address = some(Address(ip: ipv4(tr.ip.get()), port: Port(tr.udp.get())))
+  if tr.ip6.isSome() and tr.udp6.isSome():
+    address6 = some(Address(ip: ipv6(tr.ip6.get()), port: Port(tr.udp6.get())))
+  
+  ok(Node(id: pk.get().toNodeId(), pubkey: pk.get(), record: r,
+       address: address, address6: address6))
 
-    ok(Node(id: pk.get().toNodeId(), pubkey: pk.get() , record: r,
-       address: some(a)))
-  else:
-    ok(Node(id: pk.get().toNodeId(), pubkey: pk.get(), record: r,
-       address: none(Address)))
-
-func update*(n: Node, pk: PrivateKey, ip: Option[ValidIpAddress],
-    tcpPort, udpPort: Option[Port] = none[Port](),
+func update*(n: Node, pk: PrivateKey, ip: Option[ValidIpAddress] = none(ValidIpAddress), # todo
+    ip6: Option[ValidIpAddress] = none(ValidIpAddress), tcpPort,
+    udpPort: Option[Port] = none[Port](),
     extraFields: openarray[FieldPair] = []): Result[void, cstring] =
-  ? n.record.update(pk, ip, tcpPort, udpPort, extraFields)
+  ? n.record.update(pk, ip, ip6, tcpPort, udpPort, extraFields)
 
   if ip.isSome():
     if udpPort.isSome():
@@ -71,8 +74,20 @@ func update*(n: Node, pk: PrivateKey, ip: Option[ValidIpAddress],
       n.address = none(Address)
   else:
     n.address = none(Address)
+  
+  if ip6.isSome():
+    if udpPort.isSome():
+      let a = Address(ip: ip6.get(), port: udpPort.get())
+      n.address6 = some(a)
+    elif n.address6.isSome():
+      let a = Address(ip: ip6.get(), port: n.address6.get().port)
+      n.address6 = some(a)
+    else:
+      n.address6 = none(Address)
+  else:
+    n.address6 = none(Address)
 
-  ok()
+  ok() 
 
 func hash*(n: Node): hashes.Hash = hash(n.pubkey.toRaw)
 
@@ -116,8 +131,10 @@ func `$`*(a: Address): string =
 func shortLog*(n: Node): string =
   if n.isNil:
     "uninitialized"
-  elif n.address.isNone():
+  elif n.address.isNone() and n.address6.isNone():
     shortLog(n.id) & ":unaddressable"
+  elif n.address.isNone():
+    shortLog(n.id) & ":" & $n.address6.get()
   else:
     shortLog(n.id) & ":" & $n.address.get()
 chronicles.formatIt(Node): shortLog(it)

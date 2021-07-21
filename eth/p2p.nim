@@ -80,11 +80,24 @@ proc listeningAddress*(node: EthereumNode): ENode =
   node.toENode()
 
 proc startListening*(node: EthereumNode) =
-  # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(IPv4_any(), node.address.tcpPort)
+  # TODO allow binding to specific IP
+  
+  var ta: TransportAddress
+  ta = initTAddress(IPv6_any(), node.address.tcpPort)
+
+  let nativeSock = createNativeSocket(ta.getDomain(), SockType.SOCK_STREAM,
+                                      nativesockets.Protocol.IPPROTO_TCP)
+  var asyncSock: AsyncFD = AsyncFD(nativeSock)
+  let dualstack = asyncSock.setSockOpt(posix.IPPROTO_IPV6, posix.IPV6_V6ONLY, 0)
+
+  if nativeSock == osInvalidSocket or dualstack == false:
+    ta = initTAddress(IPv4_any(), node.address.tcpPort)
+    asyncSock = asyncInvalidSocket
+
   if node.listeningServer == nil:
     node.listeningServer = createStreamServer(ta, processIncoming,
                                               {ReuseAddr},
+                                              sock = asyncSock,
                                               udata = cast[pointer](node))
   node.listeningServer.start()
   info "RLPx listener up", self = node.listeningAddress

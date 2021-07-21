@@ -74,9 +74,11 @@
 {.push raises: [Defect].}
 
 import
-  std/[tables, sets, options, math, sequtils, algorithm],
+  posix,
+  std/[tables, sets, options, math, sequtils, algorithm, nativesockets],
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/endians2, chronicles, chronos, stint, bearssl, metrics,
+  ../../net/utils,
   ".."/../[rlp, keys, async_utils],
   "."/[messages, encoding, node, routing_table, enr, random2, sessions, ip_vote]
 
@@ -120,7 +122,8 @@ type
     transp: DatagramTransport
     localNode*: Node
     privateKey: PrivateKey
-    bindAddress: Address ## UDP binding address
+    bindIp: Option[ValidIpAddress] ## UDP binding address
+    bindPort: Port
     pendingRequests: Table[AESGCMNonce, PendingRequest]
     routingTable: RoutingTable
     codec*: Codec
@@ -131,6 +134,7 @@ type
     lastLookup: chronos.Moment
     bootstrapRecords*: seq[Record]
     ipVote: IpVote
+    ipVote6: IpVote
     enrAutoUpdate: bool
     talkProtocols*: Table[seq[byte], TalkProtocol] # TODO: Table is a bit of
     # overkill here, use sequence
@@ -236,8 +240,26 @@ proc send(d: Protocol, a: Address, data: seq[byte]) =
       warn "Discovery send failed", msg = f.readError.msg
 
 proc send(d: Protocol, n: Node, data: seq[byte]) =
-  doAssert(n.address.isSome())
-  d.send(n.address.get(), data)
+  doAssert(n.address.isSome() or n.address6.isSome())
+
+  var localTransportIpv6: bool
+  try:
+    localTransportIpv6 = d.transp.localAddress.family == AddressFamily.IPv6
+  except TransportOsError: discard
+  
+  if n.address6.isSome() and localTransportIpv6:
+    # If we have IPv6 and they have it, let's use that.
+    d.send(n.address6.get(), data)
+  else:
+    if localTransportIpv6:
+      let unwrapped = n.address.get().wrapIPv4InIPv6()
+      # According to RFC 3493 IPv4 addresses need to be wrapped in IPv6 when
+      # sending from an IPv6 socket. Linux and Windows accept the IPv4 addresses
+      # directly, but maybe some other OS doesn't.
+      d.send(unwrapped, data)
+    else:
+      # If we have only IPv4 we will stick to that.
+      d.send(n.address.get(), data)
 
 proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
     nodes: openarray[Node]) =
@@ -424,9 +446,18 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
   else:
     trace "Packet decoding error", error = decoded.error, address = a
 
-proc processClient(transp: DatagramTransport, raddr: TransportAddress):
+proc processClient(transp: DatagramTransport, rawAddr: TransportAddress):
     Future[void] {.async.} =
   let proto = getUserData[Protocol](transp)
+
+  # If we have an IPv6 socket, IPv4 sender addresses will be mapped to IPv6.
+  # We want to process the proper IPv4 address since that's how we identify
+  # the node.
+  let remoteAddr =
+    if rawAddr.isWrappedIPv4():
+      rawAddr.unwrapIPv4InIPv6()
+    else:
+      rawAddr
 
   # TODO: should we use `peekMessage()` to avoid allocation?
   let buf = try: transp.getMessage()
@@ -435,11 +466,11 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
               warn "Transport getMessage", exception = e.name, msg = e.msg
               return
 
-  let ip = try: raddr.address()
+  let ip = try: remoteAddr.address()
            except ValueError as e:
              error "Not a valid IpAddress", exception = e.name, msg = e.msg
              return
-  let a = Address(ip: ValidIpAddress.init(ip), port: raddr.port)
+  let a = Address(ip: ValidIpAddress.init(ip), port: remoteAddr.port)
 
   proto.receive(a, buf)
 
@@ -572,7 +603,7 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
 
 proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
     RequestId =
-  doAssert(toNode.address.isSome())
+  doAssert(toNode.address.isSome() or toNode.address6.isSome())
   let
     address = toNode.address.get()
     reqId = RequestId.init(d.rng[])
@@ -859,7 +890,10 @@ proc revalidateNode*(d: Protocol, n: Node) {.async.} =
 
     # Get IP and port from pong message and add it to the ip votes
     let a = Address(ip: ValidIpAddress.init(res.ip), port: Port(res.port))
-    d.ipVote.insert(n.id, a)
+    if a.ip.family == IpAddressFamily.IPv4:
+      d.ipVote.insert(n.id, a)
+    elif a.ip.family == IpAddressFamily.IPv6:
+      d.ipVote6.insert(n.id, a)
 
 proc revalidateLoop(d: Protocol) {.async.} =
   ## Loop which revalidates the nodes in the routing table by sending the ping
@@ -891,6 +925,34 @@ proc refreshLoop(d: Protocol) {.async.} =
   except CancelledError:
     trace "refreshLoop canceled"
 
+proc updateIpMajority(d: Protocol, majority: Option[Address]) {.async.} = 
+  if majority.isSome():
+    let v6 = majority.get().ip.family == IpAddressFamily.IPv6
+    let currentAddress = (if v6: d.localNode.address6 else: d.localNode.address)
+    if currentAddress != majority:
+      let address = majority.get()
+      if d.enrAutoUpdate:
+        var res: Result[void, cstring]
+        if v6:
+           res = d.localNode.update(d.privateKey,
+            ip6 = some(address.ip), udpPort = some(address.port))
+        else:
+          res = d.localNode.update(d.privateKey,
+            ip = some(address.ip), udpPort = some(address.port))
+        if res.isErr:
+          warn "Failed updating ENR with newly discovered external address",
+            majority, previous = currentAddress, error = res.error
+        else:
+          discovery_enr_auto_update.inc()
+          info "Updated ENR with newly discovered external address",
+            majority, previous = currentAddress, uri = toURI(d.localNode.record)
+      else:
+        warn "Discovered new external address but ENR auto update is off",
+          majority, previous = currentAddress
+    else:
+      debug "Discovered external address matches current address", majority,
+        current = d.localNode.address
+
 proc ipMajorityLoop(d: Protocol) {.async.} =
   ## When `enrAutoUpdate` is enabled, the IP:port combination returned
   ## by the majority will be used to update the local ENR.
@@ -912,40 +974,21 @@ proc ipMajorityLoop(d: Protocol) {.async.} =
   ## - There are IP limits on the buckets and the whole routing table.
   try:
     while true:
-      let majority = d.ipVote.majority()
-      if majority.isSome():
-        if d.localNode.address != majority:
-          let address = majority.get()
-          let previous = d.localNode.address
-          if d.enrAutoUpdate:
-            let res = d.localNode.update(d.privateKey,
-              ip = some(address.ip), udpPort = some(address.port))
-            if res.isErr:
-              warn "Failed updating ENR with newly discovered external address",
-                majority, previous, error = res.error
-            else:
-              discovery_enr_auto_update.inc()
-              info "Updated ENR with newly discovered external address",
-                majority, previous, uri = toURI(d.localNode.record)
-          else:
-            warn "Discovered new external address but ENR auto update is off",
-              majority, previous
-        else:
-          debug "Discovered external address matches current address", majority,
-            current = d.localNode.address
-
+      await d.updateIpMajority(d.ipVote.majority())
+      await d.updateIpMajority(d.ipVote6.majority())
       await sleepAsync(ipMajorityInterval)
   except CancelledError:
     trace "ipMajorityLoop canceled"
 
 proc newProtocol*(privKey: PrivateKey,
                   enrIp: Option[ValidIpAddress],
+                  enrIp6: Option[ValidIpAddress],
                   enrTcpPort, enrUdpPort: Option[Port],
                   localEnrFields: openarray[(string, seq[byte])] = [],
                   bootstrapRecords: openarray[Record] = [],
                   previousRecord = none[enr.Record](),
                   bindPort: Port,
-                  bindIp = IPv4_any(),
+                  bindIp: Option[ValidIpAddress],
                   enrAutoUpdate = false,
                   tableIpLimits = DefaultTableIpLimits,
                   rng = newRng()):
@@ -962,15 +1005,15 @@ proc newProtocol*(privKey: PrivateKey,
   var record: Record
   if previousRecord.isSome():
     record = previousRecord.get()
-    record.update(privKey, enrIp, enrTcpPort, enrUdpPort,
+    record.update(privKey, enrIp, enrIp6, enrTcpPort, enrUdpPort,
       extraFields).expect("Record within size limits and correct key")
   else:
-    record = enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort,
+    record = enr.Record.init(1, privKey, enrIp, enrIp6, enrTcpPort, enrUdpPort,
       extraFields).expect("Record within size limits")
 
-  info "ENR initialized", ip = enrIp, tcp = enrTcpPort, udp = enrUdpPort,
+  info "ENR initialized", ip = enrIp, ip6 = enrIp6, tcp = enrTcpPort, udp = enrUdpPort,
     seqNum = record.seqNum, uri = toURI(record)
-  if enrIp.isNone():
+  if enrIp.isNone() and enrIp6.isNone():
     warn "No external IP provided for the ENR, this node will not be discoverable"
 
   let node = newNode(record).expect("Properly initialized record")
@@ -981,24 +1024,48 @@ proc newProtocol*(privKey: PrivateKey,
   result = Protocol(
     privateKey: privKey,
     localNode: node,
-    bindAddress: Address(ip: ValidIpAddress.init(bindIp), port: bindPort),
+    bindIp: bindIp,
+    bindPort: bindPort,
     codec: Codec(localNode: node, privKey: privKey,
       sessions: Sessions.init(256)),
     bootstrapRecords: @bootstrapRecords,
     ipVote: IpVote.init(),
+    ipVote6: IpVote.init(),
     enrAutoUpdate: enrAutoUpdate,
     rng: rng)
 
   result.routingTable.init(node, DefaultBitsPerHop, tableIpLimits, rng)
 
 proc open*(d: Protocol) {.raises: [Defect, CatchableError].} =
-  info "Starting discovery node", node = d.localNode,
-    bindAddress = d.bindAddress
+  var ta: TransportAddress
 
-  # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(d.bindAddress.ip, d.bindAddress.port)
-  d.transp = newDatagramTransport(processClient, udata = d, local = ta)
+  if d.bindIp.isNone:
+    ## The default strategy is to use an IPv6 socket in dual stack mode which
+    ## "can be used to send and receive packets to and from an IPv6 address or
+    ## an IPv4-mapped IPv6 address."
+    ta = initTAddress(IPv6_any(), d.bindPort)
+    let nativeSock = createNativeSocket(ta.getDomain(), SockType.SOCK_DGRAM,
+                                  nativesockets.Protocol.IPPROTO_UDP)
+    let asyncSock = AsyncFD(nativeSock)
+    let dualstack = asyncSock.setSockOpt(posix.IPPROTO_IPV6, posix.IPV6_V6ONLY, 0)
 
+    if nativeSock == osInvalidSocket or dualstack == false:
+      ## If this fails (because IPv6 is disabled or this is a very old system) we
+      ## will stick to IPv4 only.
+      ta = initTAddress(IPv4_any(), d.bindPort)
+      d.transp = newDatagramTransport(processClient, udata = d, local = ta)
+    else:
+      ## Otherwise our dual-stack socket should be good to go!
+      d.transp = newDatagramTransport6(processClient, udata = d, local = ta, sock = asyncSock)
+  else:
+    ta = initTAddress(d.bindIp.get(), d.bindPort)
+    if ta.family == AddressFamily.IPv4:
+      d.transp = newDatagramTransport(processClient, udata = d, local = ta)
+    elif ta.family == AddressFamily.IPv6:
+      d.transp = newDatagramTransport6(processClient, udata = d, local = ta)
+    else:
+      error "Bind address should be either IPv4 or IPv6", address_family = ta.family, address = ta
+  info "Started discovery node", node = d.localNode, bindIp = d.transp.localAddress, bindPort = d.bindPort
   d.seedTable()
 
 proc start*(d: Protocol) =

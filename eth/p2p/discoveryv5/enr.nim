@@ -168,6 +168,7 @@ proc addAddress(fields: var seq[FieldPair], ip: Option[ValidIpAddress],
 proc init*(T: type Record, seqNum: uint64,
                            pk: PrivateKey,
                            ip: Option[ValidIpAddress],
+                           ip6: Option[ValidIpAddress],
                            tcpPort, udpPort: Option[Port],
                            extraFields: openarray[FieldPair] = []):
                            EnrResult[T] =
@@ -178,6 +179,7 @@ proc init*(T: type Record, seqNum: uint64,
   var fields = newSeq[FieldPair]()
 
   fields.addAddress(ip, tcpPort, udpPort)
+  fields.addAddress(ip6, tcpPort, udpPort)
   fields.add extraFields
   makeEnrAux(seqNum, pk, fields)
 
@@ -288,6 +290,7 @@ proc update*(record: var Record, pk: PrivateKey,
 
 proc update*(r: var Record, pk: PrivateKey,
                             ip: Option[ValidIpAddress],
+                            ip6: Option[ValidIpAddress],
                             tcpPort, udpPort: Option[Port] = none[Port](),
                             extraFields: openarray[FieldPair] = []):
                             EnrResult[void] =
@@ -303,6 +306,7 @@ proc update*(r: var Record, pk: PrivateKey,
   var fields = newSeq[FieldPair]()
 
   fields.addAddress(ip, tcpPort, udpPort)
+  fields.addAddress(ip6, tcpPort, udpPort)
   fields.add extraFields
   r.update(pk, fields)
 
