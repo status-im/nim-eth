@@ -52,6 +52,9 @@ task test_portal, "Run Portal network tests":
 task test_p2p, "Run p2p tests":
   runTest("tests/p2p/all_tests")
 
+task test_net, "Run net tests":
+  runTest("tests/net/utils")
+
 task test_rlp, "Run rlp tests":
   # workaround for github action CI
   # mysterious crash on windows-2019 64bit mode
@@ -81,6 +84,7 @@ task test, "Run all tests":
   test_p2p_task()
   test_trie_task()
   test_db_task()
+  test_net_task()
 
 task test_discv5_full, "Run discovery v5 and its dependencies tests":
   test_keys_task()
