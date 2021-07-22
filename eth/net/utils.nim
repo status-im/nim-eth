@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  std/[tables, hashes],
+  std/[tables, hashes, options],
   stew/results, stew/shims/net as stewNet, chronos, chronicles
 from ../p2p/discoveryv5/node import Address
 
@@ -48,14 +48,11 @@ func isPublic*(address: IpAddress): bool =
   let a = initTAddress(address, Port(0))
   a.isPublic
 
-proc getRouteIpv4*(): Result[ValidIpAddress, cstring] =
+proc bestRoute(ta: TransportAddress): Result[ValidIpAddress, cstring] =
   # Avoiding Exception with initTAddress and can't make it work with static.
-  # Note: `publicAddress` is only used an "example" IP to find the best route,
+  # Note: `ta` is only used as an "example" IP to find the best route,
   # no data is send over the network to this IP!
-  let
-    publicAddress = TransportAddress(family: AddressFamily.IPv4,
-      address_v4: [1'u8, 1, 1, 1], port: Port(0))
-    route = getBestRoute(publicAddress)
+  let route = getBestRoute(ta)
 
   if route.source.isUnspecified():
     err("No best ipv4 route found")
@@ -66,6 +63,20 @@ proc getRouteIpv4*(): Result[ValidIpAddress, cstring] =
                error "Address convertion error", exception = e.name, msg = e.msg
                return err("Invalid IP address")
     ok(ValidIpAddress.init(ip))
+
+proc getRouteIpv4*(): Result[ValidIpAddress, cstring] =
+  return bestRoute(TransportAddress(family: AddressFamily.IPv4,
+      address_v4: [1'u8, 1, 1, 1], port: Port(0)))
+
+proc getPublicIpv6*(): Option[ValidIpAddress] =
+  var address_v6: array[16, uint8]
+  address_v6[0] = 20'u8
+  let route = bestRoute(TransportAddress(family: AddressFamily.IPv6,
+    address_v6: address_v6, port: Port(0)))
+  if route.isOk:
+    let firstHop = route.get()
+    if firstHop.isPublic:
+      return some(route.get())
 
 proc isWrappedIPv4*(ta: TransportAddress): bool =
   # First 80 bits are all 0;

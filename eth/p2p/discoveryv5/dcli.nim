@@ -2,7 +2,7 @@ import
   std/[options, strutils, tables],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, stew/byteutils,
-  ../../keys, ../../net/nat,
+  ../../keys, ../../net/nat, ../../net/utils,
   "."/[enr, node, protocol]
 
 type
@@ -24,9 +24,10 @@ type
       name: "udp-port" .}: uint16
 
     listenAddress* {.
-      defaultValue: defaultListenAddress(config)
+      defaultValue: none(ValidIpAddress)
+      defaultValueDesc: ":: and 0.0.0.0"
       desc: "Listening address for the Discovery v5 traffic"
-      name: "listen-address" }: ValidIpAddress
+      name: "listen-address" }: Option[ValidIpAddress]
 
     bootnodes* {.
       desc: "ENR URI of node to bootstrap discovery with. Argument may be repeated"
@@ -92,9 +93,6 @@ type
         desc: "ENR URI of the node to send a talkreq message"
         name: "node" .}: Node
 
-func defaultListenAddress*(conf: DiscoveryConf): ValidIpAddress =
-  (static ValidIpAddress.init("0.0.0.0"))
-
 func defaultAdminListenAddress*(conf: DiscoveryConf): ValidIpAddress =
   (static ValidIpAddress.init("127.0.0.1"))
 
@@ -139,16 +137,19 @@ proc discover(d: protocol.Protocol) {.async.} =
 
 proc run(config: DiscoveryConf) =
   let
-    bindIp = config.listenAddress
+    bindIp = if config.listenAddress.isSome: config.listenAddress.get()
+             else: ValidIPAddress.init(IPv4_any())
     udpPort = Port(config.udpPort)
     # TODO: allow for no TCP port mapping!
     (extIp, _, extUdpPort) = setupAddress(config.nat,
-      config.listenAddress, udpPort, udpPort, "dcli")
+      bindIp, udpPort, udpPort, "dcli")
+    extIp6 = getPublicIpv6()
 
   let d = newProtocol(config.nodeKey,
-          extIp, none(Port), extUdpPort,
+          extIp, extIp6,
+          none(Port), extUdpPort,
           bootstrapRecords = config.bootnodes,
-          bindIp = bindIp, bindPort = udpPort,
+          bindIp = some(bindIp), bindPort = udpPort,
           enrAutoUpdate = config.enrAutoUpdate)
 
   d.open()

@@ -18,7 +18,8 @@ let
   rng = keys.newRng
   privKey = PrivateKey.random(rng[])
   (ip, tcpPort, udpPort) = setupNat(config) # Or fill in external IP/ports manually
-  d = newProtocol(privKey, ip, tcpPort, udpPort, rng = rng)
+  ip6 = getPublicIpv6()
+  d = newProtocol(privKey, ip, ip6, tcpPort, udpPort, rng = rng)
 
 d.open() # Start listening
 ```
@@ -31,7 +32,7 @@ other nodes in the network.
 To initialize with a bootnode or a set of bootnodes, the ENRs need to be passed
 as parameter in `newProtocol`.
 ```Nim
-d = newProtocol(privKey, ip, tcpPort, udpPort,
+d = newProtocol(privKey, ip, ip6, tcpPort, udpPort,
       bootstrapRecords = bootnodes)
 d.open() # Start listening and add bootstrap nodes to the routing table.
 ```
