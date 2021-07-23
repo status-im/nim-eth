@@ -618,25 +618,19 @@ func getGeneralizedIndexLength(x: uint64): int =
 func getGeneralizedIndexBit(index: uint64, position: uint64): bool =
   (index and (1'u64 shl position)) > 0
 
-# validates merkle proof. Provides index should an generalized index of leaf node
+# validates merkle proof. Provided index should be a generalized index of leaf node
 # as defined in: https://github.com/ethereum/eth2.0-specs/blob/dev/ssz/merkle-proofs.md#generalized-merkle-tree-index
 func isValidProof*(leaf: Digest, proof: openArray[Digest],
                              index: uint64, root: Digest): bool =
   if len(proof) == getGeneralizedIndexLength(index):
     var
       value = leaf
-      buf: array[64, byte]
 
     for i, digest in proof:
       if getGeneralizedIndexBit(index, uint64 i):
-        buf[0..31] = digest.data
-        buf[32..63] = value.data
+        value = mergeBranches(digest, value)
       else:
-        buf[0..31] = value.data
-        buf[32..63] = digest.data
-
-      value = computeDigest:
-        h.update(buf)
+        value = mergeBranches(value, digest)
 
     value == root
   else:
