@@ -627,10 +627,11 @@ func isValidProof*(leaf: Digest, proof: openArray[Digest],
       value = leaf
 
     for i, digest in proof:
-      if getGeneralizedIndexBit(index, uint64 i):
-        value = mergeBranches(digest, value)
-      else:
-        value = mergeBranches(value, digest)
+      value =
+        if getGeneralizedIndexBit(index, uint64 i):
+          mergeBranches(digest, value)
+        else:
+          mergeBranches(value, digest)
 
     value == root
   else:
