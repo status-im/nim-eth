@@ -925,7 +925,7 @@ proc refreshLoop(d: Protocol) {.async.} =
   except CancelledError:
     trace "refreshLoop canceled"
 
-proc updateIpMajority(d: Protocol, majority: Option[Address]) {.async.} = 
+proc updateIpByMajority(d: Protocol, majority: Option[Address]) = 
   if majority.isSome():
     let v6 = majority.get().ip.family == IpAddressFamily.IPv6
     let currentAddress = (if v6: d.localNode.address6 else: d.localNode.address)
@@ -974,8 +974,8 @@ proc ipMajorityLoop(d: Protocol) {.async.} =
   ## - There are IP limits on the buckets and the whole routing table.
   try:
     while true:
-      await d.updateIpMajority(d.ipVote.majority())
-      await d.updateIpMajority(d.ipVote6.majority())
+      d.updateIpByMajority(d.ipVote.majority())
+      d.updateIpByMajority(d.ipVote6.majority())
       await sleepAsync(ipMajorityInterval)
   except CancelledError:
     trace "ipMajorityLoop canceled"
