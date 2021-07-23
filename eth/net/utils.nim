@@ -77,51 +77,10 @@ proc getPublicIpv6*(): Option[ValidIpAddress] =
     let firstHop = route.get()
     if firstHop.isPublic:
       return some(route.get())
-
-proc isWrappedIPv4*(ta: TransportAddress): bool =
-  # First 80 bits are all 0;
-  # next 16 bits are FFFF;
-  # last 32 bits are the IPv4 address.
-  if ta.family != AddressFamily.IPv6:
-    return false
-  for i in 0..9:
-   if ta.address_v6[i] != 0x0:
-     return false
-  if ta.address_v6[10] != 0xff or ta.address_v6[11] != 0xff:
-    return false
-  return true
-
-proc unwrapIPv4InIPv6*(ta: TransportAddress): TransportAddress = 
-  assert ta.isWrappedIPv4
-  var address_v4: array[4, uint8]
-  address_v4[0] = ta.address_v6[12]
-  address_v4[1] = ta.address_v6[13]
-  address_v4[2] = ta.address_v6[14]
-  address_v4[3] = ta.address_v6[15]
-  return TransportAddress(
-    family: AddressFamily.IPv4,
-    address_v4: address_v4,
-    port: ta.port
-  )
-
-proc wrapIPv4InIPv6*(ta: TransportAddress): TransportAddress =
-  assert ta.family == AddressFamily.IPv4
-  var address_v6: array[16, uint8]
-  address_v6[10] = 0xff
-  address_v6[11] = 0xff
-  address_v6[12] = ta.address_v4[0]
-  address_v6[13] = ta.address_v4[1]
-  address_v6[14] = ta.address_v4[2]
-  address_v6[15] = ta.address_v4[3]
-  return TransportAddress(
-    family: AddressFamily.IPv6,
-    address_v6: address_v6,
-    port: ta.port
-  )
-  
-proc wrapIPv4InIPv6*(a: Address): Address =
+ 
+proc toIPv6*(a: Address): Address =
   let ta = initTAddress(a.ip, a.port)
-  let wrapped = wrapIPv4InIPv6(ta)
+  let wrapped = toIPv6(ta)
   return Address(
     ip: ipv6(cast[array[16, uint8]](wrapped.address_v6)), port: wrapped.port
   )

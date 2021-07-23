@@ -252,11 +252,11 @@ proc send(d: Protocol, n: Node, data: seq[byte]) =
     d.send(n.address6.get(), data)
   else:
     if localTransportIpv6:
-      let unwrapped = n.address.get().wrapIPv4InIPv6()
+      let wrapped = n.address.get().toIPv6()
       # According to RFC 3493 IPv4 addresses need to be wrapped in IPv6 when
       # sending from an IPv6 socket. Linux and Windows accept the IPv4 addresses
       # directly, but maybe some other OS doesn't.
-      d.send(unwrapped, data)
+      d.send(wrapped, data)
     else:
       # If we have only IPv4 we will stick to that.
       d.send(n.address.get(), data)
@@ -454,8 +454,8 @@ proc processClient(transp: DatagramTransport, rawAddr: TransportAddress):
   # We want to process the proper IPv4 address since that's how we identify
   # the node.
   let remoteAddr =
-    if rawAddr.isWrappedIPv4():
-      rawAddr.unwrapIPv4InIPv6()
+    if rawAddr.isV4Mapped():
+      rawAddr.toIPv4()
     else:
       rawAddr
 
