@@ -1,3 +1,5 @@
+{.used.}
+
 import 
   sequtils, unittest,
   nimcrypto/[hash, sha2], stew/endians2, 
