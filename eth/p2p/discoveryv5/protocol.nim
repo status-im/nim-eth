@@ -118,8 +118,14 @@ const
   ## call
 
 type
+  TransportType = enum
+    ipv4
+    ipv6
+    dualstack
+
   Protocol* = ref object
     transp: DatagramTransport
+    transportType: TransportType
     localNode*: Node
     privateKey: PrivateKey
     bindIp: Option[ValidIpAddress] ## UDP binding address
@@ -242,24 +248,22 @@ proc send(d: Protocol, a: Address, data: seq[byte]) =
 proc send(d: Protocol, n: Node, data: seq[byte]) =
   doAssert(n.address.isSome() or n.address6.isSome())
 
-  var localTransportIpv6: bool
-  try:
-    localTransportIpv6 = d.transp.localAddress.family == AddressFamily.IPv6
-  except TransportOsError: discard
-  
-  if n.address6.isSome() and localTransportIpv6:
+  if n.address6.isSome() and (
+      d.transportType == TransportType.ipv6 or
+      d.transportType == TransportType.dualstack):
     # If we have IPv6 and they have it, let's use that.
     d.send(n.address6.get(), data)
+  elif n.address.isSome() and d.transportType == TransportType.dualstack:
+    let wrapped = n.address.get().toIPv6()
+    # According to RFC 3493 IPv4 addresses need to be wrapped in IPv6 when
+    # sending from an IPv6 socket. Linux and Windows accept the IPv4 addresses
+    # directly, but maybe some other OS doesn't.
+    d.send(wrapped, data)
+  elif n.address.isSome() and d.transportType == TransportType.ipv4:
+    d.send(n.address.get(), data)
   else:
-    if localTransportIpv6:
-      let wrapped = n.address.get().toIPv6()
-      # According to RFC 3493 IPv4 addresses need to be wrapped in IPv6 when
-      # sending from an IPv6 socket. Linux and Windows accept the IPv4 addresses
-      # directly, but maybe some other OS doesn't.
-      d.send(wrapped, data)
-    else:
-      # If we have only IPv4 we will stick to that.
-      d.send(n.address.get(), data)
+    warn "Local transport type doesn't support connecting to node",
+      node = n, transportType = d.transportType
 
 proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
     nodes: openarray[Node]) =
@@ -1052,17 +1056,21 @@ proc open*(d: Protocol) {.raises: [Defect, CatchableError].} =
     if nativeSock == osInvalidSocket or dualstack == false:
       ## If this fails (because IPv6 is disabled or this is a very old system) we
       ## will stick to IPv4 only.
+      d.transportType = TransportType.ipv4
       ta = initTAddress(IPv4_any(), d.bindPort)
       d.transp = newDatagramTransport(processClient, udata = d, local = ta)
     else:
       ## Otherwise our dual-stack socket should be good to go!
+      d.transportType = TransportType.dualstack
       d.transp = newDatagramTransport6(processClient, udata = d, local = ta, sock = asyncSock)
   else:
     ta = initTAddress(d.bindIp.get(), d.bindPort)
     if ta.family == AddressFamily.IPv4:
       d.transp = newDatagramTransport(processClient, udata = d, local = ta)
+      d.transportType = TransportType.ipv4
     elif ta.family == AddressFamily.IPv6:
       d.transp = newDatagramTransport6(processClient, udata = d, local = ta)
+      d.transportType = TransportType.ipv6
     else:
       error "Bind address should be either IPv4 or IPv6", address_family = ta.family, address = ta
   info "Started discovery node", node = d.localNode, bindIp = d.transp.localAddress, bindPort = d.bindPort
