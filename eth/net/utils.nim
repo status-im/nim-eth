@@ -82,5 +82,5 @@ proc toIPv6*(a: Address): Address =
   let ta = initTAddress(a.ip, a.port)
   let wrapped = toIPv6(ta)
   return Address(
-    ip: ipv6(cast[array[16, uint8]](wrapped.address_v6)), port: wrapped.port
+    ip: ipv6(cast[array[16, uint8]](wrapped.address_v6)), port: ta.port
   )

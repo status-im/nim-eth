@@ -241,9 +241,9 @@ proc send(d: Protocol, a: Address, data: seq[byte]) =
       # it should not stop the process as that would reset the discovery
       # progress in case there is even a small window of no connection.
       # One case that needs this error available upwards is when revalidating
-      # nodes. Else the revalidation might end up clearing the routing tabl
+      # nodes. Else the revalidation might end up clearing the routing table
       # because of ping failures due to own network connection failure.
-      warn "Discovery send failed", msg = f.readError.msg
+      warn "Discovery send failed", msg = f.readError.msg, a
 
 proc send(d: Protocol, n: Node, data: seq[byte]) =
   doAssert(n.address.isSome() or n.address6.isSome())
@@ -474,7 +474,7 @@ proc processClient(transp: DatagramTransport, rawAddr: TransportAddress):
            except ValueError as e:
              error "Not a valid IpAddress", exception = e.name, msg = e.msg
              return
-  let a = Address(ip: ValidIpAddress.init(ip), port: remoteAddr.port)
+  let a = Address(ip: ValidIpAddress.init(ip), port: rawAddr.port)
 
   proto.receive(a, buf)
 
