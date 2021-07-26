@@ -73,8 +73,15 @@
 
 {.push raises: [Defect].}
 
+when defined(windows):
+  var IPV6_V6ONLY {.importc, nodecl, header: "<ws2tcpip.h>".}: cint
+  var IPPROTO_IPV6 {.importc, nodecl.}: cint
+else:
+  import posix
+  var IPV6_V6ONLY = posix.IPV6_V6ONLY
+  var IPPROTO_IPV6 = posix.IPPROTO_IPV6
+
 import
-  posix,
   std/[tables, sets, options, math, sequtils, algorithm, nativesockets],
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/endians2, chronicles, chronos, stint, bearssl, metrics,
@@ -1051,7 +1058,7 @@ proc open*(d: Protocol) {.raises: [Defect, CatchableError].} =
     let nativeSock = createNativeSocket(ta.getDomain(), SockType.SOCK_DGRAM,
                                   nativesockets.Protocol.IPPROTO_UDP)
     let asyncSock = AsyncFD(nativeSock)
-    let dualstack = asyncSock.setSockOpt(posix.IPPROTO_IPV6, posix.IPV6_V6ONLY, 0)
+    let dualstack = asyncSock.setSockOpt(IPPROTO_IPV6, IPV6_V6ONLY, 0)
 
     if nativeSock == osInvalidSocket or dualstack == false:
       ## If this fails (because IPv6 is disabled or this is a very old system) we
