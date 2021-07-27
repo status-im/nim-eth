@@ -101,7 +101,7 @@ type
     fee*:           Option[UInt256]   # EIP-1559
 
   BlockBody* = object
-    transactions*{.rlpCustomSerialization.}: seq[Transaction]
+    transactions*:  seq[Transaction]
     uncles*:        seq[BlockHeader]
 
   Log* = object
@@ -127,7 +127,7 @@ type
 
   EthBlock* = object
     header*: BlockHeader
-    txs* {.rlpCustomSerialization.}: seq[Transaction]
+    txs*:    seq[Transaction]
     uncles*: seq[BlockHeader]
 
   CollationHeader* = object
@@ -427,39 +427,74 @@ proc readTxEip1559(rlp: var Rlp, tx: var Transaction)=
   rlp.read(tx.R)
   rlp.read(tx.S)
 
+proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.inline.} =
+  # EIP-2718: We MUST decode the first byte as a byte, not `rlp.read(int)`.
+  # If decoded with `rlp.read(int)`, bad transaction data (from the network)
+  # or even just incorrectly framed data for other reasons fails with
+  # any of these misleading error messages:
+  # - "Message too large to fit in memory"
+  # - "Number encoded with a leading zero"
+  # - "Read past the end of the RLP stream"
+  # - "Small number encoded in a non-canonical way"
+  # - "Attempt to read an Int value past the RLP end"
+  # - "The RLP contains a larger than expected Int value"
+  if not rlp.isSingleByte:
+    if not rlp.hasData:
+      raise newException(MalformedRlpError,
+        "Transaction expected but source RLP is empty")
+    raise newException(MalformedRlpError,
+      "TypedTransaction type byte is out of range, must be 0x00 to 0x7f")
+  let txType = rlp.getByteValue
+  rlp.position += 1
+
+  case TxType(txType):
+    of TxEip2930:
+      rlp.readTxEip2930(tx)
+    of TxEip1559:
+      rlp.readTxEip1559(tx)
+    else:
+      raise newException(UnsupportedRlpError,
+        "TypedTransaction type must be 1 or 2 in this version, got " & $txType)
+
 proc read*(rlp: var Rlp, T: type Transaction): T =
+  # Individual transactions are encoded and stored as either `RLP([fields..])`
+  # for legacy transactions, or `Type || RLP([fields..])`.  Both of these
+  # encodings are byte sequences.  The part after `Type` doesn't have to be
+  # RLP in theory, but all types so far use RLP.  EIP-2718 covers this.
   if rlp.isList:
     rlp.readTxLegacy(result)
-    return
-
-  # EIP 2718
-  let txType = rlp.read(int)
-  if txType notin {1, 2}:
-    raise newException(UnsupportedRlpError,
-      "TxType expect 1 or 2 got " & $txType)
-
-  if TxType(txType) == TxEip2930:
-    rlp.readTxEip2930(result)
   else:
-    rlp.readTxEip1559(result)
+    rlp.readTxTyped(result)
 
-proc read*(rlp: var Rlp, t: var (EthBlock | BlockBody), _: type seq[Transaction]): seq[Transaction] {.inline.} =
-  # EIP 2718/2930: we have to override this field
-  # for reasons described below in `append` proc
+proc read*(rlp: var Rlp,
+           T: (type seq[Transaction]) | (type openArray[Transaction])): seq[Transaction] =
+  # In arrays (sequences), transactions are encoded as either `RLP([fields..])`
+  # for legacy transactions, or `RLP(Type || RLP([fields..]))` for all typed
+  # transactions to date.  Spot the extra `RLP(..)` blob encoding, to make it
+  # valid RLP inside a larger RLP.  EIP-2976 covers this, "Typed Transactions
+  # over Gossip", although it's not very clear about the blob encoding.
+  #
+  # In practice the extra `RLP(..)` applies to all arrays/sequences of
+  # transactions.  In principle, all aggregates (objects etc.), but
+  # arrays/sequences are enough.  In `eth/65` protocol this is essential for
+  # the correct encoding/decoding of `Transactions`, `NewBlock`, and
+  # `PooledTransactions` network calls.  We need a type match on both
+  # `openArray[Transaction]` and `seq[Transaction]` to catch all cases.
   if not rlp.isList:
-    raise newException(MalformedRlpError,
-      "List expected, but got blob.")
-  for tx in rlp:
-    if tx.isList:
-      result.add tx.read(Transaction)
+    raise newException(RlpTypeMismatch,
+      "Transaction list expected, but source RLP is not a list")
+  for item in rlp:
+    var tx: Transaction
+    if item.isList:
+      item.readTxLegacy(tx)
     else:
-      let bytes = rlp.read(Blob)
-      var rr = rlpFromBytes(bytes)
-      result.add rr.read(Transaction)
+      var rr = rlpFromBytes(rlp.read(Blob))
+      rr.readTxTyped(tx)
+    result.add tx
 
-proc append*(rlpWriter: var RlpWriter, blk: EthBlock | BlockBody, txs: seq[Transaction]) {.inline.} =
-  # EIP 2718/2930: the new Tx is rlp(txType || txPlayload) -> one blob/one list elem
-  # not rlp(txType, txPayload) -> two list elem, wrong!
+proc append*(rlpWriter: var RlpWriter,
+             txs: seq[Transaction] | openArray[Transaction]) {.inline.} =
+  # See above about encoding arrays/sequences of transactions.
   rlpWriter.startList(txs.len)
   for tx in txs:
     if tx.txType == TxLegacy:
