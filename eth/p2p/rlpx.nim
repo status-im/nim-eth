@@ -252,15 +252,8 @@ func asCapability*(p: ProtocolInfo): Capability =
   result.name = p.name
   result.version = p.version
 
-func nameStr*(p: ProtocolInfo): string =
-  result = newStringOfCap(3)
-  for c in p.name: result.add(c)
-
 proc cmp*(lhs, rhs: ProtocolInfo): int =
-  for i in 0..2:
-    if lhs.name[i] != rhs.name[i]:
-      return int16(lhs.name[i]) - int16(rhs.name[i])
-  return 0
+  return cmp(lhs.name, rhs.name)
 
 proc nextMsgResolver[MsgType](msgData: Rlp, future: FutureBase)
     {.gcsafe, raises: [RlpError, Defect].} =
@@ -666,9 +659,8 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     isSubprotocol = protocol.rlpxName != "p2p"
 
   if protocol.rlpxName.len == 0: protocol.rlpxName = protocol.name
-  # By convention, all Ethereum protocol names were abbreviated to 3 letters,
-  # but this informal spec has since been relaxed (e.g. `hive`).
-  doAssert protocol.rlpxName.len > 2
+  # By convention, all Ethereum protocol names have at least 3 characters.
+  doAssert protocol.rlpxName.len >= 3
 
   new result
 
