@@ -4,10 +4,6 @@ template rlpIgnore* {.pragma.}
   ## Specifies that a certain field should be ignored for the purposes
   ## of RLP serialization
 
-template rlpInline* {.pragma.}
-  ## This can be specified on a record field in order to avoid the
-  ## default behavior of wrapping the record in a RLP list.
-
 template rlpCustomSerialization* {.pragma.}
   ## This pragma can be applied to a record field to enable the
   ## use of custom `read` and `append` overloads that also take

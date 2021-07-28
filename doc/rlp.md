@@ -122,11 +122,9 @@ var bytes = encode(t1)
 var t2 = bytes.decode(Transaction)
 ```
 
-By default, sub-fields within objects are wrapped in RLP lists. You can avoid this
-behavior by adding the custom pragma `rlpInline` on a particular field. In rare
-circumstances, you may need to serialize the same field type differently depending
-on the enclosing object type. You can use the `rlpCustomSerialization` pragma to
-achieve this.
+In rare circumstances, you may need to serialize the same field type
+differently depending on the enclosing object type. You can use the
+`rlpCustomSerialization` pragma to achieve this.
 
 ### Contributing / Testing
 

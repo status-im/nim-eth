@@ -23,7 +23,8 @@ type
 
   NewBlockAnnounce* = object
     header*: BlockHeader
-    body* {.rlpInline.}: BlockBody
+    txs*:    seq[Transaction]
+    uncles*: seq[BlockHeader]
 
   PeerState = ref object
     initialized*: bool
