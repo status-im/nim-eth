@@ -46,7 +46,6 @@ type
     replacementCache: seq[Node] ## Nodes that could not be added to the `nodes`
     ## seq as it is full and without stale nodes. This is practically a small
     ## LRU cache.
-    lastUpdated: float ## epochTime of last update to `nodes` in the KBucket.
     ipLimits: IpLimits ## IP limits for bucket: node entries and replacement
     ## cache entries combined.
 
@@ -470,7 +469,6 @@ proc setJustSeen*(r: RoutingTable, n: Node) =
   if idx >= 0:
     if idx != 0:
       b.nodes.moveRight(0, idx - 1)
-    b.lastUpdated = epochTime()
 
     if not n.seen:
       b.nodes[0].seen = true
@@ -481,9 +479,8 @@ proc nodeToRevalidate*(r: RoutingTable): Node =
   ## bucket is selected.
   var buckets = r.buckets
   r.rng[].shuffle(buckets)
-  # TODO: Should we prioritize less-recently-updated buckets instead? Could use
-  # `lastUpdated` for this, but it would probably make more sense to only update
-  # that value on revalidation then and rename it to `lastValidated`.
+  # TODO: Should we prioritize less-recently-updated buckets instead? Could
+  # store a `now` Moment at setJustSeen or at revalidate per bucket.
   for b in buckets:
     if b.len > 0:
       return b.nodes[^1]
