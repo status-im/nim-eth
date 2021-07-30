@@ -93,7 +93,8 @@ proc startListening*(node: EthereumNode) {.raises: [CatchableError, Defect].} =
 proc connectToNetwork*(node: EthereumNode,
                        bootstrapNodes: seq[ENode],
                        startListening = true,
-                       enableDiscovery = true) {.async.} =
+                       enableDiscovery = true,
+                       waitForPeers = true) {.async.} =
   doAssert node.connectionState == ConnectionState.None
 
   node.connectionState = Connecting
@@ -112,7 +113,7 @@ proc connectToNetwork*(node: EthereumNode,
   else:
     info "Discovery disabled"
 
-  while node.peerPool.connectedNodes.len == 0:
+  while node.peerPool.connectedNodes.len == 0 and waitForPeers:
     trace "Waiting for more peers", peers = node.peerPool.connectedNodes.len
     await sleepAsync(500.milliseconds)
 
