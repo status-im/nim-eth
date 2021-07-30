@@ -633,7 +633,7 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
     return err(nodes.error)
 
 proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
-    Future[DiscResult[TalkRespMessage]] {.async.} =
+    Future[DiscResult[seq[byte]]] {.async.} =
   ## Send a discovery talkreq message.
   ##
   ## Returns the received talkresp message or an error.
@@ -644,7 +644,7 @@ proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
   if resp.isSome():
     if resp.get().kind == talkresp:
       d.routingTable.setJustSeen(toNode)
-      return ok(resp.get().talkresp)
+      return ok(resp.get().talkresp.response)
     else:
       d.replaceNode(toNode)
       discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])

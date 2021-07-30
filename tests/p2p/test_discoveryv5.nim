@@ -632,7 +632,7 @@ procSuite "Discovery v5 Tests":
 
     check:
       talkresp.isOk()
-      talkresp.get().response.len == 0
+      talkresp.get().len == 0
 
     await node1.closeWait()
     await node2.closeWait()
@@ -657,7 +657,7 @@ procSuite "Discovery v5 Tests":
 
     check:
       talkresp.isOk()
-      talkresp.get().response == "hello".toBytes()
+      talkresp.get() == "hello".toBytes()
 
     await node1.closeWait()
     await node2.closeWait()
