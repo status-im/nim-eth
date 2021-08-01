@@ -50,22 +50,23 @@ template put*(dbParam: KvStoreRef, key, val: openArray[byte]): KvResult[void] =
   let db = dbParam
   db.putProc(db.obj, key, val)
 
-template get*(dbParam: KvStoreRef, key: openArray[byte], onData: untyped): KvResult[bool] =
+# template would be preferred, but cannot be called with an anonymous proc on Nim 1.2.12.
+# See https://github.com/nim-lang/Nim/issues/18648
+proc get*(db: KvStoreRef, key: openArray[byte], onData: DataProc): KvResult[bool] =
   ## Retrive value at ``key`` and call ``onData`` with the value. The data is
   ## valid for the duration of the callback.
   ## ``onData``: ``proc(data: openArray[byte])``
   ## returns true if found and false otherwise.
-  let db = dbParam
   db.getProc(db.obj, key, onData)
 
-template find*(
-    dbParam: KvStoreRef, prefix: openArray[byte], onFind: untyped): KvResult[int] =
+# template would be preferred, but cannot be called with an anonymous proc on Nim 1.2.12.
+# See https://github.com/nim-lang/Nim/issues/18648
+proc find*(db: KvStoreRef, prefix: openArray[byte], onFind: KeyValueProc): KvResult[int] =
   ## Perform a prefix find, returning all data starting with the given prefix.
   ## An empty prefix returns all rows in the store.
   ## The data is valid for the duration of the callback.
   ## ``onFind``: ``proc(key, value: openArray[byte])``
   ## returns the number of rows found
-  let db = dbParam
   db.findProc(db.obj, prefix, onFind)
 
 template del*(dbParam: KvStoreRef, key: openArray[byte]): KvResult[void] =

@@ -32,6 +32,11 @@ proc testKvStore*(db: KvStoreRef, supportsFind: bool) =
     db.contains(key)[]
     db.get(key, grab)[]
     v == value
+    # Test that compilation succeeds when called with anonymous proc.
+    # See https://github.com/nim-lang/Nim/issues/18648
+    db.contains(key)[]
+    db.get(key, proc(data: openArray[byte]) = v = @data)[]
+    v == value
 
   db.put(key, value2)[] # overwrite old value
   check:
