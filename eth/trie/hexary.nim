@@ -677,3 +677,17 @@ proc isPruning*(self: SecureHexaryTrie): bool {.borrow.}
 template contains*(self: HexaryTrie | SecureHexaryTrie;
                    key: openArray[byte]): bool =
   self.get(key).len > 0
+
+# Validates merkle proof against provided root hash
+proc isValidBranch*(branch: seq[seq[byte]], rootHash: KeccakHash, key, value: seq[byte]): bool =
+  # branch must not be empty
+  doAssert(branch.len != 0)
+
+  var db = newMemoryDB()
+  for node in branch:
+    doAssert(node.len != 0)
+    let nodeHash = hexary.keccak(node)
+    db.put(nodeHash.data, node)
+
+  var trie = initHexaryTrie(db, rootHash)
+  result = trie.get(key) == value
