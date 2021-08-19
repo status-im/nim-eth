@@ -726,7 +726,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
         # If it wasn't seen before, insert node while remaining sorted
         closestNodes.insert(n, closestNodes.lowerBound(n,
           proc(x: Node, n: Node): int =
-            cmp(distanceTo(x, target), distanceTo(n, target))
+            cmp(distanceTo(x.id, target), distanceTo(n.id, target))
         ))
 
         if closestNodes.len > BUCKET_SIZE:

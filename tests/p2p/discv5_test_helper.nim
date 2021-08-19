@@ -42,6 +42,13 @@ proc generateNode*(privKey: PrivateKey, port: int = 20302,
     some(port), some(port), localEnrFields).expect("Properly intialized private key")
   result = newNode(enr).expect("Properly initialized node")
 
+proc generateNRandomNodes*(rng: ref BrHmacDrbgContext, n: int): seq[Node] =
+  var res = newSeq[Node]()
+  for i in 1..n:
+    let node = generateNode(PrivateKey.random(rng[]))
+    res.add(node)
+  res
+
 proc nodeAndPrivKeyAtDistance*(n: Node, rng: var BrHmacDrbgContext, d: uint32,
     ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1")): (Node, PrivateKey) =
   while true:

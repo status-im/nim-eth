@@ -19,6 +19,15 @@ declarePublicGauge routing_table_nodes,
   "Discovery routing table nodes", labels = ["state"]
 
 type
+  DistanceProc* = proc(a, b: NodeId): NodeId {.raises: [Defect], gcsafe, noSideEffect.}
+  LogDistanceProc* = proc(a, b: NodeId): uint16 {.raises: [Defect], gcsafe, noSideEffect.}
+  IdAtDistanceProc* = proc (id: NodeId, dist: uint16): NodeId {.raises: [Defect], gcsafe, noSideEffect.}
+
+  DistanceCalculator* = object
+    calculateDistance*: DistanceProc
+    calculateLogDistance*: LogDistanceProc
+    calculateIdAtDistance*: IdAtDistanceProc
+
   RoutingTable* = object
     thisNode: Node
     buckets: seq[KBucket]
@@ -32,6 +41,7 @@ type
     ## will result in an improvement of log base(2^b) n hops per lookup.
     ipLimits: IpLimits ## IP limits for total routing table: all buckets and
     ## replacement caches.
+    distanceCalculator: DistanceCalculator
     rng: ref BrHmacDrbgContext
 
   KBucket = ref object
@@ -82,22 +92,21 @@ type
     ReplacementExisting
     NoAddress
 
-const
-  BUCKET_SIZE* = 16 ## Maximum amount of nodes per bucket
-  REPLACEMENT_CACHE_SIZE* = 8 ## Maximum amount of nodes per replacement cache
-  ## of a bucket
-  ID_SIZE = 256
-  DefaultBitsPerHop* = 5
-  DefaultBucketIpLimit* = 2'u
-  DefaultTableIpLimit* = 10'u
-  DefaultTableIpLimits* = TableIpLimits(tableIpLimit: DefaultTableIpLimit,
-    bucketIpLimit: DefaultBucketIpLimit)
-
-proc distanceTo*(n: Node, id: NodeId): UInt256 =
+# xor distance functions
+#
+func distanceTo*(a, b: NodeId): Uint256 =
   ## Calculate the distance to a NodeId.
-  n.id xor id
+  a xor b
 
-proc logDist*(a, b: NodeId): uint16 =
+func idAtDistance*(id: NodeId, dist: uint16): NodeId =
+  ## Calculate the "lowest" `NodeId` for given logarithmic distance.
+  ## A logarithmic distance obviously covers a whole range of distances and thus
+  ## potential `NodeId`s.
+  # xor the NodeId with 2^(d - 1) or one could say, calculate back the leading
+  # zeroes and xor those` with the id.
+  id xor (1.stuint(256) shl (dist.int - 1))
+
+func logDist*(a, b: NodeId): uint16 =
   ## Calculate the logarithmic distance between two `NodeId`s.
   ##
   ## According the specification, this is the log base 2 of the distance. But it
@@ -115,6 +124,20 @@ proc logDist*(a, b: NodeId): uint16 =
       lz += bitops.countLeadingZeroBits(x)
       break
   return uint16(a.len * 8 - lz)
+#
+
+const
+  BUCKET_SIZE* = 16 ## Maximum amount of nodes per bucket
+  REPLACEMENT_CACHE_SIZE* = 8 ## Maximum amount of nodes per replacement cache
+  ## of a bucket
+  ID_SIZE = 256
+  DefaultBitsPerHop* = 5
+  DefaultBucketIpLimit* = 2'u
+  DefaultTableIpLimit* = 10'u
+  DefaultTableIpLimits* = TableIpLimits(tableIpLimit: DefaultTableIpLimit,
+    bucketIpLimit: DefaultBucketIpLimit)
+  XorDistanceCalculator* = DistanceCalculator(calculateDistance: distanceTo, 
+    calculateLogDistance: logDist, calculateIdAtDistance: idAtDistance)
 
 proc newKBucket(istart, iend: NodeId, bucketIpLimit: uint): KBucket =
   result.new()
@@ -127,11 +150,8 @@ proc newKBucket(istart, iend: NodeId, bucketIpLimit: uint): KBucket =
 proc midpoint(k: KBucket): NodeId =
   k.istart + (k.iend - k.istart) div 2.u256
 
-proc distanceTo(k: KBucket, id: NodeId): UInt256 = k.midpoint xor id
-proc nodesByDistanceTo(k: KBucket, id: NodeId): seq[Node] =
-  sortedByIt(k.nodes, it.distanceTo(id))
-
 proc len(k: KBucket): int = k.nodes.len
+
 proc tail(k: KBucket): Node = k.nodes[high(k.nodes)]
 
 proc ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
@@ -233,13 +253,14 @@ proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
 proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = DefaultBitsPerHop,
-    ipLimits = DefaultTableIpLimits, rng: ref BrHmacDrbgContext) =
+    ipLimits = DefaultTableIpLimits, rng: ref BrHmacDrbgContext, distanceCalculator = XorDistanceCalculator) =
   ## Initialize the routing table for provided `Node` and bitsPerHop value.
   ## `bitsPerHop` is default set to 5 as recommended by original Kademlia paper.
   r.thisNode = thisNode
   r.buckets = @[newKBucket(0.u256, high(Uint256), ipLimits.bucketIpLimit)]
   r.bitsPerHop = bitsPerHop
   r.ipLimits.limit = ipLimits.tableIpLimit
+  r.distanceCalculator = distanceCalculator
   r.rng = rng
 
 proc splitBucket(r: var RoutingTable, index: int) =
@@ -397,7 +418,10 @@ proc contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
   # Check if the routing table contains node `n`.
 
 proc bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
-  sortedByIt(r.buckets, it.distanceTo(id))
+  sortedByIt(r.buckets,  r.distanceCalculator.calculateDistance(it.midpoint, id))
+
+proc nodesByDistanceTo(r: RoutingTable, k: KBucket, id: NodeId): seq[Node] =
+  sortedByIt(k.nodes, r.distanceCalculator.calculateDistance(it.id, id))
 
 proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
     seenOnly = false): seq[Node] =
@@ -407,7 +431,7 @@ proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
   result = newSeqOfCap[Node](k * 2)
   block addNodes:
     for bucket in r.bucketsByDistanceTo(id):
-      for n in bucket.nodesByDistanceTo(id):
+      for n in r.nodesByDistanceTo(bucket, id):
         # Only provide actively seen nodes when `seenOnly` set.
         if not seenOnly or n.seen:
           result.add(n)
@@ -416,25 +440,17 @@ proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
 
   # TODO: is this sort still needed? Can we get nodes closer from the "next"
   # bucket?
-  result = sortedByIt(result, it.distanceTo(id))
+  result = sortedByIt(result, r.distanceCalculator.calculateDistance(it.id, id))
   if result.len > k:
     result.setLen(k)
-
-proc idAtDistance*(id: NodeId, dist: uint16): NodeId =
-  ## Calculate the "lowest" `NodeId` for given logarithmic distance.
-  ## A logarithmic distance obviously covers a whole range of distances and thus
-  ## potential `NodeId`s.
-  # xor the NodeId with 2^(d - 1) or one could say, calculate back the leading
-  # zeroes and xor those` with the id.
-  id xor (1.stuint(256) shl (dist.int - 1))
 
 proc neighboursAtDistance*(r: RoutingTable, distance: uint16,
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours at given logarithmic distance.
-  result = r.neighbours(idAtDistance(r.thisNode.id, distance), k, seenOnly)
+  result = r.neighbours(r.distanceCalculator.calculateIdAtDistance(r.thisNode.id, distance), k, seenOnly)
   # This is a bit silly, first getting closest nodes then to only keep the ones
   # that are exactly the requested distance.
-  keepIf(result, proc(n: Node): bool = logDist(n.id, r.thisNode.id) == distance)
+  keepIf(result, proc(n: Node): bool = r.distanceCalculator.calculateLogDistance(n.id, r.thisNode.id) == distance)
 
 proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
@@ -443,12 +459,12 @@ proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
   # first one prioritize. It might end up not including all the node distances
   # requested. Need to rework the logic here and not use the neighbours call.
   if distances.len > 0:
-    result = r.neighbours(idAtDistance(r.thisNode.id, distances[0]), k,
+    result = r.neighbours(r.distanceCalculator.calculateIdAtDistance(r.thisNode.id, distances[0]), k,
       seenOnly)
     # This is a bit silly, first getting closest nodes then to only keep the ones
     # that are exactly the requested distances.
     keepIf(result, proc(n: Node): bool =
-      distances.contains(logDist(n.id, r.thisNode.id)))
+      distances.contains(r.distanceCalculator.calculateLogDistance(n.id, r.thisNode.id)))
 
 proc len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len
