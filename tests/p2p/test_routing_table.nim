@@ -6,6 +6,20 @@ import
   ../../eth/keys, ../../eth/p2p/discoveryv5/[routing_table, node, enr],
   ./discv5_test_helper
 
+func customDistance*(a, b: NodeId): Uint256 =
+  if a >= b:
+    a - b
+  else:
+    b - a
+
+func customLogDistance*(a, b: NodeId): uint16 =
+  let distance = customDistance(a, b)
+  let modulo = distance mod (u256(uint8.high))
+  cast[uint16](modulo)
+
+func customIdAdDist*(id: NodeId, dist: uint16): NodeId =
+  id + u256(dist)
+
 suite "Routing Table Tests":
   let rng = newRng()
 
@@ -15,6 +29,11 @@ suite "Routing Table Tests":
   # thus independent of routing_table.
   let ipLimits = TableIpLimits(tableIpLimit: 200,
     bucketIpLimit: BUCKET_SIZE + REPLACEMENT_CACHE_SIZE + 1)
+
+  let customDistanceCalculator = DistanceCalculator(
+    calculateDistance: customDistance, 
+    calculateLogDistance: customLogDistance, 
+    calculateIdAtDistance: customIdAdDist)
 
   test "Add local node":
     let node = generateNode(PrivateKey.random(rng[]))
@@ -540,3 +559,45 @@ suite "Routing Table Tests":
       check table.addNode(n) == Added
 
     check table.len == int(DefaultTableIpLimits.bucketIpLimit) + 1
+
+  test "Custom distance calculator: distance":
+    let numNodes = 10
+    let local = generateNode(PrivateKey.random(rng[]))
+    var table: RoutingTable
+    table.init(local, 1, ipLimits, rng = rng, distanceCalculator = customDistanceCalculator)
+
+    let nodes = generateNRandomNodes(rng, numNodes)
+
+    for n in nodes:
+      check table.addNode(n) == Added
+
+    let neighbours = table.neighbours(local.id)
+    check len(neighbours) == numNodes
+
+    #  check that neighbours are sorted by provdied custom distance funciton
+    for i in 0..numNodes-2:
+      let prevDist = customDistance(local.id, neighbours[i].id)
+      let nextDist = customDistance(local.id, neighbours[i + 1].id)
+      check prevDist <= nextDist
+
+  test "Custom distance calculator: at log distance":
+    let numNodes = 10
+    let local = generateNode(PrivateKey.random(rng[]))
+    var table: RoutingTable
+    table.init(local, 1, ipLimits, rng = rng, distanceCalculator = customDistanceCalculator)
+
+    let nodes = generateNRandomNodes(rng, numNodes)
+
+    for n in nodes:
+      check table.addNode(n) == Added
+
+    let neighbours = table.neighbours(local.id)
+    check len(neighbours) == numNodes
+
+    for n in neighbours:
+      let cLogDist = customLogDistance(local.id, n.id)
+      let neighboursAtLogDist = table.neighboursAtDistance(cLogDist)
+      # there may be more than one node at provided distance
+      check len(neighboursAtLogDist) >= 1
+      check neighboursAtLogDist.contains(n)
+
