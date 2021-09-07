@@ -139,13 +139,13 @@ const
   XorDistanceCalculator* = DistanceCalculator(calculateDistance: distanceTo, 
     calculateLogDistance: logDist, calculateIdAtDistance: idAtDistance)
 
-proc newKBucket(istart, iend: NodeId, bucketIpLimit: uint): KBucket =
-  result.new()
-  result.istart = istart
-  result.iend = iend
-  result.nodes = @[]
-  result.replacementCache = @[]
-  result.ipLimits.limit = bucketIpLimit
+proc new(T: type KBucket, istart, iend: NodeId, bucketIpLimit: uint): T =
+  KBucket(
+    istart: istart,
+    iend: iend,
+    nodes: @[],
+    replacementCache: @[],
+    ipLimits: IpLimits(limit: bucketIpLimit))
 
 proc midpoint(k: KBucket): NodeId =
   k.istart + (k.iend - k.istart) div 2.u256
@@ -196,12 +196,12 @@ proc remove(k: KBucket, n: Node): bool =
 proc split(k: KBucket): tuple[lower, upper: KBucket] =
   ## Split the kbucket `k` at the median id.
   let splitid = k.midpoint
-  result.lower = newKBucket(k.istart, splitid, k.ipLimits.limit)
-  result.upper = newKBucket(splitid + 1.u256, k.iend, k.ipLimits.limit)
+  result.lower = KBucket.new(k.istart, splitid, k.ipLimits.limit)
+  result.upper = KBucket.new(splitid + 1.u256, k.iend, k.ipLimits.limit)
   for node in k.nodes:
     let bucket = if node.id <= splitid: result.lower else: result.upper
     bucket.nodes.add(node)
-    # Ip limits got reset because of the newKBuckets, so there is the need to
+    # Ip limits got reset because of the KBucket.new, so there is the need to
     # increment again for each added node. It should however never fail as the
     # previous bucket had the same limits.
     doAssert(bucket.ipLimits.inc(node.address.get().ip),
@@ -252,16 +252,18 @@ proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
   # Reaching this would mean that all node ids are equal.
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
-proc init*(r: var RoutingTable, thisNode: Node, bitsPerHop = DefaultBitsPerHop,
-    ipLimits = DefaultTableIpLimits, rng: ref BrHmacDrbgContext, distanceCalculator = XorDistanceCalculator) =
+proc init*(T: type RoutingTable, thisNode: Node, bitsPerHop = DefaultBitsPerHop,
+    ipLimits = DefaultTableIpLimits, rng: ref BrHmacDrbgContext,
+    distanceCalculator = XorDistanceCalculator): T =
   ## Initialize the routing table for provided `Node` and bitsPerHop value.
   ## `bitsPerHop` is default set to 5 as recommended by original Kademlia paper.
-  r.thisNode = thisNode
-  r.buckets = @[newKBucket(0.u256, high(Uint256), ipLimits.bucketIpLimit)]
-  r.bitsPerHop = bitsPerHop
-  r.ipLimits.limit = ipLimits.tableIpLimit
-  r.distanceCalculator = distanceCalculator
-  r.rng = rng
+  RoutingTable(
+    thisNode: thisNode,
+    buckets: @[KBucket.new(0.u256, high(Uint256), ipLimits.bucketIpLimit)],
+    bitsPerHop: bitsPerHop,
+    ipLimits: IpLimits(limit: ipLimits.tableIpLimit),
+    distanceCalculator: distanceCalculator,
+    rng: rng)
 
 proc splitBucket(r: var RoutingTable, index: int) =
   let bucket = r.buckets[index]
