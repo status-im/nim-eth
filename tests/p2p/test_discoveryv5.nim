@@ -645,7 +645,7 @@ procSuite "Discovery v5 Tests":
         rng, PrivateKey.random(rng[]), localAddress(20303))
       talkProtocol = "echo".toBytes()
 
-    proc handler(protocol: TalkProtocol, request: seq[byte]): seq[byte]
+    proc handler(protocol: TalkProtocol, request: seq[byte], fromId: NodeId, fromUdpAddress: Address): seq[byte]
         {.gcsafe, raises: [Defect].} =
       request
 
@@ -670,7 +670,7 @@ procSuite "Discovery v5 Tests":
         rng, PrivateKey.random(rng[]), localAddress(20303))
       talkProtocol = "echo".toBytes()
 
-    proc handler(protocol: TalkProtocol, request: seq[byte]): seq[byte]
+    proc handler(protocol: TalkProtocol, request: seq[byte], fromId: NodeId, fromUdpAddress: Address): seq[byte]
         {.gcsafe, raises: [Defect].} =
       request
 

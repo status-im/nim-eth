@@ -140,7 +140,7 @@ type
     node: Node
     message: seq[byte]
 
-  TalkProtocolHandler* = proc(p: TalkProtocol, request: seq[byte]): seq[byte]
+  TalkProtocolHandler* = proc(p: TalkProtocol, request: seq[byte], fromId: NodeId, fromUdpAddress: Address): seq[byte]
     {.gcsafe, raises: [Defect].}
 
   TalkProtocol* = ref object of RootObj
@@ -318,7 +318,7 @@ proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
       TalkRespMessage(response: @[])
     else:
       TalkRespMessage(response: talkProtocol.protocolHandler(talkProtocol,
-        talkreq.request))
+        talkreq.request, fromId, fromAddr))
   let (data, _) = encodeMessagePacket(d.rng[], d.codec, fromId, fromAddr,
     encodeMessage(talkresp, reqId))
 
