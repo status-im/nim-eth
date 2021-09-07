@@ -1,7 +1,7 @@
 import
   std/[os, strutils, options],
   stew/shims/net,
-  eth/keys, eth/p2p/discoveryv5/enr,
+  ../../../eth/keys, ../../../eth/p2p/discoveryv5/enr,
   ../fuzzing_helpers
 
 template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
@@ -12,7 +12,7 @@ proc generate() =
     rng = newRng()
     privKey = PrivateKey.random(rng[])
     ip = some(ValidIpAddress.init("127.0.0.1"))
-    port = Port(20301)
+    port = some(Port(20301))
 
   block:
     let record = enr.Record.init(1, privKey, ip, port, port)[]

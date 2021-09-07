@@ -1,13 +1,15 @@
 import
-  options, sequtils, chronicles,
-  eth/p2p/rlpx_protocols/whisper_protocol as whisper,
-  ../fuzztest
+  std/[options, sequtils],
+  chronicles, testutils/fuzzing,
+  ../../../eth/p2p/rlpx_protocols/whisper_protocol as whisper,
+  ../../../eth/keys
 
 test:
   let
+    rng = newRng()
     data = @payload.distribute(2)
     whisperPayload = Payload(payload: data[0], padding: some(data[1]))
-    encoded = whisper.encode(whisperPayload)
+    encoded = whisper.encode(rng[], whisperPayload)
 
     decoded = whisper.decode(encoded.get())
 

@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  eth/common/[eth_types, state_accessors]
+  ../common/[eth_types, state_accessors]
 
 # TODO: Perhaps we can move this to eth-common
 

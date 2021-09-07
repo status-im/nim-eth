@@ -1,6 +1,6 @@
 import
-  testutils/fuzzing, stew/shims/net, stew/byteutils,
-  eth/p2p/discoveryv5/[encoding, enr, sessions, node]
+  testutils/fuzzing, stew/shims/net,
+  ../../../eth/p2p/discoveryv5/[encoding, enr, sessions, node]
 
 init:
   const

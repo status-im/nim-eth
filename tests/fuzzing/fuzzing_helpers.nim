@@ -1,5 +1,5 @@
 import
-    std/streams
+  std/streams
 
 proc toFile*(data: seq[byte], fn: string) =
   var s = newFileStream(fn, fmWrite)

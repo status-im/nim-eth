@@ -90,3 +90,16 @@ task test_discv5_full, "Run discovery v5 and its dependencies tests":
 
 task build_dcli, "Build dcli":
   buildBinary("eth/p2p/discoveryv5/dcli")
+
+import os, strutils
+
+task build_fuzzers, "Build fuzzer test cases":
+  # This file is there to be able to quickly build the fuzzer test cases in
+  # order to avoid bit rot (e.g. for CI). Not for actual fuzzing.
+  # TODO: Building fuzzer test case one by one will make it take a bit longer,
+  # but we cannot import them in one Nim file due to the usage of
+  # `exportc: "AFLmain"` in the fuzzing test template for Windows:
+  # https://github.com/status-im/nim-testutils/blob/master/testutils/fuzzing.nim#L100
+  for file in walkDirRec("tests/fuzzing/"):
+    if file.endsWith("nim"):
+      buildBinary(file)

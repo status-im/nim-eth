@@ -1,10 +1,17 @@
 import
-  testutils/fuzzing, chronicles,
-  eth/p2p/[discovery, enode], eth/[keys, rlp],
+  testutils/fuzzing, chronicles, nimcrypto/keccak,
+  ../../../eth/p2p/[discovery, enode], ../../../eth/[keys, rlp],
   ../../p2p/p2p_test_helper
 
 const DefaultListeningPort = 30303
 var targetNode: DiscoveryProtocol
+
+proc packData(payload: openArray[byte], pk: PrivateKey): seq[byte] =
+  let
+    payloadSeq = @payload
+    signature = @(pk.sign(payload).toRaw())
+    msgHash = keccak256.digest(signature & payloadSeq)
+  result = @(msgHash.data) & signature & payloadSeq
 
 init:
   # Set up a discovery node, this is the node we target when fuzzing
