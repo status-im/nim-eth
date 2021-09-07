@@ -984,7 +984,7 @@ proc newProtocol*(privKey: PrivateKey,
   # TODO Consider whether this should be a Defect
   doAssert rng != nil, "RNG initialization failed"
 
-  result = Protocol(
+  Protocol(
     privateKey: privKey,
     localNode: node,
     bindAddress: Address(ip: ValidIpAddress.init(bindIp), port: bindPort),
@@ -993,9 +993,8 @@ proc newProtocol*(privKey: PrivateKey,
     bootstrapRecords: @bootstrapRecords,
     ipVote: IpVote.init(),
     enrAutoUpdate: enrAutoUpdate,
+    routingTable: RoutingTable.init(node, DefaultBitsPerHop, tableIpLimits, rng),
     rng: rng)
-
-  result.routingTable.init(node, DefaultBitsPerHop, tableIpLimits, rng)
 
 proc open*(d: Protocol) {.raises: [Defect, CatchableError].} =
   info "Starting discovery node", node = d.localNode,
