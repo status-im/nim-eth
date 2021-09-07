@@ -90,3 +90,6 @@ task test_discv5_full, "Run discovery v5 and its dependencies tests":
 
 task build_dcli, "Build dcli":
   buildBinary("eth/p2p/discoveryv5/dcli")
+
+task build_fuzzers, "Build fuzzer test cases":
+  buildBinary("tests/fuzzing/all_fuzzing_tests")

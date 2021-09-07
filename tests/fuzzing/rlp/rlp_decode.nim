@@ -1,6 +1,6 @@
 import
   testutils/fuzzing, chronicles,
-  eth/rlp
+  ../../../eth/rlp
 
 type
   TestEnum = enum

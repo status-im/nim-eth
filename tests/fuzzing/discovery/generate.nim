@@ -1,16 +1,12 @@
 import
-  chronos, times, stew/byteutils, stint, chronicles, streams, nimcrypto, os,
-  strformat, strutils, eth/p2p/[discovery, kademlia], eth/[keys, rlp],
-  ../../p2p/p2p_test_helper
+  std/[times, os, strformat, strutils],
+  chronos, stew/byteutils, stint, chronicles, nimcrypto,
+  ../../../eth/p2p/[discovery, kademlia], ../../../eth/[keys, rlp],
+  ../../p2p/p2p_test_helper,
+  ../fuzzing_helpers
 
 template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 const inputsDir = &"{sourceDir}{DirSep}generated-input{DirSep}"
-
-proc toFile(data: Bytes, fn: string) =
-  var s = newFileStream(fn, fmWrite)
-  for x in data:
-    s.write(x)
-  s.close()
 
 const EXPIRATION = 3600 * 24 * 365 * 10
 proc expiration(): uint32 = uint32(epochTime() + EXPIRATION)
@@ -32,7 +28,7 @@ proc generate() =
 
   # valid data for a Pong packet
   block:
-    let token = keccak256.digest(@[0])
+    let token = keccak256.digest(@[byte 0])
     let payload = rlp.encode((toAddr, token , expiration()))
     let encodedData = @[2.byte] & payload
     debug "Pong", data=byteutils.toHex(encodedData)
@@ -42,9 +38,9 @@ proc generate() =
   # valid data for a FindNode packet
   block:
     var data: array[64, byte]
-    data[32 .. ^1] = peerKey.toPublicKey().tryGet().toNodeId().toByteArrayBE()
+    data[32 .. ^1] = peerKey.toPublicKey().toNodeId().toByteArrayBE()
     let payload = rlp.encode((data, expiration()))
-    let encodedData = @[3.byte] & payload.toSeq()
+    let encodedData = @[3.byte] & @payload
     debug "FindNode", data=byteutils.toHex(encodedData)
 
     encodedData.toFile(inputsDir & "findnode")
@@ -62,11 +58,11 @@ proc generate() =
     type Neighbour = tuple[ip: IpAddress, udpPort, tcpPort: Port, pk: PublicKey]
     var nodes = newSeqOfCap[Neighbour](2)
 
-    nodes.add((n1Addr.ip, n1Addr.udpPort, n1Addr.tcpPort, n1Key.toPublicKey().tryGet()))
-    nodes.add((n2Addr.ip, n2Addr.udpPort, n2Addr.tcpPort, n2Key.toPublicKey().tryGet()))
+    nodes.add((n1Addr.ip, n1Addr.udpPort, n1Addr.tcpPort, n1Key.toPublicKey()))
+    nodes.add((n2Addr.ip, n2Addr.udpPort, n2Addr.tcpPort, n2Key.toPublicKey()))
 
     let payload = rlp.encode((nodes, expiration()))
-    let encodedData = @[4.byte] & payload.toSeq()
+    let encodedData = @[4.byte] & @payload
     debug "Neighbours", data=byteutils.toHex(encodedData)
 
     encodedData.toFile(inputsDir & "neighbours")

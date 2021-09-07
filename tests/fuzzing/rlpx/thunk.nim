@@ -1,8 +1,8 @@
 import
   testutils/fuzzing, chronos,
-  eth/p2p, eth/p2p/rlpx, eth/p2p/private/p2p_types,
-  eth/p2p/rlpx_protocols/[whisper_protocol, eth_protocol],
-  ../p2p/p2p_test_helper
+  ../../../eth/p2p, ../../../eth/p2p/rlpx, ../../../eth/p2p/private/p2p_types,
+  ../../../eth/p2p/rlpx_protocols/[whisper_protocol, eth_protocol],
+  ../../p2p/p2p_test_helper
 
 var
   node1: EthereumNode
