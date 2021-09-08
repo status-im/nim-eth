@@ -1,0 +1,48 @@
+import
+  chronos, chronicles,
+  ./packets
+
+logScope:
+  topics = "utp"
+
+type
+  UtpProtocol* = ref object
+    transport: DatagramTransport
+
+  UtpSocket* = ref object
+
+# TODO not implemented
+# for now just log incoming packets
+proc processPacket(p: Packet) =
+  notice "Received packet ", packet = p
+
+# Connect to provided address
+# Reference implementation: https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
+# TODO not implemented
+proc connectTo*(p: UtpProtocol, address: TransportAddress): Future[UtpSocket] {.async.} =
+  let packet = synPacket(randUint16(), 1048576)
+  notice "Sending packet", packet = packet
+  let packetEncoded = encodePacket(packet)
+  await p.transport.sendTo(address, packetEncoded)
+  return UtpSocket()
+
+proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
+    Future[void] {.async.} =
+  # TODO: should we use `peekMessage()` to avoid allocation?
+  let buf = try: transp.getMessage()
+            except TransportOsError as e:
+              # This is likely to be local network connection issues.
+              return
+
+  let dec = decodePacket(buf)
+  if (dec.isOk()):
+    processPacket(dec.get())
+  else:
+    warn "failed to decode packet from address", address = raddr
+
+proc new*(T: type UtpProtocol, address: TransportAddress): UtpProtocol =
+  let ta = newDatagramTransport(processDatagram, local = address)
+  UtpProtocol(transport: ta)
+
+proc closeWait*(p: UtpProtocol): Future[void] =
+  p.transport.closeWait()
