@@ -6,6 +6,9 @@ logScope:
   topics = "utp"
 
 type
+  # For now utp protocol is tied to udp transport, but ultimatly we would like to
+  # abstract underlying transport to be able to run utp over udp, discoveryv5 or
+  # maybe some test transport
   UtpProtocol* = ref object
     transport: DatagramTransport
 
