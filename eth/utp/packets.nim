@@ -1,3 +1,11 @@
+# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.push raises: [Defect].}
+
 import
   std/[monotimes, random],
   faststreams,
@@ -62,23 +70,31 @@ proc encodeTypeVer(h: PacketHeaderV1): uint8 =
 
 proc encodeHeader*(h: PacketHeaderV1): seq[byte] = 
   var mem = memoryOutput().s
-  mem.write(encodeTypeVer(h))
-  mem.write(h.extension)
-  mem.write(h.connectionId.toBytesBE())
-  mem.write(h.timestamp.toBytesBE())
-  mem.write(h.timestampDiff.toBytesBE())
-  mem.write(h.wndSize.toBytesBE())
-  mem.write(h.seqNr.toBytesBE())
-  mem.write(h.ackNr.toBytesBE())
-  mem.getOutput()
+  try:
+    mem.write(encodeTypeVer(h))
+    mem.write(h.extension)
+    mem.write(h.connectionId.toBytesBE())
+    mem.write(h.timestamp.toBytesBE())
+    mem.write(h.timestampDiff.toBytesBE())
+    mem.write(h.wndSize.toBytesBE())
+    mem.write(h.seqNr.toBytesBE())
+    mem.write(h.ackNr.toBytesBE())
+    return mem.getOutput()
+  except IOError:
+    # TODO not sure how writing to memory buffer could throw. Just swallow it for now
+    return @[]
 
 proc encodePacket*(p: Packet): seq[byte] =
   var mem = memoryOutput().s
-  mem.write(encodeHeader(p.header))
-  if (len(p.payload) > 0):
-     mem.write(p.payload)
-  mem.getOutput()
-
+  try:
+    mem.write(encodeHeader(p.header))
+    if (len(p.payload) > 0):
+      mem.write(p.payload)
+    mem.getOutput()
+  except IOError:
+    # TODO not sure how writing to memory buffer could throw. Just swallow it for now
+    return @[]
+  
 # TODO for now we do not handle extensions
 proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
     if len(bytes) < minimalHeaderSize:

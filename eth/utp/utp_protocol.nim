@@ -1,3 +1,11 @@
+# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.push raises: [Defect].}
+
 import
   chronos, chronicles,
   ./packets
@@ -43,7 +51,7 @@ proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
   else:
     warn "failed to decode packet from address", address = raddr
 
-proc new*(T: type UtpProtocol, address: TransportAddress): UtpProtocol =
+proc new*(T: type UtpProtocol, address: TransportAddress): UtpProtocol {.raises: [Defect, CatchableError].} =
   let ta = newDatagramTransport(processDatagram, local = address)
   UtpProtocol(transport: ta)
 
