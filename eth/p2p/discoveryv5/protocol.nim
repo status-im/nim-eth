@@ -654,15 +654,16 @@ proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Talk response message not received in time")
 
-proc lookupDistances(target, dest: NodeId): seq[uint16] =
+proc lookupDistances*(target, dest: NodeId): seq[uint16] =
   let td = logDist(target, dest)
+  let tdAsInt = int(td)
   result.add(td)
-  var i = 1'u16
+  var i = 1
   while result.len < lookupRequestLimit:
-    if td + i < 256:
-      result.add(td + i)
-    if td - i > 0'u16:
-      result.add(td - i)
+    if tdAsInt + i < 256:
+      result.add(td + uint16(i))
+    if tdAsInt - i > 0:
+      result.add(td - uint16(i))
     inc i
 
 proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
