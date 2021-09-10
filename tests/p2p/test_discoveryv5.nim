@@ -527,6 +527,15 @@ procSuite "Discovery v5 Tests":
         test = verifyNodesRecords(records, fromNode, 0'u16)
       check test.len == 0
 
+    block: # Invalid distance but distance validation is disabled
+      let
+        recordInvalidDistance = enr.Record.init(
+          1, pk, some(ValidIpAddress.init("12.13.14.15")),
+          some(port), some(port))[]
+        records = [recordInvalidDistance]
+        test = verifyNodesRecords(records, fromNode)
+      check test.len == 1
+
   asyncTest "Handshake cleanup: different ids":
     # Node to test the handshakes on.
     let receiveNode = initDiscoveryNode(
