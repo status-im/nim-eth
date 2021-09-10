@@ -527,6 +527,15 @@ procSuite "Discovery v5 Tests":
         test = verifyNodesRecords(records, fromNode, 0'u16)
       check test.len == 0
 
+  test "Calculate lookup distances":
+    # Log distance between zeros is zero
+    let dist = lookupDistances(u256(0), u256(0))
+    check dist == @[0'u16, 1, 2]
+
+    # Log distance between zero and one is one
+    let dist1 = lookupDistances(u256(0), u256(1))
+    check dist1 == @[1'u16, 2, 3]
+
   asyncTest "Handshake cleanup: different ids":
     # Node to test the handshakes on.
     let receiveNode = initDiscoveryNode(
