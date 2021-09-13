@@ -8,11 +8,15 @@
 
 import
   unittest,
-  ../eth/utp/packets
+  ../eth/utp/packets,
+   ../../eth/keys
 
 suite "Utp packets encoding/decoding":
+
+  let rng = newRng()
+  
   test "Encode/decode syn packet":
-    let synPacket = synPacket(10, 20)
+    let synPacket = synPacket(rng[], 10, 20)
     let encoded = encodePacket(synPacket)
     let decoded = decodePacket(encoded)
 

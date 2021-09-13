@@ -7,9 +7,10 @@
 {.push raises: [Defect].}
 
 import
-  std/[monotimes, random],
+  std/[monotimes],
   faststreams,
-  stew/[endians2, results, objects]
+  stew/[endians2, results, objects], bearssl,
+  ../p2p/discoveryv5/random2
 
 export results
 
@@ -54,12 +55,12 @@ proc getMonoTimeTimeStamp(): uint32 =
   cast[uint32](time.ticks() div 1000)
 
 # Simple generator, not useful for cryptography
-proc randUint16*(): uint16 =
-  uint16(rand(int(high(uint16))))
+proc randUint16*(rng: var BrHmacDrbgContext): uint16 =
+  uint16(rand(rng, int(high(uint16))))
 
 # Simple generator, not useful for cryptography
-proc randUint32*(): uint32 =
-  uint32(rand(int(high(uint32))))
+proc randUint32*(rng: var BrHmacDrbgContext): uint32 =
+  uint32(rand(rng, int(high(uint32))))
 
 proc encodeTypeVer(h: PacketHeaderV1): uint8 =
   var typeVer = 0'u8
@@ -80,9 +81,10 @@ proc encodeHeader*(h: PacketHeaderV1): seq[byte] =
     mem.write(h.seqNr.toBytesBE())
     mem.write(h.ackNr.toBytesBE())
     return mem.getOutput()
-  except IOError:
-    # TODO not sure how writing to memory buffer could throw. Just swallow it for now
-    return @[]
+  except IOError as e:
+    # TODO not sure how writing to memory buffer could throw. Raise assertion error if
+    # its happen for now
+    raiseAssert e.msg
 
 proc encodePacket*(p: Packet): seq[byte] =
   var mem = memoryOutput().s
@@ -91,9 +93,10 @@ proc encodePacket*(p: Packet): seq[byte] =
     if (len(p.payload) > 0):
       mem.write(p.payload)
     mem.getOutput()
-  except IOError:
-    # TODO not sure how writing to memory buffer could throw. Just swallow it for now
-    return @[]
+  except IOError as e:
+    # TODO not sure how writing to memory buffer could throw. Raise assertion error if
+    # its happen for now
+    raiseAssert e.msg
   
 # TODO for now we do not handle extensions
 proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
@@ -131,7 +134,7 @@ proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
 
 # connectionId - should be random not already used number
 # bufferSize - should be pre configured initial buffer size for socket
-proc synPacket*(connectionId: uint16, bufferSize: uint32): Packet =
+proc synPacket*(rng: var BrHmacDrbgContext, connectionId: uint16, bufferSize: uint32): Packet =
   let h = PacketHeaderV1(
     pType: ST_SYN,
     version: protocolVersion,
@@ -145,7 +148,7 @@ proc synPacket*(connectionId: uint16, bufferSize: uint32): Packet =
     timestampDiff: 0'u32,
     # TODO shouldbe current available buffer size
     wndSize: bufferSize,
-    seqNr: randUint16(),
+    seqNr: randUint16(rng),
     # Initialy we did not receive any acks
     ackNr: 0'u16
   )

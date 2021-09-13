@@ -7,8 +7,9 @@
 {.push raises: [Defect].}
 
 import
-  chronos, chronicles,
-  ./packets
+  chronos, chronicles, bearssl,
+  ./packets,
+  ../keys
 
 logScope:
   topics = "utp"
@@ -19,6 +20,7 @@ type
   # maybe some test transport
   UtpProtocol* = ref object
     transport: DatagramTransport
+    rng*: ref BrHmacDrbgContext
 
   UtpSocket* = ref object
 
@@ -31,7 +33,7 @@ proc processPacket(p: Packet) =
 # Reference implementation: https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
 # TODO not implemented
 proc connectTo*(p: UtpProtocol, address: TransportAddress): Future[UtpSocket] {.async.} =
-  let packet = synPacket(randUint16(), 1048576)
+  let packet = synPacket(p.rng[], randUint16(p.rng[]), 1048576)
   notice "Sending packet", packet = packet
   let packetEncoded = encodePacket(packet)
   await p.transport.sendTo(address, packetEncoded)
@@ -51,9 +53,9 @@ proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
   else:
     warn "failed to decode packet from address", address = raddr
 
-proc new*(T: type UtpProtocol, address: TransportAddress): UtpProtocol {.raises: [Defect, CatchableError].} =
+proc new*(T: type UtpProtocol, address: TransportAddress, rng = newRng()): UtpProtocol {.raises: [Defect, CatchableError].} =
   let ta = newDatagramTransport(processDatagram, local = address)
-  UtpProtocol(transport: ta)
+  UtpProtocol(transport: ta, rng: rng)
 
 proc closeWait*(p: UtpProtocol): Future[void] =
   p.transport.closeWait()
