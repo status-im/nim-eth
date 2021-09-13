@@ -473,7 +473,7 @@ procSuite "Discovery v5 Tests":
       pk = PrivateKey.random(rng[])
       targetDistance = @[logDist(fromNode.id, pk.toPublicKey().toNodeId())]
       limit = 16
-    
+
     block: # Duplicates
       let
         record = enr.Record.init(
@@ -536,6 +536,15 @@ procSuite "Discovery v5 Tests":
         records = [recordInvalidDistance]
         test = verifyNodesRecords(records, fromNode, limit)
       check test.len == 1
+
+  test "Calculate lookup distances":
+    # Log distance between zeros is zero
+    let dist = lookupDistances(u256(0), u256(0))
+    check dist == @[0'u16, 1, 2]
+
+    # Log distance between zero and one is one
+    let dist1 = lookupDistances(u256(0), u256(1))
+    check dist1 == @[1'u16, 2, 3]
 
   asyncTest "Handshake cleanup: different ids":
     # Node to test the handshakes on.
