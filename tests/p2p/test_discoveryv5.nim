@@ -5,7 +5,7 @@ import
   chronos, chronicles, stint, testutils/unittests, stew/shims/net,
   stew/byteutils, bearssl,
   ../../eth/keys,
-  ../../eth/p2p/discoveryv5/[enr, node, routing_table, encoding, sessions, messages],
+  ../../eth/p2p/discoveryv5/[enr, node, routing_table, encoding, sessions, messages, nodes_verification],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./discv5_test_helper
 
@@ -471,7 +471,8 @@ procSuite "Discovery v5 Tests":
         some(port), some(port))[]
       fromNode = newNode(fromNoderecord)[]
       pk = PrivateKey.random(rng[])
-      targetDistance = logDist(fromNode.id, pk.toPublicKey().toNodeId())
+      targetDistance = @[logDist(fromNode.id, pk.toPublicKey().toNodeId())]
+      limit = 16
 
     block: # Duplicates
       let
@@ -481,7 +482,7 @@ procSuite "Discovery v5 Tests":
 
       # Exact duplicates
       var records = @[record, record]
-      var nodes = verifyNodesRecords(records, fromNode, targetDistance)
+      var nodes = verifyNodesRecords(records, fromNode, limit, targetDistance)
       check nodes.len == 1
 
       # Node id duplicates
@@ -489,7 +490,7 @@ procSuite "Discovery v5 Tests":
         1, pk, some(ValidIpAddress.init("212.13.14.15")),
         some(port), some(port))[]
       records.add(recordSameId)
-      nodes = verifyNodesRecords(records, fromNode, targetDistance)
+      nodes = verifyNodesRecords(records, fromNode, limit, targetDistance)
       check nodes.len == 1
 
     block: # No address
@@ -497,7 +498,7 @@ procSuite "Discovery v5 Tests":
         recordNoAddress = enr.Record.init(
           1, pk, none(ValidIpAddress), some(port), some(port))[]
         records = [recordNoAddress]
-        test = verifyNodesRecords(records, fromNode, targetDistance)
+        test = verifyNodesRecords(records, fromNode, limit, targetDistance)
       check test.len == 0
 
     block: # Invalid address - site local
@@ -506,7 +507,7 @@ procSuite "Discovery v5 Tests":
           1, pk, some(ValidIpAddress.init("10.1.2.3")),
           some(port), some(port))[]
         records = [recordInvalidAddress]
-        test = verifyNodesRecords(records, fromNode, targetDistance)
+        test = verifyNodesRecords(records, fromNode, limit, targetDistance)
       check test.len == 0
 
     block: # Invalid address - loopback
@@ -515,7 +516,7 @@ procSuite "Discovery v5 Tests":
           1, pk, some(ValidIpAddress.init("127.0.0.1")),
           some(port), some(port))[]
         records = [recordInvalidAddress]
-        test = verifyNodesRecords(records, fromNode, targetDistance)
+        test = verifyNodesRecords(records, fromNode, limit, targetDistance)
       check test.len == 0
 
     block: # Invalid distance
@@ -524,8 +525,17 @@ procSuite "Discovery v5 Tests":
           1, pk, some(ValidIpAddress.init("12.13.14.15")),
           some(port), some(port))[]
         records = [recordInvalidDistance]
-        test = verifyNodesRecords(records, fromNode, 0'u16)
+        test = verifyNodesRecords(records, fromNode, limit, @[0'u16])
       check test.len == 0
+
+    block: # Invalid distance but distance validation is disabled
+      let
+        recordInvalidDistance = enr.Record.init(
+          1, pk, some(ValidIpAddress.init("12.13.14.15")),
+          some(port), some(port))[]
+        records = [recordInvalidDistance]
+        test = verifyNodesRecords(records, fromNode, limit)
+      check test.len == 1
 
   test "Calculate lookup distances":
     # Log distance between zeros is zero
