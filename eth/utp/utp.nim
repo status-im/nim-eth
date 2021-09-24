@@ -8,8 +8,6 @@
 
 import 
   chronos,
-  strutils,
-  os,
   ./utp_protocol
 
 # Exemple application to interact with reference implementation server to help with implementation
@@ -20,23 +18,10 @@ import
 # 4. ./ucat -ddddd -l -p 9078 - it will run utp server on port 9078
 when isMainModule:
   # TODO read client/server ports and address from cmd line or config file
-  # By default runs on port 8000 unless specified
-  let params = commandLineParams()
-  var clientPort = 8000
-  var serverPort = 9000
-
-  for param in params:
-    let flag = param.split("=")[0]
-    let option = param.split("=")[1]
-    if flag == "-cp" or flag == "-clientport":
-      clientPort = parseInt(option)
-    elif flag == "-sp" or flag == "-serverport":
-      serverPort = parseInt(option)
-
-  let localAddress = initTAddress("0.0.0.0", clientPort)
+  let localAddress = initTAddress("0.0.0.0", 9077)
   let utpProt = UtpProtocol.new(localAddress)
 
-  let remoteServer = initTAddress("0.0.0.0", serverPort)
+  let remoteServer = initTAddress("0.0.0.0", 9078)
   let soc = waitFor utpProt.connectTo(remoteServer)
 
   # Needed to wait for response from server

@@ -27,7 +27,7 @@ type
 
   MicroSeconds = uint32
 
-  PacketHeaderV1 = object
+  PacketHeaderV1* = object
     pType*: PacketType
     version*: uint8
     extension*: uint8
@@ -50,7 +50,7 @@ type
 # For now we can use basic monotime, later it would be good to analyze:
 # https://github.com/bittorrent/libutp/blob/master/utp_utils.cpp, to check all the
 # timing assumptions on different platforms
-proc getMonoTimeTimeStamp(): uint32 = 
+proc getMonoTimeTimeStamp*(): uint32 = 
   let time = getMonoTime()
   cast[uint32](time.ticks() div 1000)
 
