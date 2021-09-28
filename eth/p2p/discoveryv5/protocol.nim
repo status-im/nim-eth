@@ -928,6 +928,9 @@ proc newProtocol*(privKey: PrivateKey,
     routingTable: RoutingTable.init(node, DefaultBitsPerHop, tableIpLimits, rng),
     rng: rng)
 
+template listeningAddress*(p: Protocol): Address =
+  p.bindAddress
+
 proc open*(d: Protocol) {.raises: [Defect, CatchableError].} =
   info "Starting discovery node", node = d.localNode,
     bindAddress = d.bindAddress
