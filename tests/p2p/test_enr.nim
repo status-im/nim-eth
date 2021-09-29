@@ -83,7 +83,7 @@ suite "ENR":
   test "ENR without address":
     let
       keypair = KeyPair.random(rng[])
-      port = some(Port(9000))
+      port = none(Port)
       enr = Record.init(
         100, keypair.seckey, none(ValidIpAddress), port, port)[]
       typedEnr = get enr.toTypedRecord()
@@ -192,8 +192,8 @@ suite "ENR":
       check updated.isOk()
       check:
         r.tryGet("ip", uint).isNone()
-        r.tryGet("tcp", uint).isNone()
-        r.tryGet("udp", uint).isNone()
+        r.tryGet("tcp", uint).isSome()
+        r.tryGet("udp", uint).isSome()
         r.seqNum == 1
 
     block:
@@ -202,9 +202,9 @@ suite "ENR":
       check updated.isOk()
       check:
         r.tryGet("ip", uint).isNone()
-        r.tryGet("tcp", uint).isNone()
-        r.tryGet("udp", uint).isNone()
-        r.seqNum == 1
+        r.tryGet("tcp", uint).isSome()
+        r.tryGet("udp", uint).isSome()
+        r.seqNum == 2
 
     block:
       let updated = r.update(pk, some(ValidIpAddress.init("10.20.30.40")),
@@ -223,7 +223,7 @@ suite "ENR":
         typedEnr.udp.isSome()
         typedEnr.udp.get() == 9000
 
-        r.seqNum == 2
+        r.seqNum == 3
 
     block:
       let updated = r.update(pk, some(ValidIpAddress.init("10.20.30.40")),
@@ -242,4 +242,4 @@ suite "ENR":
         typedEnr.udp.isSome()
         typedEnr.udp.get() == 9001
 
-        r.seqNum == 3
+        r.seqNum == 4
