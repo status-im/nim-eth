@@ -240,7 +240,10 @@ proc redirectPorts*(tcpPort, udpPort: Port, description: string): Option[(Port, 
 proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
     clientId: string):
     tuple[ip: Option[ValidIpAddress], tcpPort, udpPort: Option[Port]] =
-
+  ## Setup NAT port mapping and get external IP address.
+  ## If any of this fails, we don't return any IP address but do return the
+  ## original ports as best effort.
+  ## TODO: Allow for tcp or udp port mapping to be optional.
   let extIp = getExternalIP(natStrategy)
   if extIP.isSome:
     let ip = ValidIpAddress.init(extIp.get)
@@ -250,13 +253,13 @@ proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
                     description = clientId))
     if extPorts.isSome:
       let (extTcpPort, extUdpPort) = extPorts.get()
-      (some(ip), some(extTcpPort), some(extUdpPort))
+      (ip: some(ip), tcpPort: some(extTcpPort), udpPort: some(extUdpPort))
     else:
-      error "UPnP/NAT-PMP available but port forwarding failed"
-      (none(ValidIpAddress), none(Port), none(Port))
+      warn "UPnP/NAT-PMP available but port forwarding failed"
+      (ip: none(ValidIpAddress), tcpPort: some(tcpPort), udpPort: some(udpPort))
   else:
     warn "UPnP/NAT-PMP not available"
-    (none(ValidIpAddress), none(Port), none(Port))
+    (ip: none(ValidIpAddress), tcpPort: some(tcpPort), udpPort: some(udpPort))
 
 type
   NatConfig* = object
@@ -293,6 +296,11 @@ proc setupAddress*(natConfig: NatConfig, bindIp: ValidIpAddress,
     tcpPort, udpPort: Port, clientId: string):
     tuple[ip: Option[ValidIpAddress], tcpPort, udpPort: Option[Port]]
     {.gcsafe.} =
+  ## Set-up of the external address via any of the ways as configured in
+  ## `NatConfig`. In case all fails an error is logged and the bind ports are
+  ## selected also as external ports, as best effort and in hope that the
+  ## external IP can be figured out by other means at a later stage.
+  ## TODO: Allow for tcp or udp bind ports to be optional.
 
   if natConfig.hasExtIp:
     # any required port redirection must be done by hand
@@ -307,7 +315,7 @@ proc setupAddress*(natConfig: NatConfig, bindIp: ValidIpAddress,
           # No route was found, log error and continue without IP.
           error "No routable IP address found, check your network connection",
             error = ip.error
-          return (none(ValidIpAddress), none(Port), none(Port))
+          return (none(ValidIpAddress), some(tcpPort), some(udpPort))
         elif ip.get().isPublic():
           return (some(ip.get()), some(tcpPort), some(udpPort))
         else:
@@ -329,17 +337,17 @@ proc setupAddress*(natConfig: NatConfig, bindIp: ValidIpAddress,
           # No route was found, log error and continue without IP.
           error "No routable IP address found, check your network connection",
             error = ip.error
-          return (none(ValidIpAddress), none(Port), none(Port))
+          return (none(ValidIpAddress), some(tcpPort), some(udpPort))
         elif ip.get().isPublic():
           return (some(ip.get()), some(tcpPort), some(udpPort))
         else:
           error "No public IP address found. Should not use --nat:none option"
-          return (none(ValidIpAddress), none(Port), none(Port))
+          return (none(ValidIpAddress), some(tcpPort), some(udpPort))
       elif bindAddress.isPublic():
         # When a specific public interface is provided, use that one.
         return (some(ValidIpAddress.init(bindIP)), some(tcpPort), some(udpPort))
       else:
         error "Bind IP is not a public IP address. Should not use --nat:none option"
-        return (none(ValidIpAddress), none(Port), none(Port))
+        return (none(ValidIpAddress), some(tcpPort), some(udpPort))
     of NatUpnp, NatPmp:
       return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
