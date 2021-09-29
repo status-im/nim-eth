@@ -152,7 +152,9 @@ template toFieldPair*(key: string, value: auto): FieldPair =
 
 proc addAddress(fields: var seq[FieldPair], ip: Option[ValidIpAddress],
     tcpPort, udpPort: Option[Port]) =
-  # It makes sense to add ports only when there is an IP provided
+  ## Add address information in new fields. Incomplete address
+  ## information is allowed (example: Port but not IP) as that information
+  ## might be already in the ENR or added later.
   if ip.isSome():
     let
       ipExt = ip.get()
@@ -164,6 +166,11 @@ proc addAddress(fields: var seq[FieldPair], ip: Option[ValidIpAddress],
       fields.add(((if isV6: "tcp6" else: "tcp"), tcpPort.get().uint16.toField))
     if udpPort.isSome():
       fields.add(((if isV6: "udp6" else: "udp"), udpPort.get().uint16.toField))
+  else:
+    if tcpPort.isSome():
+      fields.add(("tcp", tcpPort.get().uint16.toField))
+    if udpPort.isSome():
+      fields.add(("udp", udpPort.get().uint16.toField))
 
 proc init*(T: type Record, seqNum: uint64,
                            pk: PrivateKey,
@@ -177,6 +184,7 @@ proc init*(T: type Record, seqNum: uint64,
   ## Can fail in case the record exceeds the `maxEnrSize`.
   var fields = newSeq[FieldPair]()
 
+  # TODO: Allow for initializing ENR with both ip4 and ipv6 address.
   fields.addAddress(ip, tcpPort, udpPort)
   fields.add extraFields
   makeEnrAux(seqNum, pk, fields)
@@ -302,6 +310,7 @@ proc update*(r: var Record, pk: PrivateKey,
   ## will not be altered in these cases.
   var fields = newSeq[FieldPair]()
 
+  # TODO: Make updating of both ipv4 and ipv6 address in ENR more convenient.
   fields.addAddress(ip, tcpPort, udpPort)
   fields.add extraFields
   r.update(pk, fields)
