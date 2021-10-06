@@ -69,33 +69,29 @@ proc encodeTypeVer(h: PacketHeaderV1): uint8 =
   typeVer = (typeVer and 0xf) or (typeOrd shl 4)
   typeVer
 
-proc encodeHeader*(h: PacketHeaderV1): seq[byte] = 
-  var mem = memoryOutput().s
+proc encodeHeaderStream(s: var OutputStream, h: PacketHeaderV1) =
   try:
-    mem.write(encodeTypeVer(h))
-    mem.write(h.extension)
-    mem.write(h.connectionId.toBytesBE())
-    mem.write(h.timestamp.toBytesBE())
-    mem.write(h.timestampDiff.toBytesBE())
-    mem.write(h.wndSize.toBytesBE())
-    mem.write(h.seqNr.toBytesBE())
-    mem.write(h.ackNr.toBytesBE())
-    return mem.getOutput()
+    s.write(encodeTypeVer(h))
+    s.write(h.extension)
+    s.write(h.connectionId.toBytesBE())
+    s.write(h.timestamp.toBytesBE())
+    s.write(h.timestampDiff.toBytesBE())
+    s.write(h.wndSize.toBytesBE())
+    s.write(h.seqNr.toBytesBE())
+    s.write(h.ackNr.toBytesBE())
   except IOError as e:
-    # TODO not sure how writing to memory buffer could throw. Raise assertion error if
-    # its happen for now
+    # This should not happen in case of in-memory streams
     raiseAssert e.msg
 
 proc encodePacket*(p: Packet): seq[byte] =
-  var mem = memoryOutput().s
+  var s = memoryOutput().s
   try:
-    mem.write(encodeHeader(p.header))
+    encodeHeaderStream(s, p.header)
     if (len(p.payload) > 0):
-      mem.write(p.payload)
-    mem.getOutput()
+      s.write(p.payload)
+    s.getOutput()
   except IOError as e:
-    # TODO not sure how writing to memory buffer could throw. Raise assertion error if
-    # its happen for now
+    # This should not happen in case of in-memory streams
     raiseAssert e.msg
   
 # TODO for now we do not handle extensions
@@ -116,12 +112,12 @@ proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
         pType: kind,
         version: version,
         extension: bytes[1],
-        connection_id: fromBytesBE(uint16, [bytes[2], bytes[3]]),
-        timestamp: fromBytesBE(uint32, [bytes[4], bytes[5], bytes[6], bytes[7]]),
-        timestamp_diff: fromBytesBE(uint32, [bytes[8], bytes[9], bytes[10], bytes[11]]),
-        wnd_size: fromBytesBE(uint32, [bytes[12], bytes[13], bytes[14], bytes[15]]),
-        seq_nr: fromBytesBE(uint16, [bytes[16], bytes[17]]),
-        ack_nr: fromBytesBE(uint16, [bytes[18], bytes[19]]),
+        connection_id: fromBytesBE(uint16, bytes.toOpenArray(2, 3)),
+        timestamp: fromBytesBE(uint32, bytes.toOpenArray(4, 7)),
+        timestamp_diff: fromBytesBE(uint32, bytes.toOpenArray(8, 11)),
+        wnd_size: fromBytesBE(uint32, bytes.toOpenArray(12, 15)),
+        seq_nr: fromBytesBE(uint16, bytes.toOpenArray(16, 17)),
+        ack_nr: fromBytesBE(uint16, bytes.toOpenArray(18, 19)),
       )
     
     let payload =
