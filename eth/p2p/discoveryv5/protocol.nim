@@ -586,7 +586,7 @@ proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
     return err("Talk response message not received in time")
 
 proc lookupDistances*(target, dest: NodeId): seq[uint16] =
-  let td = logDist(target, dest)
+  let td = logDistance(target, dest)
   let tdAsInt = int(td)
   result.add(td)
   var i = 1
@@ -658,7 +658,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
         # If it wasn't seen before, insert node while remaining sorted
         closestNodes.insert(n, closestNodes.lowerBound(n,
           proc(x: Node, n: Node): int =
-            cmp(distanceTo(x.id, target), distanceTo(n.id, target))
+            cmp(distance(x.id, target), distance(n.id, target))
         ))
 
         if closestNodes.len > BUCKET_SIZE:

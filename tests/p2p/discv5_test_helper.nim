@@ -54,7 +54,7 @@ proc nodeAndPrivKeyAtDistance*(n: Node, rng: var BrHmacDrbgContext, d: uint32,
   while true:
     let pk = PrivateKey.random(rng)
     let node = generateNode(pk, ip = ip)
-    if logDist(n.id, node.id) == d:
+    if logDistance(n.id, node.id) == d:
       return (node, pk)
 
 proc nodeAtDistance*(n: Node, rng: var BrHmacDrbgContext, d: uint32,

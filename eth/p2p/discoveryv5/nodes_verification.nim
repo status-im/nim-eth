@@ -67,7 +67,8 @@ proc verifyNodesRecords(enrs: openarray[Record], fromNode: Node, nodesLimit: int
         continue
       # Check if returned node has one of the requested distances.
       if distances.isSome():
-        if (not distances.get().contains(logDist(n.id, fromNode.id))):
+        # TODO: This is incorrect for custom distances
+        if (not distances.get().contains(logDistance(n.id, fromNode.id))):
           debug "Incorrect distance",
             record = n.record.toURI, sender = fromNode.record.toURI
           continue

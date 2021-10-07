@@ -93,20 +93,11 @@ type
     NoAddress
 
 # xor distance functions
-#
-func distanceTo*(a, b: NodeId): Uint256 =
+func distance*(a, b: NodeId): Uint256 =
   ## Calculate the distance to a NodeId.
   a xor b
 
-func idAtDistance*(id: NodeId, dist: uint16): NodeId =
-  ## Calculate the "lowest" `NodeId` for given logarithmic distance.
-  ## A logarithmic distance obviously covers a whole range of distances and thus
-  ## potential `NodeId`s.
-  # xor the NodeId with 2^(d - 1) or one could say, calculate back the leading
-  # zeroes and xor those` with the id.
-  id xor (1.stuint(256) shl (dist.int - 1))
-
-func logDist*(a, b: NodeId): uint16 =
+func logDistance*(a, b: NodeId): uint16 =
   ## Calculate the logarithmic distance between two `NodeId`s.
   ##
   ## According the specification, this is the log base 2 of the distance. But it
@@ -124,7 +115,14 @@ func logDist*(a, b: NodeId): uint16 =
       lz += bitops.countLeadingZeroBits(x)
       break
   return uint16(a.len * 8 - lz)
-#
+
+func idAtDistance*(id: NodeId, dist: uint16): NodeId =
+  ## Calculate the "lowest" `NodeId` for given logarithmic distance.
+  ## A logarithmic distance obviously covers a whole range of distances and thus
+  ## potential `NodeId`s.
+  # xor the NodeId with 2^(d - 1) or one could say, calculate back the leading
+  # zeroes and xor those` with the id.
+  id xor (1.stuint(256) shl (dist.int - 1))
 
 const
   BUCKET_SIZE* = 16 ## Maximum amount of nodes per bucket
@@ -136,8 +134,17 @@ const
   DefaultTableIpLimit* = 10'u
   DefaultTableIpLimits* = TableIpLimits(tableIpLimit: DefaultTableIpLimit,
     bucketIpLimit: DefaultBucketIpLimit)
-  XorDistanceCalculator* = DistanceCalculator(calculateDistance: distanceTo, 
-    calculateLogDistance: logDist, calculateIdAtDistance: idAtDistance)
+  XorDistanceCalculator* = DistanceCalculator(calculateDistance: distance,
+    calculateLogDistance: logDistance, calculateIdAtDistance: idAtDistance)
+
+func distance*(r: RoutingTable, a, b: NodeId): Uint256 =
+  r.distanceCalculator.calculateDistance(a, b)
+
+func logDistance*(r: RoutingTable, a, b: NodeId): uint16 =
+  r.distanceCalculator.calculateLogDistance(a, b)
+
+func idAtDistance*(r: RoutingTable, id: NodeId, dist: uint16): NodeId =
+  r.distanceCalculator.calculateIdAtDistance(id, dist)
 
 proc new(T: type KBucket, istart, iend: NodeId, bucketIpLimit: uint): T =
   KBucket(
@@ -420,10 +427,10 @@ proc contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
   # Check if the routing table contains node `n`.
 
 proc bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
-  sortedByIt(r.buckets,  r.distanceCalculator.calculateDistance(it.midpoint, id))
+  sortedByIt(r.buckets,  r.distance(it.midpoint, id))
 
 proc nodesByDistanceTo(r: RoutingTable, k: KBucket, id: NodeId): seq[Node] =
-  sortedByIt(k.nodes, r.distanceCalculator.calculateDistance(it.id, id))
+  sortedByIt(k.nodes, r.distance(it.id, id))
 
 proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
     seenOnly = false): seq[Node] =
@@ -442,17 +449,17 @@ proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
 
   # TODO: is this sort still needed? Can we get nodes closer from the "next"
   # bucket?
-  result = sortedByIt(result, r.distanceCalculator.calculateDistance(it.id, id))
+  result = sortedByIt(result, r.distance(it.id, id))
   if result.len > k:
     result.setLen(k)
 
 proc neighboursAtDistance*(r: RoutingTable, distance: uint16,
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours at given logarithmic distance.
-  result = r.neighbours(r.distanceCalculator.calculateIdAtDistance(r.thisNode.id, distance), k, seenOnly)
+  result = r.neighbours(r.idAtDistance(r.thisNode.id, distance), k, seenOnly)
   # This is a bit silly, first getting closest nodes then to only keep the ones
   # that are exactly the requested distance.
-  keepIf(result, proc(n: Node): bool = r.distanceCalculator.calculateLogDistance(n.id, r.thisNode.id) == distance)
+  keepIf(result, proc(n: Node): bool = r.logDistance(n.id, r.thisNode.id) == distance)
 
 proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
@@ -461,12 +468,12 @@ proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
   # first one prioritize. It might end up not including all the node distances
   # requested. Need to rework the logic here and not use the neighbours call.
   if distances.len > 0:
-    result = r.neighbours(r.distanceCalculator.calculateIdAtDistance(r.thisNode.id, distances[0]), k,
+    result = r.neighbours(r.idAtDistance(r.thisNode.id, distances[0]), k,
       seenOnly)
     # This is a bit silly, first getting closest nodes then to only keep the ones
     # that are exactly the requested distances.
     keepIf(result, proc(n: Node): bool =
-      distances.contains(r.distanceCalculator.calculateLogDistance(n.id, r.thisNode.id)))
+      distances.contains(r.logDistance(n.id, r.thisNode.id)))
 
 proc len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len

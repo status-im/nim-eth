@@ -62,6 +62,7 @@ procSuite "Discovery v5 Tests":
     const
       targetId = "0x0000"
       testValues = [
+        ("0x0000", 0'u16),
         ("0x0001", 1'u16),
         ("0x0002", 2'u16),
         ("0x0003", 2'u16),
@@ -78,7 +79,7 @@ procSuite "Discovery v5 Tests":
       ]
 
     for (id, d) in testValues:
-      check logDist(parse(targetId, UInt256, 16), parse(id, UInt256, 16)) == d
+      check logDistance(parse(targetId, UInt256, 16), parse(id, UInt256, 16)) == d
 
   test "Distance check with keys":
     const
@@ -96,7 +97,7 @@ procSuite "Discovery v5 Tests":
 
     for (key, d) in testValues:
       let id = toNodeId(PrivateKey.fromHex(key)[].toPublicKey())
-      check logDist(targetId, id) == d
+      check logDistance(targetId, id) == d
 
   test "Distance to id check":
     const
@@ -211,7 +212,7 @@ procSuite "Discovery v5 Tests":
     let
       neighbours = mainNode.neighbours(mainNode.localNode.id)
       closest = neighbours[0]
-      closestDistance = logDist(closest.id, mainNode.localNode.id)
+      closestDistance = logDistance(closest.id, mainNode.localNode.id)
 
     debug "Closest neighbour", closestDistance, id=closest.id.toHex()
 
@@ -471,7 +472,7 @@ procSuite "Discovery v5 Tests":
         some(port), some(port))[]
       fromNode = newNode(fromNoderecord)[]
       pk = PrivateKey.random(rng[])
-      targetDistance = @[logDist(fromNode.id, pk.toPublicKey().toNodeId())]
+      targetDistance = @[logDistance(fromNode.id, pk.toPublicKey().toNodeId())]
       limit = 16
 
     block: # Duplicates
