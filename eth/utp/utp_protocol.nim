@@ -7,7 +7,6 @@
 {.push raises: [Defect].}
 
 import
-  std/[random],
   chronos, chronicles, bearssl,
   ./packets,
   ../keys
@@ -31,10 +30,11 @@ type
     disconnected
   
   ConnectionKey* = ref object
-    nodeId*: uint16
+    address*: uint16
     connectionIdRecv*: uint16
 
   UtpSocket* = ref object
+    address: TransportAddress
     state*: ConnectionState
     seqNr*: uint16
     ackNr*: uint16
@@ -44,9 +44,11 @@ type
     curWindow*: uint32
     lastAck*: uint16
     duplicateAcks*: uint8
+    protocol: ref UtpProtocol
+
   
   
-proc createSocket*(): UtpSocket =
+proc new(T: type UtpSocket): UtpSocket =
   let s = UtpSocket(
     state: uninitialized,
     seqNr: 0,
@@ -63,13 +65,13 @@ proc createSocket*(): UtpSocket =
 # for now just log incoming packets
 # Process an incoming packet
 
-proc sendPacket(uTP: UtpProtocol, address: TransportAddress, conn: UtpSocket, p: Packet) {.async.} =
+proc sendPacket(conn: UtpSocket, p: Packet) {.async.} =
   #if conn.cur_window + sizeof(p) <= min(int(conn.max_window), int(p.wndSize)):
     #send the packet
   #elif conn.maxWindow < sizeof(p) and conn.curWindow <= conn.maxWindow:
     #we can also send the packet
   let packetEncoded = encodePacket(p)
-  await uTP.transport.sendTo(address, packetEncoded)
+  await conn.protocol.transport.sendTo(conn.address, packetEncoded)
 
   #need to pass utp to every function
       
@@ -95,7 +97,8 @@ proc sendPacket(uTP: UtpProtocol, address: TransportAddress, conn: UtpSocket, p:
 
 # Should creating the packet be done the way above or below?
 
-proc handleSynPacket(uTP: UtpProtocol, address: TransportAddress, conn: UtpSocket, p: Packet) {.async.} =
+proc handleSynPacket(p: Packet): Future[UtpSocket] {.async.} =
+  let conn = UtpSocket.new()
   conn.connectionIdRecv = p.header.connectionId + 1
   conn.connectionIdSend = p.header.connectionId
   #conn.seqNr = randUint16()
@@ -113,11 +116,13 @@ proc handleSynPacket(uTP: UtpProtocol, address: TransportAddress, conn: UtpSocke
     seqNr: conn.seqNr + 1,
     ackNr: conn.ackNr
   )
-  await sendPacket(uTP, address, conn, Packet(header: response, payload: @[]))
+  await sendPacket(conn, Packet(header: response, payload: @[]))
+
+  return conn
 
 
 
-proc handleStatePacket(uTP: UtpProtocol, address: TransportAddress, conn: UtpSocket, p: Packet) {.async.} =
+proc handleStatePacket(conn: UtpSocket, p: Packet) {.async.} =
   if conn.state == synSent:
     conn.state = connected
     conn.ackNr = p.header.seqNr 
@@ -130,7 +135,7 @@ proc handleStatePacket(uTP: UtpProtocol, address: TransportAddress, conn: UtpSoc
   
 
 
-proc handleDataPacket(uTP: UtpProtocol, address: TransportAddress, conn: UtpSocket, p: Packet) {.async.} =
+proc handleDataPacket(conn: UtpSocket, p: Packet) {.async.} =
   if conn.state == synRecv:
     conn.state = connected
 
@@ -144,10 +149,10 @@ proc handleDataPacket(uTP: UtpProtocol, address: TransportAddress, conn: UtpSock
     seqNr: conn.seqNr,
     ackNr: conn.ackNr
   )
-  await sendPacket(uTP, address, conn, Packet(header: response, payload: @[]))
+  await sendPacket(conn, Packet(header: response, payload: @[]))
 
 
-proc handleFinalizePacket(uTP: UtpProtocol, address: TransportAddress, conn: UtpSocket, p: Packet) {.async.}=
+proc handleFinalizePacket(conn: UtpSocket, p: Packet) {.async.}=
   
   if conn.state == connected:
 
@@ -163,29 +168,30 @@ proc handleFinalizePacket(uTP: UtpProtocol, address: TransportAddress, conn: Utp
       seqNr: conn.seqNr,
       ackNr: conn.ackNr
     )
-    await sendPacket(uTP, address, conn, Packet(header: response, payload: @[]))  
+    await sendPacket(conn, Packet(header: response, payload: @[]))  
 
 
-proc handlePacket*(uTP: UtpProtocol, address: TransportAddress, conn: UtpSocket, p: Packet) {.async.} =
+proc handlePacket*(p: Packet) {.async.} =
     let packetType = p.header.pType
+    var connection: UtpSocket
     case packetType:
       of ST_SYN:
-        await handleSynPacket(uTP, address, conn, p)
+        connection = await handleSynPacket(p)
       of ST_STATE:
-        await handleStatePacket(uTP, address, conn, p)
+        await handleStatePacket(connection, p)
       of ST_DATA:
-        await handleDataPacket(uTP, address, conn, p)
+        await handleDataPacket(connection, p)
       of ST_FIN:
-        await handleFinalizePacket(uTP, address, conn, p)
+        await handleFinalizePacket(connection, p)
       of ST_RESET:
         warn "Should not end up here"
 
-proc processPacket(uTP: UtpProtocol, address: TransportAddress, conn: UtpSocket, p: Packet) {.async.} =
+proc processPacket(p: Packet) {.async.} =
   notice "Received packet ", packet = p
   let connection_id = p.header.connectionId
   let packetType = p.header.pType
 
-  await handlePacket(uTP, address, conn, p)
+  await handlePacket(p)
 
   # if packetType == ST_RESET:
   #   echo "Reset"
@@ -221,11 +227,10 @@ proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
             except TransportOsError as e:
               # This is likely to be local network connection issues.
               return
-  let protocol = createSocket()
+ 
   let dec = decodePacket(buf)
   if (dec.isOk()):
-    let uTP = UtpProtocol.new()
-    await processPacket(uTP, raddr, protocol, dec.get())
+    await processPacket(dec.get())
   else:
     warn "failed to decode packet from address", address = raddr
 
