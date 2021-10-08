@@ -9,7 +9,7 @@
 import
   chronos,
   testutils/unittests,
-  ./eth/utp/utp_protocol,
+  ../../eth/utp/utp_protocol,
   ../../eth/keys
   
 procSuite "Utp protocol tests":
