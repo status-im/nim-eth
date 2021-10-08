@@ -70,7 +70,7 @@ task test_ssz, "Run ssz tests":
   runTest("tests/ssz/all_tests")
 
 task test_utp, "Run utp tests":
-  runTest("tests/utp/test_packets")
+  runTest("tests/utp/all_utp_tests")
 
 task test, "Run all tests":
   for filename in [

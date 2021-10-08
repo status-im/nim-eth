@@ -16,7 +16,7 @@ suite "Utp packets encoding/decoding":
   let rng = newRng()
   
   test "Encode/decode syn packet":
-    let synPacket = synPacket(rng[], 10, 20)
+    let synPacket = synPacket(5, 10, 20)
     let encoded = encodePacket(synPacket)
     let decoded = decodePacket(encoded)
 

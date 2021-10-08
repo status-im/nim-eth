@@ -130,23 +130,39 @@ proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
 
 # connectionId - should be random not already used number
 # bufferSize - should be pre configured initial buffer size for socket
-proc synPacket*(rng: var BrHmacDrbgContext, connectionId: uint16, bufferSize: uint32): Packet =
+# SYN packets are special, and should have the receive ID in the connid field,
+# instead of conn_id_send.
+proc synPacket*(seqNr: uint16, rcvConnectionId: uint16, bufferSize: uint32): Packet =
   let h = PacketHeaderV1(
     pType: ST_SYN,
     version: protocolVersion,
     # TODO for we do not handle extensions
     extension: 0'u8,
-    # TODO should be random not used number
-    connectionId: connectionId,
-
+    connectionId: rcvConnectionId,
     timestamp: getMonoTimeTimeStamp(),
-
     timestampDiff: 0'u32,
-    # TODO shouldbe current available buffer size
     wndSize: bufferSize,
-    seqNr: randUint16(rng),
+    seqNr: seqNr,
     # Initialy we did not receive any acks
     ackNr: 0'u16
   )
 
+  Packet(header: h, payload: @[])
+
+proc ackPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSize: uint32): Packet = 
+  let h = PacketHeaderV1(
+    pType: ST_STATE,
+    version: protocolVersion,
+    # ack packets always have extension field set to 0
+    extension: 0'u8,
+    connectionId: sndConnectionId,
+    timestamp: getMonoTimeTimeStamp(),
+    # TODO for not we are using 0, but this value should be calculated on socket
+    # level
+    timestampDiff: 0'u32,
+    wndSize: bufferSize,
+    seqNr: seqNr,
+    ackNr: ackNr
+  )
+  
   Packet(header: h, payload: @[])
