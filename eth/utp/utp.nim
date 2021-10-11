@@ -21,9 +21,7 @@ when isMainModule:
   let localAddress = initTAddress("0.0.0.0", 9077)
   let utpProt = UtpProtocol.new(localAddress)
 
-  let remoteServer = initTAddress("0.0.0.0", 9078)
+  let remoteServer = initTAddress("127.0.0.1", 9078)
   let soc = waitFor utpProt.connectTo(remoteServer)
 
-  # Needed to wait for response from server
-  waitFor(sleepAsync(100))
   waitFor utpProt.closeWait()
