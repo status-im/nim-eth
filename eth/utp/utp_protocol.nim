@@ -24,7 +24,7 @@ type
     Connected,
     ConnectedFull,
     Reset,
-    Destory
+    Destroy
 
   UtpSocketKey = object
     remoteAddress: TransportAddress
@@ -49,7 +49,7 @@ type
     connectionFuture: Future[UtpSocket]
 
   UtpSocketsContainerRef = ref object
-    sockets: TableRef[UtpSocketKey, UtpSocket]
+    sockets: Table[UtpSocketKey, UtpSocket]
 
   # For now utp protocol is tied to udp transport, but ultimatly we would like to
   # abstract underlying transport to be able to run utp over udp, discoveryv5 or
@@ -60,7 +60,7 @@ type
     rng*: ref BrHmacDrbgContext
 
 proc new(T: type UtpSocketsContainerRef): T =
-  UtpSocketsContainerRef(sockets: newTable[UtpSocketKey, UtpSocket]())
+  UtpSocketsContainerRef(sockets: initTable[UtpSocketKey, UtpSocket]())
 
 # This should probably be defined in TransportAddress module, as hash function should
 # be consitent with equality function
@@ -110,24 +110,24 @@ proc initOutgoingSocket(to: TransportAddress, rng: var BrHmacDrbgContext): UtpSo
   # TODO handle possible clashes and overflows
   let rcvConnectionId = randUint16(rng)
   let sndConnectionId = rcvConnectionId + 1
-  let initalSeqNr = randUint16(rng)
+  let initialSeqNr = randUint16(rng)
   UtpSocket(
     remoteAddress: to,
     state: SynSent,
     connectionIdRcv: rcvConnectionId,
     connectionIdSnd: sndConnectionId,
-    seqNr: initalSeqNr,
+    seqNr: initialSeqNr,
     connectionFuture: newFuture[UtpSocket]()
   )
 
 proc initIncomingSocket(to: TransportAddress, connectionId: uint16, ackNr: uint16, rng: var BrHmacDrbgContext): UtpSocket =
-  let initalSeqNr = randUint16(rng)
+  let initialSeqNr = randUint16(rng)
   UtpSocket(
     remoteAddress: to,
     state: SynRecv,
     connectionIdRcv: connectionId + 1,
     connectionIdSnd: connectionId,
-    seqNr: initalSeqNr,
+    seqNr: initialSeqNr,
     ackNr: ackNr,
     connectionFuture: newFuture[UtpSocket]()
   )
