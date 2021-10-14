@@ -24,4 +24,6 @@ when isMainModule:
   let remoteServer = initTAddress("127.0.0.1", 9078)
   let soc = waitFor utpProt.connectTo(remoteServer)
 
+  assert(soc.numPacketsInOutGoingBuffer() == 0)
+
   waitFor utpProt.closeWait()

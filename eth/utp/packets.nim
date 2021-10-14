@@ -33,9 +33,13 @@ type
     extension*: uint8
     connectionId*: uint16
     timestamp*: MicroSeconds
+    # This is the difference between the local time and the timestamp in the 
+    # last received packet, at the time the last packet was received
     timestampDiff*: MicroSeconds
+    # The window size is the number of bytes currently in-flight, i.e. sent but not acked
     wndSize*: uint32
     seqNr*: uint16
+    # sequence number the sender of the packet last received in the other direction
     ackNr*: uint16
 
   Packet* = object
