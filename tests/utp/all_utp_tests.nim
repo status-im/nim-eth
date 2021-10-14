@@ -8,4 +8,5 @@
 
 import
   ./test_packets,
-  ./test_protocol
+  ./test_protocol,
+  ./test_buffer
