@@ -8,7 +8,7 @@
 
 import
   unittest,
-  ../eth/utp/growable_buffer
+  ../../eth/utp/growable_buffer
 
 suite "Utp ring buffer":
   test "Empty buffer":
