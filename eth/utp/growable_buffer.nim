@@ -6,7 +6,7 @@ export options
 # Buffer implementation similar to the one in in reference implementation.
 # Main rationale for it, is to refer to items in buffer by their sequence number,
 # and support out of order packets.
-# Therefore it is super general data structure, and it mostly usefull for
+# Therefore it is super specific data structure, and it mostly usefull for
 # utp implementation.
 # Another alternative would be to use standard deque from deques module, and caluclate
 # item indexes from their sequence numbers.
@@ -34,7 +34,7 @@ proc put*[A](buff: var GrowableCircularBuffer[A], i: Natural, elem: A) =
 proc delete*[A](buff: var GrowableCircularBuffer[A], i: Natural) =
   buff.putImpl(i, none[A]())
 
-proc size*[A](buff: GrowableCircularBuffer[A]): int =
+proc len*[A](buff: GrowableCircularBuffer[A]): int =
   buff.mask + 1
 
 # Item contains the element we want to make space for

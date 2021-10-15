@@ -14,7 +14,7 @@ suite "Utp ring buffer":
   test "Empty buffer":
     let buff = GrowableCircularBuffer[int].init(size = 4)
     check:
-      buff.size() == 4
+      buff.len() == 4
       buff.get(0).isNone()
   
   test "Adding elements to buffer":
@@ -56,7 +56,7 @@ suite "Utp ring buffer":
 
     check:
       # it growed to next power of two
-      buff.size() == 8
+      buff.len() == 8
       buff.get(11) == some(11)
       buff.get(12) == some(12)
       buff.get(13) == some(13)
@@ -77,7 +77,7 @@ suite "Utp ring buffer":
 
     check:
       # it growed to next power of two
-      buff.size() == 8
+      buff.len() == 8
       buff.get(11) == some(11)
       buff.get(12) == some(12)
       buff.get(13) == some(13)
