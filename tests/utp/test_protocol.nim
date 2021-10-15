@@ -26,6 +26,9 @@ procSuite "Utp protocol tests":
 
     check:
       sock.isConnected()
+      # after successful connection outgoing buffer should be empty as syn packet
+      # should be correctly acked
+      sock.numPacketsInOutGoingBuffer() == 0
 
     await utpProt1.closeWait()
     await utpProt2.closeWait()

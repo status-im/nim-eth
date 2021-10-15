@@ -8,8 +8,8 @@
 
 import
   unittest,
-  ../eth/utp/packets,
-   ../../eth/keys
+  ../../eth/utp/packets,
+  ../../eth/keys
 
 suite "Utp packets encoding/decoding":
 

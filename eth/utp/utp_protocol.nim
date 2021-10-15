@@ -10,6 +10,7 @@ import
   std/[tables, options, hashes],
   chronos, chronicles, bearssl,
   ./packets,
+  ./growable_buffer,
   ../keys
 
 logScope:
@@ -41,15 +42,29 @@ type
     seqNr: uint16
     # All seq number up to this havve been correctly acked by us
     ackNr: uint16
-
+    
     # Should be completed after succesful connection to remote host.
     # TODO check if nim gc handles properly cyclic references, as this future will
     # contain reference to socket which hold this future.
     # If that is not the case, then this future will need to be hold independly
     connectionFuture: Future[UtpSocket]
+    
+    # the number of packets in the send queue. Packets that haven't
+    # yet been sent count as well as packets marked as needing resend
+    # the oldest un-acked packet in the send queue is seq_nr - cur_window_packets
+    curWindowPackets: uint16
+
+    # out going buffer for all send packets
+    outBuffer: GrowableCircularBuffer[Packet]
+
+    # incoming buffer for out of order packets
+    inBuffer: GrowableCircularBuffer[Packet]
 
   UtpSocketsContainerRef = ref object
     sockets: Table[UtpSocketKey, UtpSocket]
+
+  AckResult = enum
+    PacketAcked, PacketAlreadyAcked, PacketNotSentYet
 
   # For now utp protocol is tied to udp transport, but ultimatly we would like to
   # abstract underlying transport to be able to run utp over udp, discoveryv5 or
@@ -61,6 +76,9 @@ type
 
 proc new(T: type UtpSocketsContainerRef): T =
   UtpSocketsContainerRef(sockets: initTable[UtpSocketKey, UtpSocket]())
+
+proc init(T: type UtpSocketKey, remoteAddress: TransportAddress, rcvId: uint16): T =
+  UtpSocketKey(remoteAddress: remoteAddress, rcvId: rcvId)
 
 # This should probably be defined in TransportAddress module, as hash function should
 # be consitent with equality function
@@ -117,7 +135,9 @@ proc initOutgoingSocket(to: TransportAddress, rng: var BrHmacDrbgContext): UtpSo
     connectionIdRcv: rcvConnectionId,
     connectionIdSnd: sndConnectionId,
     seqNr: initialSeqNr,
-    connectionFuture: newFuture[UtpSocket]()
+    connectionFuture: newFuture[UtpSocket](),
+    outBuffer: GrowableCircularBuffer[Packet].init(),
+    inBuffer: GrowableCircularBuffer[Packet].init()
   )
 
 proc initIncomingSocket(to: TransportAddress, connectionId: uint16, ackNr: uint16, rng: var BrHmacDrbgContext): UtpSocket =
@@ -129,21 +149,78 @@ proc initIncomingSocket(to: TransportAddress, connectionId: uint16, ackNr: uint1
     connectionIdSnd: connectionId,
     seqNr: initialSeqNr,
     ackNr: ackNr,
-    connectionFuture: newFuture[UtpSocket]()
+    connectionFuture: newFuture[UtpSocket](),
+    outBuffer: GrowableCircularBuffer[Packet].init(),
+    inBuffer: GrowableCircularBuffer[Packet].init()
   )
 
-proc ack(socket: UtpSocket): Packet =
+proc getAckPacket(socket: UtpSocket): Packet =
   ackPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, 1048576)
+
+proc ackPacket(socket: UtpSocket, seqNr: uint16): AckResult =
+  let packetOpt = socket.outBuffer.get(seqNr)
+  if packetOpt.isSome():
+    let packet = packetOpt.get()
+    # TODO Add number of transmision to each packet to track which packet was sent
+    # how many times, and handle here case when we try to ack packet which was not
+    # sent yet
+    socket.outBuffer.delete(seqNr)
+    # TODO Update estimates about roundtrip time, when we are acking packed which
+    # acked without re sends
+    PacketAcked
+  else:
+    # the packet has already been acked (or not sent)
+    PacketAlreadyAcked
+
+proc ackPackets(socket: UtpSocket, nrPacketsToAck: uint16) = 
+  var i = 0
+  while i < int(nrPacketsToack):
+    let result = socket.ackPacket(socket.seqNr - socket.curWindowPackets)
+    case result
+    of PacketAcked:
+      dec socket.curWindowPackets
+    of PacketAlreadyAcked:
+      dec socket.curWindowPackets
+    of PacketNotSentYet:
+      debug "Tried to ack packed which was not sent yet"
+      break
+
+    inc i
+
+proc getSocketKey(socket: UtpSocket): UtpSocketKey =
+  UtpSocketKey.init(socket.remoteAddress, socket.connectionIdRcv)
+
+proc initSynPacket(socket: UtpSocket): seq[byte] =
+  assert(socket.state == SynSent)
+  let packet = synPacket(socket.seqNr, socket.connectionIdRcv, 1048576)
+  socket.outBuffer.ensureSize(socket.seqNr, socket.curWindowPackets)
+  socket.outBuffer.put(socket.seqNr, packet)
+  inc socket.seqNr
+  inc socket.curWindowPackets
+  encodePacket(packet)
 
 proc isConnected*(socket: UtpSocket): bool =
   socket.state == Connected
+
+# Check how many packets are still in the out going buffer, usefull for tests or
+# debugging.
+# It throws assertion error when number of elements in buffer do not equal kept counter
+proc numPacketsInOutGoingBuffer*(socket: UtpSocket): int =
+  var num = 0
+  for e in socket.outBuffer.items():
+    if e.isSome():
+      inc num
+  assert(num == int(socket.curWindowPackets))
+  num
 
 # TODO not implemented
 # for now just log incoming packets
 proc processPacket(prot: UtpProtocol, p: Packet, sender: TransportAddress) =
   notice "Received packet ", packet = p
-  let socketKey = UtpSocketKey(remoteAddress: sender, rcvId: p.header.connectionId)
+  let socketKey = UtpSocketKey.init(sender, p.header.connectionId)
   let maybeSocket = prot.activeSockets.getUtpSocket(socketKey)
+  let pkSeqNr = p.header.seqNr
+  let pkAckNr = p.header.ackNr
   if (maybeSocket.isSome()):
     let socket = maybeSocket.unsafeGet()
     case p.header.pType
@@ -155,12 +232,31 @@ proc processPacket(prot: UtpProtocol, p: Packet, sender: TransportAddress) =
       notice "Received ST_FIN on known socket"
     of ST_STATE:
       notice "Received ST_STATE on known socket"
+      # acks is the number of packets that was acked, in normal case - no selective
+      # acks, no losses, no resends, it will usually be equal to 1
+      let acks = pkAckNr - (socket.seqNr - 1 - socket.curWindowPackets)
+      socket.ackPackets(acks)
+
       if (socket.state == SynSent):
         socket.state = Connected
-        socket.ackNr = p.header.seqNr
+        # TODO reference implementation sets ackNr (p.header.seqNr - 1), although
+        # spec mention that it should be equal p.header.seqNr. For now follow the
+        # reference impl to be compatible with it. Later investigate trin compatibility.
+        socket.ackNr = p.header.seqNr - 1
+        # In case of SynSent complate the future as last thing to make sure user of libray will
+        # receive socket in correct state
         socket.connectionFuture.complete(socket)
-      # TODO to finish handhske we should respond with ST_DATA packet, without it
-      # socket is left in half-open state
+
+        # number of packets past the expected
+        # ack_nr is the last acked, seq_nr is the
+        # current. Subtracring 1 makes 0 mean "this is the next expected packet"
+        let pastExpected = pkSeqNr - socket.ackNr - 1
+
+        # TODO to finish handhske we should respond with ST_DATA packet, without it
+        # socket is left in half-open state.
+        # Actual reference implementation waits for user to send data, as it assumes
+        # existence of application level handshake over utp. We may need to modify this
+        # to automaticly send ST_DATA .
     of ST_RESET:
       # TODO not implemented
       notice "Received ST_RESET on known socket"
@@ -173,12 +269,10 @@ proc processPacket(prot: UtpProtocol, p: Packet, sender: TransportAddress) =
     if (p.header.pType == ST_SYN):
       # Initial ackNr is set to incoming packer seqNr
       let incomingSocket = initIncomingSocket(sender, p.header.connectionId, p.header.seqNr, prot.rng[])
-      let socketKey = UtpSocketKey(remoteAddress: incomingSocket.remoteAddress, rcvId: incomingSocket.connectionIdRcv)
-      prot.activeSockets.registerUtpSocket(socketKey, incomingSocket)
-      let synAck = incomingSocket.ack()
-      let encoded = encodePacket(synAck)
+      prot.activeSockets.registerUtpSocket(incomingSocket.getSocketKey(), incomingSocket)
+      let encodedAck= encodePacket(incomingSocket.getAckPacket())
       # TODO sending should be done from UtpSocket context
-      discard prot.transport.sendTo(sender, encoded)
+      discard prot.transport.sendTo(sender, encodedAck)
       notice "Received ST_SYN and socket is not known"
     else:
       # TODO not implemented
@@ -189,16 +283,13 @@ proc processPacket(prot: UtpProtocol, p: Packet, sender: TransportAddress) =
 # TODO not implemented
 proc connectTo*(p: UtpProtocol, address: TransportAddress): Future[UtpSocket] =
   let socket = initOutgoingSocket(address, p.rng[])
-  let socketKey = UtpSocketKey(remoteAddress: socket.remoteAddress, rcvId: socket.connectionIdRcv)
-  # TODO Buffer in syn packet should be based on our current buffer size
-  let packet = synPacket(socket.seqNr, socket.connectionIdRcv, 1048576)
-  notice "Sending packet", packet = packet
-  let packetEncoded = encodePacket(packet)
-  p.activeSockets.registerUtpSocket(socketKey, socket)
+  p.activeSockets.registerUtpSocket(socket.getSocketKey(), socket)
+  let synEncoded = socket.initSynPacket()
+  notice "Sending packet", packet = synEncoded
   # TODO add callback to handle errors and cancellation i.e unregister socket on
   # send error and finish connection future with failure
   # sending should be done from UtpSocketContext
-  discard p.transport.sendTo(address, packetEncoded)
+  discard p.transport.sendTo(address, synEncoded)
   return socket.connectionFuture
 
 proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
