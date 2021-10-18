@@ -257,9 +257,9 @@ suite "ENR":
     let pk = PrivateKey.fromHex(
       "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
     var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8],
-      "some_list": rlp.encode(rlpList)})[]
+      "some_list": rlpList})[]
 
-    check($r == """(123, id: "v4", ip: 0x05060708, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, some_list: 0xCE4883000102884869207468657265, udp: 1234)""")
+    check($r == """(123, id: "v4", ip: 0x05060708, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, some_list: (Raw RLP list) 0xCE4883000102884869207468657265, udp: 1234)""")
 
     let encoded = rlp.encode(r)
     let decoded = rlp.decode(encoded, enr.Record)

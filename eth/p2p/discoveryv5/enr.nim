@@ -46,7 +46,8 @@ type
   FieldKind = enum
     kString,
     kNum,
-    kBytes
+    kBytes,
+    kList
 
   Field = object
     case kind: FieldKind
@@ -56,6 +57,9 @@ type
       num: BiggestUInt
     of kBytes:
       bytes: seq[byte]
+    of kList:
+      listRaw: seq[byte] ## Differently from the other kinds, this is is stored
+      ## as raw (encoded) RLP data, and thus treated as such further on.
 
   EnrResult*[T] = Result[T, cstring]
 
@@ -68,6 +72,8 @@ template toField[T](v: T): Field =
     Field(kind: kBytes, bytes: v)
   elif T is SomeUnsignedInt:
     Field(kind: kNum, num: BiggestUInt(v))
+  elif T is object|tuple:
+    Field(kind: kList, listRaw: rlp.encode(v))
   else:
     {.error: "Unsupported field type".}
 
@@ -80,6 +86,8 @@ proc `==`(a, b: Field): bool =
       return a.num == b.num
     of kBytes:
       return a.bytes == b.bytes
+    of kList:
+      return a.listRaw == b.listRaw
   else:
     return false
 
@@ -96,6 +104,7 @@ proc makeEnrRaw(seqNum: uint64, pk: PrivateKey,
       of kString: w.append(v.str)
       of kNum: w.append(v.num)
       of kBytes: w.append(v.bytes)
+      of kList: w.appendRawBytes(v.listRaw) # No encoding needs to happen
     w.finish()
 
   let toSign = block:
@@ -426,7 +435,7 @@ proc fromBytesAux(r: var Record): bool {.raises: [RlpError, Defect].} =
       elif rlp.isList():
         # Not supporting decoding lists as value (especially unknown ones),
         # just drop the raw RLP value in there.
-        r.pairs.add((k, Field(kind: kBytes, bytes: @(rlp.rawData()))))
+        r.pairs.add((k, Field(kind: kList, listRaw: @(rlp.rawData()))))
         # Need to skip the element still.
         rlp.skipElem()
 
@@ -472,6 +481,8 @@ proc `$`(f: Field): string =
     "0x" & f.bytes.toHex
   of kString:
     "\"" & f.str & "\""
+  of kList:
+    "(Raw RLP list) " & "0x" & f.listRaw.toHex
 
 proc `$`*(r: Record): string =
   result = "("
