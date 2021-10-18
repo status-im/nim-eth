@@ -22,7 +22,7 @@ proc generateByteArray(length: int): seq[byte] =
     inc i
   return bytes
 
-type AssertionCallback = proc(): bool {.gcsafe.}
+type AssertionCallback = proc(): bool {.gcsafe, raises: [Defect].}
 
 proc waitUntil(f: AssertionCallback): Future[void] {.async.} =
   while true:
@@ -30,7 +30,7 @@ proc waitUntil(f: AssertionCallback): Future[void] {.async.} =
     if res:
       break
     else:
-      await sleepAsync(50)
+      await sleepAsync(milliseconds(50))
 
 proc transferData(sender: UtpSocket, receiver: UtpSocket, data: seq[byte]): Future[seq[byte]] {.async.}=
   await sender.write(data)
@@ -97,7 +97,11 @@ procSuite "Utp protocol tests":
     # this future will be completed when we called accepted connection callback
     discard await serverSocketFut
 
-    let serverSocket = serverSocketFut.read()
+    let serverSocket = 
+      try:
+        serverSocketFut.read()
+      except:
+        raiseAssert "Unexpected error when reading finished future"
 
     check:
       clientSocket.isConnected()
@@ -138,7 +142,11 @@ procSuite "Utp protocol tests":
     # this future will be completed when we called accepted connection callback
     discard await serverSocketFut
 
-    let serverSocket = serverSocketFut.read()
+    let serverSocket = 
+      try:
+        serverSocketFut.read()
+      except:
+        raiseAssert "Unexpected error when reading finished future"
 
     check:
       clientSocket.isConnected()
@@ -182,7 +190,11 @@ procSuite "Utp protocol tests":
     # this future will be completed when we called accepted connection callback
     discard await serverSocketFut
 
-    let serverSocket = serverSocketFut.read()
+    let serverSocket = 
+      try:
+        serverSocketFut.read()
+      except:
+        raiseAssert "Unexpected error when reading finished future"
 
     check:
       clientSocket.isConnected()
