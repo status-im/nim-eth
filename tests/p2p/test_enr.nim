@@ -37,7 +37,7 @@ suite "ENR":
     var r: Record
     check not fromBytes(r, [])
 
-  test "Base64 dserialsation without data":
+  test "Base64 deserialsation without data":
     var r: Record
     let sigValid = r.fromURI("enr:")
     check(not sigValid)
@@ -243,3 +243,25 @@ suite "ENR":
         typedEnr.udp.get() == 9001
 
         r.seqNum == 4
+
+  test "ENR with RLP list value":
+    type
+      RlpTestList = object
+        number: uint16
+        data: seq[byte]
+        text: string
+
+    let rlpList =
+      RlpTestList(number: 72, data: @[byte 0x0, 0x1, 0x2], text: "Hi there")
+
+    let pk = PrivateKey.fromHex(
+      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
+    var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8],
+      "some_list": rlp.encode(rlpList)})[]
+
+    check($r == """(123, id: "v4", ip: 0x05060708, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, some_list: 0xCE4883000102884869207468657265, udp: 1234)""")
+
+    let encoded = rlp.encode(r)
+    let decoded = rlp.decode(encoded, enr.Record)
+    check($decoded == $r)
+    check(decoded.raw == r.raw)

@@ -424,9 +424,9 @@ proc fromBytesAux(r: var Record): bool {.raises: [RlpError, Defect].} =
       if rlp.isSingleByte() or rlp.isBlob():
         r.pairs.add((k, Field(kind: kBytes, bytes: rlp.read(seq[byte]))))
       elif rlp.isList():
-        # Not supporting decoding lists as value (especially unknown ones) so
-        # just mentioning that in the value.
-        r.pairs.add((k, Field(kind: kString, str: "Unsupported RLP List")))
+        # Not supporting decoding lists as value (especially unknown ones),
+        # just drop the raw RLP value in there.
+        r.pairs.add((k, Field(kind: kBytes, bytes: @(rlp.rawData()))))
         # Need to skip the element still.
         rlp.skipElem()
 
