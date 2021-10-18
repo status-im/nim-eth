@@ -54,7 +54,7 @@ type
 # For now we can use basic monotime, later it would be good to analyze:
 # https://github.com/bittorrent/libutp/blob/master/utp_utils.cpp, to check all the
 # timing assumptions on different platforms
-proc getMonoTimeTimeStamp(): uint32 = 
+proc getMonoTimeTimeStamp*(): uint32 = 
   let time = getMonoTime()
   cast[uint32](time.ticks() div 1000)
 
@@ -170,3 +170,21 @@ proc ackPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSiz
   )
   
   Packet(header: h, payload: @[])
+
+proc dataPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSize: uint32, payload: seq[byte]): Packet = 
+  let h = PacketHeaderV1(
+    pType: ST_DATA,
+    version: protocolVersion,
+    # data packets always have extension field set to 0
+    extension: 0'u8,
+    connectionId: sndConnectionId,
+    timestamp: getMonoTimeTimeStamp(),
+    # TODO for not we are using 0, but this value should be calculated on socket
+    # level
+    timestampDiff: 0'u32,
+    wndSize: bufferSize,
+    seqNr: seqNr,
+    ackNr: ackNr
+  )
+  
+  Packet(header: h, payload: payload)
