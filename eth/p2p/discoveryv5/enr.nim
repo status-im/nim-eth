@@ -419,7 +419,16 @@ proc fromBytesAux(r: var Record): bool {.raises: [RlpError, Defect].} =
       let v = rlp.read(uint16)
       r.pairs.add((k, Field(kind: kNum, num: v)))
     else:
-      r.pairs.add((k, Field(kind: kBytes, bytes: rlp.read(seq[byte]))))
+      # Don't know really what this is supposed to represent so drop it in
+      # `kBytes` field pair when a single byte or blob.
+      if rlp.isSingleByte() or rlp.isBlob():
+        r.pairs.add((k, Field(kind: kBytes, bytes: rlp.read(seq[byte]))))
+      elif rlp.isList():
+        # Not supporting decoding lists as value (especially unknown ones) so
+        # just mentioning that in the value.
+        r.pairs.add((k, Field(kind: kString, str: "Unsupported RLP List")))
+        # Need to skip the element still.
+        rlp.skipElem()
 
   verifySignature(r)
 
