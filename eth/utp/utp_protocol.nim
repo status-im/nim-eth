@@ -331,6 +331,8 @@ proc processPacket(prot: UtpProtocol, p: Packet, sender: TransportAddress) {.asy
     of ST_DATA:
       # To avoid amplification attacks, server socket is in SynRecv state until
       # it receices first data transfer
+      # https://www.usenix.org/system/files/conference/woot15/woot15-paper-adamsky.pdf
+      # TODO when intgrating with discv5 this need to be configurable
       if (socket.state == SynRecv):
         socket.state = Connected
 

@@ -7,19 +7,15 @@
 {.used.}
 
 import
-  std/random,
   sequtils,
-  chronos,
+  chronos, bearssl,
   testutils/unittests,
   ../../eth/utp/utp_protocol,
   ../../eth/keys
   
-proc generateByteArray(length: int): seq[byte] =
+proc generateByteArray(rng: var BrHmacDrbgContext, length: int): seq[byte] =
   var bytes = newSeq[byte](length)
-  var i = 0
-  while i < length:
-    bytes[i] = uint8(rand(int(high(uint8))))
-    inc i
+  brHmacDrbgGenerate(rng, bytes)
   return bytes
 
 type AssertionCallback = proc(): bool {.gcsafe, raises: [Defect].}
@@ -41,7 +37,7 @@ proc transferData(sender: UtpSocket, receiver: UtpSocket, data: seq[byte]): Futu
 procSuite "Utp protocol tests":
   let rng = newRng()
 
-  proc setAcceptedCallabck(event: AsyncEvent): AcceptConnectionCallback =
+  proc setAcceptedCallback(event: AsyncEvent): AcceptConnectionCallback =
     return (
       proc(server: UtpProtocol, client: UtpSocket): Future[void] =
         let fut = newFuture[void]()
@@ -50,7 +46,7 @@ procSuite "Utp protocol tests":
         fut
     )
 
-  proc setIncomingSocketCallabck(socketPromise: Future[UtpSocket]): AcceptConnectionCallback =
+  proc setIncomingSocketCallback(socketPromise: Future[UtpSocket]): AcceptConnectionCallback =
     return (
       proc(server: UtpProtocol, client: UtpSocket): Future[void] =
         let fut = newFuture[void]()
@@ -62,11 +58,11 @@ procSuite "Utp protocol tests":
   asyncTest "Success connect to remote host":
     let server1Called = newAsyncEvent()
     let address = initTAddress("127.0.0.1", 9079)
-    let utpProt1 = UtpProtocol.new(setAcceptedCallabck(server1Called), address)
+    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address)
 
     var server2Called = newAsyncEvent()
     let address1 = initTAddress("127.0.0.1", 9080)
-    let utpProt2 = UtpProtocol.new(setAcceptedCallabck(server2Called), address1)
+    let utpProt2 = UtpProtocol.new(setAcceptedCallback(server2Called), address1)
 
     let sock = await utpProt1.connectTo(address1)
     
@@ -87,11 +83,11 @@ procSuite "Utp protocol tests":
   asyncTest "Success data transfer when data fits into one packet":
     var server1Called = newAsyncEvent()
     let address = initTAddress("127.0.0.1", 9079)
-    let utpProt1 = UtpProtocol.new(setAcceptedCallabck(server1Called), address)
+    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address)
 
     var serverSocketFut = newFuture[UtpSocket]()
     let address1 = initTAddress("127.0.0.1", 9080)
-    let utpProt2 = UtpProtocol.new(setIncomingSocketCallabck(serverSocketFut), address1)
+    let utpProt2 = UtpProtocol.new(setIncomingSocketCallback(serverSocketFut), address1)
 
     let clientSocket = await utpProt1.connectTo(address1)
 
@@ -113,7 +109,7 @@ procSuite "Utp protocol tests":
       # Server socket is not in connected state, until first data transfer
       (not serverSocket.isConnected())
 
-    let bytesToTransfer = generateByteArray(100)
+    let bytesToTransfer = generateByteArray(rng[], 100)
 
     let bytesReceivedFromClient = await transferData(clientSocket, serverSocket, bytesToTransfer)
 
@@ -132,11 +128,11 @@ procSuite "Utp protocol tests":
   asyncTest "Success data transfer when data need to be sliced into multiple packets":
     var server1Called = newAsyncEvent()
     let address = initTAddress("127.0.0.1", 9079)
-    let utpProt1 = UtpProtocol.new(setAcceptedCallabck(server1Called), address)
+    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address)
 
     var serverSocketFut = newFuture[UtpSocket]()
     let address1 = initTAddress("127.0.0.1", 9080)
-    let utpProt2 = UtpProtocol.new(setIncomingSocketCallabck(serverSocketFut), address1)
+    let utpProt2 = UtpProtocol.new(setIncomingSocketCallback(serverSocketFut), address1)
 
     let clientSocket = await utpProt1.connectTo(address1)
 
@@ -158,7 +154,7 @@ procSuite "Utp protocol tests":
       (not serverSocket.isConnected())
 
     # 5000 bytes is over maximal packet size
-    let bytesToTransfer = generateByteArray(5000)
+    let bytesToTransfer = generateByteArray(rng[], 5000)
     
     let bytesReceivedFromClient = await transferData(clientSocket, serverSocket, bytesToTransfer)
     let bytesReceivedFromServer = await transferData(serverSocket, clientSocket, bytesToTransfer)
@@ -180,11 +176,11 @@ procSuite "Utp protocol tests":
   asyncTest "Success multiple data transfers when data need to be sliced into multiple packets":
     var server1Called = newAsyncEvent()
     let address = initTAddress("127.0.0.1", 9079)
-    let utpProt1 = UtpProtocol.new(setAcceptedCallabck(server1Called), address)
+    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address)
 
     var serverSocketFut = newFuture[UtpSocket]()
     let address1 = initTAddress("127.0.0.1", 9080)
-    let utpProt2 = UtpProtocol.new(setIncomingSocketCallabck(serverSocketFut), address1)
+    let utpProt2 = UtpProtocol.new(setIncomingSocketCallback(serverSocketFut), address1)
 
     let clientSocket = await utpProt1.connectTo(address1)
 
@@ -205,14 +201,14 @@ procSuite "Utp protocol tests":
 
 
     # 5000 bytes is over maximal packet size
-    let bytesToTransfer = generateByteArray(5000)
+    let bytesToTransfer = generateByteArray(rng[], 5000)
     
     let written = await clientSocket.write(bytesToTransfer)
 
     check:
       written == len(bytesToTransfer)
 
-    let bytesToTransfer1 = generateByteArray(5000)
+    let bytesToTransfer1 = generateByteArray(rng[], 5000)
 
     let written1 = await clientSocket.write(bytesToTransfer1)
 
