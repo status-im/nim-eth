@@ -7,7 +7,7 @@
 {.push raises: [Defect].}
 
 import 
-  chronos,
+  chronos, stew/byteutils,
   ./utp_protocol
 
 # Exemple application to interact with reference implementation server to help with implementation
@@ -17,13 +17,28 @@ import
 # 3. make
 # 4. ./ucat -ddddd -l -p 9078 - it will run utp server on port 9078
 when isMainModule:
+  proc echoIncomingSocketCallBack(): AcceptConnectionCallback =
+    return (
+      proc (server: UtpProtocol, client: UtpSocket): Future[void] {.gcsafe, raises: [Defect].} = 
+        echo "received incoming connection"
+        let fakeFuture = newFuture[void]()
+        fakeFuture.complete()
+        return fakeFuture
+    )
   # TODO read client/server ports and address from cmd line or config file
   let localAddress = initTAddress("0.0.0.0", 9077)
-  let utpProt = UtpProtocol.new(localAddress)
+  let utpProt = UtpProtocol.new(echoIncomingSocketCallBack(), localAddress)
 
   let remoteServer = initTAddress("127.0.0.1", 9078)
   let soc = waitFor utpProt.connectTo(remoteServer)
 
   doAssert(soc.numPacketsInOutGoingBuffer() == 0)
+
+  let helloUtp = "Helllo from nim implementation"
+  let bytes = helloUtp.toBytes()
+
+  waitFor soc.write(bytes)
+
+  runForever()
 
   waitFor utpProt.closeWait()
