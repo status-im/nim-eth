@@ -33,7 +33,8 @@ proc waitUntil(f: AssertionCallback): Future[void] {.async.} =
       await sleepAsync(milliseconds(50))
 
 proc transferData(sender: UtpSocket, receiver: UtpSocket, data: seq[byte]): Future[seq[byte]] {.async.}=
-  await sender.write(data)
+  let bytesWritten = await sender.write(data)
+  doAssert bytesWritten == len(data)
   let received = await receiver.read(len(data))
   return received
 
@@ -206,11 +207,17 @@ procSuite "Utp protocol tests":
     # 5000 bytes is over maximal packet size
     let bytesToTransfer = generateByteArray(5000)
     
-    await clientSocket.write(bytesToTransfer)
+    let written = await clientSocket.write(bytesToTransfer)
+
+    check:
+      written == len(bytesToTransfer)
 
     let bytesToTransfer1 = generateByteArray(5000)
 
-    await clientSocket.write(bytesToTransfer1)
+    let written1 = await clientSocket.write(bytesToTransfer1)
+
+    check:
+      written1 == len(bytesToTransfer)
 
     let bytesReceived = await serverSocket.read(len(bytesToTransfer) + len(bytesToTransfer1))
     

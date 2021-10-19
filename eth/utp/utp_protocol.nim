@@ -273,12 +273,16 @@ proc getPacketSize(socket: UtpSocket): int =
   # TODO currently returning constant, ultimatly it should be bases on mtu estimates
   mtuSize
   
-proc write*(socket: UtpSocket, data: seq[byte]): Future[void] {.async.} = 
-  assert(len(data) > 0)
+proc write*(socket: UtpSocket, data: seq[byte]): Future[int] {.async.} = 
+  var bytesWritten = 0
   # TODO 
   # Handle different socket state i.e do not write when socket is full or not
   # connected
   # Handle growing of send window
+
+  if len(data) == 0:
+    return bytesWritten
+
   let pSize = socket.getPacketSize()
   let endIndex = data.high()
   var i = 0
@@ -291,19 +295,26 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[void] {.async.} =
     socket.outBuffer.put(socket.seqNr, dataPacket)
     inc socket.seqNr
     inc socket.curWindowPackets
+    bytesWritten = bytesWritten + len(dataSlice)
     i = lastOrEnd + 1
   await socket.flushPackets()
+  return bytesWritten
 
-proc read*(socket: UtpSocket, n: int): Future[seq[byte]] {.async.}=
+proc read*(socket: UtpSocket, n: Natural): Future[seq[byte]] {.async.}=
   ## Read all bytes `n` bytes from socket ``socket``.
   ##
   ## This procedure allocates buffer seq[byte] and return it as result.
   var bytes = newSeq[byte]()
+
+  if n == 0:
+    return bytes
+
   readLoop():
     # TODO Add handling of socket closing
     let count = min(socket.buffer.dataLen(), n - len(bytes))
     bytes.add(socket.buffer.buffer.toOpenArray(0, count - 1))
     (count, len(bytes) == n)
+
   return bytes
 
 proc processPacket(prot: UtpProtocol, p: Packet, sender: TransportAddress) {.async.}=
