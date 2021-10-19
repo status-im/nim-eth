@@ -491,7 +491,22 @@ proc `$`*(r: Record): string =
     result &= ", "
     result &= k
     result &= ": "
-    result &= $v
+    # For IP addresses we print something prettier than the default kinds
+    # Note: Could disallow for invalid IPs in ENR also.
+    if k == "ip":
+      let ip = r.tryGet("ip", array[4, byte])
+      if ip.isSome():
+        result &= $ipv4(ip.get())
+      else:
+        result &= "(Invalid) " & $v
+    elif k == "ip6":
+      let ip = r.tryGet("ip6", array[16, byte])
+      if ip.isSome():
+        result &= $ipv6(ip.get())
+      else:
+        result &= "(Invalid) " & $v
+    else:
+      result &= $v
   result &= ')'
 
 proc `==`*(a, b: Record): bool = a.raw == b.raw
