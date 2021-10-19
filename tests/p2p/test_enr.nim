@@ -12,7 +12,7 @@ suite "ENR":
     var pk = PrivateKey.fromHex(
       "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
     var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8]})[]
-    check($r == """(123, id: "v4", ip: 0x05060708, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
+    check($r == """(123, id: "v4", ip: 5.6.7.8, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
     let uri = r.toURI()
     var r2: Record
     let sigValid = r2.fromURI(uri)
@@ -24,7 +24,7 @@ suite "ENR":
     var pk = PrivateKey.fromHex(
       "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
     var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8]})[]
-    check($r == """(123, id: "v4", ip: 0x05060708, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
+    check($r == """(123, id: "v4", ip: 5.6.7.8, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
     let encoded = rlp.encode(r)
     let decoded = rlp.decode(encoded, enr.Record)
     check($decoded == $r)
@@ -46,7 +46,7 @@ suite "ENR":
     var r: Record
     let sigValid = r.fromBase64("-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8")
     check(sigValid)
-    check($r == """(1, id: "v4", ip: 0x7F000001, secp256k1: 0x03CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258CD3138, udp: 30303)""")
+    check($r == """(1, id: "v4", ip: 127.0.0.1, secp256k1: 0x03CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258CD3138, udp: 30303)""")
 
   test "Bad base64":
     var r: Record
@@ -259,9 +259,54 @@ suite "ENR":
     var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8],
       "some_list": rlpList})[]
 
-    check($r == """(123, id: "v4", ip: 0x05060708, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, some_list: (Raw RLP list) 0xCE4883000102884869207468657265, udp: 1234)""")
+    check($r == """(123, id: "v4", ip: 5.6.7.8, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, some_list: (Raw RLP list) 0xCE4883000102884869207468657265, udp: 1234)""")
 
     let encoded = rlp.encode(r)
     let decoded = rlp.decode(encoded, enr.Record)
     check($decoded == $r)
     check(decoded.raw == r.raw)
+
+  test "ENR IP addresses ":
+    let pk = PrivateKey.fromHex(
+      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
+    block: # valid ipv4
+      var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8]})[]
+
+      check($r == """(123, id: "v4", ip: 5.6.7.8, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
+
+      let encoded = rlp.encode(r)
+      let decoded = rlp.decode(encoded, enr.Record)
+      check($decoded == $r)
+      check(decoded.raw == r.raw)
+
+    block: # invalid ipv4
+      var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7]})[]
+
+      check($r == """(123, id: "v4", ip: (Invalid) 0x050607, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
+
+      let encoded = rlp.encode(r)
+      let decoded = rlp.decode(encoded, enr.Record)
+      check($decoded == $r)
+      check(decoded.raw == r.raw)
+
+    block: # valid ipv4 + ipv6
+      var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8],
+        "ip6": [byte 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6]})[]
+
+      check($r == """(123, id: "v4", ip: 5.6.7.8, ip6: 102::102:304:506, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
+
+      let encoded = rlp.encode(r)
+      let decoded = rlp.decode(encoded, enr.Record)
+      check($decoded == $r)
+      check(decoded.raw == r.raw)
+
+    block: # invalid ipv4 + ipv6
+      var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8, 9],
+        "ip6": [byte 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5]})[]
+
+      check($r == """(123, id: "v4", ip: (Invalid) 0x0506070809, ip6: (Invalid) 0x010200000000000000000102030405, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
+
+      let encoded = rlp.encode(r)
+      let decoded = rlp.decode(encoded, enr.Record)
+      check($decoded == $r)
+      check(decoded.raw == r.raw)
