@@ -164,8 +164,8 @@ template ElemType*(T: type array): untyped =
 template ElemType*(T: type seq): untyped =
   type(default(T)[0])
 
-template ElemType*(T: type List): untyped =
-  T.T
+template ElemType*(T0: type List): untyped =
+  T0.T
 
 func isFixedSize*(T0: type): bool {.compileTime.} =
   mixin toSszType, enumAllSerializedFields
