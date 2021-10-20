@@ -7,7 +7,7 @@
 {.push raises: [Defect].}
 
 import
-  std/[tables, options, hashes],
+  std/[tables, options, hashes, sugar],
   chronos, chronicles, bearssl,
   ./packets,
   ./growable_buffer,
@@ -30,6 +30,11 @@ type
   UtpSocketKey = object
     remoteAddress: TransportAddress
     rcvId: uint16
+  
+  OutgoingPacket = object
+    packetBytes: seq[byte]
+    transsmisions: uint16
+    needResend: bool
 
   UtpSocket* = ref object
     remoteAddress*: TransportAddress
@@ -55,7 +60,7 @@ type
     curWindowPackets: uint16
 
     # out going buffer for all send packets
-    outBuffer: GrowableCircularBuffer[Packet]
+    outBuffer: GrowableCircularBuffer[OutgoingPacket]
 
     # incoming buffer for out of order packets
     inBuffer: GrowableCircularBuffer[Packet]
@@ -93,11 +98,16 @@ const
   # adjusted based on traffic.
   mtuSize = 580
 
+  checkTimeoutsLoopInterval = milliseconds(500)
+
 proc new(T: type UtpSocketsContainerRef): T =
   UtpSocketsContainerRef(sockets: initTable[UtpSocketKey, UtpSocket]())
 
 proc init(T: type UtpSocketKey, remoteAddress: TransportAddress, rcvId: uint16): T =
   UtpSocketKey(remoteAddress: remoteAddress, rcvId: rcvId)
+
+proc init(T: type OutgoingPacket, packetBytes: seq[byte], transsmisions: uint16, needResend: bool): T =
+  OutgoingPacket(packetBytes: packetBytes, transsmisions: transsmisions, needResend: needResend)
 
 # This should probably be defined in TransportAddress module, as hash function should
 # be consitent with equality function
@@ -155,7 +165,7 @@ proc initOutgoingSocket(to: TransportAddress, p: UtpProtocol, rng: var BrHmacDrb
     connectionIdSnd: sndConnectionId,
     seqNr: initialSeqNr,
     connectionFuture: newFuture[UtpSocket](),
-    outBuffer: GrowableCircularBuffer[Packet].init(),
+    outBuffer: GrowableCircularBuffer[OutgoingPacket].init(),
     inBuffer: GrowableCircularBuffer[Packet].init(),
     # Default 1MB buffer
     # TODO add posibility to configure buffer size
@@ -173,7 +183,7 @@ proc initIncomingSocket(to: TransportAddress,  p: UtpProtocol, connectionId: uin
     seqNr: initialSeqNr,
     ackNr: ackNr,
     connectionFuture: newFuture[UtpSocket](),
-    outBuffer: GrowableCircularBuffer[Packet].init(),
+    outBuffer: GrowableCircularBuffer[OutgoingPacket].init(),
     inBuffer: GrowableCircularBuffer[Packet].init(),
     # Default 1MB buffer
     # TODO add posibility to configure buffer size
@@ -218,15 +228,6 @@ proc ackPackets(socket: UtpSocket, nrPacketsToAck: uint16) =
 proc getSocketKey(socket: UtpSocket): UtpSocketKey =
   UtpSocketKey.init(socket.remoteAddress, socket.connectionIdRcv)
 
-proc initSynPacket(socket: UtpSocket): seq[byte] =
-  assert(socket.state == SynSent)
-  let packet = synPacket(socket.seqNr, socket.connectionIdRcv, 1048576)
-  socket.outBuffer.ensureSize(socket.seqNr, socket.curWindowPackets)
-  socket.outBuffer.put(socket.seqNr, packet)
-  inc socket.seqNr
-  inc socket.curWindowPackets
-  encodePacket(packet)
-
 proc isConnected*(socket: UtpSocket): bool =
   socket.state == Connected
 
@@ -258,15 +259,19 @@ proc sendData(socket: UtpSocket, data: seq[byte]): Future[void] =
 proc sendPacket(socket: UtpSocket, packet: Packet): Future[void] =
   socket.sendData(encodePacket(packet))
 
+proc setSend(p: var OutgoingPacket): seq[byte] =
+  inc p.transsmisions
+  p.needResend = false
+  return p.packetBytes
+
 proc flushPackets(socket: UtpSocket) {.async.} =
   var i: uint16 = socket.seqNr - socket.curWindowPackets
   while i != socket.seqNr:
-    let maybePacket = socket.outBuffer.get(i)
-    if (maybePacket.isSome()):
-      let p = maybePacket.get()
-      # TODO we should keep encoded packets in outgoing buffer to avoid, re-encoding
-      # them with each resend
-      await socket.sendData(encodePacket(p))
+    # sending only packet which were not transmitted yet or need a resend
+    let shouldSendPacket = socket.outBuffer.exists(i, (p: OutgoingPacket) => (p.transsmisions == 0 or p.needResend == true))
+    if (shouldSendPacket):
+      let toSend = setSend(socket.outBuffer[i])
+      await socket.sendData(toSend)
     inc i
 
 proc getPacketSize(socket: UtpSocket): int =
@@ -292,7 +297,7 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[int] {.async.} =
     let dataSlice = data[i..lastOrEnd]
     let dataPacket = dataPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, 1048576, dataSlice)
     socket.outBuffer.ensureSize(socket.seqNr, socket.curWindowPackets)
-    socket.outBuffer.put(socket.seqNr, dataPacket)
+    socket.outBuffer.put(socket.seqNr, OutgoingPacket.init(encodePacket(dataPacket), 0, false))
     inc socket.seqNr
     inc socket.curWindowPackets
     bytesWritten = bytesWritten + len(dataSlice)
@@ -417,19 +422,43 @@ proc processPacket(prot: UtpProtocol, p: Packet, sender: TransportAddress) {.asy
       # TODO not implemented
       notice "Received not ST_SYN and socket is not know"
 
+proc initSynPacket(socket: UtpSocket): OutgoingPacket =
+  ## creates syncPacket based on socket current state and put it in its outgoing
+  ## buffer
+  doAssert(socket.state == SynSent)
+  let packet = synPacket(socket.seqNr, socket.connectionIdRcv, 1048576)
+  # set number of transmissions to 1 as syn packet will be send just after
+  # initiliazation
+  let outogoingPacket = OutgoingPacket.init(encodePacket(packet), 1, false)
+  socket.outBuffer.ensureSize(socket.seqNr, socket.curWindowPackets)
+  socket.outBuffer.put(socket.seqNr, outogoingPacket)
+  inc socket.seqNr
+  inc socket.curWindowPackets
+  outogoingPacket
+
 # Connect to provided address
 # Reference implementation: https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
 # TODO not implemented
 proc connectTo*(p: UtpProtocol, address: TransportAddress): Future[UtpSocket] =
   let socket = initOutgoingSocket(address, p, p.rng[])
   p.activeSockets.registerUtpSocket(socket.getSocketKey(), socket)
-  let synEncoded = socket.initSynPacket()
-  notice "Sending packet", packet = synEncoded
+  var outgoingSyn = socket.initSynPacket()
+  notice "Sending syn packet packet", packet = outgoingSyn
   # TODO add callback to handle errors and cancellation i.e unregister socket on
   # send error and finish connection future with failure
   # sending should be done from UtpSocketContext
-  discard socket.sendData(synEncoded)
+  discard socket.sendData(outgoingSyn.packetBytes)
   return socket.connectionFuture
+
+proc checkTimeoutsLoop(p: UtpProtocol) {.async.} =
+  ## Loop that check timeouts in each opened socket and clear up the sockets in 
+  ## destroy state (closed ones)
+  try:
+    while true:
+      let currentTime = Moment.now()
+      await sleepAsync(checkTimeoutsLoopInterval)
+  except CancelledError:
+    trace "checkTimeoutsLoop canceled"
 
 proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
     Future[void] {.async.} =

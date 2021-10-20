@@ -7,8 +7,13 @@
 {.used.}
 
 import
+  std/sugar,
   unittest,
   ../../eth/utp/growable_buffer
+
+
+type TestObj = object
+  foo: string
 
 suite "Utp ring buffer":
   test "Empty buffer":
@@ -29,6 +34,39 @@ suite "Utp ring buffer":
       buff.get(12) == some(12)
       buff.get(13) == some(13)
       buff.get(14) == some(14)
+
+  test "Modifing existing element in buffer":
+    var buff = GrowableCircularBuffer[TestObj].init(size = 4)
+    let oldText = "test"
+    let newText = "testChanged"
+
+    buff.put(11, TestObj(foo: oldText))
+
+    check:
+      buff.get(11).get() == TestObj(foo: oldText)
+
+    buff[11].foo = newText
+
+    check:
+      buff.get(11).get() == TestObj(foo: newText)
+
+  test "Checking if element exists and has some properties":
+    var buff = GrowableCircularBuffer[TestObj].init(size = 4)
+    let text = "test"
+    let textIdx = 11
+
+    check:
+      not buff.exists(textIdx, x => x.foo == text)
+
+    buff.put(textIdx, TestObj(foo: "old"))
+
+    check:
+      not buff.exists(textIdx, x => x.foo == text)
+
+    buff[textIdx].foo = text
+    
+    check:
+      buff.exists(textIdx, x => x.foo == text)
 
   test "Deleting elements from buffer":
     var buff = GrowableCircularBuffer[int].init(size = 4)

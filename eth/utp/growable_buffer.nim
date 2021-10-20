@@ -1,5 +1,5 @@
 import
-  std/[options, math]
+  std/[options, math, sugar]
 
 export options
 
@@ -10,9 +10,10 @@ export options
 # utp implementation.
 # Another alternative would be to use standard deque from deques module, and caluclate
 # item indexes from their sequence numbers.
-type GrowableCircularBuffer*[A] = object
-  items: seq[Option[A]]
-  mask: int
+type 
+  GrowableCircularBuffer*[A] = object
+    items: seq[Option[A]]
+    mask: int
 
 # provided size will always be adjusted to next power of two
 proc init*[A](T: type GrowableCircularBuffer[A], size: Natural = 16): T = 
@@ -33,6 +34,22 @@ proc put*[A](buff: var GrowableCircularBuffer[A], i: Natural, elem: A) =
 
 proc delete*[A](buff: var GrowableCircularBuffer[A], i: Natural) =
   buff.putImpl(i, none[A]())
+
+proc hasKey*[A](buff: GrowableCircularBuffer[A], i: Natural): bool =
+  buff.get(i).isSome()
+
+proc exists*[A](buff: GrowableCircularBuffer[A], i: Natural, check: proc (x: A): bool): bool =
+  let maybeElem = buff.get(i)
+  if (maybeElem.isSome()):
+    let elem = maybeElem.unsafeGet()
+    check(elem)
+  else:
+    false
+
+proc `[]`*[A](buff: var GrowableCircularBuffer[A], i: Natural): var A = 
+  ## Returns contents of the `var GrowableCircularBuffer`. If it is not set, then an exception
+  ## is thrown.
+  buff.items[i and buff.mask].get()
 
 proc len*[A](buff: GrowableCircularBuffer[A]): int =
   buff.mask + 1
