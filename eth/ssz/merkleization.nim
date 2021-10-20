@@ -567,8 +567,8 @@ func hashTreeRootAux[T](x: T): Digest =
           pos += sizeof(E)
     else:
       trs "FIXED TYPE; USE CHUNK STREAM"
-      var markleizer = createMerkleizer(maxChunksCount(T, Limit x.len))
-      chunkedHashTreeRootForBasicTypes(markleizer, x)
+      var merkleizer = createMerkleizer(maxChunksCount(T, Limit x.len))
+      chunkedHashTreeRootForBasicTypes(merkleizer, x)
   elif T is BitArray:
     hashTreeRootAux(x.bytes)
   elif T is array|object|tuple:
