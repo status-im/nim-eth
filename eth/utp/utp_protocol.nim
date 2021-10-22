@@ -101,6 +101,12 @@ type
   AckResult = enum
     PacketAcked, PacketAlreadyAcked, PacketNotSentYet
 
+  SocketConfig* = object
+    # This is configurable (in contrast to reference impl), as with standard 2 syn resends 
+    # default timeout set to 3seconds and doubling of timeout with each re-send, it
+    # means that initial connection would timeout after 21s, which seems rather long
+    initialSynTimeout*: Duration
+
   # For now utp protocol is tied to udp transport, but ultimatly we would like to
   # abstract underlying transport to be able to run utp over udp, discoveryv5 or
   # maybe some test transport
@@ -108,6 +114,7 @@ type
     transport: DatagramTransport
     activeSockets: UtpSocketsContainerRef
     acceptConnectionCb: AcceptConnectionCallback
+    socketConfig: SocketConfig
     rng*: ref BrHmacDrbgContext
 
   # New remote client connection callback
@@ -132,11 +139,8 @@ const
   # How often each socket check its different on going timers
   checkTimeoutsLoopInterval = milliseconds(500)
 
-  # Initial timeout for first Syn packet 
-  # TODO We may need to make this configurable, as with standard 2 syn resends and
-  # doubling of timeout in each re-send, this means that initial connection will
-  # timeout after 21s, which seems rather long
-  initialSendRetransmitTimeout = milliseconds(3000)
+  # Defualt initial timeout for first Syn packet 
+  defaultInitialSynTimeout = milliseconds(3000)
 
   # Initial timeout to receive first Data data packet after receiving initial Syn
   # packet. (TODO it should only be set when working over udp)
@@ -155,6 +159,9 @@ proc init(T: type OutgoingPacket, packetBytes: seq[byte], transsmisions: uint16,
     needResend: needResend,
     timeSent: timeSent
   )
+
+proc init*(T: type SocketConfig, initialSynTimeout: Duration = defaultInitialSynTimeout): T =
+  SocketConfig(initialSynTimeout: initialSynTimeout)
 
 # This should probably be defined in TransportAddress module, as hash function should
 # be consitent with equality function
@@ -214,12 +221,20 @@ proc registerUtpSocket(s: UtpSocketsContainerRef, k: UtpSocketKey, socket: UtpSo
 proc deRegisterUtpSocket(s: UtpSocketsContainerRef, k: UtpSocketKey) =
   s.sockets.del(k)
 
+iterator allSockets(s: UtpSocketsContainerRef): UtpSocket =
+  for socket in s.sockets.values():
+    yield socket
+
+proc len(s: UtpSocketsContainerRef): int =
+  len(s.sockets)
+
 # TODO extract similiar code between Outgoinhg and Incoming socket initialization
-proc initOutgoingSocket(to: TransportAddress, p: UtpProtocol, rng: var BrHmacDrbgContext): UtpSocket =
+proc initOutgoingSocket(to: TransportAddress, p: UtpProtocol, cfg: SocketConfig, rng: var BrHmacDrbgContext): UtpSocket =
   # TODO handle possible clashes and overflows
   let rcvConnectionId = randUint16(rng)
   let sndConnectionId = rcvConnectionId + 1
   let initialSeqNr = randUint16(rng)
+
   UtpSocket(
     remoteAddress: to,
     state: SynSent,
@@ -229,8 +244,8 @@ proc initOutgoingSocket(to: TransportAddress, p: UtpProtocol, rng: var BrHmacDrb
     connectionFuture: newFuture[UtpSocket](),
     outBuffer: GrowableCircularBuffer[OutgoingPacket].init(),
     inBuffer: GrowableCircularBuffer[Packet].init(),
-    retransmitTimeout: initialSendRetransmitTimeout,
-    rtoTimeout: Moment.now() + initialSendRetransmitTimeout,
+    retransmitTimeout: cfg.initialSynTimeout,
+    rtoTimeout: Moment.now() + cfg.initialSynTimeout,
     # Initial timeout values taken from reference implemntation
     rtt: milliseconds(0),
     rttVar: milliseconds(800),
@@ -520,6 +535,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       
       # resend oldest packet if there are some packets in flight
       if (socket.curWindowPackets > 0):
+        notice "resending oldest packet in outBuffer"
         inc socket.retransmitCount
         let oldestPacketSeqNr = socket.seqNr - socket.curWindowPackets
         # TODO add handling of fast timeout
@@ -667,10 +683,20 @@ proc initSynPacket(socket: UtpSocket): OutgoingPacket =
   inc socket.curWindowPackets
   outogoingPacket
 
+proc openSockets*(p: UtpProtocol): int =
+  ## Returns number of currently active sockets
+  len(p.activeSockets)
+
+proc close*(s: UtpSocket) =
+  # TODO Rething all this when working on FIN and RESET packets and proper handling
+  # of resources
+  s.checkTimeoutsLoop.cancel()
+  s.closeEvent.fire()
+
 # Connect to provided address
 # Reference implementation: https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
 proc connectTo*(p: UtpProtocol, address: TransportAddress): Future[UtpSocket] =
-  let socket = initOutgoingSocket(address, p, p.rng[])
+  let socket = initOutgoingSocket(address, p, p.socketConfig, p.rng[])
   let socketKey = socket.getSocketKey()
   p.activeSockets.registerUtpSocket(socketKey, socket)
   # whenever socket get permanently closed, deregister it
@@ -702,14 +728,24 @@ proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
 proc new*(
   T: type UtpProtocol, 
   acceptConnectionCb: AcceptConnectionCallback, 
-  address: TransportAddress, 
+  address: TransportAddress,
+  socketConfig: SocketConfig = SocketConfig.init(),
   rng = newRng()): UtpProtocol {.raises: [Defect, CatchableError].} =
   doAssert(not(isNil(acceptConnectionCb)))
   let activeSockets = UtpSocketsContainerRef.new()
-  let utp = UtpProtocol(activeSockets: activeSockets, acceptConnectionCb: acceptConnectionCb, rng: rng)
+  let utp = UtpProtocol(
+    activeSockets: activeSockets,
+    acceptConnectionCb: acceptConnectionCb,
+    socketConfig: socketConfig,
+    rng: rng
+  )
   let ta = newDatagramTransport(processDatagram, udata = utp, local = address)
   utp.transport = ta
   utp
 
-proc closeWait*(p: UtpProtocol): Future[void] =
-  p.transport.closeWait()
+proc closeWait*(p: UtpProtocol): Future[void] {.async.} =
+  # TODO Rething all this when working on FIN and RESET packets and proper handling
+  # of resources
+  await p.transport.closeWait()
+  for s in p.activeSockets.allSockets():
+    s.close()
