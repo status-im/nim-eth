@@ -197,7 +197,7 @@ proc hash(x: UtpSocketKey): Hash =
   !$h
 
 proc setCloseCallback(s: UtpSocket, cb: SocketCloseCallback) {.async.} =
-  ## Loop that check timeouts in each opened socket
+  ## Set callback which will be called whenever the socket is permanently closed
   try:
     await s.closeEvent.wait()
     cb()
@@ -550,7 +550,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
     # TODO add sending keep alives when necessary
 
 proc checkTimeoutsLoop(s: UtpSocket) {.async.} =
-  ## Loop that check timeouts in each opened socket
+  ## Loop that check timeoutsin the socket.
   try:
     while true:
       await sleepAsync(checkTimeoutsLoopInterval)
