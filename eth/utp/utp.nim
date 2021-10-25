@@ -37,7 +37,7 @@ when isMainModule:
   let helloUtp = "Helllo from nim implementation"
   let bytes = helloUtp.toBytes()
 
-  waitFor soc.write(bytes)
+  discard waitFor soc.write(bytes)
 
   runForever()
 

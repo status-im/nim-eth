@@ -80,6 +80,54 @@ procSuite "Utp protocol tests":
     await utpProt1.closeWait()
     await utpProt2.closeWait()
 
+  asyncTest "Fail to connect to offline remote host":
+    let server1Called = newAsyncEvent()
+    let address = initTAddress("127.0.0.1", 9079)
+    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address , SocketConfig.init(milliseconds(200)))
+
+    let address1 = initTAddress("127.0.0.1", 9080)
+
+    let fut = utpProt1.connectTo(address1)
+    
+    yield fut
+  
+    check:
+      fut.failed()
+    
+    await waitUntil(proc (): bool = utpProt1.openSockets() == 0)
+    
+    check:
+      utpProt1.openSockets() == 0
+
+    await utpProt1.closeWait()
+
+  asyncTest "Success connect to remote host which initialy was offline":
+    let server1Called = newAsyncEvent()
+    let address = initTAddress("127.0.0.1", 9079)
+    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address, SocketConfig.init(milliseconds(500)))
+
+    let address1 = initTAddress("127.0.0.1", 9080)
+    
+    let futSock = utpProt1.connectTo(address1)
+
+    # waiting 400 milisecond will trigger at least one re-send
+    await sleepAsync(milliseconds(400))
+
+    var server2Called = newAsyncEvent()
+    let utpProt2 = UtpProtocol.new(setAcceptedCallback(server2Called), address1)
+
+    # this future will be completed when we called accepted connection callback
+    await server2Called.wait()
+    
+    yield futSock
+
+    check:
+      futSock.finished() and (not futsock.failed()) and (not futsock.cancelled())
+      server2Called.isSet()
+
+    await utpProt1.closeWait()
+    await utpProt2.closeWait()
+
   asyncTest "Success data transfer when data fits into one packet":
     var server1Called = newAsyncEvent()
     let address = initTAddress("127.0.0.1", 9079)
