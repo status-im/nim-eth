@@ -33,7 +33,7 @@ type
   
   OutgoingPacket = object
     packetBytes: seq[byte]
-    transsmisions: uint16
+    transmissions: uint16
     needResend: bool
     timeSent: Moment
 
@@ -152,10 +152,10 @@ proc new(T: type UtpSocketsContainerRef): T =
 proc init(T: type UtpSocketKey, remoteAddress: TransportAddress, rcvId: uint16): T =
   UtpSocketKey(remoteAddress: remoteAddress, rcvId: rcvId)
 
-proc init(T: type OutgoingPacket, packetBytes: seq[byte], transsmisions: uint16, needResend: bool, timeSent: Moment = Moment.now()): T =
+proc init(T: type OutgoingPacket, packetBytes: seq[byte], transmissions: uint16, needResend: bool, timeSent: Moment = Moment.now()): T =
   OutgoingPacket(
     packetBytes: packetBytes,
-    transsmisions: transsmisions,
+    transmissions: transmissions,
     needResend: needResend,
     timeSent: timeSent
   )
@@ -327,7 +327,7 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16): AckResult =
   if packetOpt.isSome():
     let packet = packetOpt.get()
 
-    if packet.transsmisions == 0:
+    if packet.transmissions == 0:
       # according to reference impl it can happen when we get an ack_nr that 
       # does not exceed what we have stuffed into the outgoing buffer, 
       # but does exceed what we have sent
@@ -341,7 +341,7 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16): AckResult =
     # from spec: The rtt and rtt_var is only updated for packets that were sent only once. 
     # This avoids problems with figuring out which packet was acked, the first or the second one.
     # it is standard solution to retransmission ambiguity problem
-    if packet.transsmisions == 1:
+    if packet.transmissions == 1:
       socket.updateTimeouts(packet.timeSent, currentTime)
 
     socket.retransmitTimeout = socket.rto
@@ -406,7 +406,7 @@ proc sendPacket(socket: UtpSocket, packet: Packet): Future[void] =
 
 # Should be called before flushing data onto the socket
 proc setSend(p: var OutgoingPacket): seq[byte] =
-  inc p.transsmisions
+  inc p.transmissions
   p.needResend = false
   p.timeSent = Moment.now()
   return p.packetBytes
@@ -415,7 +415,7 @@ proc flushPackets(socket: UtpSocket) {.async.} =
   var i: uint16 = socket.seqNr - socket.curWindowPackets
   while i != socket.seqNr:
     # sending only packet which were not transmitted yet or need a resend
-    let shouldSendPacket = socket.outBuffer.exists(i, (p: OutgoingPacket) => (p.transsmisions == 0 or p.needResend == true))
+    let shouldSendPacket = socket.outBuffer.exists(i, (p: OutgoingPacket) => (p.transmissions == 0 or p.needResend == true))
     if (shouldSendPacket):
       let toSend = setSend(socket.outBuffer[i])
       await socket.sendData(toSend)
@@ -489,7 +489,7 @@ proc markAllPacketAsLost(s: UtpSocket) =
   while i < s.curWindowPackets:
 
     let packetSeqNr = s.seqNr - 1 - i
-    if (s.outBuffer.exists(packetSeqNr, (p: OutgoingPacket) => p.transsmisions > 0 and p.needResend == false)):
+    if (s.outBuffer.exists(packetSeqNr, (p: OutgoingPacket) => p. transmissions > 0 and p.needResend == false)):
       s.outBuffer[packetSeqNr].needResend = true
       # TODO here we should also decrease number of bytes in flight. This should be
       # done when working on congestion control
@@ -531,6 +531,10 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       socket.rtoTimeout = currentTime + newTimeout
       
       # TODO Add handling of congestion control 
+
+      # This will have much more sense when we will add handling of selective acks
+      # as then every selecivly acked packet restes timeout timer and removes packet
+      # from out buffer.
       markAllPacketAsLost(socket)
       
       # resend oldest packet if there are some packets in flight
@@ -676,12 +680,12 @@ proc initSynPacket(socket: UtpSocket): OutgoingPacket =
   let packet = synPacket(socket.seqNr, socket.connectionIdRcv, 1048576)
   # set number of transmissions to 1 as syn packet will be send just after
   # initiliazation
-  let outogoingPacket = OutgoingPacket.init(encodePacket(packet), 1, false)
+  let outgoingPacket = OutgoingPacket.init(encodePacket(packet), 1, false)
   socket.outBuffer.ensureSize(socket.seqNr, socket.curWindowPackets)
-  socket.outBuffer.put(socket.seqNr, outogoingPacket)
+  socket.outBuffer.put(socket.seqNr, outgoingPacket)
   inc socket.seqNr
   inc socket.curWindowPackets
-  outogoingPacket
+  outgoingPacket
 
 proc openSockets*(p: UtpProtocol): int =
   ## Returns number of currently active sockets
