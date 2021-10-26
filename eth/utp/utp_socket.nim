@@ -130,7 +130,6 @@ const
   # packet. (TODO it should only be set when working over udp)
   initialRcvRetransmitTimeout = milliseconds(10000)
 
-
 proc init*(T: type UtpSocketKey, remoteAddress: TransportAddress, rcvId: uint16): T =
   UtpSocketKey(remoteAddress: remoteAddress, rcvId: rcvId)
 

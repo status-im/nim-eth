@@ -8,6 +8,7 @@
 
 import 
   chronos, stew/byteutils,
+  ./utp_socket,
   ./utp_protocol
 
 # Exemple application to interact with reference implementation server to help with implementation

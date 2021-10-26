@@ -10,7 +10,7 @@ import
   sequtils,
   chronos, bearssl,
   testutils/unittests,
-  ../../eth/utp/utp_socket,
+  ../../eth/utp/utp_router,
   ../../eth/utp/utp_protocol,
   ../../eth/keys
   
@@ -88,7 +88,7 @@ procSuite "Utp protocol tests":
 
   proc setAcceptedCallback(event: AsyncEvent): AcceptConnectionCallback =
     return (
-      proc(server: UtpProtocol, client: UtpSocket): Future[void] =
+      proc(server: UtpRouter, client: UtpSocket): Future[void] =
         let fut = newFuture[void]()
         event.fire()
         fut.complete()
@@ -97,7 +97,7 @@ procSuite "Utp protocol tests":
 
   proc setIncomingSocketCallback(socketPromise: Future[UtpSocket]): AcceptConnectionCallback =
     return (
-      proc(server: UtpProtocol, client: UtpSocket): Future[void] =
+      proc(server: UtpRouter, client: UtpSocket): Future[void] =
         let fut = newFuture[void]()
         socketPromise.complete(client)
         fut.complete()
@@ -106,7 +106,7 @@ procSuite "Utp protocol tests":
   
   proc registerIncomingSocketCallback(serverSockets: AsyncQueue): AcceptConnectionCallback =
     return (
-      proc(server: UtpProtocol, client: UtpSocket): Future[void] =
+      proc(server: UtpRouter, client: UtpSocket): Future[void] =
         serverSockets.addLast(client)
     )
 
