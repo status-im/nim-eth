@@ -21,19 +21,52 @@ type
   # maybe some test transport
   UtpProtocol* = ref object
     transport: DatagramTransport
-    utpRouter: UtpRouter
+    utpRouter: UtpRouter[TransportAddress]
+
+# This should probably be defined in TransportAddress module, as hash function should
+# be consitent with equality function
+# in nim zero arrays always have hash equal to 0, irrespectively of array size, to
+# avoid clashes betweend different types of addresses, each type have mixed different
+# magic number
+proc hash(x: TransportAddress): Hash =
+  var h: Hash = 0
+  case x.family
+  of AddressFamily.None:
+    h = h !& 31
+    !$h
+  of AddressFamily.IPv4:
+    h = h !& x.address_v4.hash
+    h = h !& x.port.hash
+    h = h !& 37
+    !$h
+  of AddressFamily.IPv6:
+    h = h !& x.address_v6.hash
+    h = h !& x.port.hash
+    h = h !& 41
+    !$h
+  of AddressFamily.Unix:
+    h = h !& x.address_un.hash
+    h = h !& 43
+    !$h
+
+# Required to use socketKey as key in hashtable
+proc hash(x: UtpSocketKey[TransportAddress]): Hash =
+  var h = 0
+  h = h !& x.remoteAddress.hash
+  h = h !& x.rcvId.hash
+  !$h
 
 proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
     Future[void] {.async.} =
-  let router = getUserData[UtpRouter](transp)
+  let router = getUserData[UtpRouter[TransportAddress]](transp)
   # TODO: should we use `peekMessage()` to avoid allocation?
   let buf = try: transp.getMessage()
             except TransportOsError as e:
               # This is likely to be local network connection issues.
               return
-  await router.processIncomingBytes(buf, raddr)
+  await processIncomingBytes[TransportAddress](router, buf, raddr)
 
-proc initSendCallback(t: DatagramTransport): SendCallback =
+proc initSendCallback(t: DatagramTransport): SendCallback[TransportAddress] =
   return (
     proc (to: TransportAddress, data: seq[byte]): Future[void] = 
       t.sendTo(to, data)
@@ -41,13 +74,14 @@ proc initSendCallback(t: DatagramTransport): SendCallback =
 
 proc new*(
   T: type UtpProtocol, 
-  acceptConnectionCb: AcceptConnectionCallback, 
+  acceptConnectionCb: AcceptConnectionCallback[TransportAddress], 
   address: TransportAddress,
   socketConfig: SocketConfig = SocketConfig.init(),
   rng = newRng()): UtpProtocol {.raises: [Defect, CatchableError].} =
+  
   doAssert(not(isNil(acceptConnectionCb)))
 
-  let router = UtpRouter.new(
+  let router = UtpRouter[TransportAddress].new(
     acceptConnectionCb,
     socketConfig,
     rng
@@ -63,8 +97,8 @@ proc closeWait*(p: UtpProtocol): Future[void] {.async.} =
   await p.transport.closeWait()
   p.utpRouter.close()
 
-proc connectTo*(r: UtpProtocol, address: TransportAddress): Future[UtpSocket] {.async.} =
-  return await r.utpRouter.connectTo(address)
+proc connectTo*(r: UtpProtocol, address: TransportAddress): Future[UtpSocket[TransportAddress]] =
+  return r.utpRouter.connectTo(address)
 
 proc openSockets*(r: UtpProtocol): int =
   len(r.utpRouter)

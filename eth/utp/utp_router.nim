@@ -1,5 +1,5 @@
 import
-  std/[tables, options, hashes],
+  std/[tables, options],
   chronos, bearssl, chronicles,
   ../keys,
   ./utp_socket,
@@ -14,93 +14,60 @@ type
   # New remote client connection callback
   # ``server`` - UtpProtocol object.
   # ``client`` - accepted client utp socket.
-  AcceptConnectionCallback* = proc(server: UtpRouter,
-                         client: UtpSocket): Future[void] {.gcsafe, raises: [Defect].}
+  AcceptConnectionCallback*[A] = proc(server: UtpRouter[A],
+                         client: UtpSocket[A]): Future[void] {.gcsafe, raises: [Defect].}
 
   # Oject responsible for creating and maintaing table of of utp sockets.
   # caller should use `processIncomingBytes` proc to feed it with incoming byte 
   # packets, based this input, proper utp sockets will be created, closed, or will
   # receive data 
-  UtpRouter* = ref object
-   sockets: Table[UtpSocketKey, UtpSocket]
+  UtpRouter*[A] = ref object
+   sockets: Table[UtpSocketKey[A], UtpSocket[A]]
    socketConfig: SocketConfig
-   acceptConnection: AcceptConnectionCallback
-   sendCb*: SendCallback
+   acceptConnection: AcceptConnectionCallback[A]
+   sendCb*: SendCallback[A]
    rng*: ref BrHmacDrbgContext
 
-# This should probably be defined in TransportAddress module, as hash function should
-# be consitent with equality function
-# in nim zero arrays always have hash equal to 0, irrespectively of array size, to
-# avoid clashes betweend different types of addresses, each type have mixed different
-# magic number
-proc hash(x: TransportAddress): Hash =
-  var h: Hash = 0
-  case x.family
-  of AddressFamily.None:
-    h = h !& 31
-    !$h
-  of AddressFamily.IPv4:
-    h = h !& x.address_v4.hash
-    h = h !& x.port.hash
-    h = h !& 37
-    !$h
-  of AddressFamily.IPv6:
-    h = h !& x.address_v6.hash
-    h = h !& x.port.hash
-    h = h !& 41
-    !$h
-  of AddressFamily.Unix:
-    h = h !& x.address_un.hash
-    h = h !& 43
-    !$h
-
-# Required to use socketKey as key in hashtable
-proc hash(x: UtpSocketKey): Hash =
-  var h = 0
-  h = h !& x.remoteAddress.hash
-  h = h !& x.rcvId.hash
-  !$h
-
-proc getUtpSocket(s: UtpRouter, k: UtpSocketKey): Option[UtpSocket] =
+proc getUtpSocket[A](s: UtpRouter[A], k: UtpSocketKey[A]): Option[UtpSocket[A]] =
   let s = s.sockets.getOrDefault(k)
   if s == nil:
-    none[UtpSocket]()
+    none[UtpSocket[A]]()
   else:
     some(s)
 
-proc deRegisterUtpSocket(s: UtpRouter, socket: UtpSocket) =
+proc deRegisterUtpSocket[A](s: UtpRouter[A], socket: UtpSocket[A]) =
   s.sockets.del(socket.socketKey)
 
-iterator allSockets(s: UtpRouter): UtpSocket =
+iterator allSockets[A](s: UtpRouter[A]): UtpSocket[A] =
   for socket in s.sockets.values():
     yield socket
 
-proc len*(s: UtpRouter): int =
+proc len*[A](s: UtpRouter[A]): int =
   len(s.sockets)
 
-proc registerUtpSocket(p: UtpRouter, s: UtpSocket) =
+proc registerUtpSocket[A](p: UtpRouter, s: UtpSocket[A]) =
   # TODO Handle duplicates
   p.sockets[s.socketKey] = s
   # Install deregister handler, so when socket will get closed, in will be promptly
   # removed from open sockets table
   s.registerCloseCallback(proc () = p.deRegisterUtpSocket(s))
 
-proc new*(
-  T: type UtpRouter, 
-  acceptConnectionCb: AcceptConnectionCallback, 
+proc new*[A](
+  T: type UtpRouter[A], 
+  acceptConnectionCb: AcceptConnectionCallback[A], 
   socketConfig: SocketConfig = SocketConfig.init(),
-  rng = newRng()): UtpRouter {.raises: [Defect, CatchableError].} =
+  rng = newRng()): UtpRouter[A] {.raises: [Defect, CatchableError].} =
   doAssert(not(isNil(acceptConnectionCb)))
-  UtpRouter(
-    sockets: initTable[UtpSocketKey, UtpSocket](),
+  UtpRouter[A](
+    sockets: initTable[UtpSocketKey[A], UtpSocket[A]](),
     acceptConnection: acceptConnectionCb,
     socketConfig: socketConfig,
     rng: rng
   )
 
-proc processPacket(r: UtpRouter, p: Packet, sender: TransportAddress) {.async.}=
+proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
   notice "Received packet ", packet = p
-  let socketKey = UtpSocketKey.init(sender, p.header.connectionId)
+  let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId)
   let maybeSocket = r.getUtpSocket(socketKey)
 
   if (maybeSocket.isSome()):
@@ -111,9 +78,9 @@ proc processPacket(r: UtpRouter, p: Packet, sender: TransportAddress) {.async.}=
     # SynPacket we should reject it and send rst packet to sender in some cases
     if (p.header.pType == ST_SYN):
       # Initial ackNr is set to incoming packer seqNr
-      let incomingSocket = initIncomingSocket(sender, r.sendCb, p.header.connectionId, p.header.seqNr, r.rng[])
-      await incomingSocket.startIncomingSocket()
+      let incomingSocket = initIncomingSocket[A](sender, r.sendCb, p.header.connectionId, p.header.seqNr, r.rng[])
       r.registerUtpSocket(incomingSocket)
+      await incomingSocket.startIncomingSocket()
       # TODO By default (when we have utp over udp) socket here is passed to upper layer
       # in SynRecv state, which is not writeable i.e user of socket cannot write
       # data to it unless some data will be received. This is counter measure to
@@ -126,23 +93,23 @@ proc processPacket(r: UtpRouter, p: Packet, sender: TransportAddress) {.async.}=
       # TODO not implemented
       notice "Received not ST_SYN and socket is not know"
 
-proc processIncomingBytes*(r: UtpRouter, bytes: seq[byte], sender: TransportAddress) {.async.} = 
+proc processIncomingBytes*[A](r: UtpRouter[A], bytes: seq[byte], sender: A) {.async.} = 
   let dec = decodePacket(bytes)
   if (dec.isOk()):
-    await r.processPacket(dec.get(), sender)
+    await processPacket[A](r, dec.get(), sender)
   else:
     warn "failed to decode packet from address", address = sender
 
 # Connect to provided address
 # Reference implementation: https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
-proc connectTo*(r: UtpRouter, address: TransportAddress): Future[UtpSocket] {.async.}=
-  let socket = initOutgoingSocket(address, r.sendCb, r.socketConfig, r.rng[])
+proc connectTo*[A](r: UtpRouter[A], address: A): Future[UtpSocket[A]] {.async.}=
+  let socket = initOutgoingSocket[A](address, r.sendCb, r.socketConfig, r.rng[])
   await socket.startOutgoingSocket()
   r.registerUtpSocket(socket)
   await socket.waitFotSocketToConnect()
   return socket
 
-proc close*(r: UtpRouter) =
+proc close*[A](r: UtpRouter[A]) =
   # TODO Rething all this when working on FIN and RESET packets and proper handling
   # of resources
   for s in r.allSockets():

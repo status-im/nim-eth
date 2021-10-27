@@ -24,8 +24,8 @@ type
     Reset,
     Destroy
 
-  UtpSocketKey* = object
-    remoteAddress*: TransportAddress
+  UtpSocketKey*[A] = object
+    remoteAddress*: A
     rcvId*: uint16
   
   OutgoingPacket = object
@@ -38,10 +38,10 @@ type
     PacketAcked, PacketAlreadyAcked, PacketNotSentYet
 
   # Socket callback to send data to remote peer
-  SendCallback* = proc (to: TransportAddress, data: seq[byte]): Future[void] {.gcsafe, raises: [Defect]}
+  SendCallback*[A] = proc (to: A, data: seq[byte]): Future[void] {.gcsafe, raises: [Defect]}
 
-  UtpSocket* = ref object
-    remoteAddress*: TransportAddress
+  UtpSocket*[A] = ref object
+    remoteAddress*: A
     state: ConnectionState
     # Connection id for packets we receive
     connectionIdRcv: uint16
@@ -97,9 +97,9 @@ type
     closeCallbacks: seq[Future[void]]
 
     # socket identifier
-    socketKey*: UtpSocketKey
+    socketKey*: UtpSocketKey[A]
 
-    send: SendCallback
+    send: SendCallback[A]
 
   SocketConfig* = object
     # This is configurable (in contrast to reference impl), as with standard 2 syn resends 
@@ -130,8 +130,8 @@ const
   # packet. (TODO it should only be set when working over udp)
   initialRcvRetransmitTimeout = milliseconds(10000)
 
-proc init*(T: type UtpSocketKey, remoteAddress: TransportAddress, rcvId: uint16): T =
-  UtpSocketKey(remoteAddress: remoteAddress, rcvId: rcvId)
+proc init*[A](T: type UtpSocketKey, remoteAddress: A, rcvId: uint16): T =
+  UtpSocketKey[A](remoteAddress: remoteAddress, rcvId: rcvId)
 
 proc init(T: type OutgoingPacket, packetBytes: seq[byte], transmissions: uint16, needResend: bool, timeSent: Moment = Moment.now()): T =
   OutgoingPacket(
@@ -277,10 +277,10 @@ proc checkTimeoutsLoop(s: UtpSocket) {.async.} =
 proc startTimeoutLoop(s: UtpSocket) =
   s.checkTimeoutsLoop = checkTimeoutsLoop(s)
 
-proc new(
-  T: type UtpSocket,
-  to: TransportAddress,
-  snd: SendCallback,
+proc new[A](
+  T: type UtpSocket[A],
+  to: A,
+  snd: SendCallback[A],
   state: ConnectionState,
   initialTimeout: Duration,
   rcvId: uint16,
@@ -313,18 +313,18 @@ proc new(
     send: snd
   )
 
-proc initOutgoingSocket*(
-  to: TransportAddress,
-  snd: SendCallback,
+proc initOutgoingSocket*[A](
+  to: A,
+  snd: SendCallback[A],
   cfg: SocketConfig,
   rng: var BrHmacDrbgContext
-): UtpSocket =
+): UtpSocket[A] =
   # TODO handle possible clashes and overflows
   let rcvConnectionId = randUint16(rng)
   let sndConnectionId = rcvConnectionId + 1
   let initialSeqNr = randUint16(rng)
 
-  UtpSocket.new(
+  UtpSocket[A].new(
     to,
     snd,
     SynSent,
@@ -336,16 +336,16 @@ proc initOutgoingSocket*(
     0
   )
 
-proc initIncomingSocket*(
-  to: TransportAddress,
-  snd: SendCallback,
+proc initIncomingSocket*[A](
+  to: A,
+  snd: SendCallback[A],
   connectionId: uint16,
   ackNr: uint16,
   rng: var BrHmacDrbgContext
-): UtpSocket =
+): UtpSocket[A] =
   let initialSeqNr = randUint16(rng)
 
-  UtpSocket.new(
+  UtpSocket[A].new(
     to,
     snd,
     SynRecv,
