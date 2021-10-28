@@ -10,6 +10,7 @@ import
   sequtils,
   chronos, bearssl,
   testutils/unittests,
+  ../../eth/utp/utp_router,
   ../../eth/utp/utp_protocol,
   ../../eth/keys
   
@@ -20,6 +21,21 @@ proc generateByteArray(rng: var BrHmacDrbgContext, length: int): seq[byte] =
 
 type AssertionCallback = proc(): bool {.gcsafe, raises: [Defect].}
 
+proc setAcceptedCallback(event: AsyncEvent): AcceptConnectionCallback[TransportAddress] =
+  return (
+    proc(server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] =
+      let fut = newFuture[void]()
+      event.fire()
+      fut.complete()
+      fut
+  )
+
+proc registerIncomingSocketCallback(serverSockets: AsyncQueue): AcceptConnectionCallback[TransportAddress] =
+  return (
+    proc(server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] =
+      serverSockets.addLast(client)
+  )
+
 proc waitUntil(f: AssertionCallback): Future[void] {.async.} =
   while true:
     let res = f()
@@ -28,32 +44,89 @@ proc waitUntil(f: AssertionCallback): Future[void] {.async.} =
     else:
       await sleepAsync(milliseconds(50))
 
-proc transferData(sender: UtpSocket, receiver: UtpSocket, data: seq[byte]): Future[seq[byte]] {.async.}=
+proc transferData(sender: UtpSocket[TransportAddress], receiver: UtpSocket[TransportAddress], data: seq[byte]): Future[seq[byte]] {.async.}=
   let bytesWritten = await sender.write(data)
   doAssert bytesWritten == len(data)
   let received = await receiver.read(len(data))
   return received
 
-procSuite "Utp protocol tests":
+type 
+  ClientServerScenario = object
+    utp1: UtpProtocol
+    utp2: UtpProtocol
+    clientSocket: UtpSocket[TransportAddress]
+    serverSocket: UtpSocket[TransportAddress]
+
+  TwoClientsServerScenario = object
+    utp1: UtpProtocol
+    utp2: UtpProtocol
+    utp3: UtpProtocol
+    clientSocket1: UtpSocket[TransportAddress]
+    clientSocket2: UtpSocket[TransportAddress]
+    serverSocket1: UtpSocket[TransportAddress]
+    serverSocket2: UtpSocket[TransportAddress]
+
+proc initClientServerScenario(): Future[ClientServerScenario] {.async.} =
+  let q = newAsyncQueue[UtpSocket[TransportAddress]]()
+  var server1Called = newAsyncEvent()
+  let address = initTAddress("127.0.0.1", 9079)
+  let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address)
+
+  let address1 = initTAddress("127.0.0.1", 9080)
+  let utpProt2 = UtpProtocol.new(registerIncomingSocketCallback(q), address1)
+  let clientSocket = await utpProt1.connectTo(address1)
+    # this future will be completed when we called accepted connection callback
+  let serverSocket = await q.popFirst()
+
+  return ClientServerScenario(
+    utp1: utpProt1,
+    utp2: utpProt2,
+    clientSocket: clientSocket,
+    serverSocket: serverSocket
+  )
+
+proc close(s: ClientServerScenario) {.async.} =
+  await s.utp1.closeWait()
+  await s.utp2.closeWait()
+
+proc init2ClientsServerScenario(): Future[TwoClientsServerScenario] {.async.} =
+  var serverSockets = newAsyncQueue[UtpSocket[TransportAddress]]()
+  var server1Called = newAsyncEvent()
+  let address1 = initTAddress("127.0.0.1", 9079)
+  let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address1)
+
+  let address2 = initTAddress("127.0.0.1", 9080)
+  let utpProt2 = UtpProtocol.new(registerIncomingSocketCallback(serverSockets), address2)
+
+  let address3 = initTAddress("127.0.0.1", 9081)
+  let utpProt3 = UtpProtocol.new(registerIncomingSocketCallback(serverSockets), address3)
+  
+  let clientSocket1 = await utpProt1.connectTo(address2)
+  let clientSocket2 = await utpProt1.connectTo(address3)
+
+  await waitUntil(proc (): bool = len(serverSockets) == 2)
+
+  # this future will be completed when we called accepted connection callback
+  let serverSocket1 = serverSockets[0]
+  let serverSocket2 = serverSockets[1]
+
+  return TwoClientsServerScenario(
+    utp1: utpProt1,
+    utp2: utpProt2,
+    utp3: utpProt3,
+    clientSocket1: clientSocket1,
+    clientSocket2: clientSocket2,
+    serverSocket1: serverSocket1,
+    serverSocket2: serverSocket2
+  )
+
+proc close(s: TwoClientsServerScenario) {.async.} =
+  await s.utp1.closeWait()
+  await s.utp2.closeWait()
+  await s.utp3.closeWait()
+
+procSuite "Utp protocol over udp tests":
   let rng = newRng()
-
-  proc setAcceptedCallback(event: AsyncEvent): AcceptConnectionCallback =
-    return (
-      proc(server: UtpProtocol, client: UtpSocket): Future[void] =
-        let fut = newFuture[void]()
-        event.fire()
-        fut.complete()
-        fut
-    )
-
-  proc setIncomingSocketCallback(socketPromise: Future[UtpSocket]): AcceptConnectionCallback =
-    return (
-      proc(server: UtpProtocol, client: UtpSocket): Future[void] =
-        let fut = newFuture[void]()
-        socketPromise.complete(client)
-        fut.complete()
-        fut
-    )
 
   asyncTest "Success connect to remote host":
     let server1Called = newAsyncEvent()
@@ -129,148 +202,119 @@ procSuite "Utp protocol tests":
     await utpProt2.closeWait()
 
   asyncTest "Success data transfer when data fits into one packet":
-    var server1Called = newAsyncEvent()
-    let address = initTAddress("127.0.0.1", 9079)
-    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address)
-
-    var serverSocketFut = newFuture[UtpSocket]()
-    let address1 = initTAddress("127.0.0.1", 9080)
-    let utpProt2 = UtpProtocol.new(setIncomingSocketCallback(serverSocketFut), address1)
-
-    let clientSocket = await utpProt1.connectTo(address1)
-
-    # this future will be completed when we called accepted connection callback
-    discard await serverSocketFut
-
-    let serverSocket = 
-      try:
-        serverSocketFut.read()
-      except:
-        raiseAssert "Unexpected error when reading finished future"
-
+    let s = await initClientServerScenario()
+    
     check:
-      clientSocket.isConnected()
+      s.clientSocket.isConnected()
       # after successful connection outgoing buffer should be empty as syn packet
       # should be correctly acked
-      clientSocket.numPacketsInOutGoingBuffer() == 0
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
 
       # Server socket is not in connected state, until first data transfer
-      (not serverSocket.isConnected())
+      (not s.serverSocket.isConnected())
 
     let bytesToTransfer = generateByteArray(rng[], 100)
 
-    let bytesReceivedFromClient = await transferData(clientSocket, serverSocket, bytesToTransfer)
+    let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
 
     check:
       bytesToTransfer == bytesReceivedFromClient
-      serverSocket.isConnected()
+      s.serverSocket.isConnected()
 
-    let bytesReceivedFromServer = await transferData(serverSocket, clientSocket, bytesToTransfer)
+    let bytesReceivedFromServer = await transferData(s.serverSocket, s.clientSocket, bytesToTransfer)
 
     check:
       bytesToTransfer == bytesReceivedFromServer
 
-    await utpProt1.closeWait()
-    await utpProt2.closeWait()
+    await s.close()
 
   asyncTest "Success data transfer when data need to be sliced into multiple packets":
-    var server1Called = newAsyncEvent()
-    let address = initTAddress("127.0.0.1", 9079)
-    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address)
-
-    var serverSocketFut = newFuture[UtpSocket]()
-    let address1 = initTAddress("127.0.0.1", 9080)
-    let utpProt2 = UtpProtocol.new(setIncomingSocketCallback(serverSocketFut), address1)
-
-    let clientSocket = await utpProt1.connectTo(address1)
-
-    # this future will be completed when we called accepted connection callback
-    discard await serverSocketFut
-
-    let serverSocket = 
-      try:
-        serverSocketFut.read()
-      except:
-        raiseAssert "Unexpected error when reading finished future"
-
+    let s = await initClientServerScenario()
+    
     check:
-      clientSocket.isConnected()
+      s.clientSocket.isConnected()
       # after successful connection outgoing buffer should be empty as syn packet
       # should be correctly acked
-      clientSocket.numPacketsInOutGoingBuffer() == 0
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
 
-      (not serverSocket.isConnected())
+      (not s.serverSocket.isConnected())
 
     # 5000 bytes is over maximal packet size
     let bytesToTransfer = generateByteArray(rng[], 5000)
     
-    let bytesReceivedFromClient = await transferData(clientSocket, serverSocket, bytesToTransfer)
-    let bytesReceivedFromServer = await transferData(serverSocket, clientSocket, bytesToTransfer)
+    let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
+    let bytesReceivedFromServer = await transferData(s.serverSocket, s.clientSocket, bytesToTransfer)
 
     # ultimatly all send packets will acked, and outgoing buffer will be empty
-    await waitUntil(proc (): bool = clientSocket.numPacketsInOutGoingBuffer() == 0)
-    await waitUntil(proc (): bool = serverSocket.numPacketsInOutGoingBuffer() == 0)
+    await waitUntil(proc (): bool = s.clientSocket.numPacketsInOutGoingBuffer() == 0)
+    await waitUntil(proc (): bool = s.serverSocket.numPacketsInOutGoingBuffer() == 0)
 
     check:
-      serverSocket.isConnected()
-      clientSocket.numPacketsInOutGoingBuffer() == 0
-      serverSocket.numPacketsInOutGoingBuffer() == 0
+      s.serverSocket.isConnected()
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
+      s.serverSocket.numPacketsInOutGoingBuffer() == 0
       bytesReceivedFromClient == bytesToTransfer
       bytesReceivedFromServer == bytesToTransfer
 
-    await utpProt1.closeWait()
-    await utpProt2.closeWait()
+    await s.close()
 
   asyncTest "Success multiple data transfers when data need to be sliced into multiple packets":
-    var server1Called = newAsyncEvent()
-    let address = initTAddress("127.0.0.1", 9079)
-    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address)
-
-    var serverSocketFut = newFuture[UtpSocket]()
-    let address1 = initTAddress("127.0.0.1", 9080)
-    let utpProt2 = UtpProtocol.new(setIncomingSocketCallback(serverSocketFut), address1)
-
-    let clientSocket = await utpProt1.connectTo(address1)
-
-    # this future will be completed when we called accepted connection callback
-    discard await serverSocketFut
-
-    let serverSocket = 
-      try:
-        serverSocketFut.read()
-      except:
-        raiseAssert "Unexpected error when reading finished future"
+    let s = await initClientServerScenario()
 
     check:
-      clientSocket.isConnected()
+      s.clientSocket.isConnected()
       # after successful connection outgoing buffer should be empty as syn packet
       # should be correctly acked
-      clientSocket.numPacketsInOutGoingBuffer() == 0
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
 
 
     # 5000 bytes is over maximal packet size
     let bytesToTransfer = generateByteArray(rng[], 5000)
     
-    let written = await clientSocket.write(bytesToTransfer)
+    let written = await s.clientSocket.write(bytesToTransfer)
 
     check:
       written == len(bytesToTransfer)
 
     let bytesToTransfer1 = generateByteArray(rng[], 5000)
 
-    let written1 = await clientSocket.write(bytesToTransfer1)
+    let written1 = await s.clientSocket.write(bytesToTransfer1)
 
     check:
       written1 == len(bytesToTransfer)
 
-    let bytesReceived = await serverSocket.read(len(bytesToTransfer) + len(bytesToTransfer1))
+    let bytesReceived = await s.serverSocket.read(len(bytesToTransfer) + len(bytesToTransfer1))
     
     # ultimatly all send packets will acked, and outgoing buffer will be empty
-    await waitUntil(proc (): bool = clientSocket.numPacketsInOutGoingBuffer() == 0)
+    await waitUntil(proc (): bool = s.clientSocket.numPacketsInOutGoingBuffer() == 0)
 
     check:
-      clientSocket.numPacketsInOutGoingBuffer() == 0
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
       bytesToTransfer.concat(bytesToTransfer1) == bytesReceived
+
+    await s.close()
+
+  asyncTest "Success data transfers from multiple clients":
+    let s = await init2ClientsServerScenario()
     
-    await utpProt1.closeWait()
-    await utpProt2.closeWait()
+    check:
+      s.clientSocket1.isConnected()
+      s.clientSocket2.isConnected()
+      s.clientSocket1.numPacketsInOutGoingBuffer() == 0
+      s.clientSocket2.numPacketsInOutGoingBuffer() == 0
+    
+    let numBytesToTransfer = 5000
+    let client1Data = generateByteArray(rng[], numBytesToTransfer)
+    let client2Data = generateByteArray(rng[], numBytesToTransfer)
+
+    discard s.clientSocket1.write(client1Data)
+    discard s.clientSocket2.write(client2Data)
+    
+    let server1ReadBytes = await s.serverSocket1.read(numBytesToTransfer)
+    let server2ReadBytes = await s.serverSocket2.read(numBytesToTransfer)
+
+    check:
+      client1Data == server1ReadBytes
+      client2Data == server2ReadBytes
+
+    await s.close()

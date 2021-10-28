@@ -9,4 +9,5 @@
 import
   ./test_packets,
   ./test_protocol,
+  ./test_discv5_protocol,
   ./test_buffer
