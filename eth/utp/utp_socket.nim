@@ -476,6 +476,8 @@ proc ackPackets(socket: UtpSocket, nrPacketsToAck: uint16) =
 
     inc i
 
+# TODO at socket level we should handle only FIN/DATA/ACK packets. Refactor to make
+# it enforcable by type system
 proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   ## Updates socket state based on received packet, and sends ack when necessary.
   ## Shoyuld be called in main packet receiving loop

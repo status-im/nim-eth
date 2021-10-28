@@ -70,13 +70,18 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
   let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId)
   let maybeSocket = r.getUtpSocket(socketKey)
 
-  if (maybeSocket.isSome()):
-    let socket = maybeSocket.unsafeGet()
-    await socket.processPacket(p)
-  else:
-    # We got packet for which we do not have active socket. If the packet is not a
-    # SynPacket we should reject it and send rst packet to sender in some cases
-    if (p.header.pType == ST_SYN):
+  case p.header.pType
+  of ST_RESET:
+    # TODO Properly handle Reset packet, and close socket
+    notice "Received RESET packet"
+  of ST_SYN:
+    # Syn packet are special, and we need to add 1 to header connectionId
+    let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId + 1)
+    let maybeSocket = r.getUtpSocket(socketKey)
+    if (maybeSocket.isSome()):
+      notice "Ignoring SYN for already existing connection"
+    else:
+      notice "Received SYN for not known connection. Initiating incoming connection"
       # Initial ackNr is set to incoming packer seqNr
       let incomingSocket = initIncomingSocket[A](sender, r.sendCb, p.header.connectionId, p.header.seqNr, r.rng[])
       r.registerUtpSocket(incomingSocket)
@@ -88,10 +93,15 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       # During integration with discovery v5 (i.e utp over discovv5), we must re-think
       # this.
       asyncSpawn r.acceptConnection(r, incomingSocket)
-      notice "Received ST_SYN and socket is not known"
+  else:
+    let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId)
+    let maybeSocket = r.getUtpSocket(socketKey)
+    if (maybeSocket.isSome()):
+      let socket = maybeSocket.unsafeGet()
+      await socket.processPacket(p)
     else:
-      # TODO not implemented
-      notice "Received not ST_SYN and socket is not know"
+      # TODO add handling of respondig with reset
+      notice "Recevied FIN/DATA/ACK on not known socket"
 
 proc processIncomingBytes*[A](r: UtpRouter[A], bytes: seq[byte], sender: A) {.async.} = 
   let dec = decodePacket(bytes)
