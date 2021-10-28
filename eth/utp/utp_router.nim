@@ -114,8 +114,8 @@ proc processIncomingBytes*[A](r: UtpRouter[A], bytes: seq[byte], sender: A) {.as
 # Reference implementation: https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
 proc connectTo*[A](r: UtpRouter[A], address: A): Future[UtpSocket[A]] {.async.}=
   let socket = initOutgoingSocket[A](address, r.sendCb, r.socketConfig, r.rng[])
-  await socket.startOutgoingSocket()
   r.registerUtpSocket(socket)
+  await socket.startOutgoingSocket()
   await socket.waitFotSocketToConnect()
   return socket
 
