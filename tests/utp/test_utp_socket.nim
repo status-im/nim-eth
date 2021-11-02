@@ -240,3 +240,89 @@ procSuite "Utp socket unit test":
 
     check:
       outgoingSocket.numPacketsInReordedBuffer() == 1
+
+  asyncTest "Writing small enough data should produce 1 data packet":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let dataToWrite = @[1'u8]
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    let bytesWritten = await outgoingSocket.write(dataToWrite)
+
+    check:
+      bytesWritten == len(dataToWrite)
+
+    let sentPacket = await q.get()
+
+    check:
+      outgoingSocket.numPacketsInOutGoingBuffer() == 1
+      sentPacket.header.pType == ST_DATA
+      sentPacket.header.seqNr == initialPacket.header.seqNr + 1
+      sentPacket.payload == dataToWrite
+
+    # ackNr in state packet, is set to sentPacket.header.seqNr which means remote
+    # side processed out packet
+    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, sentPacket.header.seqNr, testBufferSize)
+
+    await outgoingSocket.processPacket(responseAck)
+
+    check: 
+      outgoingSocket.numPacketsInOutGoingBuffer() == 0
+
+  asyncTest "Socket should re-send data packet configurable number of times before declaring failure":
+    let q = newAsyncQueue[Packet]()   
+    let initalRemoteSeqNr = 10'u16
+
+    let outgoingSocket = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), SocketConfig.init(milliseconds(50), 2), rng[])
+    await outgoingSocket.startOutgoingSocket()
+    let initialPacket = await q.get()
+
+    check:
+      initialPacket.header.pType == ST_SYN
+
+    let responseAck = ackPacket(initalRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+
+    await outgoingSocket.processPacket(responseAck)
+
+    check:
+      outgoingSocket.isConnected()
+
+    let dataToWrite = @[1'u8]
+
+    let bytesWritten = await outgoingSocket.write(dataToWrite)
+
+    check:
+      bytesWritten == len(dataToWrite)
+
+    let sentPacket = await q.get()
+
+    check:
+      outgoingSocket.numPacketsInOutGoingBuffer() == 1
+      sentPacket.header.pType == ST_DATA
+      sentPacket.header.seqNr == initialPacket.header.seqNr + 1
+      sentPacket.payload == dataToWrite
+
+    let reSend1 = await q.get()
+
+    check:
+      outgoingSocket.numPacketsInOutGoingBuffer() == 1
+      reSend1.header.pType == ST_DATA
+      reSend1.header.seqNr == initialPacket.header.seqNr + 1
+      reSend1.payload == dataToWrite
+
+    let reSend2 = await q.get()
+
+    check:
+      outgoingSocket.numPacketsInOutGoingBuffer() == 1
+      reSend2.header.pType == ST_DATA
+      reSend2.header.seqNr == initialPacket.header.seqNr + 1
+      reSend2.payload == dataToWrite
+
+    # next timeout will should disconnect socket
+    await waitUntil(proc (): bool = outgoingSocket.isConnected() == false)
+
+    check:
+      not outgoingSocket.isConnected()
+      len(q) == 0

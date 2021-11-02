@@ -83,7 +83,7 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
     else:
       notice "Received SYN for not known connection. Initiating incoming connection"
       # Initial ackNr is set to incoming packer seqNr
-      let incomingSocket = initIncomingSocket[A](sender, r.sendCb, p.header.connectionId, p.header.seqNr, r.rng[])
+      let incomingSocket = initIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
       r.registerUtpSocket(incomingSocket)
       await incomingSocket.startIncomingSocket()
       # TODO By default (when we have utp over udp) socket here is passed to upper layer

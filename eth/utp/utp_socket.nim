@@ -24,6 +24,9 @@ type
     Reset,
     Destroy
 
+  ConnectionDirection = enum
+   Outgoing, Incoming
+
   UtpSocketKey*[A] = object
     remoteAddress*: A
     rcvId*: uint16
@@ -40,9 +43,22 @@ type
   # Socket callback to send data to remote peer
   SendCallback*[A] = proc (to: A, data: seq[byte]): Future[void] {.gcsafe, raises: [Defect]}
 
+  SocketConfig* = object
+    # This is configurable (in contrast to reference impl), as with standard 2 syn resends 
+    # default timeout set to 3seconds and doubling of timeout with each re-send, it
+    # means that initial connection would timeout after 21s, which seems rather long
+    initialSynTimeout*: Duration
+
+    # Number of resend re-tries of each data packet, before daclaring connection
+    # failed
+    dataResendsBeforeFailure*: uint16
+
   UtpSocket*[A] = ref object
     remoteAddress*: A
     state: ConnectionState
+    direction: ConnectionDirection
+    socketConfig: SocketConfig
+
     # Connection id for packets we receive
     connectionIdRcv: uint16
     # Connection id for packets we send
@@ -104,12 +120,6 @@ type
 
     send: SendCallback[A]
 
-  SocketConfig* = object
-    # This is configurable (in contrast to reference impl), as with standard 2 syn resends 
-    # default timeout set to 3seconds and doubling of timeout with each re-send, it
-    # means that initial connection would timeout after 21s, which seems rather long
-    initialSynTimeout*: Duration
-
   # User driven call back to be called whenever socket is permanently closed i.e
   # reaches destroy state
   SocketCloseCallback* = proc (): void {.gcsafe, raises: [Defect].}
@@ -133,6 +143,10 @@ const
   # packet. (TODO it should only be set when working over udp)
   initialRcvRetransmitTimeout = milliseconds(10000)
 
+  # Number of times each data packet will be resend before declaring connection
+  # dead. 4 is taken from reference implementation
+  defaultDataResendsBeforeFailure = 4'u16
+
   reorderBufferMaxSize = 1024
 
 proc init*[A](T: type UtpSocketKey, remoteAddress: A, rcvId: uint16): T =
@@ -146,8 +160,15 @@ proc init(T: type OutgoingPacket, packetBytes: seq[byte], transmissions: uint16,
     timeSent: timeSent
   )
 
-proc init*(T: type SocketConfig, initialSynTimeout: Duration = defaultInitialSynTimeout): T =
-  SocketConfig(initialSynTimeout: initialSynTimeout)
+proc init*(
+  T: type SocketConfig, 
+  initialSynTimeout: Duration = defaultInitialSynTimeout,
+  dataResendsBeforeFailure: uint16 = defaultDataResendsBeforeFailure
+  ): T =
+  SocketConfig(
+    initialSynTimeout: initialSynTimeout,
+    dataResendsBeforeFailure: dataResendsBeforeFailure
+  )
 
 proc registerOutgoingPacket(socket: UtpSocket, oPacket: OutgoingPacket) =
   ## Adds packet to outgoing buffer and updates all related fields
@@ -213,6 +234,10 @@ proc isOpened(socket:UtpSocket): bool =
     socket.state == ConnectedFull
   )
 
+proc shouldDisconnectFromFailedRemote(socket: UtpSocket): bool = 
+  (socket.state == SynSent and socket.retransmitCount >= 2) or 
+  (socket.retransmitCount >= socket.socketConfig.dataResendsBeforeFailure)
+
 proc checkTimeouts(socket: UtpSocket) {.async.} =
   let currentTime = Moment.now()
   # flush all packets which needs to be re-send
@@ -233,7 +258,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
         socket.closeEvent.fire()
         return
       
-      if (socket.state == SynSent and socket.retransmitCount >= 2) or (socket.retransmitCount >= 4):
+      if socket.shouldDisconnectFromFailedRemote():
         if socket.state == SynSent and (not socket.connectionFuture.finished()):
           # TODO standard stream interface result in failed future in case of failed connections,
           # but maybe it would be more clean to use result
@@ -287,15 +312,24 @@ proc new[A](
   to: A,
   snd: SendCallback[A],
   state: ConnectionState,
-  initialTimeout: Duration,
+  cfg: SocketConfig,
+  direction: ConnectionDirection,
   rcvId: uint16,
   sndId: uint16,
   initialSeqNr: uint16,
   initialAckNr: uint16
 ): T =
+  let initialTimeout = 
+    if direction == Outgoing:
+      cfg.initialSynTimeout
+    else :
+      initialRcvRetransmitTimeout
+
   T(
     remoteAddress: to,
     state: state,
+    direction: direction,
+    socketConfig: cfg,
     connectionIdRcv: rcvId,
     connectionIdSnd: sndId,
     seqNr: initialSeqNr,
@@ -333,7 +367,8 @@ proc initOutgoingSocket*[A](
     to,
     snd,
     SynSent,
-    cfg.initialSynTimeout,
+    cfg,
+    Outgoing,
     rcvConnectionId,
     sndConnectionId,
     initialSeqNr,
@@ -344,6 +379,7 @@ proc initOutgoingSocket*[A](
 proc initIncomingSocket*[A](
   to: A,
   snd: SendCallback[A],
+  cfg: SocketConfig,
   connectionId: uint16,
   ackNr: uint16,
   rng: var BrHmacDrbgContext
@@ -354,7 +390,8 @@ proc initIncomingSocket*[A](
     to,
     snd,
     SynRecv,
-    initialRcvRetransmitTimeout,
+    cfg,
+    Incoming,
     connectionId + 1,
     connectionId,
     initialSeqNr,
