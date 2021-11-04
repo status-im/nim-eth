@@ -60,9 +60,9 @@ type
     socketConfig: SocketConfig
 
     # Connection id for packets we receive
-    connectionIdRcv: uint16
+    connectionIdRcv*: uint16
     # Connection id for packets we send
-    connectionIdSnd: uint16
+    connectionIdSnd*: uint16
     # Sequence number for the next packet to be sent.
     seqNr: uint16
     # All seq number up to this havve been correctly acked by us
@@ -254,8 +254,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       # client initiated connections, but did not send following data packet in rto
       # time. TODO this should be configurable
       if (socket.state == SynRecv):
-        socket.state = Destroy
-        socket.closeEvent.fire()
+        socket.close()
         return
       
       if socket.shouldDisconnectFromFailedRemote():
@@ -264,8 +263,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
           # but maybe it would be more clean to use result
           socket.connectionFuture.fail(newException(ConnectionError, "Connection to peer timed out"))
 
-        socket.state = Destroy
-        socket.closeEvent.fire()
+        socket.close()
         return
 
       let newTimeout = socket.retransmitTimeout * 2
@@ -419,10 +417,17 @@ proc isConnected*(socket: UtpSocket): bool =
   socket.state == Connected or socket.state == ConnectedFull
 
 proc close*(s: UtpSocket) =
-  # TODO Rething all this when working on FIN and RESET packets and proper handling
+  # TODO Rething all this when working on FIN packets and proper handling
   # of resources
+  s.state = Destroy
   s.checkTimeoutsLoop.cancel()
   s.closeEvent.fire()
+
+proc closeWait*(s: UtpSocket) {.async.} =
+  # TODO Rething all this when working on FIN packets and proper handling
+  # of resources
+  s.close()
+  await allFutures(s.closeCallbacks)
 
 proc setCloseCallback(s: UtpSocket, cb: SocketCloseCallback) {.async.} =
   ## Set callback which will be called whenever the socket is permanently closed

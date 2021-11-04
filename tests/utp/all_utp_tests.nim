@@ -11,4 +11,5 @@ import
   ./test_protocol,
   ./test_discv5_protocol,
   ./test_buffer,
-  ./test_utp_socket
+  ./test_utp_socket,
+  ./test_utp_router
