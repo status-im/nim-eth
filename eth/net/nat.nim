@@ -36,6 +36,9 @@ var
 logScope:
   topics = "nat"
 
+chronicles.formatIt(Port):
+  int(it)
+
 ## Also does threadvar initialisation.
 ## Must be called before redirectPorts() in each thread.
 proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] =

@@ -75,8 +75,8 @@
 
 import
   std/[tables, sets, options, math, sequtils, algorithm],
-  stew/shims/net as stewNet, json_serialization/std/net,
-  stew/endians2, chronicles, chronos, stint, bearssl, metrics,
+  stew/shims/net as stewNet, json_serialization/std/net as jsonNet,
+  stew/endians2, chronicles/std/net, chronos, stint, bearssl, metrics,
   ".."/../[rlp, keys, async_utils],
   "."/[messages, encoding, node, routing_table, enr, random2, sessions, ip_vote, nodes_verification]
 
