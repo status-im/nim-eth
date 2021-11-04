@@ -10,16 +10,10 @@ import
   sequtils,
   chronos, bearssl,
   testutils/unittests,
+  ./test_utils,
   ../../eth/utp/utp_router,
   ../../eth/utp/utp_protocol,
   ../../eth/keys
-  
-proc generateByteArray(rng: var BrHmacDrbgContext, length: int): seq[byte] =
-  var bytes = newSeq[byte](length)
-  brHmacDrbgGenerate(rng, bytes)
-  return bytes
-
-type AssertionCallback = proc(): bool {.gcsafe, raises: [Defect].}
 
 proc setAcceptedCallback(event: AsyncEvent): AcceptConnectionCallback[TransportAddress] =
   return (
@@ -35,14 +29,6 @@ proc registerIncomingSocketCallback(serverSockets: AsyncQueue): AcceptConnection
     proc(server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] =
       serverSockets.addLast(client)
   )
-
-proc waitUntil(f: AssertionCallback): Future[void] {.async.} =
-  while true:
-    let res = f()
-    if res:
-      break
-    else:
-      await sleepAsync(milliseconds(50))
 
 proc transferData(sender: UtpSocket[TransportAddress], receiver: UtpSocket[TransportAddress], data: seq[byte]): Future[seq[byte]] {.async.}=
   let bytesWritten = await sender.write(data)

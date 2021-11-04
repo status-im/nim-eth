@@ -8,6 +8,7 @@
 
 import 
   chronos, stew/byteutils,
+  ./utp_router,
   ./utp_socket,
   ./utp_protocol
 
@@ -18,9 +19,9 @@ import
 # 3. make
 # 4. ./ucat -ddddd -l -p 9078 - it will run utp server on port 9078
 when isMainModule:
-  proc echoIncomingSocketCallBack(): AcceptConnectionCallback =
+  proc echoIncomingSocketCallBack(): AcceptConnectionCallback[TransportAddress] =
     return (
-      proc (server: UtpProtocol, client: UtpSocket): Future[void] {.gcsafe, raises: [Defect].} = 
+      proc (server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] {.gcsafe, raises: [Defect].} = 
         echo "received incoming connection"
         let fakeFuture = newFuture[void]()
         fakeFuture.complete()
@@ -37,6 +38,10 @@ when isMainModule:
 
   let helloUtp = "Helllo from nim implementation"
   let bytes = helloUtp.toBytes()
+
+  discard waitFor soc.write(bytes)
+
+  waitFor(sleepAsync(milliseconds(1000)))
 
   discard waitFor soc.write(bytes)
 

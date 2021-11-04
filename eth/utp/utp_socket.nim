@@ -24,6 +24,9 @@ type
     Reset,
     Destroy
 
+  ConnectionDirection = enum
+   Outgoing, Incoming
+
   UtpSocketKey*[A] = object
     remoteAddress*: A
     rcvId*: uint16
@@ -40,9 +43,22 @@ type
   # Socket callback to send data to remote peer
   SendCallback*[A] = proc (to: A, data: seq[byte]): Future[void] {.gcsafe, raises: [Defect]}
 
+  SocketConfig* = object
+    # This is configurable (in contrast to reference impl), as with standard 2 syn resends 
+    # default timeout set to 3seconds and doubling of timeout with each re-send, it
+    # means that initial connection would timeout after 21s, which seems rather long
+    initialSynTimeout*: Duration
+
+    # Number of resend re-tries of each data packet, before daclaring connection
+    # failed
+    dataResendsBeforeFailure*: uint16
+
   UtpSocket*[A] = ref object
     remoteAddress*: A
     state: ConnectionState
+    direction: ConnectionDirection
+    socketConfig: SocketConfig
+
     # Connection id for packets we receive
     connectionIdRcv: uint16
     # Connection id for packets we send
@@ -66,6 +82,9 @@ type
 
     # incoming buffer for out of order packets
     inBuffer: GrowableCircularBuffer[Packet]
+
+    # Number of packets waiting in reorder buffer
+    reorderCount: uint16
 
     # current retransmit Timeout used to calculate rtoTimeout
     retransmitTimeout: Duration
@@ -101,12 +120,6 @@ type
 
     send: SendCallback[A]
 
-  SocketConfig* = object
-    # This is configurable (in contrast to reference impl), as with standard 2 syn resends 
-    # default timeout set to 3seconds and doubling of timeout with each re-send, it
-    # means that initial connection would timeout after 21s, which seems rather long
-    initialSynTimeout*: Duration
-
   # User driven call back to be called whenever socket is permanently closed i.e
   # reaches destroy state
   SocketCloseCallback* = proc (): void {.gcsafe, raises: [Defect].}
@@ -130,6 +143,12 @@ const
   # packet. (TODO it should only be set when working over udp)
   initialRcvRetransmitTimeout = milliseconds(10000)
 
+  # Number of times each data packet will be resend before declaring connection
+  # dead. 4 is taken from reference implementation
+  defaultDataResendsBeforeFailure = 4'u16
+
+  reorderBufferMaxSize = 1024
+
 proc init*[A](T: type UtpSocketKey, remoteAddress: A, rcvId: uint16): T =
   UtpSocketKey[A](remoteAddress: remoteAddress, rcvId: rcvId)
 
@@ -141,8 +160,15 @@ proc init(T: type OutgoingPacket, packetBytes: seq[byte], transmissions: uint16,
     timeSent: timeSent
   )
 
-proc init*(T: type SocketConfig, initialSynTimeout: Duration = defaultInitialSynTimeout): T =
-  SocketConfig(initialSynTimeout: initialSynTimeout)
+proc init*(
+  T: type SocketConfig, 
+  initialSynTimeout: Duration = defaultInitialSynTimeout,
+  dataResendsBeforeFailure: uint16 = defaultDataResendsBeforeFailure
+  ): T =
+  SocketConfig(
+    initialSynTimeout: initialSynTimeout,
+    dataResendsBeforeFailure: dataResendsBeforeFailure
+  )
 
 proc registerOutgoingPacket(socket: UtpSocket, oPacket: OutgoingPacket) =
   ## Adds packet to outgoing buffer and updates all related fields
@@ -208,6 +234,10 @@ proc isOpened(socket:UtpSocket): bool =
     socket.state == ConnectedFull
   )
 
+proc shouldDisconnectFromFailedRemote(socket: UtpSocket): bool = 
+  (socket.state == SynSent and socket.retransmitCount >= 2) or 
+  (socket.retransmitCount >= socket.socketConfig.dataResendsBeforeFailure)
+
 proc checkTimeouts(socket: UtpSocket) {.async.} =
   let currentTime = Moment.now()
   # flush all packets which needs to be re-send
@@ -228,7 +258,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
         socket.closeEvent.fire()
         return
       
-      if (socket.state == SynSent and socket.retransmitCount >= 2) or (socket.retransmitCount >= 4):
+      if socket.shouldDisconnectFromFailedRemote():
         if socket.state == SynSent and (not socket.connectionFuture.finished()):
           # TODO standard stream interface result in failed future in case of failed connections,
           # but maybe it would be more clean to use result
@@ -282,15 +312,24 @@ proc new[A](
   to: A,
   snd: SendCallback[A],
   state: ConnectionState,
-  initialTimeout: Duration,
+  cfg: SocketConfig,
+  direction: ConnectionDirection,
   rcvId: uint16,
   sndId: uint16,
   initialSeqNr: uint16,
   initialAckNr: uint16
 ): T =
+  let initialTimeout = 
+    if direction == Outgoing:
+      cfg.initialSynTimeout
+    else :
+      initialRcvRetransmitTimeout
+
   T(
     remoteAddress: to,
     state: state,
+    direction: direction,
+    socketConfig: cfg,
     connectionIdRcv: rcvId,
     connectionIdSnd: sndId,
     seqNr: initialSeqNr,
@@ -328,7 +367,8 @@ proc initOutgoingSocket*[A](
     to,
     snd,
     SynSent,
-    cfg.initialSynTimeout,
+    cfg,
+    Outgoing,
     rcvConnectionId,
     sndConnectionId,
     initialSeqNr,
@@ -339,6 +379,7 @@ proc initOutgoingSocket*[A](
 proc initIncomingSocket*[A](
   to: A,
   snd: SendCallback[A],
+  cfg: SocketConfig,
   connectionId: uint16,
   ackNr: uint16,
   rng: var BrHmacDrbgContext
@@ -349,7 +390,8 @@ proc initIncomingSocket*[A](
     to,
     snd,
     SynRecv,
-    initialRcvRetransmitTimeout,
+    cfg,
+    Incoming,
     connectionId + 1,
     connectionId,
     initialSeqNr,
@@ -476,13 +518,45 @@ proc ackPackets(socket: UtpSocket, nrPacketsToAck: uint16) =
 
     inc i
 
+proc initializeAckNr(socket: UtpSocket, packetSeqNr: uint16) =
+  if (socket.state == SynSent):
+    socket.ackNr = packetSeqNr - 1
+
 # TODO at socket level we should handle only FIN/DATA/ACK packets. Refactor to make
 # it enforcable by type system
+# TODO re-think synchronization of this procedure, as each await inside gives control
+# to scheduler which means there could be potentialy several processPacket procs
+# running
 proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   ## Updates socket state based on received packet, and sends ack when necessary.
   ## Shoyuld be called in main packet receiving loop
   let pkSeqNr = p.header.seqNr
   let pkAckNr = p.header.ackNr
+
+  socket.initializeAckNr(pkSeqNr)
+
+  # number of packets past the expected
+  # ack_nr is the last acked, seq_nr is the
+  # current. Subtracring 1 makes 0 mean "this is the next expected packet"
+  let pastExpected = pkSeqNr - socket.ackNr - 1
+
+  # acks is the number of packets that was acked, in normal case - no selective
+  # acks, no losses, no resends, it will usually be equal to 1
+  # we can calculate it here and not only for ST_STATE packet, as each utp
+  # packet has info about remote side last acked packet.
+  var acks = pkAckNr - (socket.seqNr - 1 - socket.curWindowPackets)
+
+  if acks > socket.curWindowPackets:
+    # this case happens if the we already received this ack nr
+    acks = 0
+  
+  # If packet is totally of the mark short circout the processing
+  if pastExpected >= reorderBufferMaxSize:
+    notice "Received packet is totally of the mark"
+    return
+
+  socket.ackPackets(acks)
+
   case p.header.pType
     of ST_DATA:
       # To avoid amplification attacks, server socket is in SynRecv state until
@@ -493,23 +567,35 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
         socket.state = Connected
 
       notice "Received ST_DATA on known socket"
-      # number of packets past the expected
-      # ack_nr is the last acked, seq_nr is the
-      # current. Subtracring 1 makes 0 mean "this is the next expected packet"
-      let pastExpected = pkSeqNr - socket.ackNr - 1
 
       if (pastExpected == 0):
         # we are getting in order data packet, we can flush data directly to the incoming buffer
         await upload(addr socket.buffer, unsafeAddr p.payload[0], p.payload.len())
 
-        # TODO handle the case when there may be some packets in incoming buffer which
-        # are direct extension of this packet and therefore we could pass also their
-        # content to upper layer. This may need to be done when handling selective
-        # acks.
-
         # Bytes have been passed to upper layer, we can increase number of last 
         # acked packet
         inc socket.ackNr
+
+        # check if the following packets are in reorder buffer
+        while true:
+          if socket.reorderCount == 0:
+            break
+          
+          # TODO Handle case when we have reached eof becouse of fin packet
+          let nextPacketNum = socket.ackNr + 1
+          let maybePacket = socket.inBuffer.get(nextPacketNum)
+          
+          if maybePacket.isNone():
+            break
+          
+          let packet = maybePacket.unsafeGet()
+
+          await upload(addr socket.buffer, unsafeAddr packet.payload[0], packet.payload.len())
+
+          socket.inBuffer.delete(nextPacketNum)
+
+          inc socket.ackNr
+          dec socket.reorderCount
 
         # TODO for now we just schedule concurrent task with ack sending. It may
         # need improvement, as with this approach there is no direct control over
@@ -517,22 +603,26 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
         # is closed
         asyncSpawn socket.sendAck()
       else:
-        # TODO handle out of order packets
+        # TODO Handle case when out of order is out of eof range
         notice "Got out of order packet"
+
+        # growing buffer before checking the packet is already there to avoid 
+        # looking at older packet due to indices wrap aroud
+        socket.inBuffer.ensureSize(pkSeqNr + 1, pastExpected + 1)
+
+        if (socket.inBuffer.get(pkSeqNr).isSome()):
+          notice "packet already received"
+        else:
+          socket.inBuffer.put(pkSeqNr, p)
+          inc socket.reorderCount
+          notice "added out of order packet in reorder buffer"
+          # TODO for now we do not sent any ack as we do not handle selective acks
+          # add sending of selective acks
     of ST_FIN:
       # TODO not implemented
       notice "Received ST_FIN on known socket"
     of ST_STATE:
       notice "Received ST_STATE on known socket"
-      # acks is the number of packets that was acked, in normal case - no selective
-      # acks, no losses, no resends, it will usually be equal to 1
-      var acks = pkAckNr - (socket.seqNr - 1 - socket.curWindowPackets)
-
-      if acks > socket.curWindowPackets:
-        # this case happens if the we already received this ack nr
-        acks = 0
-
-      socket.ackPackets(acks)
 
       if (socket.state == SynSent and (not socket.connectionFuture.finished())):
         socket.state = Connected
@@ -627,4 +717,15 @@ proc numPacketsInOutGoingBuffer*(socket: UtpSocket): int =
     if e.isSome():
       inc num
   doAssert(num == int(socket.curWindowPackets))
+  num
+
+# Check how many packets are still in the reorder buffer, usefull for tests or
+# debugging.
+# It throws assertion error when number of elements in buffer do not equal kept counter
+proc numPacketsInReordedBuffer*(socket: UtpSocket): int =
+  var num = 0
+  for e in socket.inBUffer.items():
+    if e.isSome():
+      inc num
+  doAssert(num == int(socket.reorderCount))
   num
