@@ -134,6 +134,8 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       let socket = maybeSocket.unsafeGet()
       await socket.processPacket(p)
     else:
+      # TODO add keeping track of recently send reset packets and do not send reset
+      # to peers which we recently send reset to.
       notice "Recevied FIN/DATA/ACK on not known socket sending reset"
       let rstPacket = resetPacket(randUint16(r.rng[]), p.header.connectionId, p.header.seqNr)
       await r.sendCb(sender, encodePacket(rstPacket))
