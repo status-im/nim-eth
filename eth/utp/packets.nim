@@ -188,3 +188,21 @@ proc dataPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSi
   )
   
   Packet(header: h, payload: payload)
+
+proc resetPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16): Packet = 
+  let h = PacketHeaderV1(
+    pType: ST_RESET,
+    version: protocolVersion,
+    # data packets always have extension field set to 0
+    extension: 0'u8,
+    connectionId: sndConnectionId,
+    timestamp: getMonoTimeTimeStamp(),
+    # TODO for not we are using 0, but this value should be calculated on socket
+    # level
+    timestampDiff: 0'u32,
+    wndSize: 0,
+    seqNr: seqNr,
+    ackNr: ackNr
+  )
+  
+  Packet(header: h, payload: @[])

@@ -1,5 +1,5 @@
 import
-  std/[tables, options],
+  std/[tables, options, sugar],
   chronos, bearssl, chronicles,
   ../keys,
   ./utp_socket,
@@ -28,6 +28,15 @@ type
    sendCb*: SendCallback[A]
    rng*: ref BrHmacDrbgContext
 
+# this should probably be in standard lib, it allows lazy composition of options i.e
+# one can write: O1 orElse O2 orElse O3, and chain will be evaluated to first option
+# which isSome()
+template orElse[A](a: Option[A], b: Option[A]): Option[A] =
+  if (a.isSome()):
+    a
+  else:
+    b
+
 proc getUtpSocket[A](s: UtpRouter[A], k: UtpSocketKey[A]): Option[UtpSocket[A]] =
   let s = s.sockets.getOrDefault(k)
   if s == nil:
@@ -43,6 +52,7 @@ iterator allSockets[A](s: UtpRouter[A]): UtpSocket[A] =
     yield socket
 
 proc len*[A](s: UtpRouter[A]): int =
+  ## returns number of active sockets
   len(s.sockets)
 
 proc registerUtpSocket[A](p: UtpRouter, s: UtpSocket[A]) =
@@ -65,15 +75,39 @@ proc new*[A](
     rng: rng
   )
 
+# There are different possiblites how connection was established, and we need to 
+# check every case
+proc getSocketOnReset[A](r: UtpRouter[A], sender: A, id: uint16): Option[UtpSocket[A]] =
+  # id is our recv id
+  let recvKey = UtpSocketKey[A].init(sender, id)
+
+  # id is our send id, and we did nitiate the connection, our recv id is id - 1
+  let sendInitKey = UtpSocketKey[A].init(sender, id - 1)
+
+  # id is our send id, and we did not initiate the connection, so our recv id is id + 1
+  let sendNoInitKey = UtpSocketKey[A].init(sender, id + 1)
+
+  r.getUtpSocket(recvKey)
+  .orElse(r.getUtpSocket(sendInitKey).filter(s => s.connectionIdSnd == id))
+  .orElse(r.getUtpSocket(sendNoInitKey).filter(s => s.connectionIdSnd == id))
+
 proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
   notice "Received packet ", packet = p
-  let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId)
-  let maybeSocket = r.getUtpSocket(socketKey)
 
   case p.header.pType
   of ST_RESET:
-    # TODO Properly handle Reset packet, and close socket
-    notice "Received RESET packet"
+    let maybeSocket = r.getSocketOnReset(sender, p.header.connectionId)
+    if maybeSocket.isSome():
+      notice "Received rst packet on known connection closing"
+      let socket = maybeSocket.unsafeGet()
+      # reference implementation acutally changes the socket state to reset state unless
+      # user explicitly closed socket before. The only difference between reset and destroy
+      # state is that socket in destroy state is ultimatly deleted from active connection
+      # list but socket in reset state lingers there until user of library closes it
+      # explictly.
+      socket.close()
+    else:
+      notice "Received rst packet for not known connection"
   of ST_SYN:
     # Syn packet are special, and we need to add 1 to header connectionId
     let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId + 1)
@@ -100,8 +134,11 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       let socket = maybeSocket.unsafeGet()
       await socket.processPacket(p)
     else:
-      # TODO add handling of respondig with reset
-      notice "Recevied FIN/DATA/ACK on not known socket"
+      # TODO add keeping track of recently send reset packets and do not send reset
+      # to peers which we recently send reset to.
+      notice "Recevied FIN/DATA/ACK on not known socket sending reset"
+      let rstPacket = resetPacket(randUint16(r.rng[]), p.header.connectionId, p.header.seqNr)
+      await r.sendCb(sender, encodePacket(rstPacket))
 
 proc processIncomingBytes*[A](r: UtpRouter[A], bytes: seq[byte], sender: A) {.async.} = 
   let dec = decodePacket(bytes)
