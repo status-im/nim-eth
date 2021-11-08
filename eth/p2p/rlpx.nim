@@ -611,7 +611,8 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     # The documentation will need to be updated, explaning the fact that
     # nextMsg will be resolved only if the message handler has executed
     # successfully.
-    if peer.awaitedMessages[msgId] != nil:
+    if msgId >= 0 and msgId < peer.awaitedMessages.len and
+       peer.awaitedMessages[msgId] != nil:
       let msgInfo = peer.dispatcher.messages[msgId]
       try:
         (msgInfo.nextMsgResolver)(msgData, peer.awaitedMessages[msgId])
