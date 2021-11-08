@@ -72,6 +72,8 @@ proc initClientServerScenario(): Future[ClientServerScenario] {.async.} =
   )
 
 proc close(s: ClientServerScenario) {.async.} =
+  await s.clientSocket.destroyWait()
+  await s.serverSocket.destroyWait()
   await s.utp1.closeWait()
   await s.utp2.closeWait()
 
@@ -302,5 +304,69 @@ procSuite "Utp protocol over udp tests":
     check:
       client1Data == server1ReadBytes
       client2Data == server2ReadBytes
+
+    await s.close()
+
+  asyncTest "Gracefull stop of the socket":
+    let s = await initClientServerScenario()
+    check:
+      s.clientSocket.isConnected()
+      # after successful connection outgoing buffer should be empty as syn packet
+      # should be correctly acked
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
+
+      # Server socket is not in connected state, until first data transfer
+      (not s.serverSocket.isConnected())
+
+    let bytesToTransfer = generateByteArray(rng[], 100)
+
+    let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
+
+    check:
+      bytesToTransfer == bytesReceivedFromClient
+      s.serverSocket.isConnected()
+
+    await s.clientSocket.closeWait()
+
+    check:
+      not s.clientSocket.isConnected()
+      s.serverSocket.atEof()
+      s.utp1.openSockets() == 0
+      s.utp2.openSockets() == 1
+
+    await s.serverSocket.destroyWait()
+
+    check:
+      not s.serverSocket.isConnected()
+      s.utp2.openSockets() == 0
+
+    await s.close()
+
+  asyncTest "Reading data until eof":
+    let s = await initClientServerScenario()
+    check:
+      s.clientSocket.isConnected()
+      # after successful connection outgoing buffer should be empty as syn packet
+      # should be correctly acked
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
+
+      # Server socket is not in connected state, until first data transfer
+      (not s.serverSocket.isConnected())
+
+    let bytesToTransfer1 = generateByteArray(rng[], 1000)
+    let bytesToTransfer2 = generateByteArray(rng[], 1000)
+    let bytesToTransfer3 = generateByteArray(rng[], 1000)
+
+    let w1 = await s.clientSocket.write(bytesToTransfer1)
+    let w2 = await s.clientSocket.write(bytesToTransfer2)
+    let w3 = await s.clientSocket.write(bytesToTransfer3)
+    await s.clientSocket.closeWait()
+
+    let readData = await s.serverSocket.read()
+
+    check:
+      readData == concat(bytesToTransfer1, bytesToTransfer2, bytesToTransfer3)
+      s.serverSocket.atEof()
+      s.utp1.openSockets() == 0
 
     await s.close()

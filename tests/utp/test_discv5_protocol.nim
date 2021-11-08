@@ -78,7 +78,7 @@ procSuite "Utp protocol over discovery v5 tests":
     check:
       clientSocket.isConnected()
 
-    clientSocket.close()
+    await clientSocket.destroyWait()
     await node1.closeWait()
     await node2.closeWait()
 
@@ -113,7 +113,7 @@ procSuite "Utp protocol over discovery v5 tests":
       clientSocket.isConnected()
       serverSocket.isConnected()
 
-    clientSocket.close()
-    serverSocket.close()
+    await clientSocket.destroyWait()
+    await serverSocket.destroyWait()
     await node1.closeWait()
     await node2.closeWait()

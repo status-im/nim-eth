@@ -157,7 +157,7 @@ proc ackPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSiz
   let h = PacketHeaderV1(
     pType: ST_STATE,
     version: protocolVersion,
-    # ack packets always have extension field set to 0
+    # TODO Handle selective acks
     extension: 0'u8,
     connectionId: sndConnectionId,
     timestamp: getMonoTimeTimeStamp(),
@@ -201,6 +201,24 @@ proc resetPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16): Packet
     # level
     timestampDiff: 0'u32,
     wndSize: 0,
+    seqNr: seqNr,
+    ackNr: ackNr
+  )
+  
+  Packet(header: h, payload: @[])
+
+proc finPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSize: uint32): Packet = 
+  let h = PacketHeaderV1(
+    pType: ST_FIN,
+    version: protocolVersion,
+    # fin packets always have extension field set to 0
+    extension: 0'u8,
+    connectionId: sndConnectionId,
+    timestamp: getMonoTimeTimeStamp(),
+    # TODO for not we are using 0, but this value should be calculated on socket
+    # level
+    timestampDiff: 0'u32,
+    wndSize: bufferSize,
     seqNr: seqNr,
     ackNr: ackNr
   )

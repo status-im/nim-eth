@@ -105,7 +105,7 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       # state is that socket in destroy state is ultimatly deleted from active connection
       # list but socket in reset state lingers there until user of library closes it
       # explictly.
-      socket.close()
+      socket.destroy()
     else:
       notice "Received rst packet for not known connection"
   of ST_SYN:
@@ -160,4 +160,4 @@ proc close*[A](r: UtpRouter[A]) =
   # TODO Rething all this when working on FIN and RESET packets and proper handling
   # of resources
   for s in r.allSockets():
-    s.close()
+    s.destroy()
