@@ -74,8 +74,8 @@ proc initClientServerScenario(): Future[ClientServerScenario] {.async.} =
 proc close(s: ClientServerScenario) {.async.} =
   await s.clientSocket.destroyWait()
   await s.serverSocket.destroyWait()
-  await s.utp1.closeWait()
-  await s.utp2.closeWait()
+  await s.utp1.shutdownWait()
+  await s.utp2.shutdownWait()
 
 proc init2ClientsServerScenario(): Future[TwoClientsServerScenario] {.async.} =
   var serverSockets = newAsyncQueue[UtpSocket[TransportAddress]]()
@@ -109,9 +109,9 @@ proc init2ClientsServerScenario(): Future[TwoClientsServerScenario] {.async.} =
   )
 
 proc close(s: TwoClientsServerScenario) {.async.} =
-  await s.utp1.closeWait()
-  await s.utp2.closeWait()
-  await s.utp3.closeWait()
+  await s.utp1.shutdownWait()
+  await s.utp2.shutdownWait()
+  await s.utp3.shutdownWait()
 
 procSuite "Utp protocol over udp tests":
   let rng = newRng()
@@ -138,8 +138,8 @@ procSuite "Utp protocol over udp tests":
       
       server2Called.isSet()
 
-    await utpProt1.closeWait()
-    await utpProt2.closeWait()
+    await utpProt1.shutdownWait()
+    await utpProt2.shutdownWait()
 
   asyncTest "Fail to connect to offline remote host":
     let server1Called = newAsyncEvent()
@@ -160,7 +160,7 @@ procSuite "Utp protocol over udp tests":
     check:
       utpProt1.openSockets() == 0
 
-    await utpProt1.closeWait()
+    await utpProt1.shutdownWait()
 
   asyncTest "Success connect to remote host which initialy was offline":
     let server1Called = newAsyncEvent()
@@ -186,8 +186,8 @@ procSuite "Utp protocol over udp tests":
       futSock.finished() and (not futsock.failed()) and (not futsock.cancelled())
       server2Called.isSet()
 
-    await utpProt1.closeWait()
-    await utpProt2.closeWait()
+    await utpProt1.shutdownWait()
+    await utpProt2.shutdownWait()
 
   asyncTest "Success data transfer when data fits into one packet":
     let s = await initClientServerScenario()
