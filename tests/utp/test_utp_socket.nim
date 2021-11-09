@@ -7,7 +7,7 @@
 {.used.}
 
 import
-  std/[algorithm, random],
+  std/[algorithm, random, sequtils],
   chronos, bearssl, chronicles,
   testutils/unittests,
   ./test_utils,
@@ -326,3 +326,133 @@ procSuite "Utp socket unit test":
     check:
       not outgoingSocket.isConnected()
       len(q) == 0
+
+  asyncTest "Processing in order fin should make socket reach eof and ack this packet":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    let finP = finPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+    
+    await outgoingSocket.processPacket(finP)
+    let ack1 = await q.get()
+
+    check:
+      ack1.header.pType == ST_STATE
+      outgoingSocket.atEof()
+
+  asyncTest "Processing out of order fin should buffer it until receiving all remaining packets":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+    let data = @[1'u8, 2'u8, 3'u8]
+    let data1 = @[4'u8, 5'u8, 6'u8]
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    let readF = outgoingSocket.read()
+
+    let dataP = dataPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
+    let dataP1 = dataPacket(initialRemoteSeq + 1, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data1)
+
+    let finP = finPacket(initialRemoteSeq + 2, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+    
+    await outgoingSocket.processPacket(finP)
+
+    check:
+      not readF.finished()
+      not outgoingSocket.atEof()
+
+    await outgoingSocket.processPacket(dataP1)
+
+    check:
+      not readF.finished()
+      not outgoingSocket.atEof()
+   
+    await outgoingSocket.processPacket(dataP)
+
+    let bytes = await readF
+
+    check:
+      readF.finished()
+      outgoingSocket.atEof()
+      bytes == concat(data, data1)
+
+  asyncTest "Processing out of order fin should buffer it until receiving all remaining packets":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+    let data = @[1'u8, 2'u8, 3'u8]
+    let data1 = @[4'u8, 5'u8, 6'u8]
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    let readF = outgoingSocket.read()
+
+    let dataP = dataPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
+
+    let finP = finPacket(initialRemoteSeq + 1, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+
+    # dataP1 has seqNr larger than fin, there fore it should be considered past eof and never passed
+    # to user of library
+    let dataP1 = dataPacket(initialRemoteSeq + 2, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data1)
+
+    await outgoingSocket.processPacket(finP)
+
+    check:
+      not readF.finished()
+      not outgoingSocket.atEof()
+
+    # it is out of order dataP1 (as we still not processed dataP packet)
+    await outgoingSocket.processPacket(dataP1)
+
+    check:
+      not readF.finished()
+      not outgoingSocket.atEof()
+   
+    await outgoingSocket.processPacket(dataP)
+
+    # it is in order dataP1, as we have now processed dataP + fin which came before
+    # but it is past eof so it should be ignored
+    await outgoingSocket.processPacket(dataP1)
+
+    let bytes = await readF
+
+    check:
+      readF.finished()
+      outgoingSocket.atEof()
+      bytes == concat(data)
+
+  asyncTest "Calling close should send fin packet":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    await outgoingSocket.close()
+
+    let sendFin = await q.get()
+
+    check:
+      sendFin.header.pType == ST_FIN
+
+  asyncTest "Receiving ack for fin packet should destroy socket":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    let closeF = outgoingSocket.close()
+
+    let sendFin = await q.get()
+
+    check:
+      sendFin.header.pType == ST_FIN
+
+    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, sendFin.header.seqNr, testBufferSize)
+
+    await outgoingSocket.processPacket(responseAck)
+    
+    await closeF
+
+    check:
+      not outgoingSocket.isConnected()

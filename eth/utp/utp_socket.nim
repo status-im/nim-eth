@@ -608,19 +608,16 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
         socket.eofPktNr = pkSeqNr
 
       # we got in order packet
-      if (pastExpected == 0):
-        
+      if (pastExpected == 0 and (not socket.reachedFin)):
         if (len(p.payload) > 0 and (not socket.readShutdown)):
           # we are getting in order data packet, we can flush data directly to the incoming buffer
           await upload(addr socket.buffer, unsafeAddr p.payload[0], p.payload.len())
-
         # Bytes have been passed to upper layer, we can increase number of last 
         # acked packet
         inc socket.ackNr
 
         # check if the following packets are in reorder buffer
         while true:
-
           # We are doing this in reoreder loop, to handle the case when we already received
           # fin but there were some gaps before eof
           # we have reached remote eof, and should not receive more packets from remote
@@ -651,7 +648,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
           
           let packet = maybePacket.unsafeGet()
 
-          if (len(p.payload) > 0 and (not socket.readShutdown)):
+          if (len(packet.payload) > 0 and (not socket.readShutdown)):
             await upload(addr socket.buffer, unsafeAddr packet.payload[0], packet.payload.len())
 
           socket.inBuffer.delete(nextPacketNum)
