@@ -379,7 +379,7 @@ procSuite "Utp socket unit test":
       outgoingSocket.atEof()
       bytes == concat(data, data1)
 
-  asyncTest "Processing out of order fin should buffer it until receiving all remaining packets":
+  asyncTest "Socket should ignore data past eof packet":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
     let data = @[1'u8, 2'u8, 3'u8]
