@@ -32,7 +32,7 @@ proc registerIncomingSocketCallback(serverSockets: AsyncQueue): AcceptConnection
 
 proc transferData(sender: UtpSocket[TransportAddress], receiver: UtpSocket[TransportAddress], data: seq[byte]): Future[seq[byte]] {.async.}=
   let bytesWritten = await sender.write(data)
-  doAssert bytesWritten == len(data)
+  doAssert bytesWritten.get() == len(data)
   let received = await receiver.read(len(data))
   return received
 
@@ -262,14 +262,14 @@ procSuite "Utp protocol over udp tests":
     let written = await s.clientSocket.write(bytesToTransfer)
 
     check:
-      written == len(bytesToTransfer)
+      written.get() == len(bytesToTransfer)
 
     let bytesToTransfer1 = generateByteArray(rng[], 5000)
 
     let written1 = await s.clientSocket.write(bytesToTransfer1)
 
     check:
-      written1 == len(bytesToTransfer)
+      written1.get() == len(bytesToTransfer)
 
     let bytesReceived = await s.serverSocket.read(len(bytesToTransfer) + len(bytesToTransfer1))
     

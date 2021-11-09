@@ -12,6 +12,7 @@ import
   testutils/unittests,
   ./test_utils,
   ../../eth/utp/utp_router,
+  ../../eth/utp/utp_socket,
   ../../eth/utp/packets,
   ../../eth/keys
 
@@ -252,7 +253,7 @@ procSuite "Utp socket unit test":
     let bytesWritten = await outgoingSocket.write(dataToWrite)
 
     check:
-      bytesWritten == len(dataToWrite)
+      bytesWritten.get() == len(dataToWrite)
 
     let sentPacket = await q.get()
 
@@ -294,7 +295,7 @@ procSuite "Utp socket unit test":
     let bytesWritten = await outgoingSocket.write(dataToWrite)
 
     check:
-      bytesWritten == len(dataToWrite)
+      bytesWritten.get() == len(dataToWrite)
 
     let sentPacket = await q.get()
 
@@ -456,3 +457,41 @@ procSuite "Utp socket unit test":
 
     check:
       not outgoingSocket.isConnected()
+
+  asyncTest "Trying to write data onto closed socket should return error":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    await outgoingSocket.destroyWait()
+
+    let writeResult = await outgoingSocket.write(@[1'u8])
+
+    check:
+      writeResult.isErr()
+
+    let error = writeResult.error()
+
+    check:
+      error.kind == SocketNotWriteable
+      error.currentState == Destroy
+
+
+  asyncTest "Trying to write data onto closed socket which sent fin":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    await outgoingSocket.close()
+
+    let writeResult = await outgoingSocket.write(@[1'u8])
+
+    check:
+      writeResult.isErr()
+
+    let error = writeResult.error()
+
+    check:
+      error.kind == FinSent

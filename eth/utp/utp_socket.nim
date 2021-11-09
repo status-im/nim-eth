@@ -9,7 +9,7 @@
 import
   std/sugar,
   chronos, chronicles, bearssl,
-  stew/result,
+  stew/results,
   ./growable_buffer,
   ./packets
 
@@ -17,7 +17,7 @@ logScope:
   topics = "utp_socket"
 
 type
-  ConnectionState = enum
+  ConnectionState* = enum
     SynSent,
     SynRecv,
     Connected,
@@ -144,6 +144,19 @@ type
   SocketCloseCallback* = proc (): void {.gcsafe, raises: [Defect].}
 
   ConnectionError* = object of CatchableError
+
+  WriteErrorType* = enum
+    SocketNotWriteable, 
+    FinSent
+
+  WriteError* = object
+    case kind*: WriteErrorType
+    of SocketNotWriteable:
+      currentState*: ConnectionState
+    of FinSent:
+      discard
+
+  WriteResult* = Result[int, WriteError]
 
 const
   # Maximal number of payload bytes per packet. Total packet size will be equal to
@@ -729,9 +742,9 @@ proc close*(socket: UtpSocket) {.async.} =
         if socket.curWindowPackets == 0:
           socket.resetSendTimeout()
         
-        socket.finSent = true
         let finEncoded = encodePacket(finPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, 1048576))
-        socket.registerOutgoingPacket(OutgoingPacket.init(finEncoded, 1, true))
+        socket.registerOutgoingPacket(OutgoingPacket.init(finEncoded, 1, true)) 
+        socket.finSent = true
         await socket.sendData(finEncoded)
     else:
       # In any other case like connection is not established so sending fin make
@@ -747,15 +760,23 @@ proc closeWait*(socket: UtpSocket) {.async.} =
   await socket.close()
   await socket.closeEvent.wait()
 
-proc write*(socket: UtpSocket, data: seq[byte]): Future[int] {.async.} = 
+proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] {.async.} = 
+  
+  if (socket.state != Connected):
+    return err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
+  
+  # fin should be last packet received by remote side, therefore trying to write
+  # after sending fin is considered error
+  if socket.finSent:
+    return err(WriteError(kind: FinSent))
+
   var bytesWritten = 0
+  
   # TODO 
-  # Handle different socket state i.e do not write when socket is full or not
-  # connected
   # Handle growing of send window
 
   if len(data) == 0:
-    return bytesWritten
+    return ok(bytesWritten)
 
   if socket.curWindowPackets == 0:
     socket.resetSendTimeout()
@@ -772,7 +793,8 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[int] {.async.} =
     bytesWritten = bytesWritten + len(dataSlice)
     i = lastOrEnd + 1
   await socket.flushPackets()
-  return bytesWritten
+
+  return ok(bytesWritten)
 
 template readLoop(body: untyped): untyped =
   while true:
