@@ -73,3 +73,11 @@ proc new*(
 
 proc connectTo*(r: UtpDiscv5Protocol, address: Node): Future[UtpSocket[Node]]=
   return r.router.connectTo(address)
+
+proc shutdown*(r: UtpDiscv5Protocol) =
+  ## closes all managed utp connections in background (not closed discovery, it is up to user)
+  r.router.shutdown()
+
+proc shutdownWait*(r: UtpDiscv5Protocol) {.async.} =
+  ## closes all managed utp connections in background (not closed discovery, it is up to user)
+  await r.router.shutdownWait()

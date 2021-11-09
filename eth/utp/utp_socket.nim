@@ -9,6 +9,7 @@
 import
   std/sugar,
   chronos, chronicles, bearssl,
+  stew/results,
   ./growable_buffer,
   ./packets
 
@@ -16,7 +17,7 @@ logScope:
   topics = "utp_socket"
 
 type
-  ConnectionState = enum
+  ConnectionState* = enum
     SynSent,
     SynRecv,
     Connected,
@@ -109,11 +110,29 @@ type
     # number on consecutive re-transsmisions
     retransmitCount: uint32
 
-    # Event which will complete whenever socket gets in destory statate
+    # Event which will complete whenever socket gets in destory state
     closeEvent: AsyncEvent
 
     # All callback to be called whenever socket gets in destroy state
     closeCallbacks: seq[Future[void]]
+
+    # socket is closed for reading
+    readShutdown: bool
+
+    # we sent out fin packet
+    finSent: bool
+
+    # have our fin been acked
+    finAcked: bool
+
+    # have we received remote fin
+    gotFin: bool
+
+    # have we reached remote fin packet
+    reachedFin: bool
+
+    # sequence number of remoted fin packet
+    eofPktNr: uint16
 
     # socket identifier
     socketKey*: UtpSocketKey[A]
@@ -125,6 +144,19 @@ type
   SocketCloseCallback* = proc (): void {.gcsafe, raises: [Defect].}
 
   ConnectionError* = object of CatchableError
+
+  WriteErrorType* = enum
+    SocketNotWriteable, 
+    FinSent
+
+  WriteError* = object
+    case kind*: WriteErrorType
+    of SocketNotWriteable:
+      currentState*: ConnectionState
+    of FinSent:
+      discard
+
+  WriteResult* = Result[int, WriteError]
 
 const
   # Maximal number of payload bytes per packet. Total packet size will be equal to
@@ -254,7 +286,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       # client initiated connections, but did not send following data packet in rto
       # time. TODO this should be configurable
       if (socket.state == SynRecv):
-        socket.close()
+        socket.destroy()
         return
       
       if socket.shouldDisconnectFromFailedRemote():
@@ -263,7 +295,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
           # but maybe it would be more clean to use result
           socket.connectionFuture.fail(newException(ConnectionError, "Connection to peer timed out"))
 
-        socket.close()
+        socket.destroy()
         return
 
       let newTimeout = socket.retransmitTimeout * 2
@@ -416,17 +448,19 @@ proc startIncomingSocket*(socket: UtpSocket) {.async.} =
 proc isConnected*(socket: UtpSocket): bool =
   socket.state == Connected or socket.state == ConnectedFull
 
-proc close*(s: UtpSocket) =
-  # TODO Rething all this when working on FIN packets and proper handling
-  # of resources
+proc destroy*(s: UtpSocket) =
+  ## Moves socket to destroy state and clean all reasources.
+  ## Remote is not notified in any way about socket end of life
   s.state = Destroy
   s.checkTimeoutsLoop.cancel()
   s.closeEvent.fire()
 
-proc closeWait*(s: UtpSocket) {.async.} =
-  # TODO Rething all this when working on FIN packets and proper handling
-  # of resources
-  s.close()
+proc destroyWait*(s: UtpSocket) {.async.} =
+  ## Moves socket to destroy state and clean all reasources and wait for all registered
+  ## callback to fire
+  ## Remote is not notified in any way about socket end of life
+  s.destroy()
+  await s.closeEvent.wait()
   await allFutures(s.closeCallbacks)
 
 proc setCloseCallback(s: UtpSocket, cb: SocketCloseCallback) {.async.} =
@@ -560,34 +594,66 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     notice "Received packet is totally of the mark"
     return
 
+  # socket.curWindowPackets == acks means that this packet acked all remaining packets
+  # including the sent fin packets
+  if (socket.finSent and socket.curWindowPackets == acks):
+    notice "FIN acked, destroying socket"
+    socket.finAcked = true
+    # this bit of utp spec is a bit under specified (i.e there is not specification at all)
+    # reference implementation moves socket to destroy state in case that our fin was acked
+    # and socket is considered closed for reading and writing.
+    # but in theory remote could stil write some data on this socket (or even its own fin)
+    socket.destroy()
+
   socket.ackPackets(acks)
 
   case p.header.pType
-    of ST_DATA:
+    of ST_DATA, ST_FIN:
       # To avoid amplification attacks, server socket is in SynRecv state until
       # it receices first data transfer
       # https://www.usenix.org/system/files/conference/woot15/woot15-paper-adamsky.pdf
       # TODO when intgrating with discv5 this need to be configurable
-      if (socket.state == SynRecv):
+      if (socket.state == SynRecv and p.header.pType == ST_DATA):
         socket.state = Connected
 
-      notice "Received ST_DATA on known socket"
+      if (p.header.pType == ST_FIN and (not socket.gotFin)):
+        socket.gotFin = true
+        socket.eofPktNr = pkSeqNr
 
-      if (pastExpected == 0):
-        # we are getting in order data packet, we can flush data directly to the incoming buffer
-        await upload(addr socket.buffer, unsafeAddr p.payload[0], p.payload.len())
-
+      # we got in order packet
+      if (pastExpected == 0 and (not socket.reachedFin)):
+        if (len(p.payload) > 0 and (not socket.readShutdown)):
+          # we are getting in order data packet, we can flush data directly to the incoming buffer
+          await upload(addr socket.buffer, unsafeAddr p.payload[0], p.payload.len())
         # Bytes have been passed to upper layer, we can increase number of last 
         # acked packet
         inc socket.ackNr
 
         # check if the following packets are in reorder buffer
         while true:
+          # We are doing this in reoreder loop, to handle the case when we already received
+          # fin but there were some gaps before eof
+          # we have reached remote eof, and should not receive more packets from remote
+          if ((not socket.reachedFin) and socket.gotFin and socket.eofPktNr == socket.ackNr):
+            notice "Reached socket EOF"
+            # In case of reaching eof, it is up to user of library what to to with
+            # it. With the current implementation, the most apropriate way would be to 
+            # destory it (as with our implementation we know that remote is destroying its acked fin)
+            # as any other send will either generate timeout, or socket will be forcefully
+            # closed by reset
+            socket.reachedFin = true
+            # this is not necessarily true, but as we have already reached eof we can
+            # ignore following packets
+            socket.reorderCount = 0
+
+            # notify all readers we have reached eof
+            socket.buffer.forget()
+
           if socket.reorderCount == 0:
             break
           
-          # TODO Handle case when we have reached eof becouse of fin packet
           let nextPacketNum = socket.ackNr + 1
+
           let maybePacket = socket.inBuffer.get(nextPacketNum)
           
           if maybePacket.isNone():
@@ -595,7 +661,8 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
           
           let packet = maybePacket.unsafeGet()
 
-          await upload(addr socket.buffer, unsafeAddr packet.payload[0], packet.payload.len())
+          if (len(packet.payload) > 0 and (not socket.readShutdown)):
+            await upload(addr socket.buffer, unsafeAddr packet.payload[0], packet.payload.len())
 
           socket.inBuffer.delete(nextPacketNum)
 
@@ -607,9 +674,14 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
         # how many concurrent tasks there are and how to cancel them when socket
         # is closed
         asyncSpawn socket.sendAck()
+      
+      # we got packet out of order
       else:
-        # TODO Handle case when out of order is out of eof range
         notice "Got out of order packet"
+
+        if (socket.gotFin and pkSeqNr > socket.eofPktNr):
+          notice "Got packet past eof"
+          return
 
         # growing buffer before checking the packet is already there to avoid 
         # looking at older packet due to indices wrap aroud
@@ -623,12 +695,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
           notice "added out of order packet in reorder buffer"
           # TODO for now we do not sent any ack as we do not handle selective acks
           # add sending of selective acks
-    of ST_FIN:
-      # TODO not implemented
-      notice "Received ST_FIN on known socket"
     of ST_STATE:
-      notice "Received ST_STATE on known socket"
-
       if (socket.state == SynSent and (not socket.connectionFuture.finished())):
         socket.state = Connected
         # TODO reference implementation sets ackNr (p.header.seqNr - 1), although
@@ -644,22 +711,17 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
         # existence of application level handshake over utp. We may need to modify this
         # to automaticly send ST_DATA .
     of ST_RESET:
-      # TODO not implemented
-      notice "Received ST_RESET on known socket"
+      notice "Received ST_RESET on known socket, ignoring"
     of ST_SYN:
-      # TODO not implemented
-      notice "Received ST_SYN on known socket"
+      notice "Received ST_SYN on known socket, ignoring"
 
-template readLoop(body: untyped): untyped =
-  while true:
-    # TODO error handling
-    let (consumed, done) = body
-    socket.buffer.shift(consumed)
-    if done:
-      break
-    else:
-      # TODO add condition to handle socket closing
-      await socket.buffer.wait()
+proc atEof*(socket: UtpSocket): bool =
+  # socket is considered at eof when remote side sent us fin packet
+  # and we have processed all packets up to fin
+  socket.buffer.dataLen() == 0 and socket.reachedFin
+
+proc readingClosed(socket: UtpSocket): bool =
+  socket.atEof() or socket.state == Destroy
 
 proc getPacketSize(socket: UtpSocket): int =
   # TODO currently returning constant, ultimatly it should be bases on mtu estimates
@@ -669,15 +731,52 @@ proc resetSendTimeout(socket: UtpSocket) =
   socket.retransmitTimeout = socket.rto
   socket.rtoTimeout = Moment.now() + socket.retransmitTimeout
 
-proc write*(socket: UtpSocket, data: seq[byte]): Future[int] {.async.} = 
+proc close*(socket: UtpSocket) {.async.} =
+  ## Gracefully closes conneciton (send FIN) if socket is in connected state
+  ## does not wait for socket to close
+  if socket.state != Destroy:
+    case socket.state
+    of Connected, ConnectedFull:
+      socket.readShutdown = true
+      if (not socket.finSent):
+        if socket.curWindowPackets == 0:
+          socket.resetSendTimeout()
+        
+        let finEncoded = encodePacket(finPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, 1048576))
+        socket.registerOutgoingPacket(OutgoingPacket.init(finEncoded, 1, true)) 
+        socket.finSent = true
+        await socket.sendData(finEncoded)
+    else:
+      # In any other case like connection is not established so sending fin make
+      # no sense, we can just out right close it
+      socket.destroy()
+
+proc closeWait*(socket: UtpSocket) {.async.} =
+  ## Gracefully closes conneciton (send FIN) if socket is in connected state
+  ## and waits for socket to be closed.
+  ## Warning: if FIN packet for some reason will be lost, then socket will be closed
+  ## due to retransmission failure which may take some time.
+  ## default is 4 retransmissions with doubling of rto between each retranssmision
+  await socket.close()
+  await socket.closeEvent.wait()
+
+proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] {.async.} = 
+  
+  if (socket.state != Connected):
+    return err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
+  
+  # fin should be last packet received by remote side, therefore trying to write
+  # after sending fin is considered error
+  if socket.finSent:
+    return err(WriteError(kind: FinSent))
+
   var bytesWritten = 0
+  
   # TODO 
-  # Handle different socket state i.e do not write when socket is full or not
-  # connected
   # Handle growing of send window
 
   if len(data) == 0:
-    return bytesWritten
+    return ok(bytesWritten)
 
   if socket.curWindowPackets == 0:
     socket.resetSendTimeout()
@@ -694,7 +793,18 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[int] {.async.} =
     bytesWritten = bytesWritten + len(dataSlice)
     i = lastOrEnd + 1
   await socket.flushPackets()
-  return bytesWritten
+
+  return ok(bytesWritten)
+
+template readLoop(body: untyped): untyped =
+  while true:
+    let (consumed, done) = body
+    socket.buffer.shift(consumed)
+    if done:
+      break
+    else:
+      if not(socket.readingClosed()):
+        await socket.buffer.wait()
 
 proc read*(socket: UtpSocket, n: Natural): Future[seq[byte]] {.async.}=
   ## Read all bytes `n` bytes from socket ``socket``.
@@ -706,10 +816,28 @@ proc read*(socket: UtpSocket, n: Natural): Future[seq[byte]] {.async.}=
     return bytes
 
   readLoop():
-    # TODO Add handling of socket closing
-    let count = min(socket.buffer.dataLen(), n - len(bytes))
-    bytes.add(socket.buffer.buffer.toOpenArray(0, count - 1))
-    (count, len(bytes) == n)
+    if socket.readingClosed():
+      (0, true)
+    else:
+      let count = min(socket.buffer.dataLen(), n - len(bytes))
+      bytes.add(socket.buffer.buffer.toOpenArray(0, count - 1))
+      (count, len(bytes) == n)
+
+  return bytes
+
+proc read*(socket: UtpSocket): Future[seq[byte]] {.async.}=
+  ## Read all bytes from socket ``socket``.
+  ##
+  ## This procedure allocates buffer seq[byte] and return it as result.
+  var bytes = newSeq[byte]()
+
+  readLoop():
+    if socket.readingClosed():  
+      (0, true)
+    else:
+      let count = socket.buffer.dataLen()
+      bytes.add(socket.buffer.buffer.toOpenArray(0, count - 1))
+      (count, false)
 
   return bytes
 

@@ -131,7 +131,7 @@ procSuite "Utp router unit tests":
     check:
       router.len() == 1
 
-    await socket.closeWait()
+    await socket.destroyWait()
 
     check:
       not socket.isConnected()
@@ -161,7 +161,7 @@ procSuite "Utp router unit tests":
       outgoingSocket.isConnected()
       router.len() == 1
 
-    await outgoingSocket.closeWait()
+    await outgoingSocket.destroyWait()
 
     check:
       not outgoingSocket.isConnected()

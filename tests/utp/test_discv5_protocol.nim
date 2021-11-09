@@ -78,7 +78,7 @@ procSuite "Utp protocol over discovery v5 tests":
     check:
       clientSocket.isConnected()
 
-    clientSocket.close()
+    await clientSocket.destroyWait()
     await node1.closeWait()
     await node2.closeWait()
 
@@ -108,12 +108,12 @@ procSuite "Utp protocol over discovery v5 tests":
     let received = await serverSocket.read(numOfBytes)
 
     check:
-      written == numOfBytes
+      written.get() == numOfBytes
       bytesToTransfer == received
       clientSocket.isConnected()
       serverSocket.isConnected()
 
-    clientSocket.close()
-    serverSocket.close()
+    await clientSocket.destroyWait()
+    await serverSocket.destroyWait()
     await node1.closeWait()
     await node2.closeWait()

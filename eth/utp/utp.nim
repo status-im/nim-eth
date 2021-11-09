@@ -47,4 +47,4 @@ when isMainModule:
 
   runForever()
 
-  waitFor utpProt.closeWait()
+  waitFor utpProt.shutdownWait()

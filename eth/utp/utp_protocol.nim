@@ -91,12 +91,11 @@ proc new*(
   router.sendCb = initSendCallback(ta)
   UtpProtocol(transport: ta, utpRouter: router)
 
-proc closeWait*(p: UtpProtocol): Future[void] {.async.} =
-  # TODO Rething all this when working on FIN and RESET packets and proper handling
-  # of resources
+proc shutdownWait*(p: UtpProtocol): Future[void] {.async.} =
+  ## closes all managed utp sockets and then underlying transport
+  await p.utpRouter.shutdownWait()
   await p.transport.closeWait()
-  p.utpRouter.close()
-
+ 
 proc connectTo*(r: UtpProtocol, address: TransportAddress): Future[UtpSocket[TransportAddress]] =
   return r.utpRouter.connectTo(address)
 

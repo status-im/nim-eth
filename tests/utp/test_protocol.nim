@@ -32,7 +32,7 @@ proc registerIncomingSocketCallback(serverSockets: AsyncQueue): AcceptConnection
 
 proc transferData(sender: UtpSocket[TransportAddress], receiver: UtpSocket[TransportAddress], data: seq[byte]): Future[seq[byte]] {.async.}=
   let bytesWritten = await sender.write(data)
-  doAssert bytesWritten == len(data)
+  doAssert bytesWritten.get() == len(data)
   let received = await receiver.read(len(data))
   return received
 
@@ -72,8 +72,10 @@ proc initClientServerScenario(): Future[ClientServerScenario] {.async.} =
   )
 
 proc close(s: ClientServerScenario) {.async.} =
-  await s.utp1.closeWait()
-  await s.utp2.closeWait()
+  await s.clientSocket.destroyWait()
+  await s.serverSocket.destroyWait()
+  await s.utp1.shutdownWait()
+  await s.utp2.shutdownWait()
 
 proc init2ClientsServerScenario(): Future[TwoClientsServerScenario] {.async.} =
   var serverSockets = newAsyncQueue[UtpSocket[TransportAddress]]()
@@ -107,9 +109,9 @@ proc init2ClientsServerScenario(): Future[TwoClientsServerScenario] {.async.} =
   )
 
 proc close(s: TwoClientsServerScenario) {.async.} =
-  await s.utp1.closeWait()
-  await s.utp2.closeWait()
-  await s.utp3.closeWait()
+  await s.utp1.shutdownWait()
+  await s.utp2.shutdownWait()
+  await s.utp3.shutdownWait()
 
 procSuite "Utp protocol over udp tests":
   let rng = newRng()
@@ -136,8 +138,8 @@ procSuite "Utp protocol over udp tests":
       
       server2Called.isSet()
 
-    await utpProt1.closeWait()
-    await utpProt2.closeWait()
+    await utpProt1.shutdownWait()
+    await utpProt2.shutdownWait()
 
   asyncTest "Fail to connect to offline remote host":
     let server1Called = newAsyncEvent()
@@ -158,7 +160,7 @@ procSuite "Utp protocol over udp tests":
     check:
       utpProt1.openSockets() == 0
 
-    await utpProt1.closeWait()
+    await utpProt1.shutdownWait()
 
   asyncTest "Success connect to remote host which initialy was offline":
     let server1Called = newAsyncEvent()
@@ -184,8 +186,8 @@ procSuite "Utp protocol over udp tests":
       futSock.finished() and (not futsock.failed()) and (not futsock.cancelled())
       server2Called.isSet()
 
-    await utpProt1.closeWait()
-    await utpProt2.closeWait()
+    await utpProt1.shutdownWait()
+    await utpProt2.shutdownWait()
 
   asyncTest "Success data transfer when data fits into one packet":
     let s = await initClientServerScenario()
@@ -260,14 +262,14 @@ procSuite "Utp protocol over udp tests":
     let written = await s.clientSocket.write(bytesToTransfer)
 
     check:
-      written == len(bytesToTransfer)
+      written.get() == len(bytesToTransfer)
 
     let bytesToTransfer1 = generateByteArray(rng[], 5000)
 
     let written1 = await s.clientSocket.write(bytesToTransfer1)
 
     check:
-      written1 == len(bytesToTransfer)
+      written1.get() == len(bytesToTransfer)
 
     let bytesReceived = await s.serverSocket.read(len(bytesToTransfer) + len(bytesToTransfer1))
     
@@ -302,5 +304,69 @@ procSuite "Utp protocol over udp tests":
     check:
       client1Data == server1ReadBytes
       client2Data == server2ReadBytes
+
+    await s.close()
+
+  asyncTest "Gracefull stop of the socket":
+    let s = await initClientServerScenario()
+    check:
+      s.clientSocket.isConnected()
+      # after successful connection outgoing buffer should be empty as syn packet
+      # should be correctly acked
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
+
+      # Server socket is not in connected state, until first data transfer
+      (not s.serverSocket.isConnected())
+
+    let bytesToTransfer = generateByteArray(rng[], 100)
+
+    let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
+
+    check:
+      bytesToTransfer == bytesReceivedFromClient
+      s.serverSocket.isConnected()
+
+    await s.clientSocket.closeWait()
+
+    check:
+      not s.clientSocket.isConnected()
+      s.serverSocket.atEof()
+      s.utp1.openSockets() == 0
+      s.utp2.openSockets() == 1
+
+    await s.serverSocket.destroyWait()
+
+    check:
+      not s.serverSocket.isConnected()
+      s.utp2.openSockets() == 0
+
+    await s.close()
+
+  asyncTest "Reading data until eof":
+    let s = await initClientServerScenario()
+    check:
+      s.clientSocket.isConnected()
+      # after successful connection outgoing buffer should be empty as syn packet
+      # should be correctly acked
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
+
+      # Server socket is not in connected state, until first data transfer
+      (not s.serverSocket.isConnected())
+
+    let bytesToTransfer1 = generateByteArray(rng[], 1000)
+    let bytesToTransfer2 = generateByteArray(rng[], 1000)
+    let bytesToTransfer3 = generateByteArray(rng[], 1000)
+
+    let w1 = await s.clientSocket.write(bytesToTransfer1)
+    let w2 = await s.clientSocket.write(bytesToTransfer2)
+    let w3 = await s.clientSocket.write(bytesToTransfer3)
+    await s.clientSocket.closeWait()
+
+    let readData = await s.serverSocket.read()
+
+    check:
+      readData == concat(bytesToTransfer1, bytesToTransfer2, bytesToTransfer3)
+      s.serverSocket.atEof()
+      s.utp1.openSockets() == 0
 
     await s.close()
