@@ -37,6 +37,7 @@ type
     # was received, and the timestamp in this last received packet
     timestampDiff*: MicroSeconds
     # The window size is the number of bytes currently in-flight, i.e. sent but not acked
+    # When sending packets, this should be set to the number of bytes left in the socket's receive buffer.
     wndSize*: uint32
     seqNr*: uint16
     # sequence number the sender of the packet last received in the other direction
