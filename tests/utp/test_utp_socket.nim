@@ -502,13 +502,13 @@ procSuite "Utp socket unit test":
 
   asyncTest "Processing data packet should update window size accordingly and use it in all send packets":
     let q = newAsyncQueue[Packet]()
-    let initalRemoteSeqNr = 10'u16
+    let initialRemoteSeqNr = 10'u16
     let initialRcvBufferSize = 10'u32
     let data = @[1'u8, 2'u8, 3'u8]
     let sCfg = SocketConfig.init(optRcvBuffer = initialRcvBufferSize)
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initalRemoteSeqNr, q, sCfg)
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeqNr, q, sCfg)
 
-    let dataP1 = dataPacket(initalRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
+    let dataP1 = dataPacket(initialRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
     
     await outgoingSocket.processPacket(dataP1)
 
@@ -516,7 +516,7 @@ procSuite "Utp socket unit test":
 
     check:
       ack1.header.pType == ST_STATE
-      ack1.header.ackNr == initalRemoteSeqNr
+      ack1.header.ackNr == initialRemoteSeqNr
       ack1.header.wndSize == initialRcvBufferSize - uint32(len(data))
 
     let written = await outgoingSocket.write(data)
