@@ -54,6 +54,9 @@ type
     # failed
     dataResendsBeforeFailure*: uint16
 
+    # Maximnal size of receive buffer in bytes
+    optRcvBuffer*: uint32
+
   UtpSocket*[A] = ref object
     remoteAddress*: A
     state: ConnectionState
@@ -179,12 +182,27 @@ const
   # dead. 4 is taken from reference implementation
   defaultDataResendsBeforeFailure = 4'u16
 
+  # default size of rcv buffer in bytes
+  # rationale form C reference impl:
+  # 1 MB of receive buffer (i.e. max bandwidth delay product)
+  # means that from  a peer with 200 ms RTT, we cannot receive
+  # faster than 5 MB/s
+  # from a peer with 10 ms RTT, we cannot receive faster than
+  # 100 MB/s. This is assumed to be good enough, since bandwidth
+  # often is proportional to RTT anyway
+  defaultOptRcvBuffer: uint32 = 1024 * 1024
+
   reorderBufferMaxSize = 1024
 
 proc init*[A](T: type UtpSocketKey, remoteAddress: A, rcvId: uint16): T =
   UtpSocketKey[A](remoteAddress: remoteAddress, rcvId: rcvId)
 
-proc init(T: type OutgoingPacket, packetBytes: seq[byte], transmissions: uint16, needResend: bool, timeSent: Moment = Moment.now()): T =
+proc init(
+  T: type OutgoingPacket,
+  packetBytes: seq[byte],
+  transmissions: uint16,
+  needResend: bool,
+  timeSent: Moment = Moment.now()): T =
   OutgoingPacket(
     packetBytes: packetBytes,
     transmissions: transmissions,
@@ -195,12 +213,21 @@ proc init(T: type OutgoingPacket, packetBytes: seq[byte], transmissions: uint16,
 proc init*(
   T: type SocketConfig, 
   initialSynTimeout: Duration = defaultInitialSynTimeout,
-  dataResendsBeforeFailure: uint16 = defaultDataResendsBeforeFailure
+  dataResendsBeforeFailure: uint16 = defaultDataResendsBeforeFailure,
+  optRcvBuffer: uint32 = defaultOptRcvBuffer
   ): T =
   SocketConfig(
     initialSynTimeout: initialSynTimeout,
-    dataResendsBeforeFailure: dataResendsBeforeFailure
+    dataResendsBeforeFailure: dataResendsBeforeFailure,
+    optRcvBuffer: optRcvBuffer
   )
+
+proc getRcvWindowSize(socket: UtpSocket): uint32 =
+  let currentDataSize = socket.buffer.dataLen()
+  if currentDataSize > int(socket.socketConfig.optRcvBuffer):
+    0'u32
+  else:
+    socket.socketConfig.optRcvBuffer - uint32(currentDataSize)
 
 proc registerOutgoingPacket(socket: UtpSocket, oPacket: OutgoingPacket) =
   ## Adds packet to outgoing buffer and updates all related fields
@@ -216,12 +243,18 @@ proc sendAck(socket: UtpSocket): Future[void] =
   ## Creates and sends ack, based on current socket state. Acks are different from
   ## other packets as we do not track them in outgoing buffet
 
-  let ackPacket = ackPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, 1048576)
+  let ackPacket = 
+    ackPacket(
+      socket.seqNr,
+      socket.connectionIdSnd,
+      socket.ackNr, 
+      socket.getRcvWindowSize()
+    )
   socket.sendData(encodePacket(ackPacket))
 
 proc sendSyn(socket: UtpSocket): Future[void] =
   doAssert(socket.state == SynSent , "syn can only be send when in SynSent state")
-  let packet = synPacket(socket.seqNr, socket.connectionIdRcv, 1048576)
+  let packet = synPacket(socket.seqNr, socket.connectionIdRcv, socket.getRcvWindowSize())
   notice "Sending syn packet packet", packet = packet
   # set number of transmissions to 1 as syn packet will be send just after
   # initiliazation
@@ -373,9 +406,7 @@ proc new[A](
     rtt: milliseconds(0),
     rttVar: milliseconds(800),
     rto: milliseconds(3000),
-    # Default 1MB buffer
-    # TODO add posibility to configure buffer size
-    buffer: AsyncBuffer.init(1024 * 1024),
+    buffer: AsyncBuffer.init(int(cfg.optRcvBuffer)),
     closeEvent: newAsyncEvent(),
     closeCallbacks: newSeq[Future[void]](),
     socketKey: UtpSocketKey.init(to, rcvId),
@@ -742,7 +773,7 @@ proc close*(socket: UtpSocket) {.async.} =
         if socket.curWindowPackets == 0:
           socket.resetSendTimeout()
         
-        let finEncoded = encodePacket(finPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, 1048576))
+        let finEncoded = encodePacket(finPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, socket.getRcvWindowSize()))
         socket.registerOutgoingPacket(OutgoingPacket.init(finEncoded, 1, true)) 
         socket.finSent = true
         await socket.sendData(finEncoded)
@@ -784,11 +815,12 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] {.async.} =
   let pSize = socket.getPacketSize()
   let endIndex = data.high()
   var i = 0
+  let wndSize = socket.getRcvWindowSize()
   while i <= data.high:
     let lastIndex = i + pSize - 1
     let lastOrEnd = min(lastIndex, endIndex)
     let dataSlice = data[i..lastOrEnd]
-    let dataPacket = dataPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, 1048576, dataSlice)
+    let dataPacket = dataPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, wndSize, dataSlice)
     socket.registerOutgoingPacket(OutgoingPacket.init(encodePacket(dataPacket), 0, false))
     bytesWritten = bytesWritten + len(dataSlice)
     i = lastOrEnd + 1

@@ -57,8 +57,11 @@ procSuite "Utp socket unit test":
       resultBytes.add(p.payload)
     return resultBytes
 
-  template connectOutGoingSocket(initialRemoteSeq: uint16, q: AsyncQueue[Packet]): (UtpSocket[TransportAddress], Packet) =
-    let sock1 = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), SocketConfig.init(), rng[])
+  template connectOutGoingSocket(
+    initialRemoteSeq: uint16,
+    q: AsyncQueue[Packet],
+    cfg: SocketConfig = SocketConfig.init()): (UtpSocket[TransportAddress], Packet) =
+    let sock1 = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, rng[])
     await sock1.startOutgoingSocket()
     let initialPacket = await q.get()
 
@@ -76,12 +79,14 @@ procSuite "Utp socket unit test":
 
   asyncTest "Starting outgoing socket should send Syn packet":
     let q = newAsyncQueue[Packet]()
-    let sock1 = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), SocketConfig.init(), rng[])
+    let defaultConfig = SocketConfig.init()
+    let sock1 = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), defaultConfig, rng[])
     await sock1.startOutgoingSocket()
     let initialPacket = await q.get()
 
     check:
       initialPacket.header.pType == ST_SYN
+      initialPacket.header.wndSize == defaultConfig.optRcvBuffer
 
   asyncTest "Outgoing socket should re-send syn packet 2 times before declaring failure":
     let q = newAsyncQueue[Packet]()
@@ -477,7 +482,6 @@ procSuite "Utp socket unit test":
       error.kind == SocketNotWriteable
       error.currentState == Destroy
 
-
   asyncTest "Trying to write data onto closed socket which sent fin":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
@@ -495,3 +499,72 @@ procSuite "Utp socket unit test":
 
     check:
       error.kind == FinSent
+
+  asyncTest "Processing data packet should update window size accordingly and use it in all send packets":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeqNr = 10'u16
+    let initialRcvBufferSize = 10'u32
+    let data = @[1'u8, 2'u8, 3'u8]
+    let sCfg = SocketConfig.init(optRcvBuffer = initialRcvBufferSize)
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeqNr, q, sCfg)
+
+    let dataP1 = dataPacket(initialRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
+    
+    await outgoingSocket.processPacket(dataP1)
+
+    let ack1 = await q.get()
+
+    check:
+      ack1.header.pType == ST_STATE
+      ack1.header.ackNr == initialRemoteSeqNr
+      ack1.header.wndSize == initialRcvBufferSize - uint32(len(data))
+
+    let written = await outgoingSocket.write(data)
+
+    let sentData = await q.get()
+
+    check:
+      sentData.header.pType == ST_DATA
+      sentData.header.wndSize == initialRcvBufferSize - uint32(len(data))
+
+    await outgoingSocket.close()
+
+    let sentFin = await q.get()
+
+    check:
+      sentFin.header.pType == ST_FIN
+      sentFin.header.wndSize == initialRcvBufferSize - uint32(len(data))
+
+  asyncTest "Reading data from the buffer shoud increase receive window":
+    let q = newAsyncQueue[Packet]()
+    let initalRemoteSeqNr = 10'u16
+    let initialRcvBufferSize = 10'u32
+    let data = @[1'u8, 2'u8, 3'u8]
+    let sCfg = SocketConfig.init(optRcvBuffer = initialRcvBufferSize)
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initalRemoteSeqNr, q, sCfg)
+
+    let dataP1 = dataPacket(initalRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
+    
+    await outgoingSocket.processPacket(dataP1)
+
+    let ack1 = await q.get()
+
+    check:
+      ack1.header.pType == ST_STATE
+      ack1.header.ackNr == initalRemoteSeqNr
+      ack1.header.wndSize == initialRcvBufferSize - uint32(len(data))
+
+    let readData = await outgoingSocket.read(data.len())
+
+    check:
+      readData == data
+
+    discard await outgoingSocket.write(data)
+
+    let sentData = await q.get()
+
+    check:
+      sentData.header.pType == ST_DATA
+      # we have read all data from rcv buffer, advertised window should go back to
+      # initial size
+      sentData.header.wndSize == initialRcvBufferSize
