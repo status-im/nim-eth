@@ -568,3 +568,29 @@ procSuite "Utp socket unit test":
       # we have read all data from rcv buffer, advertised window should go back to
       # initial size
       sentData.header.wndSize == initialRcvBufferSize
+
+  asyncTest "Socket should ignore packets with bad ack number":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+    let data1 = @[1'u8, 2'u8, 3'u8]
+    let data2 = @[4'u8, 5'u8, 6'u8]
+    let data3 = @[7'u8, 7'u8, 9'u8]
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    # data packet with ack nr set above our seq nr i.e  packet from the future
+    let dataFuture = dataPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr + 1, testBufferSize, data1)
+    # data packet wth ack number set below out ack window i.e packet too old
+    let dataTooOld = dataPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr - allowedAckWindow - 1, testBufferSize, data2)
+
+    let dataOk = dataPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data3)
+    
+    await outgoingSocket.processPacket(dataFuture)
+    await outgoingSocket.processPacket(dataTooOld)
+    await outgoingSocket.processPacket(dataOk)
+
+    let receivedBytes = await outgoingSocket.read(data3.len)
+
+    check:
+      # data1 and data2 were sent in bad packets we should only receive data3
+      receivedBytes == data3

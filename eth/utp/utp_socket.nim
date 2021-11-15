@@ -192,6 +192,12 @@ const
   # often is proportional to RTT anyway
   defaultOptRcvBuffer: uint32 = 1024 * 1024
 
+  # rationale from C reference impl:
+  # Allow a reception window of at least 3 ack_nrs behind seq_nr
+  # A non-SYN packet with an ack_nr difference greater than this is
+  # considered suspicious and ignored
+  allowedAckWindow*: uint16 = 3
+
   reorderBufferMaxSize = 1024
 
 proc init*[A](T: type UtpSocketKey, remoteAddress: A, rcvId: uint16): T =
@@ -592,12 +598,40 @@ proc initializeAckNr(socket: UtpSocket, packetSeqNr: uint16) =
   if (socket.state == SynSent):
     socket.ackNr = packetSeqNr - 1
 
+# compare if lhs is less than rhs, taking wrapping
+# into account. i.e high(lhs) < 0 == true
+proc wrapCompareLess(lhs: uint16, rhs:uint16): bool =
+  let distDown = (lhs - rhs)
+  let distUp = (rhs - lhs)
+  # if the distance walking up is shorter, lhs
+  # is less than rhs. If the distance walking down
+  # is shorter, then rhs is less than lhs
+  return distUp < distDown
+
+proc isAckNrInvalid(socket: UtpSocket, packet: Packet): bool =
+  let ackWindow = max(socket.curWindowPackets + allowedAckWindow, allowedAckWindow)
+  (
+    (packet.header.pType != ST_SYN or socket.state != SynRecv) and
+    (
+      # packet ack number must be smaller than our last send packet i.e
+      # remote should not ack packets from the future
+      wrapCompareLess(socket.seqNr - 1, packet.header.ackNr) or
+      # packet ack number should not be too old
+      wrapCompareLess(packet.header.ackNr, socket.seqNr - 1 - ackWindow)
+    )
+  )
+
 # TODO at socket level we should handle only FIN/DATA/ACK packets. Refactor to make
 # it enforcable by type system
 # TODO re-think synchronization of this procedure, as each await inside gives control
 # to scheduler which means there could be potentialy several processPacket procs
 # running
 proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
+
+  if socket.isAckNrInvalid(p):
+    notice "Received packet with invalid ack nr"
+    return
+
   ## Updates socket state based on received packet, and sends ack when necessary.
   ## Shoyuld be called in main packet receiving loop
   let pkSeqNr = p.header.seqNr
