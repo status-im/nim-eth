@@ -29,6 +29,7 @@ type
     # can be created
     env: Sqlite
     managedStmts: seq[RawStmtPtr]
+    readOnly*: bool
 
   SqStoreCheckpointKind* {.pure.} = enum
     passive, full, restart, truncate
@@ -509,6 +510,7 @@ proc init*(
 
   ok(SqStoreRef(
     env: env.release,
+    readOnly: readOnly
   ))
 
 proc openKvStore*(db: SqStoreRef, name = "kvstore", withoutRowid = false): KvResult[SqKeyspaceRef] =
@@ -519,15 +521,15 @@ proc openKvStore*(db: SqStoreRef, name = "kvstore", withoutRowid = false): KvRes
   ##               rows (the row being the sum of key and value) - see
   ##               https://www.sqlite.org/withoutrowid.html
   ##
-  let
-    createSql = """
+
+  if not db.readOnly:
+    let createSql = """
       CREATE TABLE IF NOT EXISTS """ & name & """ (
          key BLOB PRIMARY KEY,
          value BLOB
       )"""
-
-  checkExec db.env,
-    if withoutRowid: createSql & " WITHOUT ROWID;" else: createSql & ";"
+    checkExec db.env,
+      if withoutRowid: createSql & " WITHOUT ROWID;" else: createSql & ";"
 
   var
     tmp: SqKeyspace
