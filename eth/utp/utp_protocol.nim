@@ -99,5 +99,8 @@ proc shutdownWait*(p: UtpProtocol): Future[void] {.async.} =
 proc connectTo*(r: UtpProtocol, address: TransportAddress): Future[ConnectionResult[TransportAddress]] =
   return r.utpRouter.connectTo(address)
 
+proc connectTo*(r: UtpProtocol, address: TransportAddress, connectionId: uint16): Future[ConnectionResult[TransportAddress]] =
+  return r.utpRouter.connectTo(address, connectionId)
+
 proc openSockets*(r: UtpProtocol): int =
   len(r.utpRouter)

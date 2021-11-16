@@ -179,6 +179,25 @@ proc generateNewUniqueSocket[A](r: UtpRouter[A], address: A): Option[UtpSocket[A
 
   return none[UtpSocket[A]]()
   
+proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.}=
+    let startFut = s.startOutgoingSocket()
+
+    startFut.cancelCallback = proc(udata: pointer) {.gcsafe.} =
+      # if for some reason future will be cancelled, destory socket to clear it from
+      # active socket list
+      s.destroy()
+
+    try:
+      await startFut
+      return ok(s)
+    except ConnectionError:
+      s.destroy()
+      return err(OutgoingConnectionError(kind: ConnectionTimedOut))
+    except CatchableError as e:
+      s.destroy()
+      # this may only happen if user provided callback will for some reason fail
+      return err(OutgoingConnectionError(kind: ErrorWhileSendingSyn, error: e))
+
 # Connect to provided address
 # Reference implementation: https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
 proc connectTo*[A](r: UtpRouter[A], address: A): Future[ConnectionResult[A]] {.async.} =
@@ -188,23 +207,17 @@ proc connectTo*[A](r: UtpRouter[A], address: A): Future[ConnectionResult[A]] {.a
     return err(OutgoingConnectionError(kind: SocketAlreadyExists))
   else:
     let socket = maybeSocket.unsafeGet()
-    let startFut = socket.startOutgoingSocket()
+    return await socket.connect()
 
-    startFut.cancelCallback = proc(udata: pointer) {.gcsafe.} =
-      # if for some reason future will be cancelled, destory socket to clear it from
-      # activesocket list
-      socket.destroy()
+# Connect to provided address with provided connection id, if socket with this id
+# and address already exsits return error
+proc connectTo*[A](r: UtpRouter[A], address: A, connectionId: uint16): Future[ConnectionResult[A]] {.async.} =
+  let socket = initOutgoingSocket[A](address, r.sendCb, r.socketConfig, connectionId, r.rng[])
 
-    try:
-      await startFut
-      return ok(socket)
-    except ConnectionError:
-      socket.destroy()
-      return err(OutgoingConnectionError(kind: ConnectionTimedOut))
-    except CatchableError as e:
-      socket.destroy()
-      # this may only happen if user provided callback will for some reason fail
-      return err(OutgoingConnectionError(kind: ErrorWhileSendingSyn, error: e))
+  if (r.registerIfAbsent(socket)):
+    return await socket.connect() 
+  else:
+    return err(OutgoingConnectionError(kind: SocketAlreadyExists))
 
 proc shutdown*[A](r: UtpRouter[A]) =
   # stop processing any new packets and close all sockets in background without

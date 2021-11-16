@@ -74,6 +74,9 @@ proc new*(
 proc connectTo*(r: UtpDiscv5Protocol, address: Node): Future[ConnectionResult[Node]]=
   return r.router.connectTo(address)
 
+proc connectTo*(r: UtpDiscv5Protocol, address: Node, connectionId: uint16): Future[ConnectionResult[Node]]=
+  return r.router.connectTo(address, connectionId)
+
 proc shutdown*(r: UtpDiscv5Protocol) =
   ## closes all managed utp connections in background (not closed discovery, it is up to user)
   r.router.shutdown()

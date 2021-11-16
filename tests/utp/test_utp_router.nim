@@ -152,6 +152,39 @@ procSuite "Utp router unit tests":
       outgoingSocket.isConnected()
       router.len() == 1
 
+  asyncTest "Router should fail to connect to the same peer with the same connection id":
+    let q = newAsyncQueue[UtpSocket[int]]()
+    let pq = newAsyncQueue[(Packet, int)]()
+    let initialRemoteSeq = 30'u16
+    let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(), rng)
+    router.sendCb = initTestSnd(pq)
+
+    let requestedConnectionId = 1'u16
+    let connectFuture = router.connectTo(testSender2, requestedConnectionId)
+    
+    let (initialPacket, sender) = await pq.get()
+
+    check:
+      initialPacket.header.pType == ST_SYN
+      # connection id of syn packet should be set to requested connection id
+      initialPacket.header.connectionId == requestedConnectionId
+
+    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+
+    await router.processIncomingBytes(encodePacket(responseAck), testSender2)
+
+    let outgoingSocket = await connectFuture
+  
+    check:
+      outgoingSocket.get().isConnected()
+      router.len() == 1
+
+    let duplicatedConnectionResult = await router.connectTo(testSender2, requestedConnectionId)
+
+    check:
+      duplicatedConnectionResult.isErr()
+      duplicatedConnectionResult.error().kind == SocketAlreadyExists
+
   asyncTest "Router should fail connect when socket syn will not be acked":
     let q = newAsyncQueue[UtpSocket[int]]()
     let pq = newAsyncQueue[(Packet, int)]()
@@ -287,4 +320,3 @@ procSuite "Utp router unit tests":
 
     check:
       router.len() == 0
-
