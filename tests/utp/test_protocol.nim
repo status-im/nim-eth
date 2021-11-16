@@ -67,7 +67,7 @@ proc initClientServerScenario(): Future[ClientServerScenario] {.async.} =
   return ClientServerScenario(
     utp1: utpProt1,
     utp2: utpProt2,
-    clientSocket: clientSocket,
+    clientSocket: clientSocket.get(),
     serverSocket: serverSocket
   )
 
@@ -102,8 +102,8 @@ proc init2ClientsServerScenario(): Future[TwoClientsServerScenario] {.async.} =
     utp1: utpProt1,
     utp2: utpProt2,
     utp3: utpProt3,
-    clientSocket1: clientSocket1,
-    clientSocket2: clientSocket2,
+    clientSocket1: clientSocket1.get(),
+    clientSocket2: clientSocket2.get(),
     serverSocket1: serverSocket1,
     serverSocket2: serverSocket2
   )
@@ -125,8 +125,8 @@ procSuite "Utp protocol over udp tests":
     let address1 = initTAddress("127.0.0.1", 9080)
     let utpProt2 = UtpProtocol.new(setAcceptedCallback(server2Called), address1)
 
-    let sock = await utpProt1.connectTo(address1)
-    
+    let sockResult = await utpProt1.connectTo(address1)
+    let sock = sockResult.get()
     # this future will be completed when we called accepted connection callback
     await server2Called.wait()
     
@@ -148,13 +148,16 @@ procSuite "Utp protocol over udp tests":
 
     let address1 = initTAddress("127.0.0.1", 9080)
 
-    let fut = utpProt1.connectTo(address1)
-    
-    yield fut
+    let connectionResult = await utpProt1.connectTo(address1)
   
     check:
-      fut.failed()
-    
+      connectionResult.isErr()
+
+    let connectionError = connectionResult.error()
+
+    check:
+      connectionError.kind == ConnectionTimedOut
+
     await waitUntil(proc (): bool = utpProt1.openSockets() == 0)
     
     check:

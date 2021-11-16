@@ -73,8 +73,9 @@ procSuite "Utp protocol over discovery v5 tests":
       node1.addNode(node2.localNode)
       node2.addNode(node1.localNode)
 
-    let clientSocket = await utp1.connectTo(node2.localNode)
-  
+    let clientSocketResult = await utp1.connectTo(node2.localNode)
+    let clientSocket = clientSocketResult.get()
+
     check:
       clientSocket.isConnected()
 
@@ -99,7 +100,9 @@ procSuite "Utp protocol over discovery v5 tests":
       node2.addNode(node1.localNode)
 
     let numOfBytes = 5000  
-    let clientSocket = await utp1.connectTo(node2.localNode)
+    let clientSocketResult = await utp1.connectTo(node2.localNode)
+    let clientSocket = clientSocketResult.get()
+
     let serverSocket = await queue.get()
 
     let bytesToTransfer = generateByteArray(rng[], numOfBytes)

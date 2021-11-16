@@ -96,7 +96,7 @@ proc shutdownWait*(p: UtpProtocol): Future[void] {.async.} =
   await p.utpRouter.shutdownWait()
   await p.transport.closeWait()
  
-proc connectTo*(r: UtpProtocol, address: TransportAddress): Future[UtpSocket[TransportAddress]] =
+proc connectTo*(r: UtpProtocol, address: TransportAddress): Future[ConnectionResult[TransportAddress]] =
   return r.utpRouter.connectTo(address)
 
 proc openSockets*(r: UtpProtocol): int =

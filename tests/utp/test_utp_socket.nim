@@ -20,6 +20,7 @@ procSuite "Utp socket unit test":
   let rng = newRng()
   let testAddress = initTAddress("127.0.0.1", 9079)
   let testBufferSize = 1024'u32
+  let defaultRcvOutgoingId = 314'u16
 
   proc initTestSnd(q: AsyncQueue[Packet]): SendCallback[TransportAddress]=
     return  (
@@ -61,8 +62,8 @@ procSuite "Utp socket unit test":
     initialRemoteSeq: uint16,
     q: AsyncQueue[Packet],
     cfg: SocketConfig = SocketConfig.init()): (UtpSocket[TransportAddress], Packet) =
-    let sock1 = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, rng[])
-    await sock1.startOutgoingSocket()
+    let sock1 = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, defaultRcvOutgoingId, rng[])
+    asyncSpawn sock1.startOutgoingSocket()
     let initialPacket = await q.get()
 
     check:
@@ -80,18 +81,32 @@ procSuite "Utp socket unit test":
   asyncTest "Starting outgoing socket should send Syn packet":
     let q = newAsyncQueue[Packet]()
     let defaultConfig = SocketConfig.init()
-    let sock1 = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), defaultConfig, rng[])
-    await sock1.startOutgoingSocket()
+    let sock1 = initOutgoingSocket[TransportAddress](
+      testAddress,
+      initTestSnd(q),
+      defaultConfig,
+      defaultRcvOutgoingId,
+      rng[]
+    )
+    let fut1 = sock1.startOutgoingSocket()
     let initialPacket = await q.get()
 
     check:
       initialPacket.header.pType == ST_SYN
       initialPacket.header.wndSize == defaultConfig.optRcvBuffer
 
+    fut1.cancel()
+
   asyncTest "Outgoing socket should re-send syn packet 2 times before declaring failure":
     let q = newAsyncQueue[Packet]()
-    let sock1 = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), SocketConfig.init(milliseconds(100)), rng[])
-    await sock1.startOutgoingSocket()
+    let sock1 = initOutgoingSocket[TransportAddress](
+      testAddress,
+      initTestSnd(q),
+      SocketConfig.init(milliseconds(100)),
+      defaultRcvOutgoingId,
+      rng[]
+    )
+    let fut1 =  sock1.startOutgoingSocket()
     let initialPacket = await q.get()
 
     check:
@@ -112,6 +127,8 @@ procSuite "Utp socket unit test":
 
     check:
       not sock1.isConnected()
+
+    fut1.cancel()
 
   asyncTest "Processing in order ack should make socket connected":
     let q = newAsyncQueue[Packet]()
@@ -281,8 +298,16 @@ procSuite "Utp socket unit test":
     let q = newAsyncQueue[Packet]()   
     let initalRemoteSeqNr = 10'u16
 
-    let outgoingSocket = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), SocketConfig.init(milliseconds(50), 2), rng[])
-    await outgoingSocket.startOutgoingSocket()
+    let outgoingSocket = initOutgoingSocket[TransportAddress](
+      testAddress, 
+      initTestSnd(q),
+      SocketConfig.init(milliseconds(3000), 2),
+      defaultRcvOutgoingId,
+      rng[]
+    )
+
+    let fut1 = outgoingSocket.startOutgoingSocket()
+
     let initialPacket = await q.get()
 
     check:

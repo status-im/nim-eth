@@ -29,6 +29,12 @@ type
    sendCb*: SendCallback[A]
    rng*: ref BrHmacDrbgContext
 
+
+const
+  # Maximal number of tries to genearte unique socket while establishing outgoing
+  # connection.
+  maxSocketGenerationTries = 1000
+
 # this should probably be in standard lib, it allows lazy composition of options i.e
 # one can write: O1 orElse O2 orElse O3, and chain will be evaluated to first option
 # which isSome()
@@ -57,11 +63,20 @@ proc len*[A](s: UtpRouter[A]): int =
   len(s.sockets)
 
 proc registerUtpSocket[A](p: UtpRouter, s: UtpSocket[A]) =
-  # TODO Handle duplicates
+  ## Register socket, overwriting already existing one
   p.sockets[s.socketKey] = s
   # Install deregister handler, so when socket will get closed, in will be promptly
   # removed from open sockets table
   s.registerCloseCallback(proc () = p.deRegisterUtpSocket(s))
+
+proc registerIfAbsent[A](p: UtpRouter, s: UtpSocket[A]): bool =
+  ## Registers socket only if its not already exsiting in the active sockets table
+  ## return true is socket has been succesfuly registered
+  if p.sockets.hasKey(s.socketKey):
+    false
+  else:
+    p.registerUtpSocket(s)
+    true
 
 proc new*[A](
   T: type UtpRouter[A], 
@@ -149,14 +164,47 @@ proc processIncomingBytes*[A](r: UtpRouter[A], bytes: seq[byte], sender: A) {.as
     else:
       warn "failed to decode packet from address", address = sender
 
+proc generateNewUniqueSocket[A](r: UtpRouter[A], address: A): Option[UtpSocket[A]] =
+  ## Tries to generate unique socket, gives up after maxSocketGenerationTries tries
+  var tryCount = 0
+
+  while tryCount < maxSocketGenerationTries:
+    let rcvId = randUint16(r.rng[])
+    let socket = initOutgoingSocket[A](address, r.sendCb, r.socketConfig, rcvId, r.rng[])
+
+    if r.registerIfAbsent(socket):
+      return some(socket)
+    
+    inc tryCount
+
+  return none[UtpSocket[A]]()
+  
 # Connect to provided address
 # Reference implementation: https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
-proc connectTo*[A](r: UtpRouter[A], address: A): Future[UtpSocket[A]] {.async.}=
-  let socket = initOutgoingSocket[A](address, r.sendCb, r.socketConfig, r.rng[])
-  r.registerUtpSocket(socket)
-  await socket.startOutgoingSocket()
-  await socket.waitFotSocketToConnect()
-  return socket
+proc connectTo*[A](r: UtpRouter[A], address: A): Future[ConnectionResult[A]] {.async.} =
+  let maybeSocket = r.generateNewUniqueSocket(address)
+
+  if (maybeSocket.isNone()):
+    return err(OutgoingConnectionError(kind: SocketAlreadyExists))
+  else:
+    let socket = maybeSocket.unsafeGet()
+    let startFut = socket.startOutgoingSocket()
+
+    startFut.cancelCallback = proc(udata: pointer) {.gcsafe.} =
+      # if for some reason future will be cancelled, destory socket to clear it from
+      # activesocket list
+      socket.destroy()
+
+    try:
+      await startFut
+      return ok(socket)
+    except ConnectionError:
+      socket.destroy()
+      return err(OutgoingConnectionError(kind: ConnectionTimedOut))
+    except CatchableError as e:
+      socket.destroy()
+      # this may only happen if user provided callback will for some reason fail
+      return err(OutgoingConnectionError(kind: ErrorWhileSendingSyn, error: e))
 
 proc shutdown*[A](r: UtpRouter[A]) =
   # stop processing any new packets and close all sockets in background without

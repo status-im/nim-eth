@@ -71,7 +71,7 @@ proc new*(
   )
   prot
 
-proc connectTo*(r: UtpDiscv5Protocol, address: Node): Future[UtpSocket[Node]]=
+proc connectTo*(r: UtpDiscv5Protocol, address: Node): Future[ConnectionResult[Node]]=
   return r.router.connectTo(address)
 
 proc shutdown*(r: UtpDiscv5Protocol) =
