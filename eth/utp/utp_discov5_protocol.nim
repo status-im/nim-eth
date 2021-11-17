@@ -50,11 +50,13 @@ proc new*(
   subProtocolName: seq[byte],
   acceptConnectionCb: AcceptConnectionCallback[Node], 
   socketConfig: SocketConfig = SocketConfig.init(),
+  allowConnectionCb: AllowConnectionCallback[Node] = nil,
   rng = newRng()): UtpDiscv5Protocol {.raises: [Defect, CatchableError].} =
   doAssert(not(isNil(acceptConnectionCb)))
 
   let router = UtpRouter[Node].new(
     acceptConnectionCb,
+    allowConnectionCb,
     socketConfig,
     rng
   )

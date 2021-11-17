@@ -17,6 +17,11 @@ type
   AcceptConnectionCallback*[A] = proc(server: UtpRouter[A],
                          client: UtpSocket[A]): Future[void] {.gcsafe, raises: [Defect].}
 
+  # Callback to act as fire wall for incoming peers. Should return true if peer is allowed
+  # to connect.
+  AllowConnectionCallback*[A] =
+    proc(r: UtpRouter[A], remoteAddress: A, connectionId: uint16): bool {.gcsafe, raises: [Defect], noSideEffect.}
+
   # Oject responsible for creating and maintaing table of of utp sockets.
   # caller should use `processIncomingBytes` proc to feed it with incoming byte 
   # packets, based this input, proper utp sockets will be created, closed, or will
@@ -27,8 +32,8 @@ type
    acceptConnection: AcceptConnectionCallback[A]
    closed: bool
    sendCb*: SendCallback[A]
+   allowConnection*: AllowConnectionCallback[A]
    rng*: ref BrHmacDrbgContext
-
 
 const
   # Maximal number of tries to genearte unique socket while establishing outgoing
@@ -80,16 +85,25 @@ proc registerIfAbsent[A](p: UtpRouter, s: UtpSocket[A]): bool =
 
 proc new*[A](
   T: type UtpRouter[A], 
-  acceptConnectionCb: AcceptConnectionCallback[A], 
+  acceptConnectionCb: AcceptConnectionCallback[A],
+  allowConnectionCb: AllowConnectionCallback[A],
   socketConfig: SocketConfig = SocketConfig.init(),
   rng = newRng()): UtpRouter[A] {.raises: [Defect, CatchableError].} =
   doAssert(not(isNil(acceptConnectionCb)))
   UtpRouter[A](
     sockets: initTable[UtpSocketKey[A], UtpSocket[A]](),
     acceptConnection: acceptConnectionCb,
+    allowConnection: allowConnectionCb,
     socketConfig: socketConfig,
     rng: rng
   )
+
+proc new*[A](
+  T: type UtpRouter[A], 
+  acceptConnectionCb: AcceptConnectionCallback[A],
+  socketConfig: SocketConfig = SocketConfig.init(),
+  rng = newRng()): UtpRouter[A] {.raises: [Defect, CatchableError].} =
+  UtpRouter[A].new(acceptConnectionCb, nil, socketConfig, rng)
 
 # There are different possiblites how connection was established, and we need to 
 # check every case
@@ -106,6 +120,13 @@ proc getSocketOnReset[A](r: UtpRouter[A], sender: A, id: uint16): Option[UtpSock
   r.getUtpSocket(recvKey)
   .orElse(r.getUtpSocket(sendInitKey).filter(s => s.connectionIdSnd == id))
   .orElse(r.getUtpSocket(sendNoInitKey).filter(s => s.connectionIdSnd == id))
+
+proc shouldAllowConnection[A](r: UtpRouter[A], remoteAddress: A, connectionId: uint16): bool =
+  if r.allowConnection == nil:
+    # if the callback is not configured it means all incoming connections are allowed
+    true
+  else:
+    r.allowConnection(r, remoteAddress, connectionId)
 
 proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
   notice "Received packet ", packet = p
@@ -131,18 +152,21 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
     if (maybeSocket.isSome()):
       notice "Ignoring SYN for already existing connection"
     else:
-      notice "Received SYN for not known connection. Initiating incoming connection"
-      # Initial ackNr is set to incoming packer seqNr
-      let incomingSocket = initIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
-      r.registerUtpSocket(incomingSocket)
-      await incomingSocket.startIncomingSocket()
-      # TODO By default (when we have utp over udp) socket here is passed to upper layer
-      # in SynRecv state, which is not writeable i.e user of socket cannot write
-      # data to it unless some data will be received. This is counter measure to
-      # amplification attacks.
-      # During integration with discovery v5 (i.e utp over discovv5), we must re-think
-      # this.
-      asyncSpawn r.acceptConnection(r, incomingSocket)
+      if (r.shouldAllowConnection(sender, p.header.connectionId)):
+        notice "Received SYN for not known connection. Initiating incoming connection"
+        # Initial ackNr is set to incoming packer seqNr
+        let incomingSocket = initIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
+        r.registerUtpSocket(incomingSocket)
+        await incomingSocket.startIncomingSocket()
+        # TODO By default (when we have utp over udp) socket here is passed to upper layer
+        # in SynRecv state, which is not writeable i.e user of socket cannot write
+        # data to it unless some data will be received. This is counter measure to
+        # amplification attacks.
+        # During integration with discovery v5 (i.e utp over discovv5), we must re-think
+        # this.
+        asyncSpawn r.acceptConnection(r, incomingSocket)
+      else:
+        notice "Connection declined"
   else:
     let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId)
     let maybeSocket = r.getUtpSocket(socketKey)

@@ -77,12 +77,14 @@ proc new*(
   acceptConnectionCb: AcceptConnectionCallback[TransportAddress], 
   address: TransportAddress,
   socketConfig: SocketConfig = SocketConfig.init(),
+  allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
   rng = newRng()): UtpProtocol {.raises: [Defect, CatchableError].} =
   
   doAssert(not(isNil(acceptConnectionCb)))
 
   let router = UtpRouter[TransportAddress].new(
     acceptConnectionCb,
+    allowConnectionCb,
     socketConfig,
     rng
   )

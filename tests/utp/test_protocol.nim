@@ -30,6 +30,12 @@ proc registerIncomingSocketCallback(serverSockets: AsyncQueue): AcceptConnection
       serverSockets.addLast(client)
   )
 
+proc allowOneIdCallback(allowedId: uint16): AllowConnectionCallback[TransportAddress] =
+  return (
+     proc(r: UtpRouter[TransportAddress], remoteAddress: TransportAddress, connectionId: uint16): bool =
+       connectionId == allowedId
+  )
+
 proc transferData(sender: UtpSocket[TransportAddress], receiver: UtpSocket[TransportAddress], data: seq[byte]): Future[seq[byte]] {.async.}=
   let bytesWritten = await sender.write(data)
   doAssert bytesWritten.get() == len(data)
@@ -373,3 +379,45 @@ procSuite "Utp protocol over udp tests":
       s.utp1.openSockets() == 0
 
     await s.close()
+
+  asyncTest "Accept connection only from allowed peers":
+    let allowedId: uint16 = 10
+    let lowSynTimeout = milliseconds(500)
+    var serverSockets = newAsyncQueue[UtpSocket[TransportAddress]]()
+    var server1Called = newAsyncEvent()
+    let address1 = initTAddress("127.0.0.1", 9079)
+    let utpProt1 = 
+      UtpProtocol.new(setAcceptedCallback(server1Called), address1, SocketConfig.init(lowSynTimeout))
+
+    let address2 = initTAddress("127.0.0.1", 9080)
+    let utpProt2 =
+      UtpProtocol.new(registerIncomingSocketCallback(serverSockets), address2, SocketConfig.init(lowSynTimeout))
+
+    let address3 = initTAddress("127.0.0.1", 9081)
+    let utpProt3 =
+      UtpProtocol.new(
+        registerIncomingSocketCallback(serverSockets),
+        address3,
+        SocketConfig.init(),
+        allowOneIdCallback(allowedId)
+      )
+    
+    let allowedSocketRes = await utpProt1.connectTo(address3, allowedId)
+    let notAllowedSocketRes = await utpProt2.connectTo(address3, allowedId + 1)
+
+    check:
+      allowedSocketRes.isOk()
+      notAllowedSocketRes.isErr()
+      # remote did not allow this connection, and utlimatly it did time out
+      notAllowedSocketRes.error().kind == ConnectionTimedOut
+
+    let clientSocket = allowedSocketRes.get()
+    let serverSocket = await serverSockets.get()
+
+    check:
+      clientSocket.connectionId() == allowedId
+      serverSocket.connectionId() == allowedId
+
+    await utpProt1.shutdownWait()
+    await utpProt2.shutdownWait()
+    await utpProt3.shutdownWait()

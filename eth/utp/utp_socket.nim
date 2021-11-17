@@ -930,3 +930,13 @@ proc numPacketsInReordedBuffer*(socket: UtpSocket): int =
       inc num
   doAssert(num == int(socket.reorderCount))
   num
+
+proc connectionId*[A](socket: UtpSocket[A]): uint16 =
+  ## Connection id is id which is used in first SYN packet which establishes the connection
+  ## so for Outgoing side it is actually its rcv_id, and for Incoming side it is
+  ## its snd_id
+  case socket.direction
+  of Incoming:
+    socket.connectionIdSnd
+  of Outgoing:
+    socket.connectionIdRcv
