@@ -236,7 +236,7 @@ proc encodeWhoareyouPacket*(rng: var BrHmacDrbgContext, c: var Codec,
   # authdata
   var authdata: seq[byte]
   authdata.add(idNonce)
-  authdata.add(recordSeq.tobytesBE)
+  authdata.add(recordSeq.toBytesBE)
 
   # static-header
   let staticHeader = encodeStaticHeader(Flag.Whoareyou, requestNonce,

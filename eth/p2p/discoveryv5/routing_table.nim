@@ -104,10 +104,10 @@ func logDistance*(a, b: NodeId): uint16 =
   ## is rather the log base 2 of the distance + 1, as else the 0 value can not
   ## be used (e.g. by FindNode call to return peer its own ENR)
   ## For NodeId of 256 bits, range is 0-256.
-  let a = a.toBytes
-  let b = b.toBytes
+  let a = a.toBytesBE
+  let b = b.toBytesBE
   var lz = 0
-  for i in countdown(a.len - 1, 0):
+  for i in 0..<a.len:
     let x = a[i] xor b[i]
     if x == 0:
       lz += 8
