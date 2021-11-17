@@ -24,13 +24,13 @@ proc runTest(path: string, release: bool = true, chronosStrict = true) =
   let chronosMode =
     if chronosStrict: "-d:chronosStrictException" else: ""
   exec "nim c -r " & releaseMode & " " & chronosMode &
-    " -d:chronicles_log_level=error --verbosity:0 --hints:off " & path
+    " -d:chronicles_log_level=ERROR --verbosity:0 --hints:off " & path
   rmFile path
 
 proc buildBinary(path: string) =
   echo "\nBuilding: ", path
   exec "nim c -d:release -d:chronosStrictException " &
-    "-d:chronicles_log_level=trace --verbosity:0 --hints:off --threads:on " &
+    "-d:chronicles_log_level=TRACE --verbosity:0 --hints:off --threads:on " &
     "--warning[CaseTransition]:off --warning[ObservableStores]:off " &
     path
 
