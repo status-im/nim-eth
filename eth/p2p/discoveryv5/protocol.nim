@@ -116,6 +116,8 @@ const
   ## call
 
 type
+  NodeValidator* = proc(node: Node): bool {.gcsafe, raises: [Defect].}
+
   Protocol* = ref object
     transp: DatagramTransport
     localNode*: Node
@@ -135,6 +137,7 @@ type
     talkProtocols*: Table[seq[byte], TalkProtocol] # TODO: Table is a bit of
     # overkill here, use sequence
     rng*: ref BrHmacDrbgContext
+    nodeValidator*: Option[NodeValidator]
 
   PendingRequest = object
     node: Node
@@ -153,6 +156,12 @@ proc addNode*(d: Protocol, node: Node): bool =
   ##
   ## Returns true only when `Node` was added as a new entry to a bucket in the
   ## routing table.
+  ## 
+  ## The node can optionally be validated before being added.
+  
+  if d.nodeValidator.isSome() and not d.nodeValidator.get()(node):
+    return false
+
   if d.routingTable.addNode(node) == Added:
     return true
   else:
@@ -886,7 +895,8 @@ proc newProtocol*(privKey: PrivateKey,
                   bindIp = IPv4_any(),
                   enrAutoUpdate = false,
                   tableIpLimits = DefaultTableIpLimits,
-                  rng = newRng()):
+                  rng = newRng(),
+                  nodeValidator = none(NodeValidator)):
                   Protocol =
   # TODO: Tried adding bindPort = udpPort as parameter but that gave
   # "Error: internal error: environment misses: udpPort" in nim-beacon-chain.
@@ -926,7 +936,8 @@ proc newProtocol*(privKey: PrivateKey,
     ipVote: IpVote.init(),
     enrAutoUpdate: enrAutoUpdate,
     routingTable: RoutingTable.init(node, DefaultBitsPerHop, tableIpLimits, rng),
-    rng: rng)
+    rng: rng,
+    nodeValidator: nodeValidator)
 
 template listeningAddress*(p: Protocol): Address =
   p.bindAddress
