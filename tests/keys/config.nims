@@ -1,3 +1,0 @@
---threads:on
---path:"$projectDir/../.."
-

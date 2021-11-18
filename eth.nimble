@@ -18,19 +18,21 @@ requires "nim >= 1.2.0 & <= 1.2.14",
          "confutils",
          "testutils"
 
+let commonParams = " --verbosity:0 --hints:off --skipUserCfg:on --warning[ObservableStores]:off "
+
 proc runTest(path: string, release: bool = true, chronosStrict = true) =
   echo "\nRunning: ", path
   let releaseMode = if release: "-d:release" else: ""
   let chronosMode =
     if chronosStrict: "-d:chronosStrictException" else: ""
   exec "nim c -r " & releaseMode & " " & chronosMode &
-    " -d:chronicles_log_level=error --verbosity:0 --hints:off " & path
+    " -d:chronicles_log_level=error " & commonParams & path
   rmFile path
 
 proc buildBinary(path: string) =
   echo "\nBuilding: ", path
   exec "nim c -d:release -d:chronosStrictException " &
-    "-d:chronicles_log_level=trace --verbosity:0 --hints:off --threads:on " &
+    "-d:chronicles_log_level=trace --threads:on " & commonParams &
     "--warning[CaseTransition]:off --warning[ObservableStores]:off " &
     path
 

@@ -1,6 +1,6 @@
 import
   chronos,
-  ./../eth/keys
+  ../../eth/keys
 
 type AssertionCallback = proc(): bool {.gcsafe, raises: [Defect].}
 
