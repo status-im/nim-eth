@@ -7,7 +7,7 @@
 {.used.}
 
 import
-  std/hashes,
+  std/[hashes, options],
   chronos, bearssl, chronicles,
   testutils/unittests,
   ./test_utils,
@@ -88,6 +88,92 @@ procSuite "Utp router unit tests":
 
     check:
       router.len() == 1
+
+  asyncTest "Incoming connection should be closed when not receving data for period of time when configured":
+    let q = newAsyncQueue[UtpSocket[int]]()
+    let router = 
+      UtpRouter[int].new(
+        registerIncomingSocketCallback(q),
+        SocketConfig.init(incomingSocketReceiveTimeout = some(seconds(2))),
+        rng
+      )
+    router.sendCb = testSend
+    let encodedSyn = encodePacket(synPacket(10, 10, 10))
+
+    await router.processIncomingBytes(encodedSyn, testSender)
+
+    let socket = await q.get()
+
+    check:
+      router.len() == 1
+      # socket is not configured to be connected until receiving data
+      not socket.isConnected()
+
+    await waitUntil(proc (): bool = socket.isClosed())
+
+    check:
+      router.len() == 0
+
+  asyncTest "Incoming connection should be in connected state when configured":
+    let q = newAsyncQueue[UtpSocket[int]]()
+    let router = 
+      UtpRouter[int].new(
+        registerIncomingSocketCallback(q),
+        SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]()),
+        rng
+      )
+    router.sendCb = testSend
+    let encodedSyn = encodePacket(synPacket(10, 10, 10))
+
+    await router.processIncomingBytes(encodedSyn, testSender)
+
+    let socket = await q.get()
+
+    check:
+      router.len() == 1
+      socket.isConnected()
+
+    # wait a while to trigger timeout and check that socket is still connected
+    await sleepAsync(seconds(3))
+
+    check:
+      router.len() == 1
+      socket.isConnected()
+
+  asyncTest "Incoming connection should change state to connected when receiving data packet":
+    let q = newAsyncQueue[UtpSocket[int]]()
+    let pq = newAsyncQueue[(Packet, int)]()
+    let router = 
+      UtpRouter[int].new(
+        registerIncomingSocketCallback(q),
+        SocketConfig.init(incomingSocketReceiveTimeout = some(seconds(3))),
+        rng
+      )
+    router.sendCb = initTestSnd(pq)
+
+    let dataToSend = @[1'u8]
+    let initSeq: uint16 = 10
+    let initConnId: uint16 = 10
+
+    let encodedSyn = encodePacket(synPacket(initSeq, initConnId, 10))
+
+    await router.processIncomingBytes(encodedSyn, testSender)
+
+    let (initialPacket, _) = await pq.get()
+    let socket = await q.get()
+    
+    check:
+      router.len() == 1
+      # socket is not configured to be connected until receiving data
+      not socket.isConnected()
+
+    let encodedData = encodePacket(dataPacket(initSeq + 1, initConnId + 1, initialPacket.header.seqNr - 1, 10, dataToSend))
+
+    await router.processIncomingBytes(encodedData, testSender)
+
+    check:
+      socket.isConnected()
+
 
   asyncTest "Router should create new incoming socket when receiving same syn packet from diffrent sender":
     let q = newAsyncQueue[UtpSocket[int]]()

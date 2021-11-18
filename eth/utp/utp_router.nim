@@ -158,12 +158,8 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
         let incomingSocket = initIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
         r.registerUtpSocket(incomingSocket)
         await incomingSocket.startIncomingSocket()
-        # TODO By default (when we have utp over udp) socket here is passed to upper layer
-        # in SynRecv state, which is not writeable i.e user of socket cannot write
-        # data to it unless some data will be received. This is counter measure to
-        # amplification attacks.
-        # During integration with discovery v5 (i.e utp over discovv5), we must re-think
-        # this.
+        # Based on configuration, socket is passed to upper layer either in SynRecv
+        # or Connected state
         asyncSpawn r.acceptConnection(r, incomingSocket)
       else:
         notice "Connection declined"

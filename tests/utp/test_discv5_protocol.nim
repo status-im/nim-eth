@@ -81,11 +81,16 @@ procSuite "Utp protocol over discovery v5 tests":
 
     let clientSocketResult = await utp1.connectTo(node2.localNode)
     let clientSocket = clientSocketResult.get()
+    let serverSocket = await queue.get()
 
     check:
       clientSocket.isConnected()
+      # in this test we do not configure socket to be connected just affter
+      # accepting incoming connection
+      not serverSocket.isConnected()
 
     await clientSocket.destroyWait()
+    await serverSocket.destroyWait()
     await node1.closeWait()
     await node2.closeWait()
 
@@ -169,5 +174,53 @@ procSuite "Utp protocol over discovery v5 tests":
       clientSocket.connectionId() == allowedId
       serverSocket.connectionId() == allowedId
 
+    await clientSocket.destroyWait()
+    await serverSocket.destroyWait()
+    await node1.closeWait()
+    await node2.closeWait()
+
+  asyncTest "Configure incoming connections to be in connected state":
+    let
+      queue = newAsyncQueue[UtpSocket[Node]]()
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+
+      utp1 = UtpDiscv5Protocol.new(node1, utpProtId, registerIncomingSocketCallback(queue))
+      utp2 = UtpDiscv5Protocol.new(
+        node2,
+        utpProtId,
+        registerIncomingSocketCallback(queue),
+        SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]())
+      )
+
+    # nodes must know about each other
+    check:
+      node1.addNode(node2.localNode)
+      node2.addNode(node1.localNode)
+
+    let clientSocketResult = await utp1.connectTo(node2.localNode)
+    let clientSocket = clientSocketResult.get()
+    let serverSocket = await queue.get()
+
+    check:
+      clientSocket.isConnected()
+      serverSocket.isConnected()
+
+    let serverData = @[1'u8]
+
+    let wResult = await serverSocket.write(serverData)
+
+    check:
+      wResult.isOk()
+    
+    let readData = await clientSocket.read(len(serverData))
+
+    check:
+      readData == serverData
+
+    await clientSocket.destroyWait()
+    await serverSocket.destroyWait()
     await node1.closeWait()
     await node2.closeWait()
