@@ -7,7 +7,7 @@
 {.push raises: [Defect].}
 
 import 
-  chronos, stew/byteutils,
+  chronos, stew/[results, byteutils],
   ./utp_router,
   ./utp_socket,
   ./utp_protocol
@@ -32,7 +32,8 @@ when isMainModule:
   let utpProt = UtpProtocol.new(echoIncomingSocketCallBack(), localAddress)
 
   let remoteServer = initTAddress("127.0.0.1", 9078)
-  let soc = waitFor utpProt.connectTo(remoteServer)
+  let socResult = waitFor utpProt.connectTo(remoteServer)
+  let soc = socResult.get()
 
   doAssert(soc.numPacketsInOutGoingBuffer() == 0)
 

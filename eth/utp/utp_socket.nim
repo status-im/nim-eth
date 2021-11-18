@@ -161,6 +161,18 @@ type
 
   WriteResult* = Result[int, WriteError]
 
+  OutgoingConnectionErrorType* = enum
+    SocketAlreadyExists, ConnectionTimedOut, ErrorWhileSendingSyn
+  
+  OutgoingConnectionError* = object
+    case kind*: OutgoingConnectionErrorType
+    of ErrorWhileSendingSyn:
+      error*: ref CatchableError
+    of SocketAlreadyExists, ConnectionTimedOut:
+      discard
+
+  ConnectionResult*[A] = Result[UtpSocket[A], OutgoingConnectionError]
+
 const
   # Maximal number of payload bytes per packet. Total packet size will be equal to
   # mtuSize + sizeof(header) = 600 bytes
@@ -257,16 +269,6 @@ proc sendAck(socket: UtpSocket): Future[void] =
       socket.getRcvWindowSize()
     )
   socket.sendData(encodePacket(ackPacket))
-
-proc sendSyn(socket: UtpSocket): Future[void] =
-  doAssert(socket.state == SynSent , "syn can only be send when in SynSent state")
-  let packet = synPacket(socket.seqNr, socket.connectionIdRcv, socket.getRcvWindowSize())
-  notice "Sending syn packet packet", packet = packet
-  # set number of transmissions to 1 as syn packet will be send just after
-  # initiliazation
-  let outgoingPacket = OutgoingPacket.init(encodePacket(packet), 1, false)
-  socket.registerOutgoingPacket(outgoingPacket)
-  socket.sendData(outgoingPacket.packetBytes)
 
 # Should be called before sending packet
 proc setSend(p: var OutgoingPacket): seq[byte] =
@@ -423,10 +425,9 @@ proc initOutgoingSocket*[A](
   to: A,
   snd: SendCallback[A],
   cfg: SocketConfig,
+  rcvConnectionId: uint16,
   rng: var BrHmacDrbgContext
 ): UtpSocket[A] =
-  # TODO handle possible clashes and overflows
-  let rcvConnectionId = randUint16(rng)
   let sndConnectionId = rcvConnectionId + 1
   let initialSeqNr = randUint16(rng)
 
@@ -467,18 +468,19 @@ proc initIncomingSocket*[A](
 
 proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async.} =
   doAssert(socket.state == SynSent)
-  # TODO add callback to handle errors and cancellation i.e unregister socket on
-  # send error and finish connection future with failure
-  # sending should be done from UtpSocketContext
-  await socket.sendSyn()
+  let packet = synPacket(socket.seqNr, socket.connectionIdRcv, socket.getRcvWindowSize())
+  notice "Sending syn packet packet", packet = packet
+  # set number of transmissions to 1 as syn packet will be send just after
+  # initiliazation
+  let outgoingPacket = OutgoingPacket.init(encodePacket(packet), 1, false)
+  socket.registerOutgoingPacket(outgoingPacket)
   socket.startTimeoutLoop()
-
-proc waitFotSocketToConnect*(socket: UtpSocket): Future[void] {.async.} =
+  await socket.sendData(outgoingPacket.packetBytes)
   await socket.connectionFuture
   
 proc startIncomingSocket*(socket: UtpSocket) {.async.} =
   doAssert(socket.state == SynRecv)
-  # Make sure ack was flushed before movig forward
+  # Make sure ack was flushed before moving forward
   await socket.sendAck()
   socket.startTimeoutLoop()
 
@@ -928,3 +930,13 @@ proc numPacketsInReordedBuffer*(socket: UtpSocket): int =
       inc num
   doAssert(num == int(socket.reorderCount))
   num
+
+proc connectionId*[A](socket: UtpSocket[A]): uint16 =
+  ## Connection id is id which is used in first SYN packet which establishes the connection
+  ## so for Outgoing side it is actually its rcv_id, and for Incoming side it is
+  ## its snd_id
+  case socket.direction
+  of Incoming:
+    socket.connectionIdSnd
+  of Outgoing:
+    socket.connectionIdRcv

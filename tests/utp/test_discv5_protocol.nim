@@ -55,6 +55,12 @@ procSuite "Utp protocol over discovery v5 tests":
         serverSockets.addLast(client)
     )
   
+  proc allowOneIdCallback(allowedId: uint16): AllowConnectionCallback[Node] =
+    return (
+      proc(r: UtpRouter[Node], remoteAddress: Node, connectionId: uint16): bool =
+        connectionId == allowedId
+    )
+
   # TODO Add more tests to discovery v5 suite, especially those which will differ
   # from standard utp case
   asyncTest "Success connect to remote host":
@@ -73,8 +79,9 @@ procSuite "Utp protocol over discovery v5 tests":
       node1.addNode(node2.localNode)
       node2.addNode(node1.localNode)
 
-    let clientSocket = await utp1.connectTo(node2.localNode)
-  
+    let clientSocketResult = await utp1.connectTo(node2.localNode)
+    let clientSocket = clientSocketResult.get()
+
     check:
       clientSocket.isConnected()
 
@@ -99,7 +106,9 @@ procSuite "Utp protocol over discovery v5 tests":
       node2.addNode(node1.localNode)
 
     let numOfBytes = 5000  
-    let clientSocket = await utp1.connectTo(node2.localNode)
+    let clientSocketResult = await utp1.connectTo(node2.localNode)
+    let clientSocket = clientSocketResult.get()
+
     let serverSocket = await queue.get()
 
     let bytesToTransfer = generateByteArray(rng[], numOfBytes)
@@ -115,5 +124,50 @@ procSuite "Utp protocol over discovery v5 tests":
 
     await clientSocket.destroyWait()
     await serverSocket.destroyWait()
+    await node1.closeWait()
+    await node2.closeWait()
+
+  asyncTest "Accept connection only from allowed peers":
+    let
+      allowedId: uint16 = 10
+      lowSynTimeout = milliseconds(500)
+      queue = newAsyncQueue[UtpSocket[Node]]()
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+
+      utp1 = UtpDiscv5Protocol.new(
+        node1,
+        utpProtId,
+        registerIncomingSocketCallback(queue),
+        SocketConfig.init(lowSynTimeout))
+      utp2 = 
+        UtpDiscv5Protocol.new(
+          node2,
+          utpProtId,
+          registerIncomingSocketCallback(queue),
+          SocketConfig.init(),
+          allowOneIdCallback(allowedId))
+
+    # nodes must know about each other
+    check:
+      node1.addNode(node2.localNode)
+      node2.addNode(node1.localNode)
+
+    let clientSocketResult1 = await utp1.connectTo(node2.localNode, allowedId)
+    let clientSocketResult2 = await utp1.connectTo(node2.localNode, allowedId + 1)
+   
+    check:
+      clientSocketResult1.isOk()
+      clientSocketResult2.isErr()
+
+    let clientSocket = clientSocketResult1.get()
+    let serverSocket = await queue.get()
+    
+    check:
+      clientSocket.connectionId() == allowedId
+      serverSocket.connectionId() == allowedId
+
     await node1.closeWait()
     await node2.closeWait()

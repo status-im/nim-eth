@@ -21,6 +21,9 @@ proc hash*(x: UtpSocketKey[int]): Hash =
   h = h !& x.rcvId.hash
   !$h
 
+type
+  TestError* = object of CatchableError
+
 procSuite "Utp router unit tests":
   let rng = newRng()
   let testSender = 1
@@ -62,7 +65,7 @@ procSuite "Utp router unit tests":
     await router.processIncomingBytes(encodePacket(responseAck), remote)
 
     let outgoingSocket = await connectFuture
-    (outgoingSocket, initialPacket)
+    (outgoingSocket.get(), initialPacket)
 
   asyncTest "Router should ingnore non utp packets":
     let q = newAsyncQueue[UtpSocket[int]]()
@@ -149,6 +152,98 @@ procSuite "Utp router unit tests":
       outgoingSocket.isConnected()
       router.len() == 1
 
+  asyncTest "Router should fail to connect to the same peer with the same connection id":
+    let q = newAsyncQueue[UtpSocket[int]]()
+    let pq = newAsyncQueue[(Packet, int)]()
+    let initialRemoteSeq = 30'u16
+    let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(), rng)
+    router.sendCb = initTestSnd(pq)
+
+    let requestedConnectionId = 1'u16
+    let connectFuture = router.connectTo(testSender2, requestedConnectionId)
+    
+    let (initialPacket, sender) = await pq.get()
+
+    check:
+      initialPacket.header.pType == ST_SYN
+      # connection id of syn packet should be set to requested connection id
+      initialPacket.header.connectionId == requestedConnectionId
+
+    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+
+    await router.processIncomingBytes(encodePacket(responseAck), testSender2)
+
+    let outgoingSocket = await connectFuture
+  
+    check:
+      outgoingSocket.get().isConnected()
+      router.len() == 1
+
+    let duplicatedConnectionResult = await router.connectTo(testSender2, requestedConnectionId)
+
+    check:
+      duplicatedConnectionResult.isErr()
+      duplicatedConnectionResult.error().kind == SocketAlreadyExists
+
+  asyncTest "Router should fail connect when socket syn will not be acked":
+    let q = newAsyncQueue[UtpSocket[int]]()
+    let pq = newAsyncQueue[(Packet, int)]()
+    let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(milliseconds(500)), rng)
+    router.sendCb = initTestSnd(pq)
+
+    let connectFuture = router.connectTo(testSender2)
+    
+    let (initialPacket, sender) = await pq.get()
+
+    check:
+      initialPacket.header.pType == ST_SYN
+
+    let connectResult = await connectFuture
+
+    check:
+      connectResult.isErr()
+      connectResult.error().kind == ConnectionTimedOut
+      router.len() == 0
+
+  asyncTest "Router should clear all resources when connection future is cancelled":
+    let q = newAsyncQueue[UtpSocket[int]]()
+    let pq = newAsyncQueue[(Packet, int)]()
+    let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(milliseconds(500)), rng)
+    router.sendCb = initTestSnd(pq)
+
+    let connectFuture = router.connectTo(testSender2)
+    
+    let (initialPacket, sender) = await pq.get()
+
+    check:
+      initialPacket.header.pType == ST_SYN
+      router.len() == 1
+
+    await connectFuture.cancelAndWait() 
+
+    check:
+      router.len() == 0
+
+  asyncTest "Router should clear all resources and handle error while sending syn packet":
+    let q = newAsyncQueue[UtpSocket[int]]()
+    let pq = newAsyncQueue[(Packet, int)]()
+    let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(milliseconds(500)), rng)
+    router.sendCb =
+      proc (to: int, data: seq[byte]): Future[void] =
+        let f = newFuture[void]()
+        f.fail(newException(TestError, "faile"))
+        return f
+
+    let connectResult = await router.connectTo(testSender2)
+
+    await waitUntil(proc (): bool = router.len() == 0)
+
+    check:
+      connectResult.isErr()
+      connectResult.error().kind == ErrorWhileSendingSyn
+      cast[TestError](connectResult.error().error) is TestError
+      router.len() == 0
+  
   asyncTest "Router should clear closed outgoing connections":
     let q = newAsyncQueue[UtpSocket[int]]()
     let pq = newAsyncQueue[(Packet, int)]()
@@ -225,4 +320,3 @@ procSuite "Utp router unit tests":
 
     check:
       router.len() == 0
-

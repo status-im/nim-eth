@@ -50,11 +50,13 @@ proc new*(
   subProtocolName: seq[byte],
   acceptConnectionCb: AcceptConnectionCallback[Node], 
   socketConfig: SocketConfig = SocketConfig.init(),
+  allowConnectionCb: AllowConnectionCallback[Node] = nil,
   rng = newRng()): UtpDiscv5Protocol {.raises: [Defect, CatchableError].} =
   doAssert(not(isNil(acceptConnectionCb)))
 
   let router = UtpRouter[Node].new(
     acceptConnectionCb,
+    allowConnectionCb,
     socketConfig,
     rng
   )
@@ -71,8 +73,11 @@ proc new*(
   )
   prot
 
-proc connectTo*(r: UtpDiscv5Protocol, address: Node): Future[UtpSocket[Node]]=
+proc connectTo*(r: UtpDiscv5Protocol, address: Node): Future[ConnectionResult[Node]]=
   return r.router.connectTo(address)
+
+proc connectTo*(r: UtpDiscv5Protocol, address: Node, connectionId: uint16): Future[ConnectionResult[Node]]=
+  return r.router.connectTo(address, connectionId)
 
 proc shutdown*(r: UtpDiscv5Protocol) =
   ## closes all managed utp connections in background (not closed discovery, it is up to user)

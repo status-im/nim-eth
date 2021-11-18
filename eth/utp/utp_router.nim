@@ -17,6 +17,11 @@ type
   AcceptConnectionCallback*[A] = proc(server: UtpRouter[A],
                          client: UtpSocket[A]): Future[void] {.gcsafe, raises: [Defect].}
 
+  # Callback to act as fire wall for incoming peers. Should return true if peer is allowed
+  # to connect.
+  AllowConnectionCallback*[A] =
+    proc(r: UtpRouter[A], remoteAddress: A, connectionId: uint16): bool {.gcsafe, raises: [Defect], noSideEffect.}
+
   # Oject responsible for creating and maintaing table of of utp sockets.
   # caller should use `processIncomingBytes` proc to feed it with incoming byte 
   # packets, based this input, proper utp sockets will be created, closed, or will
@@ -27,7 +32,13 @@ type
    acceptConnection: AcceptConnectionCallback[A]
    closed: bool
    sendCb*: SendCallback[A]
+   allowConnection*: AllowConnectionCallback[A]
    rng*: ref BrHmacDrbgContext
+
+const
+  # Maximal number of tries to genearte unique socket while establishing outgoing
+  # connection.
+  maxSocketGenerationTries = 1000
 
 # this should probably be in standard lib, it allows lazy composition of options i.e
 # one can write: O1 orElse O2 orElse O3, and chain will be evaluated to first option
@@ -57,24 +68,42 @@ proc len*[A](s: UtpRouter[A]): int =
   len(s.sockets)
 
 proc registerUtpSocket[A](p: UtpRouter, s: UtpSocket[A]) =
-  # TODO Handle duplicates
+  ## Register socket, overwriting already existing one
   p.sockets[s.socketKey] = s
   # Install deregister handler, so when socket will get closed, in will be promptly
   # removed from open sockets table
   s.registerCloseCallback(proc () = p.deRegisterUtpSocket(s))
 
+proc registerIfAbsent[A](p: UtpRouter, s: UtpSocket[A]): bool =
+  ## Registers socket only if its not already exsiting in the active sockets table
+  ## return true is socket has been succesfuly registered
+  if p.sockets.hasKey(s.socketKey):
+    false
+  else:
+    p.registerUtpSocket(s)
+    true
+
 proc new*[A](
   T: type UtpRouter[A], 
-  acceptConnectionCb: AcceptConnectionCallback[A], 
+  acceptConnectionCb: AcceptConnectionCallback[A],
+  allowConnectionCb: AllowConnectionCallback[A],
   socketConfig: SocketConfig = SocketConfig.init(),
   rng = newRng()): UtpRouter[A] {.raises: [Defect, CatchableError].} =
   doAssert(not(isNil(acceptConnectionCb)))
   UtpRouter[A](
     sockets: initTable[UtpSocketKey[A], UtpSocket[A]](),
     acceptConnection: acceptConnectionCb,
+    allowConnection: allowConnectionCb,
     socketConfig: socketConfig,
     rng: rng
   )
+
+proc new*[A](
+  T: type UtpRouter[A], 
+  acceptConnectionCb: AcceptConnectionCallback[A],
+  socketConfig: SocketConfig = SocketConfig.init(),
+  rng = newRng()): UtpRouter[A] {.raises: [Defect, CatchableError].} =
+  UtpRouter[A].new(acceptConnectionCb, nil, socketConfig, rng)
 
 # There are different possiblites how connection was established, and we need to 
 # check every case
@@ -91,6 +120,13 @@ proc getSocketOnReset[A](r: UtpRouter[A], sender: A, id: uint16): Option[UtpSock
   r.getUtpSocket(recvKey)
   .orElse(r.getUtpSocket(sendInitKey).filter(s => s.connectionIdSnd == id))
   .orElse(r.getUtpSocket(sendNoInitKey).filter(s => s.connectionIdSnd == id))
+
+proc shouldAllowConnection[A](r: UtpRouter[A], remoteAddress: A, connectionId: uint16): bool =
+  if r.allowConnection == nil:
+    # if the callback is not configured it means all incoming connections are allowed
+    true
+  else:
+    r.allowConnection(r, remoteAddress, connectionId)
 
 proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
   notice "Received packet ", packet = p
@@ -116,18 +152,21 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
     if (maybeSocket.isSome()):
       notice "Ignoring SYN for already existing connection"
     else:
-      notice "Received SYN for not known connection. Initiating incoming connection"
-      # Initial ackNr is set to incoming packer seqNr
-      let incomingSocket = initIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
-      r.registerUtpSocket(incomingSocket)
-      await incomingSocket.startIncomingSocket()
-      # TODO By default (when we have utp over udp) socket here is passed to upper layer
-      # in SynRecv state, which is not writeable i.e user of socket cannot write
-      # data to it unless some data will be received. This is counter measure to
-      # amplification attacks.
-      # During integration with discovery v5 (i.e utp over discovv5), we must re-think
-      # this.
-      asyncSpawn r.acceptConnection(r, incomingSocket)
+      if (r.shouldAllowConnection(sender, p.header.connectionId)):
+        notice "Received SYN for not known connection. Initiating incoming connection"
+        # Initial ackNr is set to incoming packer seqNr
+        let incomingSocket = initIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
+        r.registerUtpSocket(incomingSocket)
+        await incomingSocket.startIncomingSocket()
+        # TODO By default (when we have utp over udp) socket here is passed to upper layer
+        # in SynRecv state, which is not writeable i.e user of socket cannot write
+        # data to it unless some data will be received. This is counter measure to
+        # amplification attacks.
+        # During integration with discovery v5 (i.e utp over discovv5), we must re-think
+        # this.
+        asyncSpawn r.acceptConnection(r, incomingSocket)
+      else:
+        notice "Connection declined"
   else:
     let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId)
     let maybeSocket = r.getUtpSocket(socketKey)
@@ -149,14 +188,60 @@ proc processIncomingBytes*[A](r: UtpRouter[A], bytes: seq[byte], sender: A) {.as
     else:
       warn "failed to decode packet from address", address = sender
 
+proc generateNewUniqueSocket[A](r: UtpRouter[A], address: A): Option[UtpSocket[A]] =
+  ## Tries to generate unique socket, gives up after maxSocketGenerationTries tries
+  var tryCount = 0
+
+  while tryCount < maxSocketGenerationTries:
+    let rcvId = randUint16(r.rng[])
+    let socket = initOutgoingSocket[A](address, r.sendCb, r.socketConfig, rcvId, r.rng[])
+
+    if r.registerIfAbsent(socket):
+      return some(socket)
+    
+    inc tryCount
+
+  return none[UtpSocket[A]]()
+  
+proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.}=
+    let startFut = s.startOutgoingSocket()
+
+    startFut.cancelCallback = proc(udata: pointer) {.gcsafe.} =
+      # if for some reason future will be cancelled, destory socket to clear it from
+      # active socket list
+      s.destroy()
+
+    try:
+      await startFut
+      return ok(s)
+    except ConnectionError:
+      s.destroy()
+      return err(OutgoingConnectionError(kind: ConnectionTimedOut))
+    except CatchableError as e:
+      s.destroy()
+      # this may only happen if user provided callback will for some reason fail
+      return err(OutgoingConnectionError(kind: ErrorWhileSendingSyn, error: e))
+
 # Connect to provided address
 # Reference implementation: https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
-proc connectTo*[A](r: UtpRouter[A], address: A): Future[UtpSocket[A]] {.async.}=
-  let socket = initOutgoingSocket[A](address, r.sendCb, r.socketConfig, r.rng[])
-  r.registerUtpSocket(socket)
-  await socket.startOutgoingSocket()
-  await socket.waitFotSocketToConnect()
-  return socket
+proc connectTo*[A](r: UtpRouter[A], address: A): Future[ConnectionResult[A]] {.async.} =
+  let maybeSocket = r.generateNewUniqueSocket(address)
+
+  if (maybeSocket.isNone()):
+    return err(OutgoingConnectionError(kind: SocketAlreadyExists))
+  else:
+    let socket = maybeSocket.unsafeGet()
+    return await socket.connect()
+
+# Connect to provided address with provided connection id, if socket with this id
+# and address already exsits return error
+proc connectTo*[A](r: UtpRouter[A], address: A, connectionId: uint16): Future[ConnectionResult[A]] {.async.} =
+  let socket = initOutgoingSocket[A](address, r.sendCb, r.socketConfig, connectionId, r.rng[])
+
+  if (r.registerIfAbsent(socket)):
+    return await socket.connect() 
+  else:
+    return err(OutgoingConnectionError(kind: SocketAlreadyExists))
 
 proc shutdown*[A](r: UtpRouter[A]) =
   # stop processing any new packets and close all sockets in background without
