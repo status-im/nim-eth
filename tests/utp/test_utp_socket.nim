@@ -62,7 +62,7 @@ procSuite "Utp socket unit test":
     initialRemoteSeq: uint16,
     q: AsyncQueue[Packet],
     cfg: SocketConfig = SocketConfig.init()): (UtpSocket[TransportAddress], Packet) =
-    let sock1 = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, defaultRcvOutgoingId, rng[])
+    let sock1 = newOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, defaultRcvOutgoingId, rng[])
     asyncSpawn sock1.startOutgoingSocket()
     let initialPacket = await q.get()
 
@@ -81,7 +81,7 @@ procSuite "Utp socket unit test":
   asyncTest "Starting outgoing socket should send Syn packet":
     let q = newAsyncQueue[Packet]()
     let defaultConfig = SocketConfig.init()
-    let sock1 = initOutgoingSocket[TransportAddress](
+    let sock1 = newOutgoingSocket[TransportAddress](
       testAddress,
       initTestSnd(q),
       defaultConfig,
@@ -100,7 +100,7 @@ procSuite "Utp socket unit test":
 
   asyncTest "Outgoing socket should re-send syn packet 2 times before declaring failure":
     let q = newAsyncQueue[Packet]()
-    let sock1 = initOutgoingSocket[TransportAddress](
+    let sock1 = newOutgoingSocket[TransportAddress](
       testAddress,
       initTestSnd(q),
       SocketConfig.init(milliseconds(100)),
@@ -317,7 +317,7 @@ procSuite "Utp socket unit test":
     let q = newAsyncQueue[Packet]()   
     let initalRemoteSeqNr = 10'u16
 
-    let outgoingSocket = initOutgoingSocket[TransportAddress](
+    let outgoingSocket = newOutgoingSocket[TransportAddress](
       testAddress, 
       initTestSnd(q),
       SocketConfig.init(milliseconds(3000), 2),

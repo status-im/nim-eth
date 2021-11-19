@@ -85,7 +85,7 @@ procSuite "Utp protocol over discovery v5 tests":
 
     check:
       clientSocket.isConnected()
-      # in this test we do not configure socket to be connected just affter
+      # in this test we do not configure the socket to be connected just after
       # accepting incoming connection
       not serverSocket.isConnected()
 

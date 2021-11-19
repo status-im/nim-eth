@@ -57,11 +57,11 @@ type
     # Maximnal size of receive buffer in bytes
     optRcvBuffer*: uint32
 
-    # If set to some(`duration`), incoming socket will be createded in not connected
-    # state and remote peer will have `duration` to transfer data to make socket
-    # connected
-    # If set to none, incoming socket will be immediatly in connected state and will
-    # be able to transfer data.
+    # If set to some(`Duration`), the incoming socket will be initialized in
+    # `SynRecv` state and the remote peer will have `Duration` to transfer data
+    # to move the socket in `Connected` state.
+    # If set to none, the incoming socket will immediately be set to `Connected`
+    # state and will be able to transfer data.
     incomingSocketReceiveTimeout*: Option[Duration]
 
   UtpSocket*[A] = ref object
@@ -423,7 +423,7 @@ proc new[A](
     send: snd
   )
 
-proc initOutgoingSocket*[A](
+proc newOutgoingSocket*[A](
   to: A,
   snd: SendCallback[A],
   cfg: SocketConfig,
@@ -447,7 +447,7 @@ proc initOutgoingSocket*[A](
     cfg.initialSynTimeout
   )
 
-proc initIncomingSocket*[A](
+proc newIncomingSocket*[A](
   to: A,
   snd: SendCallback[A],
   cfg: SocketConfig,
