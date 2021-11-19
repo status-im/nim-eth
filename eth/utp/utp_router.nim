@@ -155,15 +155,11 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       if (r.shouldAllowConnection(sender, p.header.connectionId)):
         notice "Received SYN for not known connection. Initiating incoming connection"
         # Initial ackNr is set to incoming packer seqNr
-        let incomingSocket = initIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
+        let incomingSocket = newIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
         r.registerUtpSocket(incomingSocket)
         await incomingSocket.startIncomingSocket()
-        # TODO By default (when we have utp over udp) socket here is passed to upper layer
-        # in SynRecv state, which is not writeable i.e user of socket cannot write
-        # data to it unless some data will be received. This is counter measure to
-        # amplification attacks.
-        # During integration with discovery v5 (i.e utp over discovv5), we must re-think
-        # this.
+        # Based on configuration, socket is passed to upper layer either in SynRecv
+        # or Connected state
         asyncSpawn r.acceptConnection(r, incomingSocket)
       else:
         notice "Connection declined"
@@ -194,7 +190,7 @@ proc generateNewUniqueSocket[A](r: UtpRouter[A], address: A): Option[UtpSocket[A
 
   while tryCount < maxSocketGenerationTries:
     let rcvId = randUint16(r.rng[])
-    let socket = initOutgoingSocket[A](address, r.sendCb, r.socketConfig, rcvId, r.rng[])
+    let socket = newOutgoingSocket[A](address, r.sendCb, r.socketConfig, rcvId, r.rng[])
 
     if r.registerIfAbsent(socket):
       return some(socket)
@@ -236,7 +232,7 @@ proc connectTo*[A](r: UtpRouter[A], address: A): Future[ConnectionResult[A]] {.a
 # Connect to provided address with provided connection id, if socket with this id
 # and address already exsits return error
 proc connectTo*[A](r: UtpRouter[A], address: A, connectionId: uint16): Future[ConnectionResult[A]] {.async.} =
-  let socket = initOutgoingSocket[A](address, r.sendCb, r.socketConfig, connectionId, r.rng[])
+  let socket = newOutgoingSocket[A](address, r.sendCb, r.socketConfig, connectionId, r.rng[])
 
   if (r.registerIfAbsent(socket)):
     return await socket.connect() 

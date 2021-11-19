@@ -62,7 +62,7 @@ procSuite "Utp socket unit test":
     initialRemoteSeq: uint16,
     q: AsyncQueue[Packet],
     cfg: SocketConfig = SocketConfig.init()): (UtpSocket[TransportAddress], Packet) =
-    let sock1 = initOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, defaultRcvOutgoingId, rng[])
+    let sock1 = newOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, defaultRcvOutgoingId, rng[])
     asyncSpawn sock1.startOutgoingSocket()
     let initialPacket = await q.get()
 
@@ -81,7 +81,7 @@ procSuite "Utp socket unit test":
   asyncTest "Starting outgoing socket should send Syn packet":
     let q = newAsyncQueue[Packet]()
     let defaultConfig = SocketConfig.init()
-    let sock1 = initOutgoingSocket[TransportAddress](
+    let sock1 = newOutgoingSocket[TransportAddress](
       testAddress,
       initTestSnd(q),
       defaultConfig,
@@ -95,11 +95,12 @@ procSuite "Utp socket unit test":
       initialPacket.header.pType == ST_SYN
       initialPacket.header.wndSize == defaultConfig.optRcvBuffer
 
+    await sock1.destroyWait()
     fut1.cancel()
 
   asyncTest "Outgoing socket should re-send syn packet 2 times before declaring failure":
     let q = newAsyncQueue[Packet]()
-    let sock1 = initOutgoingSocket[TransportAddress](
+    let sock1 = newOutgoingSocket[TransportAddress](
       testAddress,
       initTestSnd(q),
       SocketConfig.init(milliseconds(100)),
@@ -128,13 +129,19 @@ procSuite "Utp socket unit test":
     check:
       not sock1.isConnected()
 
+    await sock1.destroyWait()
     fut1.cancel()
 
   asyncTest "Processing in order ack should make socket connected":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
 
-    discard connectOutGoingSocket(initialRemoteSeq, q)
+    let (sock1, packet) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    check:
+      sock1.isConnected()
+
+    await sock1.destroyWait()
 
   asyncTest "Processing in order data packet should upload it to buffer and ack packet":
     let q = newAsyncQueue[Packet]()
@@ -156,6 +163,8 @@ procSuite "Utp socket unit test":
 
     check:
       receivedBytes == data
+
+    await outgoingSocket.destroyWait()
 
   asyncTest "Processing out of order data packet should buffer it until receiving in order one":
     # TODO test is valid until implementing selective acks
@@ -185,6 +194,8 @@ procSuite "Utp socket unit test":
 
     check:
       receivedData == data
+
+    await outgoingSocket.destroyWait()
     
   asyncTest "Processing out of order data packet should ignore duplicated not ordered packets":
     # TODO test is valid until implementing selective acks
@@ -218,6 +229,8 @@ procSuite "Utp socket unit test":
 
     check:
       receivedData == data
+    
+    await outgoingSocket.destroyWait()
   
   asyncTest "Processing packets in random order":
     # TODO test is valid until implementing selective acks
@@ -244,6 +257,8 @@ procSuite "Utp socket unit test":
       # as they can be fired at any point. What matters is that data is passed
       # in same order as received.
       receivedData == data
+    
+    await outgoingSocket.destroyWait()
 
   asyncTest "Ignoring totally out of order packet":
     # TODO test is valid until implementing selective acks
@@ -263,6 +278,8 @@ procSuite "Utp socket unit test":
 
     check:
       outgoingSocket.numPacketsInReordedBuffer() == 1
+
+    await outgoingSocket.destroyWait()
 
   asyncTest "Writing small enough data should produce 1 data packet":
     let q = newAsyncQueue[Packet]()
@@ -294,11 +311,13 @@ procSuite "Utp socket unit test":
     check: 
       outgoingSocket.numPacketsInOutGoingBuffer() == 0
 
+    await outgoingSocket.destroyWait()
+
   asyncTest "Socket should re-send data packet configurable number of times before declaring failure":
     let q = newAsyncQueue[Packet]()   
     let initalRemoteSeqNr = 10'u16
 
-    let outgoingSocket = initOutgoingSocket[TransportAddress](
+    let outgoingSocket = newOutgoingSocket[TransportAddress](
       testAddress, 
       initTestSnd(q),
       SocketConfig.init(milliseconds(3000), 2),
@@ -358,6 +377,8 @@ procSuite "Utp socket unit test":
       not outgoingSocket.isConnected()
       len(q) == 0
 
+    await outgoingSocket.destroyWait()
+
   asyncTest "Processing in order fin should make socket reach eof and ack this packet":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
@@ -372,6 +393,8 @@ procSuite "Utp socket unit test":
     check:
       ack1.header.pType == ST_STATE
       outgoingSocket.atEof()
+
+    await outgoingSocket.destroyWait()
 
   asyncTest "Processing out of order fin should buffer it until receiving all remaining packets":
     let q = newAsyncQueue[Packet]()
@@ -408,6 +431,8 @@ procSuite "Utp socket unit test":
       readF.finished()
       outgoingSocket.atEof()
       bytes == concat(data, data1)
+
+    await outgoingSocket.destroyWait()
 
   asyncTest "Socket should ignore data past eof packet":
     let q = newAsyncQueue[Packet]()
@@ -453,6 +478,8 @@ procSuite "Utp socket unit test":
       outgoingSocket.atEof()
       bytes == concat(data)
 
+    await outgoingSocket.destroyWait()
+
   asyncTest "Calling close should send fin packet":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
@@ -465,6 +492,8 @@ procSuite "Utp socket unit test":
 
     check:
       sendFin.header.pType == ST_FIN
+
+    await outgoingSocket.destroyWait()
 
   asyncTest "Receiving ack for fin packet should destroy socket":
     let q = newAsyncQueue[Packet]()
@@ -487,6 +516,8 @@ procSuite "Utp socket unit test":
 
     check:
       not outgoingSocket.isConnected()
+    
+    await outgoingSocket.destroyWait()
 
   asyncTest "Trying to write data onto closed socket should return error":
     let q = newAsyncQueue[Packet]()
@@ -525,6 +556,8 @@ procSuite "Utp socket unit test":
     check:
       error.kind == FinSent
 
+    await outgoingSocket.destroyWait()
+
   asyncTest "Processing data packet should update window size accordingly and use it in all send packets":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeqNr = 10'u16
@@ -560,6 +593,8 @@ procSuite "Utp socket unit test":
       sentFin.header.pType == ST_FIN
       sentFin.header.wndSize == initialRcvBufferSize - uint32(len(data))
 
+    await outgoingSocket.destroyWait()
+
   asyncTest "Reading data from the buffer shoud increase receive window":
     let q = newAsyncQueue[Packet]()
     let initalRemoteSeqNr = 10'u16
@@ -593,6 +628,8 @@ procSuite "Utp socket unit test":
       # we have read all data from rcv buffer, advertised window should go back to
       # initial size
       sentData.header.wndSize == initialRcvBufferSize
+    
+    await outgoingSocket.destroyWait()
 
   asyncTest "Socket should ignore packets with bad ack number":
     let q = newAsyncQueue[Packet]()
@@ -619,3 +656,5 @@ procSuite "Utp socket unit test":
     check:
       # data1 and data2 were sent in bad packets we should only receive data3
       receivedBytes == data3
+    
+    await outgoingSocket.destroyWait()

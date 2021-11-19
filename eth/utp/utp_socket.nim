@@ -57,6 +57,13 @@ type
     # Maximnal size of receive buffer in bytes
     optRcvBuffer*: uint32
 
+    # If set to some(`Duration`), the incoming socket will be initialized in
+    # `SynRecv` state and the remote peer will have `Duration` to transfer data
+    # to move the socket in `Connected` state.
+    # If set to none, the incoming socket will immediately be set to `Connected`
+    # state and will be able to transfer data.
+    incomingSocketReceiveTimeout*: Option[Duration]
+
   UtpSocket*[A] = ref object
     remoteAddress*: A
     state: ConnectionState
@@ -187,8 +194,8 @@ const
   defaultInitialSynTimeout = milliseconds(3000)
 
   # Initial timeout to receive first Data data packet after receiving initial Syn
-  # packet. (TODO it should only be set when working over udp)
-  initialRcvRetransmitTimeout = milliseconds(10000)
+  # packet.
+  defaultRcvRetransmitTimeout = milliseconds(10000)
 
   # Number of times each data packet will be resend before declaring connection
   # dead. 4 is taken from reference implementation
@@ -232,12 +239,14 @@ proc init*(
   T: type SocketConfig, 
   initialSynTimeout: Duration = defaultInitialSynTimeout,
   dataResendsBeforeFailure: uint16 = defaultDataResendsBeforeFailure,
-  optRcvBuffer: uint32 = defaultOptRcvBuffer
+  optRcvBuffer: uint32 = defaultOptRcvBuffer,
+  incomingSocketReceiveTimeout: Option[Duration] = some(defaultRcvRetransmitTimeout)
   ): T =
   SocketConfig(
     initialSynTimeout: initialSynTimeout,
     dataResendsBeforeFailure: dataResendsBeforeFailure,
-    optRcvBuffer: optRcvBuffer
+    optRcvBuffer: optRcvBuffer,
+    incomingSocketReceiveTimeout: incomingSocketReceiveTimeout
   )
 
 proc getRcvWindowSize(socket: UtpSocket): uint32 =
@@ -325,15 +334,13 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       # timeouts calculations
 
       # client initiated connections, but did not send following data packet in rto
-      # time. TODO this should be configurable
+      # time and our socket is configured to start in SynRecv state.
       if (socket.state == SynRecv):
         socket.destroy()
         return
       
       if socket.shouldDisconnectFromFailedRemote():
         if socket.state == SynSent and (not socket.connectionFuture.finished()):
-          # TODO standard stream interface result in failed future in case of failed connections,
-          # but maybe it would be more clean to use result
           socket.connectionFuture.fail(newException(ConnectionError, "Connection to peer timed out"))
 
         socket.destroy()
@@ -367,7 +374,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
     # TODO add sending keep alives when necessary
 
 proc checkTimeoutsLoop(s: UtpSocket) {.async.} =
-  ## Loop that check timeoutsin the socket.
+  ## Loop that check timeouts in the socket.
   try:
     while true:
       await sleepAsync(checkTimeoutsLoopInterval)
@@ -388,14 +395,9 @@ proc new[A](
   rcvId: uint16,
   sndId: uint16,
   initialSeqNr: uint16,
-  initialAckNr: uint16
+  initialAckNr: uint16,
+  initialTimeout: Duration
 ): T =
-  let initialTimeout = 
-    if direction == Outgoing:
-      cfg.initialSynTimeout
-    else :
-      initialRcvRetransmitTimeout
-
   T(
     remoteAddress: to,
     state: state,
@@ -421,7 +423,7 @@ proc new[A](
     send: snd
   )
 
-proc initOutgoingSocket*[A](
+proc newOutgoingSocket*[A](
   to: A,
   snd: SendCallback[A],
   cfg: SocketConfig,
@@ -441,10 +443,11 @@ proc initOutgoingSocket*[A](
     sndConnectionId,
     initialSeqNr,
     # Initialy ack nr is 0, as we do not know remote inital seqnr
-    0
+    0,
+    cfg.initialSynTimeout
   )
 
-proc initIncomingSocket*[A](
+proc newIncomingSocket*[A](
   to: A,
   snd: SendCallback[A],
   cfg: SocketConfig,
@@ -454,16 +457,27 @@ proc initIncomingSocket*[A](
 ): UtpSocket[A] =
   let initialSeqNr = randUint16(rng)
 
+  let (initialState, initialTimeout) = 
+    if (cfg.incomingSocketReceiveTimeout.isNone()):
+      # it does not matter what timeout value we put here, as socket will be in
+      # connected state without outgoing packets in buffer so any timeout hit will
+      # just double rto without any penalties
+      (Connected, milliseconds(0))
+    else:
+      let timeout = cfg.incomingSocketReceiveTimeout.unsafeGet()
+      (SynRecv, timeout)
+
   UtpSocket[A].new(
     to,
     snd,
-    SynRecv,
+    initialState,
     cfg,
     Incoming,
     connectionId + 1,
     connectionId,
     initialSeqNr,
-    ackNr
+    ackNr,
+    initialTimeout
   )
 
 proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async.} =
@@ -479,13 +493,15 @@ proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async.} =
   await socket.connectionFuture
   
 proc startIncomingSocket*(socket: UtpSocket) {.async.} =
-  doAssert(socket.state == SynRecv)
   # Make sure ack was flushed before moving forward
   await socket.sendAck()
   socket.startTimeoutLoop()
 
 proc isConnected*(socket: UtpSocket): bool =
   socket.state == Connected or socket.state == ConnectedFull
+
+proc isClosed*(socket: UtpSocket): bool =
+  socket.state == Destroy and socket.closeEvent.isSet()
 
 proc destroy*(s: UtpSocket) =
   ## Moves socket to destroy state and clean all reasources.
@@ -679,7 +695,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
       # To avoid amplification attacks, server socket is in SynRecv state until
       # it receices first data transfer
       # https://www.usenix.org/system/files/conference/woot15/woot15-paper-adamsky.pdf
-      # TODO when intgrating with discv5 this need to be configurable
+      # Socket is in SynRecv state only when recv timeout is configured
       if (socket.state == SynRecv and p.header.pType == ST_DATA):
         socket.state = Connected
 
@@ -772,11 +788,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
         # In case of SynSent complate the future as last thing to make sure user of libray will
         # receive socket in correct state
         socket.connectionFuture.complete()
-        # TODO to finish handhske we should respond with ST_DATA packet, without it
-        # socket is left in half-open state.
-        # Actual reference implementation waits for user to send data, as it assumes
-        # existence of application level handshake over utp. We may need to modify this
-        # to automaticly send ST_DATA .
+
     of ST_RESET:
       notice "Received ST_RESET on known socket, ignoring"
     of ST_SYN:
