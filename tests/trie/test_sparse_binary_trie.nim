@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  std/[unittest, random],
+  std/random,
+  unittest2,
   stew/byteutils,
   ../../eth/trie/[db, sparse_binary, sparse_proofs],
   ./testutils

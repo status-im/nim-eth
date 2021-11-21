@@ -10,7 +10,8 @@
 {.used.}
 
 import
-  std/[json, os, unittest],
+  std/[json, os],
+  unittest2,
   ../../eth/keys, ../../eth/keyfile/[keyfile]
 
 # Test vectors copied from

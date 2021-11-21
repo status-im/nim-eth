@@ -10,7 +10,8 @@
 {.used.}
 
 import
-  std/[sequtils, options, unittest, times],
+  std/[sequtils, options, times],
+  unittest2,
   ../../eth/p2p/rlpx_protocols/whisper_protocol as whisper
 
 suite "Whisper envelope validation":

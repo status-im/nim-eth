@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  std/[sets, unittest, strutils],
+  std/[sets, strutils],
+  unittest2,
   stew/byteutils,
   ../../eth/trie/[db, binary, branches]
 

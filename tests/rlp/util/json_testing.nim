@@ -1,5 +1,6 @@
 import
-  std/[json, unittest],
+  std/json,
+  unittest2,
   stew/byteutils,
   ../../../eth/rlp
 
@@ -31,7 +32,7 @@ proc runTests*(filename: string) =
 
         if input.isNil or output.isNil or output.kind != JString:
           skip()
-          continue
+          return
 
         if input == "VALID":
           var rlp = rlpFromHex(output.str)
@@ -50,7 +51,8 @@ proc runTests*(filename: string) =
             echo "  INTERPRETATION:\n", inspectOutput
         else:
           if input.kind == JString and input.str.len != 0 and input.str[0] == '#':
-            continue
+            skip()
+            return
 
           var outRlp = initRlpWriter()
           outRlp.append input

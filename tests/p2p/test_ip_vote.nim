@@ -1,7 +1,7 @@
 {.used.}
 
 import
-  std/unittest,
+  unittest2,
   stew/shims/net,
   ../../eth/keys, ../../eth/p2p/discoveryv5/[node, ip_vote]
 

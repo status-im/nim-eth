@@ -16,7 +16,8 @@ requires "nim >= 1.2.0",
          "metrics",
          "sqlite3_abi",
          "confutils",
-         "testutils"
+         "testutils",
+         "unittest2"
 
 let commonParams = " --verbosity:0 --hints:off --skipUserCfg:on --warning[ObservableStores]:off "
 

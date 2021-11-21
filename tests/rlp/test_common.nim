@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  std/[unittest, os, json],
+  std/[os, json],
+  unittest2,
   stew/byteutils,
   ../../eth/[common, rlp]
 

@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  std/[json, os, unittest],
+  std/[json, os],
+  unittest2,
   chronos, stew/byteutils,
   ../../eth/p2p, ../../eth/p2p/rlpx_protocols/[whisper_protocol, eth_protocol],
   ./p2p_test_helper
@@ -31,7 +32,7 @@ proc testPayloads(filename: string) =
 
         if payloadHex.isNil or payloadHex.kind != JString:
           skip()
-          continue
+          return
 
         let payload = hexToSeqByte(payloadHex.str)
 
@@ -40,7 +41,7 @@ proc testPayloads(filename: string) =
         else:
           if error.kind != JString:
             skip()
-            continue
+            return
 
           # TODO: can I convert the error string to an Exception type at runtime?
           expect CatchableError:

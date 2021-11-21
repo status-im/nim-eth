@@ -1,7 +1,7 @@
 {.used.}
 
 import
-  std/unittest,
+  unittest2,
   stew/byteutils, nimcrypto/[keccak, hash],
   ../../eth/trie/[db, binary, binaries, trie_utils, branches]
 

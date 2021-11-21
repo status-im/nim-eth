@@ -10,7 +10,8 @@
 {.used.}
 
 import
-  std/[sequtils, options, unittest, tables],
+  std/[sequtils, options, tables],
+  unittest2,
   nimcrypto/hash,
   ../../eth/[keys, rlp],
   ../../eth/p2p/rlpx_protocols/whisper/whisper_types as whisper

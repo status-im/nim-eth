@@ -10,10 +10,9 @@
 {.used.}
 
 import
+  unittest2,
   ../../eth/keys,
   ./config
-
-import unittest
 
 suite "Testing private -> public key conversion":
   test "Known private to known public keys (test data from Ethereum eth-keys)":

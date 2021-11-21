@@ -1,7 +1,7 @@
 {.used.}
 
 import
-  std/unittest,
+  unittest2,
   ../../eth/trie/db,
   ./testutils
 

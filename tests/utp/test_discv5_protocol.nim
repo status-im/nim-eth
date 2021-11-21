@@ -53,7 +53,7 @@ procSuite "Utp protocol over discovery v5 tests":
       proc(server: UtpRouter[Node], client: UtpSocket[Node]): Future[void] =
         serverSockets.addLast(client)
     )
-  
+
   proc allowOneIdCallback(allowedId: uint16): AllowConnectionCallback[Node] =
     return (
       proc(r: UtpRouter[Node], remoteAddress: Node, connectionId: uint16): bool =
@@ -109,7 +109,7 @@ procSuite "Utp protocol over discovery v5 tests":
       node1.addNode(node2.localNode)
       node2.addNode(node1.localNode)
 
-    let numOfBytes = 5000  
+    let numOfBytes = 5000
     let clientSocketResult = await utp1.connectTo(node2.localNode)
     let clientSocket = clientSocketResult.get()
 
@@ -146,7 +146,7 @@ procSuite "Utp protocol over discovery v5 tests":
         utpProtId,
         registerIncomingSocketCallback(queue),
         SocketConfig.init(lowSynTimeout))
-      utp2 = 
+      utp2 =
         UtpDiscv5Protocol.new(
           node2,
           utpProtId,
@@ -161,14 +161,14 @@ procSuite "Utp protocol over discovery v5 tests":
 
     let clientSocketResult1 = await utp1.connectTo(node2.localNode, allowedId)
     let clientSocketResult2 = await utp1.connectTo(node2.localNode, allowedId + 1)
-   
+
     check:
       clientSocketResult1.isOk()
       clientSocketResult2.isErr()
 
     let clientSocket = clientSocketResult1.get()
     let serverSocket = await queue.get()
-    
+
     check:
       clientSocket.connectionId() == allowedId
       serverSocket.connectionId() == allowedId
