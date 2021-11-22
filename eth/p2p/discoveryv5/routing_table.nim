@@ -29,8 +29,8 @@ type
     calculateIdAtDistance*: IdAtDistanceProc
 
   RoutingTable* = object
-    thisNode: Node
-    buckets: seq[KBucket]
+    localNode*: Node
+    buckets*: seq[KBucket]
     bitsPerHop: int ## This value indicates how many bits (at minimum) you get
     ## closer to finding your target per query. Practically, it tells you also
     ## how often your "not in range" branch will split off. Setting this to 1
@@ -47,8 +47,8 @@ type
   KBucket = ref object
     istart, iend: NodeId ## Range of NodeIds this KBucket covers. This is not a
     ## simple logarithmic distance as buckets can be split over a prefix that
-    ## does not cover the `thisNode` id.
-    nodes: seq[Node] ## Node entries of the KBucket. Sorted according to last
+    ## does not cover the `localNode` id.
+    nodes*: seq[Node] ## Node entries of the KBucket. Sorted according to last
     ## time seen. First entry (head) is considered the most recently seen node
     ## and the last entry (tail) is considered the least recently seen node.
     ## Here "seen" means a successful request-response. This can also not have
@@ -259,13 +259,13 @@ proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
   # Reaching this would mean that all node ids are equal.
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
-proc init*(T: type RoutingTable, thisNode: Node, bitsPerHop = DefaultBitsPerHop,
+proc init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop,
     ipLimits = DefaultTableIpLimits, rng: ref BrHmacDrbgContext,
     distanceCalculator = XorDistanceCalculator): T =
   ## Initialize the routing table for provided `Node` and bitsPerHop value.
   ## `bitsPerHop` is default set to 5 as recommended by original Kademlia paper.
   RoutingTable(
-    thisNode: thisNode,
+    localNode: localNode,
     buckets: @[KBucket.new(0.u256, high(Uint256), ipLimits.bucketIpLimit)],
     bitsPerHop: bitsPerHop,
     ipLimits: IpLimits(limit: ipLimits.tableIpLimit),
@@ -336,7 +336,7 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   if n.address.isNone():
     return NoAddress
 
-  if n == r.thisNode:
+  if n == r.localNode:
     return LocalNode
 
   let bucket = r.bucketForNode(n.id)
@@ -386,7 +386,7 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
     let depth = computeSharedPrefixBits(@[bucket.istart, bucket.iend])
     # Split if the bucket has the local node in its range or if the depth is not
     # congruent to 0 mod `bitsPerHop`
-    if bucket.inRange(r.thisNode) or
+    if bucket.inRange(r.localNode) or
         (depth mod r.bitsPerHop != 0 and depth != ID_SIZE):
       r.splitBucket(r.buckets.find(bucket))
       return r.addNode(n) # retry adding
@@ -456,10 +456,10 @@ proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
 proc neighboursAtDistance*(r: RoutingTable, distance: uint16,
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours at given logarithmic distance.
-  result = r.neighbours(r.idAtDistance(r.thisNode.id, distance), k, seenOnly)
+  result = r.neighbours(r.idAtDistance(r.localNode.id, distance), k, seenOnly)
   # This is a bit silly, first getting closest nodes then to only keep the ones
   # that are exactly the requested distance.
-  keepIf(result, proc(n: Node): bool = r.logDistance(n.id, r.thisNode.id) == distance)
+  keepIf(result, proc(n: Node): bool = r.logDistance(n.id, r.localNode.id) == distance)
 
 proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
@@ -468,12 +468,12 @@ proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
   # first one prioritize. It might end up not including all the node distances
   # requested. Need to rework the logic here and not use the neighbours call.
   if distances.len > 0:
-    result = r.neighbours(r.idAtDistance(r.thisNode.id, distances[0]), k,
+    result = r.neighbours(r.idAtDistance(r.localNode.id, distances[0]), k,
       seenOnly)
     # This is a bit silly, first getting closest nodes then to only keep the ones
     # that are exactly the requested distances.
     keepIf(result, proc(n: Node): bool =
-      distances.contains(r.logDistance(n.id, r.thisNode.id)))
+      distances.contains(r.logDistance(n.id, r.localNode.id)))
 
 proc len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len

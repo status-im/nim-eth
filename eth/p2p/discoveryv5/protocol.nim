@@ -122,7 +122,7 @@ type
     privateKey: PrivateKey
     bindAddress: Address ## UDP binding address
     pendingRequests: Table[AESGCMNonce, PendingRequest]
-    routingTable: RoutingTable
+    routingTable*: RoutingTable
     codec*: Codec
     awaitedMessages: Table[(NodeId, RequestId), Future[Option[Message]]]
     refreshLoop: Future[void]
