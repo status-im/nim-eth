@@ -10,6 +10,9 @@ proc q(s: string): string = "\"" & s & "\""
 proc i(s: string): string = s.replace(" ").replace("\n")
 proc inspectMatch(r: Rlp, s: string): bool = r.inspect.i == s.i
 
+when (NimMajor, NimMinor, NimPatch) < (1, 4, 0):
+  type AssertionDefect = AssertionError
+
 suite "test api usage":
   test "empty bytes are not a proper RLP":
     var rlp = rlpFromBytes seq[byte](@[])
