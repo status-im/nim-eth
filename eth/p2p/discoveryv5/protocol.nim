@@ -718,9 +718,9 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
   d.lastLookup = now(chronos.Moment)
   return queryBuffer
 
-proc queryRandom*(d: Protocol): Future[seq[Node]] {.async.} =
+proc queryRandom*(d: Protocol): Future[seq[Node]] =
   ## Perform a query for a random target, return all nodes discovered.
-  return await d.query(NodeId.random(d.rng[]))
+  d.query(NodeId.random(d.rng[]))
 
 proc queryRandom*(d: Protocol, enrField: (string, seq[byte])):
     Future[seq[Node]] {.async.} =
