@@ -76,13 +76,13 @@
 import
   std/[tables, sets, options, math, sequtils, algorithm],
   stew/shims/net as stewNet, json_serialization/std/net,
-  stew/endians2, chronicles, chronos, stint, bearssl, metrics,
+  stew/[endians2, results], chronicles, chronos, stint, bearssl, metrics,
   ".."/../[rlp, keys, async_utils],
   "."/[messages, encoding, node, routing_table, enr, random2, sessions, ip_vote, nodes_verification]
 
 import nimcrypto except toHex
 
-export options
+export options, results, node, enr
 
 declareCounter discovery_message_requests_outgoing,
   "Discovery protocol outgoing message requests", labels = ["response"]
@@ -422,8 +422,10 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
       # In that case we can add/update it to the routing table.
       if packet.node.isSome():
         let node = packet.node.get()
-        # Not filling table with nodes without correct IP in the ENR
-        # TODO: Should we care about this???
+        # Lets not add nodes without correct IP in the ENR to the routing table.
+        # The ENR could contain bogus IPs and although they would get removed
+        # on the next revalidation, one could spam these as the handshake
+        # message occurs on (first) incoming messages.
         if node.address.isSome() and a == node.address.get():
           if d.addNode(node):
             trace "Added new node to routing table after handshake", node
@@ -716,9 +718,9 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
   d.lastLookup = now(chronos.Moment)
   return queryBuffer
 
-proc queryRandom*(d: Protocol): Future[seq[Node]] =
+proc queryRandom*(d: Protocol): Future[seq[Node]] {.async.} =
   ## Perform a query for a random target, return all nodes discovered.
-  d.query(NodeId.random(d.rng[]))
+  return await d.query(NodeId.random(d.rng[]))
 
 proc queryRandom*(d: Protocol, enrField: (string, seq[byte])):
     Future[seq[Node]] {.async.} =
