@@ -21,7 +21,8 @@ requires "nim >= 1.2.0",
 
 var commonParams = " --verbosity:0 --hints:off --skipUserCfg:on --warning[ObservableStores]:off "
 when defined(windows):
-  commonParams &= " --passC:-mstackrealign --passL:-mstackrealign "
+  # MingGW-w64's setjmp/longjmp are buggy: https://sourceforge.net/p/mingw-w64/bugs/406/
+  commonParams &= " --exceptions:goto "
 
 proc runTest(path: string, release: bool = true, chronosStrict = true) =
   echo "\nRunning: ", path
