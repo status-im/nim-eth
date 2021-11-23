@@ -4,7 +4,7 @@ description   = "Ethereum Common library"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 1.2.0 & <= 1.2.12",
+requires "nim >= 1.2.0 & <= 1.2.14",
          "nimcrypto",
          "stint",
          "secp256k1",
