@@ -21,7 +21,7 @@ requires "nim >= 1.2.0",
 
 var commonParams = " --verbosity:0 --hints:off --skipUserCfg:on --warning[ObservableStores]:off "
 when defined(windows):
-  commonParams &= " --passC:'-mstackrealign' --passL:'-mstackrealign' "
+  commonParams &= " --passC:-mstackrealign --passL:-mstackrealign "
 
 proc runTest(path: string, release: bool = true, chronosStrict = true) =
   echo "\nRunning: ", path
