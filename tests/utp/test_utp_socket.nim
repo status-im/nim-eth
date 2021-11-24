@@ -658,3 +658,91 @@ procSuite "Utp socket unit test":
       receivedBytes == data3
     
     await outgoingSocket.destroyWait()
+
+  asyncTest "Writing data should increase current bytes window":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let dataToWrite = @[1'u8, 2, 3, 4, 5]
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    discard await outgoingSocket.write(dataToWrite)
+
+    check:
+      int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite)
+
+    discard await outgoingSocket.write(dataToWrite)
+
+    check:
+      int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite) + len(dataToWrite)
+
+    await outgoingSocket.destroyWait()
+
+  asyncTest "Acking data packet should decrease current bytes window":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let dataToWrite = @[1'u8, 2, 3, 4, 5]
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    discard await outgoingSocket.write(dataToWrite)
+
+    let sentPacket = await q.get()
+
+    check:
+      int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite)
+
+
+    discard await outgoingSocket.write(dataToWrite)
+
+    check:
+      int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite) + len(dataToWrite)
+
+    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, sentPacket.header.seqNr, testBufferSize)
+
+    await outgoingSocket.processPacket(responseAck)
+
+    check:
+      # only first packet has been acked so there should still by 5 bytes left
+      int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite)
+
+    await outgoingSocket.destroyWait()
+
+  asyncTest "Timeout packets should decrease bytes window":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let dataToWrite = @[1'u8, 2, 3]
+    let dataToWrite1 = @[6'u8, 7, 8, 9, 10]
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    discard await outgoingSocket.write(dataToWrite)
+
+    let sentPacket = await q.get()
+
+    check:
+      int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite)
+
+
+    discard await outgoingSocket.write(dataToWrite1)
+    
+    let sentPacket1 = await q.get()
+
+    check:
+      int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite) + len(dataToWrite1)
+
+    # after timeout oldest packet will be immediatly re-sent
+    let reSentFirstPacket = await q.get()
+
+    check:
+      reSentFirstPacket.payload == sentPacket.payload
+
+      # first packet has been re-sent so its payload still counts to bytes in flight
+      # second packet has been marked as missing, therefore its bytes are not counting
+      # to bytes in flight
+      int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite)
+
+    await outgoingSocket.destroyWait()
