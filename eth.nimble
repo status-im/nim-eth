@@ -19,13 +19,11 @@ requires "nim >= 1.2.0",
          "testutils",
          "unittest2"
 
-var commonParams = " --verbosity:0 --hints:off --skipUserCfg:on --warning[ObservableStores]:off "
-when defined(windows):
-  # MingGW-w64's setjmp/longjmp are buggy: https://sourceforge.net/p/mingw-w64/bugs/406/
-  commonParams &= " --exceptions:goto "
+var commonParams = " --verbosity:0 --hints:off --skipUserCfg:on --warning[ObservableStores]:off " &
+      getEnv("NIMFLAGS") & " "
 
 proc runTest(path: string, release: bool = true, chronosStrict = true) =
-  echo "\nRunning: ", path
+  echo "\nBuilding and running: ", path
   let releaseMode = if release: "-d:release" else: ""
   let chronosMode =
     if chronosStrict: "-d:chronosStrictException" else: ""

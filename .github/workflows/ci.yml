@@ -22,7 +22,7 @@ jobs:
             cpu: amd64
           #- os: windows
             #cpu: i386
-        branch: [version-1-2, version-1-4, version-1-6, devel]
+        branch: [version-1-2, version-1-4, version-1-6, devel, mingw-longjmp-devel]
         include:
           - target:
               os: linux
@@ -231,6 +231,9 @@ jobs:
         run: |
           export PLATFORM="${{ matrix.target.os }}-${{ matrix.target.cpu }}"
           export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
+          if [[ "${{ matrix.target.os }}" == "windows" && "${{ matrix.branch }}" == "mingw-longjmp-devel" ]]; then
+            export NIMFLAGS="-d:nimRawSetjmp"
+          fi
           nim --version
           nimble --version
           nimble install -y --depsOnly
