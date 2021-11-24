@@ -222,6 +222,9 @@ jobs:
       - name: Build Nim and Nimble
         run: |
           curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_nim.sh
+          if [[ "${{ matrix.target.os }}" == "windows" && "${{ matrix.branch }}" == "mingw-longjmp-devel" ]]; then
+            git clone --branch mingw-longjmp-devel --depth 1 https://github.com/status-im/Nim.git nim
+          fi
           env MAKE="${MAKE_CMD} -j${ncpu}" ARCH_OVERRIDE=${PLATFORM} NIM_COMMIT=${{ matrix.branch }} \
             QUICK_AND_DIRTY_COMPILER=1 QUICK_AND_DIRTY_NIMBLE=1 CC=gcc \
             bash build_nim.sh nim csources dist/nimble NimBinaries
