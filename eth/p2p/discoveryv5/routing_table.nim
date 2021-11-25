@@ -22,6 +22,7 @@ type
   DistanceProc* = proc(a, b: NodeId): NodeId {.raises: [Defect], gcsafe, noSideEffect.}
   LogDistanceProc* = proc(a, b: NodeId): uint16 {.raises: [Defect], gcsafe, noSideEffect.}
   IdAtDistanceProc* = proc (id: NodeId, dist: uint16): NodeId {.raises: [Defect], gcsafe, noSideEffect.}
+  NodeValidator* = proc(node: Node): bool {.gcsafe, raises: [Defect].}
 
   DistanceCalculator* = object
     calculateDistance*: DistanceProc
@@ -43,6 +44,7 @@ type
     ## replacement caches.
     distanceCalculator: DistanceCalculator
     rng: ref BrHmacDrbgContext
+    nodeValidator: Option[NodeValidator] ## Optional validation of nodes
 
   KBucket = ref object
     istart, iend: NodeId ## Range of NodeIds this KBucket covers. This is not a
@@ -91,6 +93,7 @@ type
     ReplacementAdded
     ReplacementExisting
     NoAddress
+    Invalid
 
 # xor distance functions
 func distance*(a, b: NodeId): Uint256 =
@@ -261,7 +264,7 @@ proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
 
 proc init*(T: type RoutingTable, thisNode: Node, bitsPerHop = DefaultBitsPerHop,
     ipLimits = DefaultTableIpLimits, rng: ref BrHmacDrbgContext,
-    distanceCalculator = XorDistanceCalculator): T =
+    distanceCalculator = XorDistanceCalculator, nodeValidator = none(NodeValidator)): T =
   ## Initialize the routing table for provided `Node` and bitsPerHop value.
   ## `bitsPerHop` is default set to 5 as recommended by original Kademlia paper.
   RoutingTable(
@@ -270,7 +273,8 @@ proc init*(T: type RoutingTable, thisNode: Node, bitsPerHop = DefaultBitsPerHop,
     bitsPerHop: bitsPerHop,
     ipLimits: IpLimits(limit: ipLimits.tableIpLimit),
     distanceCalculator: distanceCalculator,
-    rng: rng)
+    rng: rng,
+    nodeValidator: nodeValidator)
 
 proc splitBucket(r: var RoutingTable, index: int) =
   let bucket = r.buckets[index]
@@ -329,6 +333,11 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   ## When the IP of the node has reached the IP limits for the bucket or the
   ## total routing table, the node will not be added to the bucket, nor its
   ## replacement cache.
+  
+  ## If we have the optional validator set, only add
+  ## node if it passes validation
+  if r.nodeValidator.isSome() and not r.nodeValidator.get()(n):
+    return Invalid
 
   # Don't allow nodes without an address field in the ENR to be added.
   # This could also be reworked by having another Node type that always has an

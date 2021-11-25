@@ -562,3 +562,31 @@ suite "Routing Table Tests":
       # there may be more than one node at provided distance
       check len(neighboursAtLogDist) >= 1
       check neighboursAtLogDist.contains(n)
+
+  test "Node validation in routing table":
+    let validPort = 20302
+
+    proc validator(node: Node): bool {.gcsafe, raises: [Defect].} =
+      # Simple validation on UDP port
+      let tr = node.record.toTypedRecord.get()
+      return tr.udp.isSome and tr.udp.get() == validPort
+
+    let local = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(local, 1, ipLimits, rng = rng,
+      distanceCalculator = customDistanceCalculator,
+      nodeValidator = some(validator.NodeValidator)
+      )
+
+    let
+      validNode = generateNode(PrivateKey.random(rng[]), port = validPort)
+      invalidNode = generateNode(PrivateKey.random(rng[]), port = validPort + 1)
+
+    # Valid nodes get added
+    check:
+      table.addNode(validNode) == Added
+      table.len == 1
+
+    # Invalid nodes get rejected
+    check:
+      table.addNode(invalidNode) == Invalid
+      table.len == 1

@@ -387,6 +387,34 @@ procSuite "Discovery v5 Tests":
 
     await mainNode.closeWait()
     await lookupNode.closeWait()
+  
+  asyncTest "Discovery with node validator":
+    let validPort = 20302
+
+    proc validator(node: Node): bool {.gcsafe, raises: [Defect].} =
+      # Simple validation on UDP port
+      let tr = node.record.toTypedRecord.get()
+      return tr.udp.isSome and tr.udp.get() == validPort
+    
+    let
+      lookupNode = newProtocol(PrivateKey.random(rng[]), some(ValidIpAddress.init("127.0.0.1")),
+        some(Port(validPort)), some(Port(validPort)), bindPort = Port(validPort),
+        rng = rng, nodeValidator = some(validator.NodeValidator))
+      validNode1 = generateNode(PrivateKey.random(rng[]), port = validPort)
+      validNode2 = generateNode(PrivateKey.random(rng[]), port = validPort)
+      invalidNode1 = generateNode(PrivateKey.random(rng[]), port = validPort - 1)
+
+    check:
+      lookupNode.addNode(validNode1)
+      lookupNode.addNode(validNode2)
+      lookupNode.addNode(invalidNode1) == false
+
+    let discovered = lookupNode.randomNodes(10)
+    check:
+      discovered.len == 2
+      discovered.contains(validNode1)
+      discovered.contains(validNode2)
+      discovered.contains(invalidNode1) == false
 
   asyncTest "Random nodes with enr field filter":
     let
