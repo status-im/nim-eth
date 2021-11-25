@@ -36,6 +36,7 @@ type
     packetBytes: seq[byte]
     transmissions: uint16
     needResend: bool
+    payloadLength: uint32
     timeSent: Moment
 
   AckResult = enum
@@ -56,6 +57,13 @@ type
 
     # Maximnal size of receive buffer in bytes
     optRcvBuffer*: uint32
+
+    # If set to some(`Duration`), the incoming socket will be initialized in
+    # `SynRecv` state and the remote peer will have `Duration` to transfer data
+    # to move the socket in `Connected` state.
+    # If set to none, the incoming socket will immediately be set to `Connected`
+    # state and will be able to transfer data.
+    incomingSocketReceiveTimeout*: Option[Duration]
 
   UtpSocket*[A] = ref object
     remoteAddress*: A
@@ -137,6 +145,12 @@ type
     # sequence number of remoted fin packet
     eofPktNr: uint16
 
+    # number payload bytes in-flight (i.e not countig header sizes)
+    # packets that have not yet been sent do not count, packets
+    # that are marked as needing to be re-sent (due to a timeout)
+    # don't count either
+    currentWindow: uint32
+
     # socket identifier
     socketKey*: UtpSocketKey[A]
 
@@ -187,8 +201,8 @@ const
   defaultInitialSynTimeout = milliseconds(3000)
 
   # Initial timeout to receive first Data data packet after receiving initial Syn
-  # packet. (TODO it should only be set when working over udp)
-  initialRcvRetransmitTimeout = milliseconds(10000)
+  # packet.
+  defaultRcvRetransmitTimeout = milliseconds(10000)
 
   # Number of times each data packet will be resend before declaring connection
   # dead. 4 is taken from reference implementation
@@ -220,11 +234,13 @@ proc init(
   packetBytes: seq[byte],
   transmissions: uint16,
   needResend: bool,
+  payloadLength: uint32,
   timeSent: Moment = Moment.now()): T =
   OutgoingPacket(
     packetBytes: packetBytes,
     transmissions: transmissions,
     needResend: needResend,
+    payloadLength: payloadLength,
     timeSent: timeSent
   )
 
@@ -232,12 +248,14 @@ proc init*(
   T: type SocketConfig, 
   initialSynTimeout: Duration = defaultInitialSynTimeout,
   dataResendsBeforeFailure: uint16 = defaultDataResendsBeforeFailure,
-  optRcvBuffer: uint32 = defaultOptRcvBuffer
+  optRcvBuffer: uint32 = defaultOptRcvBuffer,
+  incomingSocketReceiveTimeout: Option[Duration] = some(defaultRcvRetransmitTimeout)
   ): T =
   SocketConfig(
     initialSynTimeout: initialSynTimeout,
     dataResendsBeforeFailure: dataResendsBeforeFailure,
-    optRcvBuffer: optRcvBuffer
+    optRcvBuffer: optRcvBuffer,
+    incomingSocketReceiveTimeout: incomingSocketReceiveTimeout
   )
 
 proc getRcvWindowSize(socket: UtpSocket): uint32 =
@@ -271,7 +289,11 @@ proc sendAck(socket: UtpSocket): Future[void] =
   socket.sendData(encodePacket(ackPacket))
 
 # Should be called before sending packet
-proc setSend(p: var OutgoingPacket): seq[byte] =
+proc setSend(s: UtpSocket, p: var OutgoingPacket): seq[byte] =
+
+  if (p.transmissions == 0 or p.needResend):
+    s.currentWindow = s.currentWindow + p.payloadLength
+
   inc p.transmissions
   p.needResend = false
   p.timeSent = Moment.now()
@@ -283,7 +305,7 @@ proc flushPackets(socket: UtpSocket) {.async.} =
     # sending only packet which were not transmitted yet or need a resend
     let shouldSendPacket = socket.outBuffer.exists(i, (p: OutgoingPacket) => (p.transmissions == 0 or p.needResend == true))
     if (shouldSendPacket):
-      let toSend = setSend(socket.outBuffer[i])
+      let toSend = socket.setSend(socket.outBuffer[i])
       await socket.sendData(toSend)
     inc i
 
@@ -294,8 +316,9 @@ proc markAllPacketAsLost(s: UtpSocket) =
     let packetSeqNr = s.seqNr - 1 - i
     if (s.outBuffer.exists(packetSeqNr, (p: OutgoingPacket) => p. transmissions > 0 and p.needResend == false)):
       s.outBuffer[packetSeqNr].needResend = true
-      # TODO here we should also decrease number of bytes in flight. This should be
-      # done when working on congestion control
+      let packetPayloadLength = s.outBuffer[packetSeqNr].payloadLength
+      doAssert(s.currentWindow >= packetPayloadLength)
+      s.currentWindow = s.currentWindow - packetPayloadLength
 
     inc i
 
@@ -325,15 +348,13 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       # timeouts calculations
 
       # client initiated connections, but did not send following data packet in rto
-      # time. TODO this should be configurable
+      # time and our socket is configured to start in SynRecv state.
       if (socket.state == SynRecv):
         socket.destroy()
         return
       
       if socket.shouldDisconnectFromFailedRemote():
         if socket.state == SynSent and (not socket.connectionFuture.finished()):
-          # TODO standard stream interface result in failed future in case of failed connections,
-          # but maybe it would be more clean to use result
           socket.connectionFuture.fail(newException(ConnectionError, "Connection to peer timed out"))
 
         socket.destroy()
@@ -361,13 +382,13 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
           socket.outBuffer.get(oldestPacketSeqNr).isSome(),
           "oldest packet should always be available when there is data in flight"
         )
-        let dataToSend = setSend(socket.outBuffer[oldestPacketSeqNr])
+        let dataToSend = socket.setSend(socket.outBuffer[oldestPacketSeqNr])
         await socket.sendData(dataToSend)
 
     # TODO add sending keep alives when necessary
 
 proc checkTimeoutsLoop(s: UtpSocket) {.async.} =
-  ## Loop that check timeoutsin the socket.
+  ## Loop that check timeouts in the socket.
   try:
     while true:
       await sleepAsync(checkTimeoutsLoopInterval)
@@ -388,14 +409,9 @@ proc new[A](
   rcvId: uint16,
   sndId: uint16,
   initialSeqNr: uint16,
-  initialAckNr: uint16
+  initialAckNr: uint16,
+  initialTimeout: Duration
 ): T =
-  let initialTimeout = 
-    if direction == Outgoing:
-      cfg.initialSynTimeout
-    else :
-      initialRcvRetransmitTimeout
-
   T(
     remoteAddress: to,
     state: state,
@@ -421,7 +437,7 @@ proc new[A](
     send: snd
   )
 
-proc initOutgoingSocket*[A](
+proc newOutgoingSocket*[A](
   to: A,
   snd: SendCallback[A],
   cfg: SocketConfig,
@@ -441,10 +457,11 @@ proc initOutgoingSocket*[A](
     sndConnectionId,
     initialSeqNr,
     # Initialy ack nr is 0, as we do not know remote inital seqnr
-    0
+    0,
+    cfg.initialSynTimeout
   )
 
-proc initIncomingSocket*[A](
+proc newIncomingSocket*[A](
   to: A,
   snd: SendCallback[A],
   cfg: SocketConfig,
@@ -454,16 +471,27 @@ proc initIncomingSocket*[A](
 ): UtpSocket[A] =
   let initialSeqNr = randUint16(rng)
 
+  let (initialState, initialTimeout) = 
+    if (cfg.incomingSocketReceiveTimeout.isNone()):
+      # it does not matter what timeout value we put here, as socket will be in
+      # connected state without outgoing packets in buffer so any timeout hit will
+      # just double rto without any penalties
+      (Connected, milliseconds(0))
+    else:
+      let timeout = cfg.incomingSocketReceiveTimeout.unsafeGet()
+      (SynRecv, timeout)
+
   UtpSocket[A].new(
     to,
     snd,
-    SynRecv,
+    initialState,
     cfg,
     Incoming,
     connectionId + 1,
     connectionId,
     initialSeqNr,
-    ackNr
+    ackNr,
+    initialTimeout
   )
 
 proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async.} =
@@ -472,20 +500,22 @@ proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async.} =
   notice "Sending syn packet packet", packet = packet
   # set number of transmissions to 1 as syn packet will be send just after
   # initiliazation
-  let outgoingPacket = OutgoingPacket.init(encodePacket(packet), 1, false)
+  let outgoingPacket = OutgoingPacket.init(encodePacket(packet), 1, false, 0)
   socket.registerOutgoingPacket(outgoingPacket)
   socket.startTimeoutLoop()
   await socket.sendData(outgoingPacket.packetBytes)
   await socket.connectionFuture
   
 proc startIncomingSocket*(socket: UtpSocket) {.async.} =
-  doAssert(socket.state == SynRecv)
   # Make sure ack was flushed before moving forward
   await socket.sendAck()
   socket.startTimeoutLoop()
 
 proc isConnected*(socket: UtpSocket): bool =
   socket.state == Connected or socket.state == ConnectedFull
+
+proc isClosed*(socket: UtpSocket): bool =
+  socket.state == Destroy and socket.closeEvent.isSet()
 
 proc destroy*(s: UtpSocket) =
   ## Moves socket to destroy state and clean all reasources.
@@ -572,7 +602,12 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16): AckResult =
     socket.retransmitTimeout = socket.rto
     socket.rtoTimeout = currentTime + socket.rto
 
-    # TODO Add handlig of decreasing bytes window, whenadding handling of congestion control
+    # if need_resend is set, this packet has already
+    # been considered timed-out, and is not included in
+    # the cur_window anymore
+    if (not packet.needResend):
+      doAssert(socket.currentWindow >= packet.payloadLength)
+      socket.currentWindow = socket.currentWindow - packet.payloadLength
 
     socket.retransmitCount = 0
     PacketAcked
@@ -679,7 +714,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
       # To avoid amplification attacks, server socket is in SynRecv state until
       # it receices first data transfer
       # https://www.usenix.org/system/files/conference/woot15/woot15-paper-adamsky.pdf
-      # TODO when intgrating with discv5 this need to be configurable
+      # Socket is in SynRecv state only when recv timeout is configured
       if (socket.state == SynRecv and p.header.pType == ST_DATA):
         socket.state = Connected
 
@@ -772,11 +807,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
         # In case of SynSent complate the future as last thing to make sure user of libray will
         # receive socket in correct state
         socket.connectionFuture.complete()
-        # TODO to finish handhske we should respond with ST_DATA packet, without it
-        # socket is left in half-open state.
-        # Actual reference implementation waits for user to send data, as it assumes
-        # existence of application level handshake over utp. We may need to modify this
-        # to automaticly send ST_DATA .
+
     of ST_RESET:
       notice "Received ST_RESET on known socket, ignoring"
     of ST_SYN:
@@ -810,7 +841,7 @@ proc close*(socket: UtpSocket) {.async.} =
           socket.resetSendTimeout()
         
         let finEncoded = encodePacket(finPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, socket.getRcvWindowSize()))
-        socket.registerOutgoingPacket(OutgoingPacket.init(finEncoded, 1, true)) 
+        socket.registerOutgoingPacket(OutgoingPacket.init(finEncoded, 1, true, 0)) 
         socket.finSent = true
         await socket.sendData(finEncoded)
     else:
@@ -857,7 +888,8 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] {.async.} =
     let lastOrEnd = min(lastIndex, endIndex)
     let dataSlice = data[i..lastOrEnd]
     let dataPacket = dataPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, wndSize, dataSlice)
-    socket.registerOutgoingPacket(OutgoingPacket.init(encodePacket(dataPacket), 0, false))
+    let payloadLength =  uint32(len(dataSlice))
+    socket.registerOutgoingPacket(OutgoingPacket.init(encodePacket(dataPacket), 0, false, payloadLength))
     bytesWritten = bytesWritten + len(dataSlice)
     i = lastOrEnd + 1
   await socket.flushPackets()
@@ -919,6 +951,9 @@ proc numPacketsInOutGoingBuffer*(socket: UtpSocket): int =
       inc num
   doAssert(num == int(socket.curWindowPackets))
   num
+
+# Check how many payload bytes are still in flight
+proc numOfBytesInFlight*(socket: UtpSocket): uint32 = socket.currentWindow
 
 # Check how many packets are still in the reorder buffer, usefull for tests or
 # debugging.
