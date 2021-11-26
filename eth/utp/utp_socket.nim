@@ -10,6 +10,7 @@ import
   std/sugar,
   chronos, chronicles, bearssl,
   stew/results,
+  ./send_buffer_tracker,
   ./growable_buffer,
   ./packets
 
@@ -145,11 +146,7 @@ type
     # sequence number of remoted fin packet
     eofPktNr: uint16
 
-    # number payload bytes in-flight (i.e not countig header sizes)
-    # packets that have not yet been sent do not count, packets
-    # that are marked as needing to be re-sent (due to a timeout)
-    # don't count either
-    currentWindow: uint32
+    sendBufferTracker: SendBufferTracker
 
     # socket identifier
     socketKey*: UtpSocketKey[A]
@@ -290,10 +287,6 @@ proc sendAck(socket: UtpSocket): Future[void] =
 
 # Should be called before sending packet
 proc setSend(s: UtpSocket, p: var OutgoingPacket): seq[byte] =
-
-  if (p.transmissions == 0 or p.needResend):
-    s.currentWindow = s.currentWindow + p.payloadLength
-
   inc p.transmissions
   p.needResend = false
   p.timeSent = Moment.now()
@@ -305,8 +298,12 @@ proc flushPackets(socket: UtpSocket) {.async.} =
     # sending only packet which were not transmitted yet or need a resend
     let shouldSendPacket = socket.outBuffer.exists(i, (p: OutgoingPacket) => (p.transmissions == 0 or p.needResend == true))
     if (shouldSendPacket):
-      let toSend = socket.setSend(socket.outBuffer[i])
-      await socket.sendData(toSend)
+      if socket.sendBufferTracker.reserveNBytes(socket.outBuffer[i].payloadLength):
+        let toSend = socket.setSend(socket.outBuffer[i])
+        await socket.sendData(toSend)
+      else:
+        # there is no place in send buffer, stop flushing
+        return
     inc i
 
 proc markAllPacketAsLost(s: UtpSocket) =
@@ -314,11 +311,10 @@ proc markAllPacketAsLost(s: UtpSocket) =
   while i < s.curWindowPackets:
 
     let packetSeqNr = s.seqNr - 1 - i
-    if (s.outBuffer.exists(packetSeqNr, (p: OutgoingPacket) => p. transmissions > 0 and p.needResend == false)):
+    if (s.outBuffer.exists(packetSeqNr, (p: OutgoingPacket) => p.transmissions > 0 and p.needResend == false)):
       s.outBuffer[packetSeqNr].needResend = true
       let packetPayloadLength = s.outBuffer[packetSeqNr].payloadLength
-      doAssert(s.currentWindow >= packetPayloadLength)
-      s.currentWindow = s.currentWindow - packetPayloadLength
+      s.sendBufferTracker.decreaseCurrentWindow(packetPayloadLength)
 
     inc i
 
@@ -383,7 +379,9 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
           "oldest packet should always be available when there is data in flight"
         )
         let dataToSend = socket.setSend(socket.outBuffer[oldestPacketSeqNr])
-        await socket.sendData(dataToSend)
+        let payloadLength = socket.outBuffer[oldestPacketSeqNr].payloadLength
+        if (socket.sendBufferTracker.reserveNBytes(payloadLength)):
+          await socket.sendData(dataToSend)
 
     # TODO add sending keep alives when necessary
 
@@ -433,6 +431,8 @@ proc new[A](
     buffer: AsyncBuffer.init(int(cfg.optRcvBuffer)),
     closeEvent: newAsyncEvent(),
     closeCallbacks: newSeq[Future[void]](),
+    # start with 1mb assumption, field will be updated with first received packet
+    sendBufferTracker: SendBufferTracker.new(0, 1024 * 1024),
     socketKey: UtpSocketKey.init(to, rcvId),
     send: snd
   )
@@ -606,8 +606,7 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16): AckResult =
     # been considered timed-out, and is not included in
     # the cur_window anymore
     if (not packet.needResend):
-      doAssert(socket.currentWindow >= packet.payloadLength)
-      socket.currentWindow = socket.currentWindow - packet.payloadLength
+      socket.sendBufferTracker.decreaseCurrentWindow(packet.payloadLength)
 
     socket.retransmitCount = 0
     PacketAcked
@@ -695,6 +694,9 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   if pastExpected >= reorderBufferMaxSize:
     notice "Received packet is totally of the mark"
     return
+
+  # update remote window size 
+  socket.sendBufferTracker.updateMaxRemote(p.header.wndSize)
 
   # socket.curWindowPackets == acks means that this packet acked all remaining packets
   # including the sent fin packets
@@ -953,7 +955,7 @@ proc numPacketsInOutGoingBuffer*(socket: UtpSocket): int =
   num
 
 # Check how many payload bytes are still in flight
-proc numOfBytesInFlight*(socket: UtpSocket): uint32 = socket.currentWindow
+proc numOfBytesInFlight*(socket: UtpSocket): uint32 = socket.sendBufferTracker.currentBytesInFlight()
 
 # Check how many packets are still in the reorder buffer, usefull for tests or
 # debugging.

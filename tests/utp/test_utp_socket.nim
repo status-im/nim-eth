@@ -61,6 +61,7 @@ procSuite "Utp socket unit test":
   template connectOutGoingSocket(
     initialRemoteSeq: uint16,
     q: AsyncQueue[Packet],
+    remoteReceiveBuffer: uint32 = testBufferSize,
     cfg: SocketConfig = SocketConfig.init()): (UtpSocket[TransportAddress], Packet) =
     let sock1 = newOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, defaultRcvOutgoingId, rng[])
     asyncSpawn sock1.startOutgoingSocket()
@@ -69,7 +70,7 @@ procSuite "Utp socket unit test":
     check:
       initialPacket.header.pType == ST_SYN
 
-    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, remoteReceiveBuffer)
 
     await sock1.processPacket(responseAck)
 
@@ -564,7 +565,7 @@ procSuite "Utp socket unit test":
     let initialRcvBufferSize = 10'u32
     let data = @[1'u8, 2'u8, 3'u8]
     let sCfg = SocketConfig.init(optRcvBuffer = initialRcvBufferSize)
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeqNr, q, sCfg)
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeqNr, q, testBufferSize, sCfg)
 
     let dataP1 = dataPacket(initialRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
     
@@ -601,7 +602,7 @@ procSuite "Utp socket unit test":
     let initialRcvBufferSize = 10'u32
     let data = @[1'u8, 2'u8, 3'u8]
     let sCfg = SocketConfig.init(optRcvBuffer = initialRcvBufferSize)
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initalRemoteSeqNr, q, sCfg)
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initalRemoteSeqNr, q, testBufferSize, sCfg)
 
     let dataP1 = dataPacket(initalRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
     
