@@ -911,7 +911,11 @@ proc newProtocol*(privKey: PrivateKey,
   info "ENR initialized", ip = enrIp, tcp = enrTcpPort, udp = enrUdpPort,
     seqNum = record.seqNum, uri = toURI(record)
   if enrIp.isNone():
-    warn "No external IP provided for the ENR, this node will not be discoverable"
+    if enrAutoUpdate:
+      notice "No external IP provided for the ENR, this node will not be " &
+        "discoverable until the ENR is updated with the discovered external IP address"
+    else:
+      warn "No external IP provided for the ENR, this node will not be discoverable"
 
   let node = newNode(record).expect("Properly initialized record")
 
