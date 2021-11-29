@@ -25,7 +25,7 @@ type SendBufferTracker* = ref object
 proc new*(T: type SendBufferTracker, currentWindow: uint32,  maxRemoteWindow: uint32): T =
   return SendBufferTracker(currentWindow: currentWindow, maxRemoteWindow: maxRemoteWindow, waiters: @[])
 
-proc currentFreeBytes(t: SendBufferTracker): uint32 =
+proc currentFreeBytes*(t: SendBufferTracker): uint32 =
   let maxSend = t.maxRemoteWindow
   if (maxSend <= t.currentWindow):
     return 0
@@ -44,19 +44,21 @@ proc checkWaiters(t: SendBufferTracker) =
         fut.complete()
       t.waiters.del(i)
     else:
-      inc i
+      # we do not have place for next waiter, just finish processing
+      return
 
 proc updateMaxRemote*(t: SendBufferTracker, newRemoteWindow: uint32) =
   t.maxRemoteWindow = newRemoteWindow
   t.checkWaiters()
 
-proc decreaseCurrentWindow*(t: SendBufferTracker, value: uint32) =
+proc decreaseCurrentWindow*(t: SendBufferTracker, value: uint32, notifyWaiters: bool) =
   doAssert(t.currentWindow >= value)
   t.currentWindow = t.currentWindow - value
-  t.checkWaiters()
+  if (notifyWaiters):
+    t.checkWaiters()
 
 proc reserveNBytesWait*(t: SendBufferTracker, n: uint32): Future[void] =
-  let fut = newFuture[void]()
+  let fut = newFuture[void]("SendBufferTracker.reserveNBytesWait")
   let free = t.currentFreeBytes()
   if (n <= free):
     t.currentWindow = t.currentWindow + n

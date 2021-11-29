@@ -747,3 +747,102 @@ procSuite "Utp socket unit test":
       int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite)
 
     await outgoingSocket.destroyWait()
+
+  asyncTest "Writing data should asynchronously block until there is enough space in snd buffer":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let dataToWrite = @[1'u8, 2, 3, 4, 5]
+
+    # remote is initialized with buffer to small to handle whole payload
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q, uint32(len(dataToWrite) - 1))
+
+    let writeFut = outgoingSocket.write(dataToWrite)
+
+    # wait some time to check future is not finished
+    await sleepAsync(seconds(2))
+
+    # write is not finished as future is blocked from progressing due to to small
+    # send window
+    check:
+      not writeFut.finished()
+
+    let someAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, uint32(len(dataToWrite)))
+
+    await outgoingSocket.processPacket(someAckFromRemote)
+
+    # after processing packet with increased buffer size write should complete and
+    # packet should be sent
+    let sentPacket = await q.get()
+
+    check:
+      sentPacket.payload == dataToWrite
+      writeFut.finished()
+
+    await outgoingSocket.destroyWait()
+
+  asyncTest "Writing data should not progress in case of timeouting packets and small snd window":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let dataToWrite = @[1'u8, 2, 3, 4, 5]
+
+    # remote is initialized with buffer to small to handle whole payload
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+    let remoteRcvWindowSize = uint32(outgoingSocket.getPacketSize())
+    let someAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, remoteRcvWindowSize)
+
+    # we are using ack from remote to setup our snd window size to one packet size on one packet
+    await outgoingSocket.processPacket(someAckFromRemote)
+
+    let twoPacketData = generateByteArray(rng[], int(2 * remoteRcvWindowSize))
+    
+    let writeFut = outgoingSocket.write(twoPacketData)
+
+    # after this time first packet will be send and will timeout, but the write should not
+    # finish, as timeouting packets do not notify writing about new space in snd
+    # buffer
+    await sleepAsync(seconds(2))
+
+    check:
+      not writeFut.finished()
+
+    await outgoingSocket.destroyWait()
+
+  asyncTest "Writing data should respect remote rcv window size":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let dataToWrite = @[1'u8, 2, 3, 4, 5]
+
+    # remote is initialized with buffer to small to handle whole payload
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+    let remoteRcvWindowSize = uint32(outgoingSocket.getPacketSize())
+    let someAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, remoteRcvWindowSize)
+
+    # we are using ack from remote to setup our snd window size to one packet size on one packet
+    await outgoingSocket.processPacket(someAckFromRemote)
+
+    let twoPacketData = generateByteArray(rng[], int(2 * remoteRcvWindowSize))
+    
+    let writeFut = outgoingSocket.write(twoPacketData)
+
+    let firstAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr + 1, remoteRcvWindowSize)
+
+    let packet = await q.get()
+
+    check:
+      packet.header.pType == ST_DATA
+      uint32(len(packet.payload)) == remoteRcvWindowSize
+      not writeFut.finished
+
+    await outgoingSocket.processPacket(firstAckFromRemote)
+
+    let packet1 = await q.get()
+    let writeResult = await writeFut
+
+    check:
+      packet1.header.pType == ST_DATA
+      writeFut.finished
+
+    await outgoingSocket.destroyWait()

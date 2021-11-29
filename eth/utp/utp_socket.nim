@@ -314,7 +314,10 @@ proc markAllPacketAsLost(s: UtpSocket) =
     if (s.outBuffer.exists(packetSeqNr, (p: OutgoingPacket) => p.transmissions > 0 and p.needResend == false)):
       s.outBuffer[packetSeqNr].needResend = true
       let packetPayloadLength = s.outBuffer[packetSeqNr].payloadLength
-      s.sendBufferTracker.decreaseCurrentWindow(packetPayloadLength)
+      # lack of waiters notification in case of timeout effectivly means that
+      # we do not allow any new bytes to enter snd buffer in case of new free space
+      # due to timeout.
+      s.sendBufferTracker.decreaseCurrentWindow(packetPayloadLength, notifyWaiters = false)
 
     inc i
 
@@ -378,9 +381,9 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
           socket.outBuffer.get(oldestPacketSeqNr).isSome(),
           "oldest packet should always be available when there is data in flight"
         )
-        let dataToSend = socket.setSend(socket.outBuffer[oldestPacketSeqNr])
         let payloadLength = socket.outBuffer[oldestPacketSeqNr].payloadLength
         if (socket.sendBufferTracker.reserveNBytes(payloadLength)):
+          let dataToSend = socket.setSend(socket.outBuffer[oldestPacketSeqNr])
           await socket.sendData(dataToSend)
 
     # TODO add sending keep alives when necessary
@@ -606,7 +609,7 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16): AckResult =
     # been considered timed-out, and is not included in
     # the cur_window anymore
     if (not packet.needResend):
-      socket.sendBufferTracker.decreaseCurrentWindow(packet.payloadLength)
+      socket.sendBufferTracker.decreaseCurrentWindow(packet.payloadLength, notifyWaiters = true)
 
     socket.retransmitCount = 0
     PacketAcked
@@ -823,7 +826,7 @@ proc atEof*(socket: UtpSocket): bool =
 proc readingClosed(socket: UtpSocket): bool =
   socket.atEof() or socket.state == Destroy
 
-proc getPacketSize(socket: UtpSocket): int =
+proc getPacketSize*(socket: UtpSocket): int =
   # TODO currently returning constant, ultimatly it should be bases on mtu estimates
   mtuSize
 
@@ -872,14 +875,8 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] {.async.} =
 
   var bytesWritten = 0
   
-  # TODO 
-  # Handle growing of send window
-
   if len(data) == 0:
     return ok(bytesWritten)
-
-  if socket.curWindowPackets == 0:
-    socket.resetSendTimeout()
 
   let pSize = socket.getPacketSize()
   let endIndex = data.high()
@@ -889,12 +886,17 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] {.async.} =
     let lastIndex = i + pSize - 1
     let lastOrEnd = min(lastIndex, endIndex)
     let dataSlice = data[i..lastOrEnd]
-    let dataPacket = dataPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, wndSize, dataSlice)
     let payloadLength =  uint32(len(dataSlice))
-    socket.registerOutgoingPacket(OutgoingPacket.init(encodePacket(dataPacket), 0, false, payloadLength))
+    await socket.sendBufferTracker.reserveNBytesWait(payloadLength)
+    if socket.curWindowPackets == 0:
+      socket.resetSendTimeout()
+
+    let dataPacket = dataPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, wndSize, dataSlice)
+    let outgoingPacket = OutgoingPacket.init(encodePacket(dataPacket), 1, false, payloadLength)
+    socket.registerOutgoingPacket(outgoingPacket)
+    await socket.sendData(outgoingPacket.packetBytes)
     bytesWritten = bytesWritten + len(dataSlice)
     i = lastOrEnd + 1
-  await socket.flushPackets()
 
   return ok(bytesWritten)
 
