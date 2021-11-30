@@ -66,6 +66,23 @@ type
     # state and will be able to transfer data.
     incomingSocketReceiveTimeout*: Option[Duration]
 
+  WriteErrorType* = enum
+    SocketNotWriteable, 
+    FinSent
+
+  WriteError* = object
+    case kind*: WriteErrorType
+    of SocketNotWriteable:
+      currentState*: ConnectionState
+    of FinSent:
+      discard
+
+  WriteResult* = Result[int, WriteError]
+
+  WriteRequest = object
+    data: seq[byte]
+    writer: Future[WriteResult]
+
   UtpSocket*[A] = ref object
     remoteAddress*: A
     state: ConnectionState
@@ -148,6 +165,10 @@ type
 
     sendBufferTracker: SendBufferTracker
 
+    writeQueue: AsyncQueue[WriteRequest]
+
+    writeLoop: Future[void]
+
     # socket identifier
     socketKey*: UtpSocketKey[A]
 
@@ -158,19 +179,6 @@ type
   SocketCloseCallback* = proc (): void {.gcsafe, raises: [Defect].}
 
   ConnectionError* = object of CatchableError
-
-  WriteErrorType* = enum
-    SocketNotWriteable, 
-    FinSent
-
-  WriteError* = object
-    case kind*: WriteErrorType
-    of SocketNotWriteable:
-      currentState*: ConnectionState
-    of FinSent:
-      discard
-
-  WriteResult* = Result[int, WriteError]
 
   OutgoingConnectionErrorType* = enum
     SocketAlreadyExists, ConnectionTimedOut, ErrorWhileSendingSyn
@@ -400,6 +408,52 @@ proc checkTimeoutsLoop(s: UtpSocket) {.async.} =
 proc startTimeoutLoop(s: UtpSocket) =
   s.checkTimeoutsLoop = checkTimeoutsLoop(s)
 
+proc getPacketSize*(socket: UtpSocket): int =
+  # TODO currently returning constant, ultimatly it should be bases on mtu estimates
+  mtuSize
+
+proc resetSendTimeout(socket: UtpSocket) =
+  socket.retransmitTimeout = socket.rto
+  socket.rtoTimeout = Moment.now() + socket.retransmitTimeout
+
+proc writeLoop(socket: UtpSocket): Future[void] {.async.} = 
+  ## Loop that processes writes on socket
+  try:
+    while true:
+      let req = await socket.writeQueue.get()
+      let pSize = socket.getPacketSize()
+      let endIndex = req.data.high()
+      var i = 0
+      var bytesWritten = 0
+      let wndSize = socket.getRcvWindowSize()
+
+      while i <= endIndex:
+        let lastIndex = i + pSize - 1
+        let lastOrEnd = min(lastIndex, endIndex)
+        let dataSlice = req.data[i..lastOrEnd]
+        let payloadLength =  uint32(len(dataSlice))
+        await socket.sendBufferTracker.reserveNBytesWait(payloadLength)
+
+        if socket.curWindowPackets == 0:
+          socket.resetSendTimeout()
+
+        let dataPacket = dataPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, wndSize, dataSlice)
+        let outgoingPacket = OutgoingPacket.init(encodePacket(dataPacket), 1, false, payloadLength)
+        socket.registerOutgoingPacket(outgoingPacket)
+        await socket.sendData(outgoingPacket.packetBytes)
+        bytesWritten = bytesWritten + len(dataSlice)
+        i = lastOrEnd + 1
+
+      # in case future got cancelled
+      if (not req.writer.finished()):
+        req.writer.complete(Result[int, WriteError].ok(bytesWritten))
+      
+  except CancelledError:
+    trace "writeLoop canceled"
+
+proc startWriteLoop(s: UtpSocket) = 
+  s.writeLoop = writeLoop(s)
+
 proc new[A](
   T: type UtpSocket[A],
   to: A,
@@ -436,6 +490,8 @@ proc new[A](
     closeCallbacks: newSeq[Future[void]](),
     # start with 1mb assumption, field will be updated with first received packet
     sendBufferTracker: SendBufferTracker.new(0, 1024 * 1024),
+    # queue with infinite size
+    writeQueue: newAsyncQueue[WriteRequest](),
     socketKey: UtpSocketKey.init(to, rcvId),
     send: snd
   )
@@ -505,6 +561,7 @@ proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async.} =
   # initiliazation
   let outgoingPacket = OutgoingPacket.init(encodePacket(packet), 1, false, 0)
   socket.registerOutgoingPacket(outgoingPacket)
+  socket.startWriteLoop()
   socket.startTimeoutLoop()
   await socket.sendData(outgoingPacket.packetBytes)
   await socket.connectionFuture
@@ -512,6 +569,7 @@ proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async.} =
 proc startIncomingSocket*(socket: UtpSocket) {.async.} =
   # Make sure ack was flushed before moving forward
   await socket.sendAck()
+  socket.startWriteLoop()
   socket.startTimeoutLoop()
 
 proc isConnected*(socket: UtpSocket): bool =
@@ -524,6 +582,7 @@ proc destroy*(s: UtpSocket) =
   ## Moves socket to destroy state and clean all reasources.
   ## Remote is not notified in any way about socket end of life
   s.state = Destroy
+  s.writeLoop.cancel()
   s.checkTimeoutsLoop.cancel()
   s.closeEvent.fire()
 
@@ -826,14 +885,6 @@ proc atEof*(socket: UtpSocket): bool =
 proc readingClosed(socket: UtpSocket): bool =
   socket.atEof() or socket.state == Destroy
 
-proc getPacketSize*(socket: UtpSocket): int =
-  # TODO currently returning constant, ultimatly it should be bases on mtu estimates
-  mtuSize
-
-proc resetSendTimeout(socket: UtpSocket) =
-  socket.retransmitTimeout = socket.rto
-  socket.rtoTimeout = Moment.now() + socket.retransmitTimeout
-
 proc close*(socket: UtpSocket) {.async.} =
   ## Gracefully closes conneciton (send FIN) if socket is in connected state
   ## does not wait for socket to close
@@ -863,42 +914,35 @@ proc closeWait*(socket: UtpSocket) {.async.} =
   await socket.close()
   await socket.closeEvent.wait()
 
-proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] {.async.} = 
-  
+proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] = 
+  let retFuture = newFuture[WriteResult]("UtpSocket.write")
+
   if (socket.state != Connected):
-    return err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
+    let res = Result[int, WriteError].err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
+    retFuture.complete(res)
+    return retFuture
   
   # fin should be last packet received by remote side, therefore trying to write
   # after sending fin is considered error
   if socket.finSent:
-    return err(WriteError(kind: FinSent))
+    let res = Result[int, WriteError].err(WriteError(kind: FinSent))
+    retFuture.complete(res)
+    return retFuture
 
   var bytesWritten = 0
   
   if len(data) == 0:
-    return ok(bytesWritten)
+    let res = Result[int, WriteError].ok(bytesWritten)
+    retFuture.complete(res)
+    return retFuture
+  
+  try:
+    socket.writeQueue.putNoWait(WriteRequest(data: data, writer: retFuture))
+  except AsyncQueueFullError as e:
+    # this should not happen as out write queue is unbounded
+    raiseAssert e.msg
 
-  let pSize = socket.getPacketSize()
-  let endIndex = data.high()
-  var i = 0
-  let wndSize = socket.getRcvWindowSize()
-  while i <= data.high:
-    let lastIndex = i + pSize - 1
-    let lastOrEnd = min(lastIndex, endIndex)
-    let dataSlice = data[i..lastOrEnd]
-    let payloadLength =  uint32(len(dataSlice))
-    await socket.sendBufferTracker.reserveNBytesWait(payloadLength)
-    if socket.curWindowPackets == 0:
-      socket.resetSendTimeout()
-
-    let dataPacket = dataPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, wndSize, dataSlice)
-    let outgoingPacket = OutgoingPacket.init(encodePacket(dataPacket), 1, false, payloadLength)
-    socket.registerOutgoingPacket(outgoingPacket)
-    await socket.sendData(outgoingPacket.packetBytes)
-    bytesWritten = bytesWritten + len(dataSlice)
-    i = lastOrEnd + 1
-
-  return ok(bytesWritten)
+  return retFuture
 
 template readLoop(body: untyped): untyped =
   while true:
