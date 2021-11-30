@@ -561,7 +561,7 @@ procSuite "Utp socket unit test":
 
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
 
-    await outgoingSocket.close()
+    outgoingSocket.close()
 
     let sendFin = await q.get()
 
@@ -576,7 +576,7 @@ procSuite "Utp socket unit test":
 
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
 
-    let closeF = outgoingSocket.close()
+    outgoingSocket.close()
 
     let sendFin = await q.get()
 
@@ -587,8 +587,6 @@ procSuite "Utp socket unit test":
 
     await outgoingSocket.processPacket(responseAck)
     
-    await closeF
-
     check:
       not outgoingSocket.isConnected()
     
@@ -619,7 +617,7 @@ procSuite "Utp socket unit test":
 
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
 
-    await outgoingSocket.close()
+    outgoingSocket.close()
 
     let writeResult = await outgoingSocket.write(@[1'u8])
 
@@ -660,7 +658,7 @@ procSuite "Utp socket unit test":
       sentData.header.pType == ST_DATA
       sentData.header.wndSize == initialRcvBufferSize - uint32(len(data))
 
-    await outgoingSocket.close()
+    outgoingSocket.close()
 
     let sentFin = await q.get()
 

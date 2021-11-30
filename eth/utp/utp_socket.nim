@@ -22,8 +22,6 @@ type
     SynSent,
     SynRecv,
     Connected,
-    ConnectedFull,
-    Reset,
     Destroy
 
   ConnectionDirection = enum
@@ -79,9 +77,16 @@ type
 
   WriteResult* = Result[int, WriteError]
 
+  WriteRequestType = enum
+   Data, Close
+
   WriteRequest = object
-    data: seq[byte]
-    writer: Future[WriteResult]
+    case kind: WriteRequestType
+    of Data:
+      data: seq[byte]
+      writer: Future[WriteResult]
+    of Close:
+      discard
 
   UtpSocket*[A] = ref object
     remoteAddress*: A
@@ -150,6 +155,9 @@ type
 
     # we sent out fin packet
     finSent: bool
+
+    # we requested to close the socket by sending fin packet
+    sendFinRequested: bool
 
     # have our fin been acked
     finAcked: bool
@@ -333,8 +341,7 @@ proc isOpened(socket:UtpSocket): bool =
   return (
     socket.state == SynRecv or 
     socket.state == SynSent or 
-    socket.state == Connected or 
-    socket.state == ConnectedFull
+    socket.state == Connected
   )
 
 proc shouldDisconnectFromFailedRemote(socket: UtpSocket): bool = 
@@ -416,19 +423,14 @@ proc resetSendTimeout(socket: UtpSocket) =
   socket.retransmitTimeout = socket.rto
   socket.rtoTimeout = Moment.now() + socket.retransmitTimeout
 
-proc writeLoop(socket: UtpSocket): Future[void] {.async.} = 
-  ## Loop that processes writes on socket
-  try:
-    while true:
-      let req = await socket.writeQueue.get()
-
-      if req.writer.finished():
+proc handleDataWrite(socket: UtpSocket, data: seq[byte], writeFut: Future[WriteResult]): Future[void] {.async.} =
+      if writeFut.finished():
         # write future was cancelled befere we got chance to process it, short circuit
         # processing and move to next loop iteration
-        continue
+        return
 
       let pSize = socket.getPacketSize()
-      let endIndex = req.data.high()
+      let endIndex = data.high()
       var i = 0
       var bytesWritten = 0
       let wndSize = socket.getRcvWindowSize()
@@ -436,7 +438,7 @@ proc writeLoop(socket: UtpSocket): Future[void] {.async.} =
       while i <= endIndex:
         let lastIndex = i + pSize - 1
         let lastOrEnd = min(lastIndex, endIndex)
-        let dataSlice = req.data[i..lastOrEnd]
+        let dataSlice = data[i..lastOrEnd]
         let payloadLength =  uint32(len(dataSlice))
         try:
           await socket.sendBufferTracker.reserveNBytesWait(payloadLength)
@@ -453,22 +455,45 @@ proc writeLoop(socket: UtpSocket): Future[void] {.async.} =
           # this approach can create partial write in case destroyin socket in the
           # the middle of the write
           doAssert(socket.state == Destroy)
-          if (not req.writer.finished()):
+          if (not writeFut.finished()):
              let res = Result[int, WriteError].err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
-             req.writer.complete(res)
+             writeFut.complete(res)
           # we need to re-raise exception so the outer loop will be properly cancelled too
           raise exc
         bytesWritten = bytesWritten + len(dataSlice)
         i = lastOrEnd + 1
 
       # in case future got cancelled
-      if (not req.writer.finished()):
-        req.writer.complete(Result[int, WriteError].ok(bytesWritten))
-      
+      if (not writeFut.finished()):
+        writeFut.complete(Result[int, WriteError].ok(bytesWritten))
+
+proc handleClose(socket: UtpSocket): Future[void] {.async.} =
+  try:
+    if socket.curWindowPackets == 0:
+      socket.resetSendTimeout()
+    
+    let finEncoded = encodePacket(finPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, socket.getRcvWindowSize()))
+    socket.registerOutgoingPacket(OutgoingPacket.init(finEncoded, 1, true, 0)) 
+    await socket.sendData(finEncoded)
+    socket.finSent = true
+  except CancelledError as exc:
+    raise exc
+
+proc writeLoop(socket: UtpSocket): Future[void] {.async.} = 
+  ## Loop that processes writes on socket
+  try:
+    while true:
+      let req = await socket.writeQueue.get()
+      case req.kind
+      of Data:
+        await socket.handleDataWrite(req.data, req.writer)
+      of Close:
+        await socket.handleClose()
+
   except CancelledError:
     doAssert(socket.state == Destroy)
     for req in socket.writeQueue.items:
-      if (not req.writer.finished()):
+      if (req.kind == Data and not req.writer.finished()):
         let res = Result[int, WriteError].err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
         req.writer.complete(res)
     socket.writeQueue.clear()
@@ -596,7 +621,7 @@ proc startIncomingSocket*(socket: UtpSocket) {.async.} =
   socket.startTimeoutLoop()
 
 proc isConnected*(socket: UtpSocket): bool =
-  socket.state == Connected or socket.state == ConnectedFull
+  socket.state == Connected
 
 proc isClosed*(socket: UtpSocket): bool =
   socket.state == Destroy and socket.closeEvent.isSet()
@@ -908,21 +933,24 @@ proc atEof*(socket: UtpSocket): bool =
 proc readingClosed(socket: UtpSocket): bool =
   socket.atEof() or socket.state == Destroy
 
-proc close*(socket: UtpSocket) {.async.} =
+proc close*(socket: UtpSocket) =
   ## Gracefully closes conneciton (send FIN) if socket is in connected state
   ## does not wait for socket to close
   if socket.state != Destroy:
     case socket.state
-    of Connected, ConnectedFull:
+    of Connected:
       socket.readShutdown = true
-      if (not socket.finSent):
-        if socket.curWindowPackets == 0:
-          socket.resetSendTimeout()
-        
-        let finEncoded = encodePacket(finPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, socket.getRcvWindowSize()))
-        socket.registerOutgoingPacket(OutgoingPacket.init(finEncoded, 1, true, 0)) 
-        socket.finSent = true
-        await socket.sendData(finEncoded)
+      if (not socket.sendFinRequested):
+        try:
+          # with this approach, all pending writes will be executed before sending fin packet
+          # we could also and method which places close request as first one to process
+          # but it would complicate the write loop
+          socket.writeQueue.putNoWait(WriteRequest(kind: Close))
+        except AsyncQueueFullError as e:
+          # should not happen as our write queue is unbounded
+          raiseAssert e.msg
+
+        socket.sendFinRequested = true
     else:
       # In any other case like connection is not established so sending fin make
       # no sense, we can just out right close it
@@ -934,7 +962,7 @@ proc closeWait*(socket: UtpSocket) {.async.} =
   ## Warning: if FIN packet for some reason will be lost, then socket will be closed
   ## due to retransmission failure which may take some time.
   ## default is 4 retransmissions with doubling of rto between each retranssmision
-  await socket.close()
+  socket.close()
   await socket.closeEvent.wait()
 
 proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] = 
@@ -947,7 +975,7 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] =
   
   # fin should be last packet received by remote side, therefore trying to write
   # after sending fin is considered error
-  if socket.finSent:
+  if socket.sendFinRequested or socket.finSent:
     let res = Result[int, WriteError].err(WriteError(kind: FinSent))
     retFuture.complete(res)
     return retFuture
@@ -960,7 +988,7 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] =
     return retFuture
   
   try:
-    socket.writeQueue.putNoWait(WriteRequest(data: data, writer: retFuture))
+    socket.writeQueue.putNoWait(WriteRequest(kind: Data, data: data, writer: retFuture))
   except AsyncQueueFullError as e:
     # this should not happen as out write queue is unbounded
     raiseAssert e.msg
