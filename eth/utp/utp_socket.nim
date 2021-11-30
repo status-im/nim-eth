@@ -421,6 +421,12 @@ proc writeLoop(socket: UtpSocket): Future[void] {.async.} =
   try:
     while true:
       let req = await socket.writeQueue.get()
+
+      if req.writer.finished():
+        # write future was cancelled befere we got chance to process it, short circuit
+        # processing and move to next loop iteration
+        continue
+
       let pSize = socket.getPacketSize()
       let endIndex = req.data.high()
       var i = 0
@@ -432,15 +438,26 @@ proc writeLoop(socket: UtpSocket): Future[void] {.async.} =
         let lastOrEnd = min(lastIndex, endIndex)
         let dataSlice = req.data[i..lastOrEnd]
         let payloadLength =  uint32(len(dataSlice))
-        await socket.sendBufferTracker.reserveNBytesWait(payloadLength)
+        try:
+          await socket.sendBufferTracker.reserveNBytesWait(payloadLength)
+          if socket.curWindowPackets == 0:
+            socket.resetSendTimeout()
 
-        if socket.curWindowPackets == 0:
-          socket.resetSendTimeout()
-
-        let dataPacket = dataPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, wndSize, dataSlice)
-        let outgoingPacket = OutgoingPacket.init(encodePacket(dataPacket), 1, false, payloadLength)
-        socket.registerOutgoingPacket(outgoingPacket)
-        await socket.sendData(outgoingPacket.packetBytes)
+          let dataPacket = dataPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, wndSize, dataSlice)
+          let outgoingPacket = OutgoingPacket.init(encodePacket(dataPacket), 1, false, payloadLength)
+          socket.registerOutgoingPacket(outgoingPacket)
+          await socket.sendData(outgoingPacket.packetBytes)
+        except CancelledError as exc:
+          # write loop has been cancelled in the middle of processing due to the 
+          # socket closing
+          # this approach can create partial write in case destroyin socket in the
+          # the middle of the write
+          doAssert(socket.state == Destroy)
+          if (not req.writer.finished()):
+             let res = Result[int, WriteError].err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
+             req.writer.complete(res)
+          # we need to re-raise exception so the outer loop will be properly cancelled too
+          raise exc
         bytesWritten = bytesWritten + len(dataSlice)
         i = lastOrEnd + 1
 
@@ -449,6 +466,12 @@ proc writeLoop(socket: UtpSocket): Future[void] {.async.} =
         req.writer.complete(Result[int, WriteError].ok(bytesWritten))
       
   except CancelledError:
+    doAssert(socket.state == Destroy)
+    for req in socket.writeQueue.items:
+      if (not req.writer.finished()):
+        let res = Result[int, WriteError].err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
+        req.writer.complete(res)
+    socket.writeQueue.clear()
     trace "writeLoop canceled"
 
 proc startWriteLoop(s: UtpSocket) = 

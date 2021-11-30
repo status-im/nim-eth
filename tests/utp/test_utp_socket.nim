@@ -314,6 +314,80 @@ procSuite "Utp socket unit test":
 
     await outgoingSocket.destroyWait()
 
+  asyncTest "Blocked writing futures should be properly finished when socket is closed":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let dataToWrite1 = @[0'u8]
+    let dataToWrite2 = @[1'u8]
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q, 0)
+
+    let writeFut1 = outgoingSocket.write(dataToWrite1)
+    let writeFut2 = outgoingSocket.write(dataToWrite2)
+
+    # wait a little to show that futures are not progressing
+    await sleepAsync(seconds(1))
+
+    check:
+      not writeFut1.finished()
+      not writeFut2.finished()
+
+    outgoingSocket.destroy()      
+
+    yield writeFut1
+    yield writeFut2
+
+    check:
+      writeFut1.completed()
+      writeFut2.completed()
+      writeFut1.read().isErr()
+      writeFut2.read().isErr()
+
+    await outgoingSocket.destroyWait()  
+
+  asyncTest "Cancelled write futures should not be processed if cancelled before processing":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let dataToWrite1 = @[0'u8]
+    let dataToWrite2 = @[1'u8]
+    let dataToWrite3 = @[2'u8]
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q, 0)
+
+    # only writeFut1 will progress as to processing stage, writeFut2 and writeFut3
+    # will be blocked in queue
+    let writeFut1 = outgoingSocket.write(dataToWrite1)
+    let writeFut2 = outgoingSocket.write(dataToWrite2)
+    let writeFut3 = outgoingSocket.write(dataToWrite3)
+
+    # user decided to cancel second write
+    await writeFut2.cancelAndWait()
+    # remote increased wnd size enough for all writes
+    let someAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, 10)
+
+    await outgoingSocket.processPacket(someAckFromRemote)
+
+    yield writeFut1
+    yield writeFut2
+    yield writeFut3
+
+    check:
+      writeFut1.completed()
+      writeFut2.cancelled()
+      writeFut3.completed()
+
+    let p1 = await q.get()
+    let p2 = await q.get
+
+    check:
+      # we produce only two data packets as write with dataToWrite2 was cancelled
+      p1.payload == dataToWrite1
+      p2.payload == dataToWrite3
+
+    await outgoingSocket.destroyWait()  
+
   asyncTest "Socket should re-send data packet configurable number of times before declaring failure":
     let q = newAsyncQueue[Packet]()   
     let initalRemoteSeqNr = 10'u16
