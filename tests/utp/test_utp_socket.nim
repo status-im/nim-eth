@@ -918,3 +918,41 @@ procSuite "Utp socket unit test":
       writeFut.finished
 
     await outgoingSocket.destroyWait()
+
+  asyncTest "Remote window should be reseted to minimal value after configured amount of time":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+    let someData = @[1'u8]
+    let (outgoingSocket, packet) = 
+      connectOutGoingSocket(
+        initialRemoteSeq,
+        q,
+        remoteReceiveBuffer = 0, 
+        cfg = SocketConfig.init(
+          remoteWindowResetTimeout = seconds(3)
+        )
+      )
+
+    check:
+      outgoingSocket.isConnected()
+
+    let writeFut = outgoingSocket.write(someData)
+
+    await sleepAsync(seconds(1))
+
+    check:
+      # Even after 1 second write is not finished as we did not receive any message
+      # so remote rcv window is still zero
+      not writeFut.finished()
+
+    # Ultimately, after 3 second remote rcv window will be reseted to minimal value
+    # and write will be able to progress
+    let writeResult = await writeFut
+    
+    let p = await q.get()
+
+    check:
+      writeResult.isOk()
+      p.payload == someData
+
+    await outgoingSocket.destroyWait()

@@ -16,10 +16,10 @@ type SendBufferTracker* = ref object
   # packets that have not yet been sent do not count, packets
   # that are marked as needing to be re-sent (due to a timeout)
   # don't count either
-  currentWindow: uint32
+  currentWindow*: uint32
 
   # remote receive window updated based on packed wndSize field
-  maxRemoteWindow: uint32
+  maxRemoteWindow*: uint32
   waiters: seq[(uint32, Future[void])]
 
 proc new*(T: type SendBufferTracker, currentWindow: uint32,  maxRemoteWindow: uint32): T =

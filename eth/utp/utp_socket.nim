@@ -64,6 +64,10 @@ type
     # state and will be able to transfer data.
     incomingSocketReceiveTimeout*: Option[Duration]
 
+    # Timeout afer which send window will be reset to it minimal value if it drops
+    # zero i.e we will receive packet from remote peer with wndSize set to 0
+    remoteWindowResetTimeout*: Duration
+
   WriteErrorType* = enum
     SocketNotWriteable, 
     FinSent
@@ -177,6 +181,8 @@ type
 
     writeLoop: Future[void]
 
+    zeroWindowTimer: Moment
+
     # socket identifier
     socketKey*: UtpSocketKey[A]
 
@@ -237,6 +243,15 @@ const
   # considered suspicious and ignored
   allowedAckWindow*: uint16 = 3
 
+  # Timeout afer which send window will be reset to it minimal value if it drops
+  # zero i.e we will receive packet from remote peer with wndSize set to 0
+  defaultResetWindowTimeout = seconds(15)
+
+  # If remote peer window will drops to zero, then after some time we will reset it 
+  # to this value even if we do not receive any more messages from remote peers.
+  # Reset period is configures in SocketConfig
+  minimalRemoteWindow: uint32 = 1500
+
   reorderBufferMaxSize = 1024
 
 proc init*[A](T: type UtpSocketKey, remoteAddress: A, rcvId: uint16): T =
@@ -262,13 +277,15 @@ proc init*(
   initialSynTimeout: Duration = defaultInitialSynTimeout,
   dataResendsBeforeFailure: uint16 = defaultDataResendsBeforeFailure,
   optRcvBuffer: uint32 = defaultOptRcvBuffer,
-  incomingSocketReceiveTimeout: Option[Duration] = some(defaultRcvRetransmitTimeout)
+  incomingSocketReceiveTimeout: Option[Duration] = some(defaultRcvRetransmitTimeout),
+  remoteWindowResetTimeout: Duration = defaultResetWindowTimeout
   ): T =
   SocketConfig(
     initialSynTimeout: initialSynTimeout,
     dataResendsBeforeFailure: dataResendsBeforeFailure,
     optRcvBuffer: optRcvBuffer,
-    incomingSocketReceiveTimeout: incomingSocketReceiveTimeout
+    incomingSocketReceiveTimeout: incomingSocketReceiveTimeout,
+    remoteWindowResetTimeout: remoteWindowResetTimeout
   )
 
 proc getRcvWindowSize(socket: UtpSocket): uint32 =
@@ -355,6 +372,11 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
     await socket.flushPackets()
 
   if socket.isOpened():
+    
+    if (socket.sendBufferTracker.maxRemoteWindow == 0 and currentTime > socket.zeroWindowTimer):
+      debug "Reset remote window to minimal value"
+      socket.sendBufferTracker.updateMaxRemote(minimalRemoteWindow)
+
     if (currentTime > socket.rtoTimeout):
       
       # TODO add handling of probe time outs. Reference implemenation has mechanism
@@ -540,6 +562,7 @@ proc new[A](
     sendBufferTracker: SendBufferTracker.new(0, 1024 * 1024),
     # queue with infinite size
     writeQueue: newAsyncQueue[WriteRequest](),
+    zeroWindowTimer: Moment.now() + cfg.remoteWindowResetTimeout,
     socketKey: UtpSocketKey.init(to, rcvId),
     send: snd
   )
@@ -807,6 +830,12 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
   # update remote window size 
   socket.sendBufferTracker.updateMaxRemote(p.header.wndSize)
+  
+  if (socket.sendBufferTracker.maxRemoteWindow == 0):
+    # when zeroWindowTimer will be hit and maxRemoteWindow still will be equal to 0
+    # then it will be reset to minimal value
+    socket.zeroWindowTimer = Moment.now() + socket.socketConfig.remoteWindowResetTimeout
+   
 
   # socket.curWindowPackets == acks means that this packet acked all remaining packets
   # including the sent fin packets
