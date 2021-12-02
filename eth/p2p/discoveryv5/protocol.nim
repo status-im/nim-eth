@@ -741,6 +741,8 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
   ## will try to contact if for newer information. If node is not known or it
   ## does not reply, a lookup is done to see if it can find a (newer) record of
   ## the node on the network.
+  if id == d.localNode.id:
+    return some(d.localNode)
 
   let node = d.getNode(id)
   if node.isSome():
