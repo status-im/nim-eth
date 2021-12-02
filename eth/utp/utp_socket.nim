@@ -57,7 +57,7 @@ type
     # Maximnal size of receive buffer in bytes
     optRcvBuffer*: uint32
 
-    # Maximnal size of receive buffer in bytes
+    # Maximnal size of send buffer in bytes
     optSndBuffer*: uint32
 
     # If set to some(`Duration`), the incoming socket will be initialized in
