@@ -10,7 +10,8 @@
 import
   std/hashes,
   nimcrypto, stint, chronos, stew/shims/net, chronicles,
-  ../../keys, ./enr
+  ../../keys, ../../net/utils,
+  ./enr
 
 export stint
 
@@ -106,7 +107,8 @@ func shortLog*(id: NodeId): string =
 chronicles.formatIt(NodeId): shortLog(it)
 
 func hash*(a: Address): hashes.Hash =
-  hashData(unsafeAddr a, sizeof(a))
+  let res = a.ip.hash !& a.port.hash
+  !$res
 
 func `$`*(a: Address): string =
   result.add($a.ip)

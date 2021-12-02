@@ -16,7 +16,7 @@ type
     limit*: uint
     ips: Table[ValidIpAddress, uint]
 
-func hash(ip: ValidIpAddress): Hash =
+func hash*(ip: ValidIpAddress): Hash =
   case ip.family
   of IpAddressFamily.IPv6: hash(ip.address_v6)
   of IpAddressFamily.IPv4: hash(ip.address_v4)
