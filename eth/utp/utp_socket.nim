@@ -485,7 +485,8 @@ proc handleDataWrite(socket: UtpSocket, data: seq[byte], writeFut: Future[WriteR
         bytesWritten = bytesWritten + len(dataSlice)
         i = lastOrEnd + 1
 
-      # in case future got cancelled or finished
+      # Before completeing future with success (as all data was sent sucessfuly)
+      # we need to check if user did not cancel write on his end
       if (not writeFut.finished()):
         writeFut.complete(Result[int, WriteError].ok(bytesWritten))
 
