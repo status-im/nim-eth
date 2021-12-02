@@ -20,13 +20,27 @@ type SendBufferTracker* = ref object
 
   # remote receive window updated based on packed wndSize field
   maxRemoteWindow*: uint32
+
+  # configuration option for maxium number of bytes in snd buffer
+  maxSndBufferSize*: uint32
   waiters: seq[(uint32, Future[void])]
 
-proc new*(T: type SendBufferTracker, currentWindow: uint32,  maxRemoteWindow: uint32): T =
-  return SendBufferTracker(currentWindow: currentWindow, maxRemoteWindow: maxRemoteWindow, waiters: @[])
+proc new*(
+  T: type SendBufferTracker,
+  currentWindow: uint32,
+  maxRemoteWindow: uint32, 
+  maxSndBufferSize: uint32): T =
+  return (
+    SendBufferTracker(
+      currentWindow: currentWindow,
+      maxRemoteWindow: maxRemoteWindow,
+      maxSndBufferSize: maxSndBufferSize,
+      waiters: @[]
+    )
+  )
 
 proc currentFreeBytes*(t: SendBufferTracker): uint32 =
-  let maxSend = t.maxRemoteWindow
+  let maxSend = min(t.maxRemoteWindow, t.maxSndBufferSize)
   if (maxSend <= t.currentWindow):
     return 0
   else:
