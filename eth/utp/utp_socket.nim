@@ -57,6 +57,9 @@ type
     # Maximnal size of receive buffer in bytes
     optRcvBuffer*: uint32
 
+    # Maximnal size of send buffer in bytes
+    optSndBuffer*: uint32
+
     # If set to some(`Duration`), the incoming socket will be initialized in
     # `SynRecv` state and the remote peer will have `Duration` to transfer data
     # to move the socket in `Connected` state.
@@ -278,12 +281,14 @@ proc init*(
   dataResendsBeforeFailure: uint16 = defaultDataResendsBeforeFailure,
   optRcvBuffer: uint32 = defaultOptRcvBuffer,
   incomingSocketReceiveTimeout: Option[Duration] = some(defaultRcvRetransmitTimeout),
-  remoteWindowResetTimeout: Duration = defaultResetWindowTimeout
+  remoteWindowResetTimeout: Duration = defaultResetWindowTimeout,
+  optSndBuffer: uint32 = defaultOptRcvBuffer
   ): T =
   SocketConfig(
     initialSynTimeout: initialSynTimeout,
     dataResendsBeforeFailure: dataResendsBeforeFailure,
     optRcvBuffer: optRcvBuffer,
+    optSndBuffer: optSndBuffer,
     incomingSocketReceiveTimeout: incomingSocketReceiveTimeout,
     remoteWindowResetTimeout: remoteWindowResetTimeout
   )
@@ -560,7 +565,7 @@ proc new[A](
     closeEvent: newAsyncEvent(),
     closeCallbacks: newSeq[Future[void]](),
     # start with 1mb assumption, field will be updated with first received packet
-    sendBufferTracker: SendBufferTracker.new(0, 1024 * 1024),
+    sendBufferTracker: SendBufferTracker.new(0, 1024 * 1024, cfg.optSndBuffer),
     # queue with infinite size
     writeQueue: newAsyncQueue[WriteRequest](),
     zeroWindowTimer: Moment.now() + cfg.remoteWindowResetTimeout,

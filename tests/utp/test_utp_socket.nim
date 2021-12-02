@@ -956,3 +956,51 @@ procSuite "Utp socket unit test":
       p.payload == someData
 
     await outgoingSocket.destroyWait()
+
+  asyncTest "Writing data should respect max snd buffer option":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+    let someData1 = @[1'u8]
+    let somedata2 = @[2'u8]
+    let (outgoingSocket, initialPacket) = 
+      connectOutGoingSocket(
+        initialRemoteSeq,
+        q,
+        cfg = SocketConfig.init(
+          optSndBuffer = 1
+        )
+      )
+
+    check:
+      outgoingSocket.isConnected()
+
+    # snd buffer got 1 byte of space so this future shold finish
+    let write1 = await outgoingSocket.write(someData1)
+
+    let writeFut2 = outgoingSocket.write(someData2)
+
+    # wait until 2 re-sends to check we do not accidently free buffer during re-sends
+    discard await q.get()
+    discard await q.get()
+    let firstPacket = await q.get()
+
+    check:
+      # this write still cannot progress as 1st write is not acked
+      not writeFut2.finished()
+
+    let someAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr + 1, 10)
+
+    # acks first write, so there is space in buffer for new data and second
+    # write should progress
+    await outgoingSocket.processPacket(someAckFromRemote)
+
+    yield writeFut2
+
+    let secondPacket =  await q.get()
+
+    check:
+      writeFut2.finished()
+      firstPacket.payload == someData1
+      secondPacket.payload == somedata2
+
+    await outgoingSocket.destroyWait()
