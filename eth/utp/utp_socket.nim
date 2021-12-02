@@ -64,8 +64,8 @@ type
     # state and will be able to transfer data.
     incomingSocketReceiveTimeout*: Option[Duration]
 
-    # Timeout afer which send window will be reset to it minimal value if it drops
-    # zero i.e we will receive packet from remote peer with wndSize set to 0
+    # Timeout after which the send window will be reset to its minimal value after it dropped
+    # to zero. i.e when we received a packet from remote peer with `wndSize` set to 0.
     remoteWindowResetTimeout*: Duration
 
   WriteErrorType* = enum
@@ -243,13 +243,13 @@ const
   # considered suspicious and ignored
   allowedAckWindow*: uint16 = 3
 
-  # Timeout afer which send window will be reset to it minimal value if it drops
-  # zero i.e we will receive packet from remote peer with wndSize set to 0
+  # Timeout after which the send window will be reset to its minimal value after it dropped
+  # to zero. i.e when we received a packet from remote peer with `wndSize` set to 0.
   defaultResetWindowTimeout = seconds(15)
 
-  # If remote peer window will drops to zero, then after some time we will reset it 
+  # If remote peer window drops to zero, then after some time we will reset it 
   # to this value even if we do not receive any more messages from remote peers.
-  # Reset period is configures in SocketConfig
+  # Reset period is configured in `SocketConfig`
   minimalRemoteWindow: uint32 = 1500
 
   reorderBufferMaxSize = 1024
@@ -485,7 +485,7 @@ proc handleDataWrite(socket: UtpSocket, data: seq[byte], writeFut: Future[WriteR
         bytesWritten = bytesWritten + len(dataSlice)
         i = lastOrEnd + 1
 
-      # in case future got cancelled
+      # in case future got cancelled or finished
       if (not writeFut.finished()):
         writeFut.complete(Result[int, WriteError].ok(bytesWritten))
 

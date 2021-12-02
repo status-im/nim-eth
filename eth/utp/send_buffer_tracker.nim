@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2021 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,7 +12,7 @@ import
 # Internal Utp data structure to track send window and properly block when there is
 # no free space when trying to send more bytes
 type SendBufferTracker* = ref object
-  # number payload bytes in-flight (i.e not countig header sizes)
+  # number of payload bytes in-flight (i.e not counting header sizes)
   # packets that have not yet been sent do not count, packets
   # that are marked as needing to be re-sent (due to a timeout)
   # don't count either
