@@ -44,7 +44,8 @@ procSuite "Utp socket unit test":
         connectionId,
         ackNr,
         testBufferSize,
-        generateByteArray(rng, packetSize)
+        generateByteArray(rng, packetSize),
+        0
       )
       packets.add(packet)
 
@@ -70,7 +71,14 @@ procSuite "Utp socket unit test":
     check:
       initialPacket.header.pType == ST_SYN
 
-    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, remoteReceiveBuffer)
+    let responseAck = 
+      ackPacket(
+        initialRemoteSeq,
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        remoteReceiveBuffer,
+        0
+      )
 
     await sock1.processPacket(responseAck)
 
@@ -151,7 +159,15 @@ procSuite "Utp socket unit test":
 
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initalRemoteSeqNr, q)
 
-    let dataP1 = dataPacket(initalRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
+    let dataP1 = 
+      dataPacket(
+        initalRemoteSeqNr,
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        testBufferSize,
+        data,
+        0
+      )
     
     await outgoingSocket.processPacket(dataP1)
     let ack1 = await q.get()
@@ -305,7 +321,14 @@ procSuite "Utp socket unit test":
 
     # ackNr in state packet, is set to sentPacket.header.seqNr which means remote
     # side processed out packet
-    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, sentPacket.header.seqNr, testBufferSize)
+    let responseAck =
+      ackPacket(
+        initialRemoteSeq,
+        initialPacket.header.connectionId,
+        sentPacket.header.seqNr,
+        testBufferSize,
+        0
+      )
 
     await outgoingSocket.processPacket(responseAck)
 
@@ -365,7 +388,14 @@ procSuite "Utp socket unit test":
     # user decided to cancel second write
     await writeFut2.cancelAndWait()
     # remote increased wnd size enough for all writes
-    let someAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, 10)
+    let someAckFromRemote =
+      ackPacket(
+        initialRemoteSeq,
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        10,
+        0
+      )
 
     await outgoingSocket.processPacket(someAckFromRemote)
 
@@ -407,7 +437,14 @@ procSuite "Utp socket unit test":
     check:
       initialPacket.header.pType == ST_SYN
 
-    let responseAck = ackPacket(initalRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+    let responseAck = 
+      ackPacket(
+        initalRemoteSeqNr,
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        testBufferSize,
+        0
+      )
 
     await outgoingSocket.processPacket(responseAck)
 
@@ -460,7 +497,14 @@ procSuite "Utp socket unit test":
 
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
 
-    let finP = finPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+    let finP =
+      finPacket(
+        initialRemoteSeq, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        testBufferSize,
+        0
+      )
     
     await outgoingSocket.processPacket(finP)
     let ack1 = await q.get()
@@ -481,10 +525,34 @@ procSuite "Utp socket unit test":
 
     let readF = outgoingSocket.read()
 
-    let dataP = dataPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
-    let dataP1 = dataPacket(initialRemoteSeq + 1, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data1)
+    let dataP = 
+      dataPacket(
+        initialRemoteSeq,
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        testBufferSize, 
+        data, 
+        0
+      )
 
-    let finP = finPacket(initialRemoteSeq + 2, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+    let dataP1 = 
+      dataPacket(
+        initialRemoteSeq + 1, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        testBufferSize, 
+        data1, 
+        0
+      )
+
+    let finP = 
+      finPacket(
+        initialRemoteSeq + 2, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        testBufferSize, 
+        0
+      )
     
     await outgoingSocket.processPacket(finP)
 
@@ -519,13 +587,36 @@ procSuite "Utp socket unit test":
 
     let readF = outgoingSocket.read()
 
-    let dataP = dataPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
+    let dataP = 
+      dataPacket(
+        initialRemoteSeq, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        testBufferSize, 
+        data, 
+        0
+      )
 
-    let finP = finPacket(initialRemoteSeq + 1, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+    let finP = 
+      finPacket(
+        initialRemoteSeq + 1, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        testBufferSize, 
+        0
+      )
 
     # dataP1 has seqNr larger than fin, there fore it should be considered past eof and never passed
     # to user of library
-    let dataP1 = dataPacket(initialRemoteSeq + 2, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data1)
+    let dataP1 = 
+      dataPacket(
+        initialRemoteSeq + 2, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        testBufferSize, 
+        data1, 
+        0
+      )
 
     await outgoingSocket.processPacket(finP)
 
@@ -583,7 +674,14 @@ procSuite "Utp socket unit test":
     check:
       sendFin.header.pType == ST_FIN
 
-    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, sendFin.header.seqNr, testBufferSize)
+    let responseAck = 
+      ackPacket(
+        initialRemoteSeq, 
+        initialPacket.header.connectionId, 
+        sendFin.header.seqNr, 
+        testBufferSize,
+        0
+      )
 
     await outgoingSocket.processPacket(responseAck)
     
@@ -639,7 +737,15 @@ procSuite "Utp socket unit test":
     let sCfg = SocketConfig.init(optRcvBuffer = initialRcvBufferSize)
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeqNr, q, testBufferSize, sCfg)
 
-    let dataP1 = dataPacket(initialRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
+    let dataP1 = 
+      dataPacket(
+        initialRemoteSeqNr, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        testBufferSize, 
+        data,
+        0
+      )
     
     await outgoingSocket.processPacket(dataP1)
 
@@ -676,7 +782,15 @@ procSuite "Utp socket unit test":
     let sCfg = SocketConfig.init(optRcvBuffer = initialRcvBufferSize)
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initalRemoteSeqNr, q, testBufferSize, sCfg)
 
-    let dataP1 = dataPacket(initalRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data)
+    let dataP1 = 
+      dataPacket(
+        initalRemoteSeqNr, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        testBufferSize, 
+        data, 
+        0
+      )
     
     await outgoingSocket.processPacket(dataP1)
 
@@ -714,11 +828,35 @@ procSuite "Utp socket unit test":
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
 
     # data packet with ack nr set above our seq nr i.e  packet from the future
-    let dataFuture = dataPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr + 1, testBufferSize, data1)
+    let dataFuture = 
+      dataPacket(
+        initialRemoteSeq, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr + 1, 
+        testBufferSize, 
+        data1, 
+        0
+      )
     # data packet wth ack number set below out ack window i.e packet too old
-    let dataTooOld = dataPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr - allowedAckWindow - 1, testBufferSize, data2)
+    let dataTooOld = 
+      dataPacket(
+        initialRemoteSeq, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr - allowedAckWindow - 1, 
+        testBufferSize,
+        data2, 
+        0
+      )
 
-    let dataOk = dataPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize, data3)
+    let dataOk = 
+      dataPacket(
+        initialRemoteSeq,
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        testBufferSize, 
+        data3,
+        0
+      )
     
     await outgoingSocket.processPacket(dataFuture)
     await outgoingSocket.processPacket(dataTooOld)
@@ -773,7 +911,14 @@ procSuite "Utp socket unit test":
     check:
       int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite) + len(dataToWrite)
 
-    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, sentPacket.header.seqNr, testBufferSize)
+    let responseAck =
+      ackPacket(
+        initialRemoteSeq,
+        initialPacket.header.connectionId, 
+        sentPacket.header.seqNr, 
+        testBufferSize, 
+        0
+      )
 
     await outgoingSocket.processPacket(responseAck)
 
@@ -839,7 +984,14 @@ procSuite "Utp socket unit test":
     check:
       not writeFut.finished()
 
-    let someAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, uint32(len(dataToWrite)))
+    let someAckFromRemote =
+      ackPacket(
+        initialRemoteSeq, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        uint32(len(dataToWrite)),
+        0
+      )
 
     await outgoingSocket.processPacket(someAckFromRemote)
 
@@ -862,7 +1014,14 @@ procSuite "Utp socket unit test":
     # remote is initialized with buffer to small to handle whole payload
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
     let remoteRcvWindowSize = uint32(outgoingSocket.getPacketSize())
-    let someAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, remoteRcvWindowSize)
+    let someAckFromRemote = 
+      ackPacket(
+        initialRemoteSeq, 
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        remoteRcvWindowSize, 
+        0
+      )
 
     # we are using ack from remote to setup our snd window size to one packet size on one packet
     await outgoingSocket.processPacket(someAckFromRemote)
@@ -890,7 +1049,14 @@ procSuite "Utp socket unit test":
     # remote is initialized with buffer to small to handle whole payload
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
     let remoteRcvWindowSize = uint32(outgoingSocket.getPacketSize())
-    let someAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, remoteRcvWindowSize)
+    let someAckFromRemote = 
+      ackPacket(
+        initialRemoteSeq, 
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        remoteRcvWindowSize,
+        0
+      )
 
     # we are using ack from remote to setup our snd window size to one packet size on one packet
     await outgoingSocket.processPacket(someAckFromRemote)
@@ -899,7 +1065,14 @@ procSuite "Utp socket unit test":
     
     let writeFut = outgoingSocket.write(twoPacketData)
 
-    let firstAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr + 1, remoteRcvWindowSize)
+    let firstAckFromRemote = 
+      ackPacket(
+        initialRemoteSeq,
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr + 1, 
+        remoteRcvWindowSize, 
+        0
+      )
 
     let packet = await q.get()
 
@@ -988,7 +1161,14 @@ procSuite "Utp socket unit test":
       # this write still cannot progress as 1st write is not acked
       not writeFut2.finished()
 
-    let someAckFromRemote = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr + 1, 10)
+    let someAckFromRemote =
+      ackPacket(
+        initialRemoteSeq, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr + 1, 
+        10, 
+        0
+      )
 
     # acks first write, so there is space in buffer for new data and second
     # write should progress
@@ -1002,5 +1182,33 @@ procSuite "Utp socket unit test":
       writeFut2.finished()
       firstPacket.payload == someData1
       secondPacket.payload == somedata2
+
+    await outgoingSocket.destroyWait()
+
+  asyncTest "Socket should inform remote about its delay":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    let dataP1 = 
+      dataPacket(
+        initialRemoteSeq,
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        testBufferSize,
+        @[1'u8],
+        0
+      )
+
+    check:
+      outgoingSocket.isConnected()
+
+    await outgoingSocket.processPacket(dataP1)
+
+    let socketAck = await q.get()
+
+    check:
+      socketAck.header.timestampDiff > 0
 
     await outgoingSocket.destroyWait()

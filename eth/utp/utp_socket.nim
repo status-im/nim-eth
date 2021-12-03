@@ -186,6 +186,10 @@ type
 
     zeroWindowTimer: Moment
 
+    # last measured delay between current local timestamp, and remote sent
+    # timestamp. In microseconds
+    replayMicro: uint32
+
     # socket identifier
     socketKey*: UtpSocketKey[A]
 
@@ -319,7 +323,8 @@ proc sendAck(socket: UtpSocket): Future[void] =
       socket.seqNr,
       socket.connectionIdSnd,
       socket.ackNr, 
-      socket.getRcvWindowSize()
+      socket.getRcvWindowSize(),
+      socket.replayMicro
     )
   socket.sendData(encodePacket(ackPacket))
 
@@ -472,7 +477,15 @@ proc handleDataWrite(socket: UtpSocket, data: seq[byte], writeFut: Future[WriteR
           if socket.curWindowPackets == 0:
             socket.resetSendTimeout()
 
-          let dataPacket = dataPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, wndSize, dataSlice)
+          let dataPacket = 
+            dataPacket(
+              socket.seqNr,
+              socket.connectionIdSnd,
+              socket.ackNr,
+              wndSize,
+              dataSlice,
+              socket.replayMicro
+            )
           let outgoingPacket = OutgoingPacket.init(encodePacket(dataPacket), 1, false, payloadLength)
           socket.registerOutgoingPacket(outgoingPacket)
           await socket.sendData(outgoingPacket.packetBytes)
@@ -500,7 +513,16 @@ proc handleClose(socket: UtpSocket): Future[void] {.async.} =
     if socket.curWindowPackets == 0:
       socket.resetSendTimeout()
     
-    let finEncoded = encodePacket(finPacket(socket.seqNr, socket.connectionIdSnd, socket.ackNr, socket.getRcvWindowSize()))
+    let finEncoded = 
+      encodePacket(
+        finPacket(
+          socket.seqNr,
+          socket.connectionIdSnd,
+          socket.ackNr,
+          socket.getRcvWindowSize(),
+          socket.replayMicro
+        )
+      )
     socket.registerOutgoingPacket(OutgoingPacket.init(finEncoded, 1, true, 0)) 
     await socket.sendData(finEncoded)
     socket.finSent = true
@@ -855,6 +877,23 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     socket.destroy()
 
   socket.ackPackets(acks)
+  
+  let receiptTimestamp = getMonoTimeTimeStamp()
+
+  let sentTimeRemote = p.header.timestamp
+  
+  # we are using uint32 to have not a Duration, to wrap a round in case of 
+  # sentTimeRemote > receipTimestamp. This can happen as local and remote
+  # clock can be not synchornized or even using different system clock.
+  # i.e this number itself does not tell anything and is only used to feedback it
+  # to remote peer with each sent packet
+  let remoteDelay = 
+    if (sentTimeRemote == 0):
+      0'u32
+    else:
+      receiptTimestamp - sentTimeRemote
+
+  socket.replayMicro = remoteDelay
 
   case p.header.pType
     of ST_DATA, ST_FIN:

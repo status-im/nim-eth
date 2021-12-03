@@ -60,7 +60,14 @@ procSuite "Utp router unit tests":
     check:
       initialPacket.header.pType == ST_SYN
 
-    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+    let responseAck =
+      ackPacket(
+        initialRemoteSeq, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        testBufferSize, 
+        0
+      )
 
     await router.processIncomingBytes(encodePacket(responseAck), remote)
 
@@ -167,7 +174,17 @@ procSuite "Utp router unit tests":
       # socket is not configured to be connected until receiving data
       not socket.isConnected()
 
-    let encodedData = encodePacket(dataPacket(initSeq + 1, initConnId + 1, initialPacket.header.seqNr - 1, 10, dataToSend))
+    let encodedData = 
+      encodePacket(
+        dataPacket(
+          initSeq + 1,
+          initConnId + 1, 
+          initialPacket.header.seqNr - 1, 
+          10, 
+          dataToSend, 
+          0
+        )
+      )
 
     await router.processIncomingBytes(encodedData, testSender)
 
@@ -255,7 +272,14 @@ procSuite "Utp router unit tests":
       # connection id of syn packet should be set to requested connection id
       initialPacket.header.connectionId == requestedConnectionId
 
-    let responseAck = ackPacket(initialRemoteSeq, initialPacket.header.connectionId, initialPacket.header.seqNr, testBufferSize)
+    let responseAck =
+      ackPacket(
+        initialRemoteSeq, 
+        initialPacket.header.connectionId, 
+        initialPacket.header.seqNr, 
+        testBufferSize, 
+        0
+      )
 
     await router.processIncomingBytes(encodePacket(responseAck), testSender2)
 
@@ -355,7 +379,7 @@ procSuite "Utp router unit tests":
     router.sendCb = initTestSnd(pq)
 
     let sndId = 10'u16
-    let dp = dataPacket(10'u16, sndId, 10'u16, 10'u32, @[1'u8])
+    let dp = dataPacket(10'u16, sndId, 10'u16, 10'u32, @[1'u8], 0)
 
     await router.processIncomingBytes(encodePacket(dp), testSender2)
 
