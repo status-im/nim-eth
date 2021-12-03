@@ -83,6 +83,9 @@ func `==`*(a, b: Node): bool =
   (a.isNil and b.isNil) or
     (not a.isNil and not b.isNil and a.pubkey == b.pubkey)
 
+func hash*(id: NodeId): Hash =
+  hash(id.toByteArrayBE)
+
 proc random*(T: type NodeId, rng: var BrHmacDrbgContext): T =
   var id: NodeId
   brHmacDrbgGenerate(addr rng, addr id, csize_t(sizeof(id)))
