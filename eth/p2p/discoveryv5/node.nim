@@ -10,7 +10,8 @@
 import
   std/hashes,
   nimcrypto, stint, chronos, stew/shims/net, chronicles,
-  ../../keys, ./enr
+  ../../keys, ../../net/utils,
+  ./enr
 
 export stint
 
@@ -82,6 +83,9 @@ func `==`*(a, b: Node): bool =
   (a.isNil and b.isNil) or
     (not a.isNil and not b.isNil and a.pubkey == b.pubkey)
 
+func hash*(id: NodeId): Hash =
+  hash(id.toByteArrayBE)
+
 proc random*(T: type NodeId, rng: var BrHmacDrbgContext): T =
   var id: NodeId
   brHmacDrbgGenerate(addr rng, addr id, csize_t(sizeof(id)))
@@ -106,7 +110,8 @@ func shortLog*(id: NodeId): string =
 chronicles.formatIt(NodeId): shortLog(it)
 
 func hash*(a: Address): hashes.Hash =
-  hashData(unsafeAddr a, sizeof(a))
+  let res = a.ip.hash !& a.port.hash
+  !$res
 
 func `$`*(a: Address): string =
   result.add($a.ip)
