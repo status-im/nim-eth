@@ -7,7 +7,7 @@
 
 # This module contains the parts necessary to create a merkle hash from the core
 # SSZ types outlined in the spec:
-# https://github.com/ethereum/eth2.0-specs/blob/v1.0.1/ssz/simple-serialize.md#merkleization
+# https://github.com/ethereum/consensus-specs/blob/v1.0.1/ssz/simple-serialize.md#merkleization
 
 {.push raises: [Defect].}
 
@@ -606,16 +606,16 @@ func hash_tree_root*(x: auto): Digest {.raises: [Defect].} =
 
   trs "HASH TREE ROOT FOR ", name(type x), " = ", "0x", $result
 
-# https://github.com/ethereum/eth2.0-specs/blob/dev/ssz/merkle-proofs.md#get_generalized_index_length
+# https://github.com/ethereum/consensus-specs/blob/dev/ssz/merkle-proofs.md#get_generalized_index_length
 func getGeneralizedIndexLength(x: uint64): int =
   log2trunc(x)
 
-# https://github.com/ethereum/eth2.0-specs/blob/dev/ssz/merkle-proofs.md#get_generalized_index_bit
+# https://github.com/ethereum/consensus-specs/blob/dev/ssz/merkle-proofs.md#get_generalized_index_bit
 func getGeneralizedIndexBit(index: uint64, position: uint64): bool =
   (index and (1'u64 shl position)) > 0
 
 # validates merkle proof. Provided index should be a generalized index of leaf node
-# as defined in: https://github.com/ethereum/eth2.0-specs/blob/dev/ssz/merkle-proofs.md#generalized-merkle-tree-index
+# as defined in: https://github.com/ethereum/consensus-specs/blob/dev/ssz/merkle-proofs.md#generalized-merkle-tree-index
 func isValidProof*(leaf: Digest, proof: openArray[Digest],
                              index: uint64, root: Digest): bool =
   if len(proof) == getGeneralizedIndexLength(index):
