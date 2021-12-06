@@ -56,6 +56,9 @@ type
 # https://github.com/bittorrent/libutp/blob/master/utp_utils.cpp, to check all the
 # timing assumptions on different platforms
 proc getMonoTimeTimeStamp*(): uint32 = 
+  # this value is equivalent of:
+  # uint32((Moment.now() - Moment.init(0, Microseconds)).microseconds())
+  # on macOs
   let time = getMonoTime()
   cast[uint32](time.ticks() div 1000)
 

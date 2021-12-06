@@ -21,6 +21,9 @@ type SendBufferTracker* = ref object
   # remote receive window updated based on packed wndSize field
   maxRemoteWindow*: uint32
 
+  # maximum window size, in bytes, calculated by local congestion controller
+  maxWindow*: uint32
+
   # configuration option for maxium number of bytes in snd buffer
   maxSndBufferSize*: uint32
   waiters: seq[(uint32, Future[void])]
@@ -29,18 +32,20 @@ proc new*(
   T: type SendBufferTracker,
   currentWindow: uint32,
   maxRemoteWindow: uint32, 
-  maxSndBufferSize: uint32): T =
+  maxSndBufferSize: uint32,
+  maxWindow: uint32): T =
   return (
     SendBufferTracker(
       currentWindow: currentWindow,
       maxRemoteWindow: maxRemoteWindow,
       maxSndBufferSize: maxSndBufferSize,
+      maxWindow: maxWindow,
       waiters: @[]
     )
   )
 
 proc currentFreeBytes*(t: SendBufferTracker): uint32 =
-  let maxSend = min(t.maxRemoteWindow, t.maxSndBufferSize)
+  let maxSend = min(min(t.maxRemoteWindow, t.maxSndBufferSize), t.maxWindow)
   if (maxSend <= t.currentWindow):
     return 0
   else:
@@ -63,6 +68,11 @@ proc checkWaiters(t: SendBufferTracker) =
 
 proc updateMaxRemote*(t: SendBufferTracker, newRemoteWindow: uint32) =
   t.maxRemoteWindow = newRemoteWindow
+  t.checkWaiters()
+
+proc updateMaxWindowSize*(t: SendBufferTracker, newRemoteWindow: uint32, maxWindow: uint32) = 
+  t.maxRemoteWindow = newRemoteWindow
+  t.maxWindow = maxWindow
   t.checkWaiters()
 
 proc decreaseCurrentWindow*(t: SendBufferTracker, value: uint32, notifyWaiters: bool) =

@@ -12,7 +12,8 @@ import
   stew/results,
   ./send_buffer_tracker,
   ./growable_buffer,
-  ./packets
+  ./packets,
+  ./ledbat_congestion_control
 
 logScope:
   topics = "utp_socket"
@@ -190,6 +191,12 @@ type
     # timestamp. In microseconds
     replayMicro: uint32
 
+    # indicator if we're in slow-start (exponential growth) phase
+    slowStart: bool
+
+    #the slow-start threshold, in bytes
+    slowStartTreshold: uint32
+
     # socket identifier
     socketKey*: UtpSocketKey[A]
 
@@ -258,6 +265,11 @@ const
   # to this value even if we do not receive any more messages from remote peers.
   # Reset period is configured in `SocketConfig`
   minimalRemoteWindow: uint32 = 1500
+
+  # Initial max window size. Reference implementation uses value available for one packet
+  # but we will over udp and discov5, and discvoery of correct values may be not as
+  # important for now, lets start with space for at least two packets
+  startMaxWindow = 2 * mtuSize
 
   reorderBufferMaxSize = 1024
 
@@ -410,7 +422,28 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       socket.retransmitTimeout = newTimeout
       socket.rtoTimeout = currentTime + newTimeout
       
-      # TODO Add handling of congestion control 
+      let currentPacketSize = uint32(socket.getPacketSize())
+
+      if (socket.curWindowPackets == 0 and socket.sendBufferTracker.maxWindow > currentPacketSize):
+        # there are no packets in flight even though there is place for more than whole packet
+        # this means connection is just idling. Reset window by 1/3'rd but no more
+        # than to fit at least one packet.
+        let oldMaxWindow = socket.sendBufferTracker.maxWindow
+        let newMaxWindow = max((oldMaxWindow * 2) div 3,  currentPacketSize)
+        socket.sendBufferTracker.updateMaxWindowSize(
+          # maxRemote window does not change
+          socket.sendBufferTracker.maxRemoteWindow,
+          newMaxWindow
+        )
+      else:
+        # delay was so high that window has shrunk below one packet. Reset window
+        # to fit a least one packet and start with slow start
+        socket.sendBufferTracker.updateMaxWindowSize(
+          # maxRemote window does not change
+          socket.sendBufferTracker.maxRemoteWindow,
+          currentPacketSize
+        )
+        socket.slowStart = true
 
       # This will have much more sense when we will add handling of selective acks
       # as then every selecivly acked packet restes timeout timer and removes packet
@@ -587,11 +620,13 @@ proc new[A](
     closeEvent: newAsyncEvent(),
     closeCallbacks: newSeq[Future[void]](),
     # start with 1mb assumption, field will be updated with first received packet
-    sendBufferTracker: SendBufferTracker.new(0, 1024 * 1024, cfg.optSndBuffer),
+    sendBufferTracker: SendBufferTracker.new(0, 1024 * 1024, cfg.optSndBuffer, startMaxWindow),
     # queue with infinite size
     writeQueue: newAsyncQueue[WriteRequest](),
     zeroWindowTimer: Moment.now() + cfg.remoteWindowResetTimeout,
     socketKey: UtpSocketKey.init(to, rcvId),
+    slowStart: true,
+    slowStartTreshold: cfg.optSndBuffer,
     send: snd
   )
 
@@ -710,6 +745,12 @@ proc max(a, b: Duration): Duration =
   else:
     b
 
+proc min(a, b: Duration): Duration =
+  if (a < b):
+    a
+  else:
+    b
+
 proc updateTimeouts(socket: UtpSocket, timeSent: Moment, currentTime: Moment) =
   ## Update timeouts according to spec:
   ## delta = rtt - packet_rtt
@@ -791,6 +832,27 @@ proc ackPackets(socket: UtpSocket, nrPacketsToAck: uint16) =
 
     inc i
 
+proc calculateAckedbytes(socket: UtpSocket, nrPacketsToAck: uint16, now: Moment): (uint32, Duration) =
+  var i: uint16 = 0
+  var ackedBytes: uint32 = 0
+  var minRtt: Duration = InfiniteDuration
+  while i < nrPacketsToack:
+    let seqNr = socket.seqNr - socket.curWindowPackets + i
+    let packetOpt = socket.outBuffer.get(seqNr)
+    if (packetOpt.isSome() and packetOpt.unsafeGet().transmissions > 0):
+      let packet = packetOpt.unsafeGet()
+
+      ackedBytes = ackedBytes + packet.payloadLength
+
+      # safety check in case clock is not monotonic
+      if packet.timeSent < now:
+        minRtt = min(minRtt, now - packet.timeSent)
+      else:
+        minRtt = min(minRtt, microseconds(50000))
+
+    inc i
+  (ackedBytes, minRtt)
+
 proc initializeAckNr(socket: UtpSocket, packetSeqNr: uint16) =
   if (socket.state == SynSent):
     socket.ackNr = packetSeqNr - 1
@@ -824,6 +886,7 @@ proc isAckNrInvalid(socket: UtpSocket, packet: Packet): bool =
 # to scheduler which means there could be potentialy several processPacket procs
 # running
 proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
+  let receiptTime = Moment.now()
 
   if socket.isAckNrInvalid(p):
     notice "Received packet with invalid ack nr"
@@ -856,28 +919,9 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     notice "Received packet is totally of the mark"
     return
 
-  # update remote window size 
-  socket.sendBufferTracker.updateMaxRemote(p.header.wndSize)
-  
-  if (socket.sendBufferTracker.maxRemoteWindow == 0):
-    # when zeroWindowTimer will be hit and maxRemoteWindow still will be equal to 0
-    # then it will be reset to minimal value
-    socket.zeroWindowTimer = Moment.now() + socket.socketConfig.remoteWindowResetTimeout
-   
+  var (ackedBytes, minRtt) = socket.calculateAckedbytes(acks, receiptTime)
+  # TODO caluclate bytes acked by selective acks here (if thats the case)
 
-  # socket.curWindowPackets == acks means that this packet acked all remaining packets
-  # including the sent fin packets
-  if (socket.finSent and socket.curWindowPackets == acks):
-    notice "FIN acked, destroying socket"
-    socket.finAcked = true
-    # this bit of utp spec is a bit under specified (i.e there is not specification at all)
-    # reference implementation moves socket to destroy state in case that our fin was acked
-    # and socket is considered closed for reading and writing.
-    # but in theory remote could stil write some data on this socket (or even its own fin)
-    socket.destroy()
-
-  socket.ackPackets(acks)
-  
   let receiptTimestamp = getMonoTimeTimeStamp()
 
   let sentTimeRemote = p.header.timestamp
@@ -894,7 +938,44 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
       receiptTimestamp - sentTimeRemote
 
   socket.replayMicro = remoteDelay
+  
+  let actualDelay = p.header.timestampDiff
 
+  let (newMaxWindow, newSlowStartTreshold, newSlowStart) =
+    applyCongestionControl(
+      socket.sendBufferTracker.maxWindow,
+      socket.slowStart,
+      socket.slowStartTreshold,
+      socket.socketConfig.optSndBuffer,
+      uint32(socket.getPacketSize()),
+      microseconds(actualDelay),
+      ackedBytes,
+      minRtt
+    )
+
+  # update remote window size and max window
+  socket.sendBufferTracker.updateMaxWindowSize(p.header.wndSize, newMaxWindow)
+  socket.slowStart = newSlowStart
+  socket.slowStartTreshold = newSlowStartTreshold
+
+  if (socket.sendBufferTracker.maxRemoteWindow == 0):
+    # when zeroWindowTimer will be hit and maxRemoteWindow still will be equal to 0
+    # then it will be reset to minimal value
+    socket.zeroWindowTimer = Moment.now() + socket.socketConfig.remoteWindowResetTimeout
+   
+  # socket.curWindowPackets == acks means that this packet acked all remaining packets
+  # including the sent fin packets
+  if (socket.finSent and socket.curWindowPackets == acks):
+    notice "FIN acked, destroying socket"
+    socket.finAcked = true
+    # this bit of utp spec is a bit under specified (i.e there is not specification at all)
+    # reference implementation moves socket to destroy state in case that our fin was acked
+    # and socket is considered closed for reading and writing.
+    # but in theory remote could stil write some data on this socket (or even its own fin)
+    socket.destroy()
+
+  socket.ackPackets(acks)
+  
   case p.header.pType
     of ST_DATA, ST_FIN:
       # To avoid amplification attacks, server socket is in SynRecv state until
