@@ -39,18 +39,19 @@ proc applyCongestionControl*(
   # double scaled_gain = MAX_CWND_INCREASE_BYTES_PER_RTT * window_factor * delay_factor;
   
   let windowFactor = float64(min(numOfAckedBytes, currentMaxWindowSize)) / float64(max(currentMaxWindowSize, numOfAckedBytes))
+
   let delayFactor = float64(offTarget) / float64(target.microseconds())
 
   # TODO add handling of zeroing scaledGain in case of hitting max window
-  let scaledGain = uint32(maxCwndIncreaseBytesPerRtt * windowFactor * delayFactor)
+  let scaledGain = maxCwndIncreaseBytesPerRtt * windowFactor * delayFactor
 
-  let scaledWindow = currentMaxWindowSize + scaledGain
+  let scaledWindow = float64(currentMaxWindowSize) + scaledGain
 
   let ledbatCwnd: uint32 = 
     if scaledWindow < minWindowSize:
       uint32(minWindowSize)
     else:
-      scaledWindow
+      uint32(scaledWindow)
 
   var newSlowStart = currentSlowStart
   var newMaxWindowSize = currentMaxWindowSize

@@ -266,10 +266,12 @@ const
   # Reset period is configured in `SocketConfig`
   minimalRemoteWindow: uint32 = 1500
 
-  # Initial max window size. Reference implementation uses value available for one packet
-  # but we will over udp and discov5, and discvoery of correct values may be not as
-  # important for now, lets start with space for at least two packets
-  startMaxWindow = 2 * mtuSize
+  # Initial max window size. Reference implementation uses value which enables one packet
+  # to be transfered.
+  # We use value two times higher as we do not yet have proper mtu estimation, and
+  # our impl should work over udp and discovery v5 (where proper estmation may be harder
+  # as packets already have discvoveryv5 envelope)
+  startMaxWindow* = 2 * mtuSize
 
   reorderBufferMaxSize = 1024
 
@@ -1229,3 +1231,7 @@ proc connectionId*[A](socket: UtpSocket[A]): uint16 =
     socket.connectionIdSnd
   of Outgoing:
     socket.connectionIdRcv
+
+# Check what is current available window size for this socket
+proc currentMaxWindowSize*[A](socket: UtpSocket[A]): uint32 =
+  socket.sendBufferTracker.maxWindow

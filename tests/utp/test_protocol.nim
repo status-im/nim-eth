@@ -421,3 +421,74 @@ procSuite "Utp protocol over udp tests":
     await utpProt1.shutdownWait()
     await utpProt2.shutdownWait()
     await utpProt3.shutdownWait()
+
+  asyncTest "Success data transfer of a lot of data should increase available window on sender side":
+    let s = await initClientServerScenario()
+    
+    check:
+      s.clientSocket.isConnected()
+      # initially window has value equal to some pre configured constant
+      s.clientSocket.currentMaxWindowSize == startMaxWindow
+      # after successful connection outgoing buffer should be empty as syn packet
+      # should be correctly acked
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
+
+      (not s.serverSocket.isConnected())
+
+    # big transfer of 50kb
+    let bytesToTransfer = generateByteArray(rng[], 50000)
+    
+    let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
+
+    # ultimatly all send packets will acked, and outgoing buffer will be empty
+    await waitUntil(proc (): bool = s.clientSocket.numPacketsInOutGoingBuffer() == 0)
+
+    check:
+      # we can only assert that window has grown, becouse specific values depends on
+      # particual timings
+      s.clientSocket.currentMaxWindowSize > startMaxWindow
+      s.serverSocket.isConnected()
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
+      bytesReceivedFromClient == bytesToTransfer
+
+    await s.close()
+
+  asyncTest "Not used socket should decay its max send window":
+    let s = await initClientServerScenario()
+    
+    check:
+      s.clientSocket.isConnected()
+      # initially window has value equal to some pre configured constant
+      s.clientSocket.currentMaxWindowSize == startMaxWindow
+      # after successful connection outgoing buffer should be empty as syn packet
+      # should be correctly acked
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
+
+      (not s.serverSocket.isConnected())
+
+    # big transfer of 50kb
+    let bytesToTransfer = generateByteArray(rng[], 50000)
+    
+    let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
+
+    # ultimatly all send packets will acked, and outgoing buffer will be empty
+    await waitUntil(proc (): bool = s.clientSocket.numPacketsInOutGoingBuffer() == 0)
+
+    let maximumMaxWindow = s.clientSocket.currentMaxWindowSize
+
+    check:
+      # we can only assert that window has grown, becouse specific values depends on
+      # particual timings
+      maximumMaxWindow > startMaxWindow
+      s.serverSocket.isConnected()
+      s.clientSocket.numPacketsInOutGoingBuffer() == 0
+      bytesReceivedFromClient == bytesToTransfer
+
+    # wait long enough to trigger timeout
+    await sleepAsync(seconds(5))
+
+    check:
+      # window should decay when idle
+      s.clientSocket.currentMaxWindowSize < maximumMaxWindow
+
+    await s.close()
