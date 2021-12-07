@@ -1,5 +1,7 @@
 import
-  chronos
+  chronos,
+  ./utp_utils
+
 
 const targetDelay = milliseconds(100)
 
@@ -20,13 +22,13 @@ proc applyCongestionControl*(
   currentPacketSize: uint32,
   actualDelay: Duration,
   numOfAckedBytes: uint32,
-  minRtt: Duration
+  minRtt: Duration,
+  calculatedDelay: Duration
 ): (uint32, uint32, bool) = 
   if (actualDelay.isZero() or minRtt.isZero() or numOfAckedBytes == 0):
     return (currentMaxWindowSize, currentSlowStartTreshold, currentSlowStart)
   
-  # TODO add taking into account value from our delay measurmens
-  let ourDelay = minRtt
+  let ourDelay = min(minRtt, calculatedDelay)
 
   let target = targetDelay
 

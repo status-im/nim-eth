@@ -13,7 +13,10 @@ import
   ./send_buffer_tracker,
   ./growable_buffer,
   ./packets,
-  ./ledbat_congestion_control
+  ./ledbat_congestion_control,
+  ./delay_histogram,
+  ./utp_utils
+
 
 logScope:
   topics = "utp_socket"
@@ -196,6 +199,10 @@ type
 
     #the slow-start threshold, in bytes
     slowStartTreshold: uint32
+
+    ourHistogram: DelayHistogram
+
+    remoteHistogram: DelayHistogram
 
     # socket identifier
     socketKey*: UtpSocketKey[A]
@@ -600,6 +607,7 @@ proc new[A](
   initialAckNr: uint16,
   initialTimeout: Duration
 ): T =
+  let currentTime = Moment.now()
   T(
     remoteAddress: to,
     state: state,
@@ -613,7 +621,7 @@ proc new[A](
     outBuffer: GrowableCircularBuffer[OutgoingPacket].init(),
     inBuffer: GrowableCircularBuffer[Packet].init(),
     retransmitTimeout: initialTimeout,
-    rtoTimeout: Moment.now() + initialTimeout,
+    rtoTimeout: currentTime + initialTimeout,
     # Initial timeout values taken from reference implemntation
     rtt: milliseconds(0),
     rttVar: milliseconds(800),
@@ -625,10 +633,12 @@ proc new[A](
     sendBufferTracker: SendBufferTracker.new(0, 1024 * 1024, cfg.optSndBuffer, startMaxWindow),
     # queue with infinite size
     writeQueue: newAsyncQueue[WriteRequest](),
-    zeroWindowTimer: Moment.now() + cfg.remoteWindowResetTimeout,
+    zeroWindowTimer: currentTime + cfg.remoteWindowResetTimeout,
     socketKey: UtpSocketKey.init(to, rcvId),
     slowStart: true,
     slowStartTreshold: cfg.optSndBuffer,
+    ourHistogram: DelayHistogram.init(currentTime),
+    remoteHistogram: DelayHistogram.init(currentTime),
     send: snd
   )
 
@@ -741,18 +751,6 @@ proc setCloseCallback(s: UtpSocket, cb: SocketCloseCallback) {.async.} =
 proc registerCloseCallback*(s: UtpSocket, cb: SocketCloseCallback) =
   s.closeCallbacks.add(s.setCloseCallback(cb))
 
-proc max(a, b: Duration): Duration =
-  if (a > b):
-    a
-  else:
-    b
-
-proc min(a, b: Duration): Duration =
-  if (a < b):
-    a
-  else:
-    b
-
 proc updateTimeouts(socket: UtpSocket, timeSent: Moment, currentTime: Moment) =
   ## Update timeouts according to spec:
   ## delta = rtt - packet_rtt
@@ -859,16 +857,6 @@ proc initializeAckNr(socket: UtpSocket, packetSeqNr: uint16) =
   if (socket.state == SynSent):
     socket.ackNr = packetSeqNr - 1
 
-# compare if lhs is less than rhs, taking wrapping
-# into account. i.e high(lhs) < 0 == true
-proc wrapCompareLess(lhs: uint16, rhs:uint16): bool =
-  let distDown = (lhs - rhs)
-  let distUp = (rhs - lhs)
-  # if the distance walking up is shorter, lhs
-  # is less than rhs. If the distance walking down
-  # is shorter, then rhs is less than lhs
-  return distUp < distDown
-
 proc isAckNrInvalid(socket: UtpSocket, packet: Packet): bool =
   let ackWindow = max(socket.curWindowPackets + allowedAckWindow, allowedAckWindow)
   (
@@ -928,7 +916,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
   let sentTimeRemote = p.header.timestamp
   
-  # we are using uint32 to have not a Duration, to wrap a round in case of 
+  # we are using uint32 not a Duration, to wrap a round in case of 
   # sentTimeRemote > receipTimestamp. This can happen as local and remote
   # clock can be not synchornized or even using different system clock.
   # i.e this number itself does not tell anything and is only used to feedback it
@@ -940,8 +928,29 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
       receiptTimestamp - sentTimeRemote
 
   socket.replayMicro = remoteDelay
-  
+
+  let prevRemoteDelayBase = socket.remoteHistogram.delayBase
+
+  if (remoteDelay != 0):
+    socket.remoteHistogram.addSample(remoteDelay, receiptTime)
+
+  # remote new delay base is less than previous
+  # shift our delay base in other direction to take clock skew into account
+  # but no more than 10ms
+  if (prevRemoteDelayBase != 0 and 
+      wrapCompareLess(socket.remoteHistogram.delayBase, prevRemoteDelayBase) and 
+      prevRemoteDelayBase - socket.remoteHistogram.delayBase <= 10000'u32):
+        socket.ourHistogram.shift(prevRemoteDelayBase - socket.remoteHistogram.delayBase)
+
   let actualDelay = p.header.timestampDiff
+
+  if actualDelay != 0:
+    socket.ourHistogram.addSample(actualDelay, receiptTime)
+
+  # adjust base delay if delay estimates exceeds rtt
+  if (socket.ourHistogram.getValue() > minRtt):
+    let diff = uint32((socket.ourHistogram.getValue() - minRtt).microseconds())
+    socket.ourHistogram.shift(diff) 
 
   let (newMaxWindow, newSlowStartTreshold, newSlowStart) =
     applyCongestionControl(
@@ -952,7 +961,8 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
       uint32(socket.getPacketSize()),
       microseconds(actualDelay),
       ackedBytes,
-      minRtt
+      minRtt,
+      socket.ourHistogram.getValue()
     )
 
   # update remote window size and max window

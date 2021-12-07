@@ -44,7 +44,11 @@ when isMainModule:
 
   waitFor(sleepAsync(milliseconds(1000)))
 
-  discard waitFor soc.write(bytes)
+  # discard waitFor soc.write(bytes)
+
+  # waitFor(sleepAsync(milliseconds(1000)))
+
+  # discard waitFor soc.write(bytes)
 
   runForever()
 
