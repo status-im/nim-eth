@@ -15,7 +15,8 @@ import
   ./packets,
   ./ledbat_congestion_control,
   ./delay_histogram,
-  ./utp_utils
+  ./utp_utils,
+  ./clock_drift_calculator
 
 
 logScope:
@@ -200,9 +201,14 @@ type
     #the slow-start threshold, in bytes
     slowStartTreshold: uint32
 
+    # history of our delays
     ourHistogram: DelayHistogram
 
+    # history of remote delays
     remoteHistogram: DelayHistogram
+
+    # calculator of drifiting between local and remote clocks
+    driftCalculator: ClockDriftCalculator
 
     # socket identifier
     socketKey*: UtpSocketKey[A]
@@ -639,6 +645,7 @@ proc new[A](
     slowStartTreshold: cfg.optSndBuffer,
     ourHistogram: DelayHistogram.init(currentTime),
     remoteHistogram: DelayHistogram.init(currentTime),
+    driftCalculator: ClockDriftCalculator.init(currentTime),
     send: snd
   )
 
@@ -946,6 +953,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
   if actualDelay != 0:
     socket.ourHistogram.addSample(actualDelay, receiptTime)
+    socket.driftCalculator.addSample(actualDelay, receiptTime)
 
   # adjust base delay if delay estimates exceeds rtt
   if (socket.ourHistogram.getValue() > minRtt):
@@ -962,7 +970,8 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
       microseconds(actualDelay),
       ackedBytes,
       minRtt,
-      socket.ourHistogram.getValue()
+      socket.ourHistogram.getValue(),
+      socket.driftCalculator.clockDrift
     )
 
   # update remote window size and max window

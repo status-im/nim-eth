@@ -23,7 +23,8 @@ proc applyCongestionControl*(
   actualDelay: Duration,
   numOfAckedBytes: uint32,
   minRtt: Duration,
-  calculatedDelay: Duration
+  calculatedDelay: Duration,
+  clockDrift: int32
 ): (uint32, uint32, bool) = 
   if (actualDelay.isZero() or minRtt.isZero() or numOfAckedBytes == 0):
     return (currentMaxWindowSize, currentSlowStartTreshold, currentSlowStart)
@@ -32,8 +33,25 @@ proc applyCongestionControl*(
 
   let target = targetDelay
 
-  let offTarget = target.microseconds() - ourDelay.microseconds()
-  # TODO add handling clock drift penalty
+  # Rationale from C reference impl:
+  # this is here to compensate for very large clock drift that affects
+  # the congestion controller into giving certain endpoints an unfair
+  # share of the bandwidth. We have an estimate of the clock drift
+  # (clock_drift). The unit of this is microseconds per 5 seconds.
+  # empirically, a reasonable cut-off appears to be about 200000
+  # (which is pretty high). The main purpose is to compensate for
+  # people trying to "cheat" uTP by making their clock run slower,
+  # and this definitely catches that without any risk of false positives
+  # if clock_drift < -200000 start applying a penalty delay proportional
+  # to how far beoynd -200000 the clock drift is
+  let clockDriftPenalty: int64 =
+    if (clockDrift < -200000):
+      let penalty = (-clockDrift - 200000) div 7
+      penalty
+    else:
+      0
+
+  let offTarget = target.microseconds() - (ourDelay.microseconds() + clockDriftPenalty)
 
   # calculations from reference impl:
   # double window_factor = (double)min(bytes_acked, max_window) / (double)max(max_window, bytes_acked);
