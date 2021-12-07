@@ -62,7 +62,6 @@ proc applyCongestionControl*(
 
   let delayFactor = float64(offTarget) / float64(target.microseconds())
 
-  # TODO add handling of zeroing scaledGain in case of hitting max window
   let scaledGain = maxCwndIncreaseBytesPerRtt * windowFactor * delayFactor
 
   let scaledWindow = float64(currentMaxWindowSize) + scaledGain
