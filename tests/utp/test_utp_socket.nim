@@ -1203,7 +1203,9 @@ procSuite "Utp socket unit test":
 
     check:
       outgoingSocket.isConnected()
-
+    
+    # necessary to avoid timestampDiff near 0 and flaky tests
+    await sleepAsync(milliseconds(50))
     await outgoingSocket.processPacket(dataP1)
 
     let socketAck = await q.get()
