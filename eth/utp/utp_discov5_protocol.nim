@@ -25,15 +25,16 @@ proc hash(x: UtpSocketKey[Node]): Hash =
   h = h !& x.rcvId.hash
   !$h
 
-proc initSendCallback(t: protocol.Protocol, subProtocolName: seq[byte]): SendCallback[Node] =
+proc initSendCallback(
+    t: protocol.Protocol, subProtocolName: seq[byte]): SendCallback[Node] =
   return (
     proc (to: Node, data: seq[byte]): Future[void] = 
       let fut = newFuture[void]()
-      # TODO In discvoveryv5 each talkreq wait for talkresp, but here we would really
-      # like the fire and forget semantics (similar to udp).
-      # For now start talkreq/response in background, and discard its result.
+      # TODO: In discovery v5 each talkreq waits for a talkresp, but here we
+      # would really like the fire and forget semantics (similar to udp).
+      # For now start talkreq/talkresp in background, and discard its result.
       # That way we also lose information about any possible errors.
-      # Cosider adding talkreq proc which does not wait for response,
+      # Consider adding talkreq proc which does not wait for the response.
       discard t.talkreq(to, subProtocolName, data)
       fut.complete()
       return fut
@@ -41,27 +42,27 @@ proc initSendCallback(t: protocol.Protocol, subProtocolName: seq[byte]): SendCal
 
 proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     srcId: NodeId, srcUdpAddress: Address): seq[byte] =
-    let p = UtpDiscv5Protocol(protocol)
-    let maybeSender = p.prot.getNode(srcId)
+  let p = UtpDiscv5Protocol(protocol)
+  let maybeSender = p.prot.getNode(srcId)
 
-    if maybeSender.isSome():
-      let sender =  maybeSender.unsafeGet()
-      # processIncomingBytes may respond to remote by using talkreq requests
-      asyncSpawn p.router.processIncomingBytes(request, sender)
-      # We always sending empty response as discv5 spec requires that talkreq always
-      # receive talkresp
-      @[]
-    else:
-      @[]
+  if maybeSender.isSome():
+    let sender =  maybeSender.unsafeGet()
+    # processIncomingBytes may respond to remote by using talkreq requests
+    asyncSpawn p.router.processIncomingBytes(request, sender)
+    # We always send empty responses as discv5 spec requires that talkreq
+    # always receives a talkresp.
+    @[]
+  else:
+    @[]
     
 proc new*(
-  T: type UtpDiscv5Protocol,
-  p: protocol.Protocol,
-  subProtocolName: seq[byte],
-  acceptConnectionCb: AcceptConnectionCallback[Node], 
-  socketConfig: SocketConfig = SocketConfig.init(),
-  allowConnectionCb: AllowConnectionCallback[Node] = nil,
-  rng = newRng()): UtpDiscv5Protocol =
+    T: type UtpDiscv5Protocol,
+    p: protocol.Protocol,
+    subProtocolName: seq[byte],
+    acceptConnectionCb: AcceptConnectionCallback[Node],
+    socketConfig: SocketConfig = SocketConfig.init(),
+    allowConnectionCb: AllowConnectionCallback[Node] = nil,
+    rng = newRng()): UtpDiscv5Protocol =
   doAssert(not(isNil(acceptConnectionCb)))
 
   let router = UtpRouter[Node].new(
@@ -83,16 +84,20 @@ proc new*(
   )
   prot
 
-proc connectTo*(r: UtpDiscv5Protocol, address: Node): Future[ConnectionResult[Node]]=
+proc connectTo*(r: UtpDiscv5Protocol, address: Node):
+    Future[ConnectionResult[Node]] =
   return r.router.connectTo(address)
 
-proc connectTo*(r: UtpDiscv5Protocol, address: Node, connectionId: uint16): Future[ConnectionResult[Node]]=
+proc connectTo*(r: UtpDiscv5Protocol, address: Node, connectionId: uint16):
+    Future[ConnectionResult[Node]] =
   return r.router.connectTo(address, connectionId)
 
 proc shutdown*(r: UtpDiscv5Protocol) =
-  ## closes all managed utp connections in background (not closed discovery, it is up to user)
+  ## Closes all managed utp connections in background (does not close discovery,
+  ## this is up to user)
   r.router.shutdown()
 
 proc shutdownWait*(r: UtpDiscv5Protocol) {.async.} =
-  ## closes all managed utp connections in background (not closed discovery, it is up to user)
+  ## Closes all managed utp connections in background (does not close discovery,
+  ## this is up to user)
   await r.router.shutdownWait()
