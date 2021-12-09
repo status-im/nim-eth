@@ -56,6 +56,9 @@ type
 # https://github.com/bittorrent/libutp/blob/master/utp_utils.cpp, to check all the
 # timing assumptions on different platforms
 proc getMonoTimeTimeStamp*(): uint32 = 
+  # this value is equivalent of:
+  # uint32((Moment.now() - Moment.init(0, Microseconds)).microseconds())
+  # on macOs
   let time = getMonoTime()
   cast[uint32](time.ticks() div 1000)
 
@@ -154,7 +157,7 @@ proc synPacket*(seqNr: uint16, rcvConnectionId: uint16, bufferSize: uint32): Pac
 
   Packet(header: h, payload: @[])
 
-proc ackPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSize: uint32): Packet = 
+proc ackPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSize: uint32, timestampDiff: uint32): Packet = 
   let h = PacketHeaderV1(
     pType: ST_STATE,
     version: protocolVersion,
@@ -162,9 +165,7 @@ proc ackPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSiz
     extension: 0'u8,
     connectionId: sndConnectionId,
     timestamp: getMonoTimeTimeStamp(),
-    # TODO for not we are using 0, but this value should be calculated on socket
-    # level
-    timestampDiff: 0'u32,
+    timestampDiff: timestampDiff,
     wndSize: bufferSize,
     seqNr: seqNr,
     ackNr: ackNr
@@ -172,7 +173,14 @@ proc ackPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSiz
   
   Packet(header: h, payload: @[])
 
-proc dataPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSize: uint32, payload: seq[byte]): Packet = 
+proc dataPacket*(
+  seqNr: uint16,
+  sndConnectionId: uint16,
+  ackNr: uint16,
+  bufferSize: uint32,
+  payload: seq[byte],
+  timestampDiff: uint32
+): Packet = 
   let h = PacketHeaderV1(
     pType: ST_DATA,
     version: protocolVersion,
@@ -180,9 +188,7 @@ proc dataPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSi
     extension: 0'u8,
     connectionId: sndConnectionId,
     timestamp: getMonoTimeTimeStamp(),
-    # TODO for not we are using 0, but this value should be calculated on socket
-    # level
-    timestampDiff: 0'u32,
+    timestampDiff: timestampDiff,
     wndSize: bufferSize,
     seqNr: seqNr,
     ackNr: ackNr
@@ -198,9 +204,9 @@ proc resetPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16): Packet
     extension: 0'u8,
     connectionId: sndConnectionId,
     timestamp: getMonoTimeTimeStamp(),
-    # TODO for not we are using 0, but this value should be calculated on socket
-    # level
-    timestampDiff: 0'u32,
+    # reset packet informs remote about lack of state for given connection, therefore
+    # we do not inform remote about its delay.
+    timestampDiff: 0,
     wndSize: 0,
     seqNr: seqNr,
     ackNr: ackNr
@@ -208,7 +214,13 @@ proc resetPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16): Packet
   
   Packet(header: h, payload: @[])
 
-proc finPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSize: uint32): Packet = 
+proc finPacket*(
+  seqNr: uint16,
+  sndConnectionId: uint16,
+  ackNr: uint16,
+  bufferSize: uint32,
+  timestampDiff: uint32
+): Packet = 
   let h = PacketHeaderV1(
     pType: ST_FIN,
     version: protocolVersion,
@@ -216,9 +228,7 @@ proc finPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSiz
     extension: 0'u8,
     connectionId: sndConnectionId,
     timestamp: getMonoTimeTimeStamp(),
-    # TODO for not we are using 0, but this value should be calculated on socket
-    # level
-    timestampDiff: 0'u32,
+    timestampDiff: timestampDiff,
     wndSize: bufferSize,
     seqNr: seqNr,
     ackNr: ackNr
