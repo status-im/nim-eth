@@ -1214,3 +1214,51 @@ procSuite "Utp socket unit test":
       socketAck.header.timestampDiff > 0
 
     await outgoingSocket.destroyWait()
+
+  asyncTest "Re-sent packet should have updated timestamps and ack numbers":
+    let q = newAsyncQueue[Packet]()   
+    let initalRemoteSeqNr = 10'u16
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initalRemoteSeqNr, q)
+
+    let writeResult = await outgoingSocket.write(@[1'u8])
+
+    check:
+      writeResult.isOk()
+
+    let firstSend = await q.get()
+
+    let secondSend = await q.get()
+
+    check:
+      # there was sometime between resend but no packet from remote
+      # so timestamp should be updated but not ackNr
+      secondSend.header.timestamp > firstSend.header.timestamp
+      firstSend.header.ackNr == secondSend.header.ackNr
+
+    let dataP1 = 
+      dataPacket(
+        initalRemoteSeqNr,
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        testBufferSize,
+        @[1'u8],
+        0
+      )
+    
+    await outgoingSocket.processPacket(dataP1)
+
+    let ack = await q.get()
+
+    check:
+      ack.header.pType == ST_STATE
+
+    let thirdSend = await q.get()
+
+    check:
+      # as there was some incoming data between resend, both timestamp and ackNr
+      # should be updated
+      thirdSend.header.timestamp > secondSend.header.timestamp
+      thirdSend.header.ackNr > secondSend.header.ackNr
+
+    await outgoingSocket.destroyWait()

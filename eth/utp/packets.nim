@@ -136,6 +136,23 @@ proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
 
     ok(Packet(header: header, payload: payload))
 
+proc modifyTimeStampAndAckNr*(packetBytes: var seq[byte], newTimestamp: uint32, newAckNr: uint16) =
+  ## Modifies timestamp and ack nr of already encoded packets. Those fiels should be
+  ## filled right before sending, so in case of re-sent packet we would like to update
+  ## them withound decoding and re-encoding packet once again
+
+  doAssert(len(packetBytes) >= minimalHeaderSize)
+  let timestampBytes = toBytesBE(newTimestamp)
+  let ackBytes = toBytesBE(newAckNr)
+  var timeStampStart = 4
+  for b in timestampBytes:
+    packetBytes[timeStampStart] = b
+    inc timeStampStart
+  var ackNrStart = 18
+  for b in ackBytes:
+    packetBytes[ackNrStart] = b
+    inc ackNrStart
+
 # connectionId - should be random not already used number
 # bufferSize - should be pre configured initial buffer size for socket
 # SYN packets are special, and should have the receive ID in the connid field,
