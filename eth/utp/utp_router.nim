@@ -1,3 +1,5 @@
+{.push raises: [Defect].}
+
 import
   std/[tables, options, sugar],
   chronos, bearssl, chronicles,
@@ -88,7 +90,7 @@ proc new*[A](
   acceptConnectionCb: AcceptConnectionCallback[A],
   allowConnectionCb: AllowConnectionCallback[A],
   socketConfig: SocketConfig = SocketConfig.init(),
-  rng = newRng()): UtpRouter[A] {.raises: [Defect, CatchableError].} =
+  rng = newRng()): UtpRouter[A] =
   doAssert(not(isNil(acceptConnectionCb)))
   UtpRouter[A](
     sockets: initTable[UtpSocketKey[A], UtpSocket[A]](),
@@ -102,7 +104,7 @@ proc new*[A](
   T: type UtpRouter[A], 
   acceptConnectionCb: AcceptConnectionCallback[A],
   socketConfig: SocketConfig = SocketConfig.init(),
-  rng = newRng()): UtpRouter[A] {.raises: [Defect, CatchableError].} =
+  rng = newRng()): UtpRouter[A] =
   UtpRouter[A].new(acceptConnectionCb, nil, socketConfig, rng)
 
 # There are different possiblites how connection was established, and we need to 

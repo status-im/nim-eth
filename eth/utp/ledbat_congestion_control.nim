@@ -1,3 +1,5 @@
+{.push raises: [Defect].}
+
 import
   chronos,
   ./utp_utils

@@ -1,9 +1,13 @@
+{.push raises: [Defect].}
+
 import
   std/[hashes],
   chronos, chronicles,
-  ../p2p/discoveryv5/[protocol, node],
+  ../p2p/discoveryv5/protocol,
   ./utp_router,
   ../keys
+
+export utp_router
 
 type UtpDiscv5Protocol* = ref object of TalkProtocol
   prot: protocol.Protocol
@@ -29,7 +33,7 @@ proc initSendCallback(t: protocol.Protocol, subProtocolName: seq[byte]): SendCal
       return fut
   )
 
-proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
+proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     srcId: NodeId, srcUdpAddress: Address): seq[byte] =
     let p = UtpDiscv5Protocol(protocol)
     let maybeSender = p.prot.getNode(srcId)
@@ -51,7 +55,7 @@ proc new*(
   acceptConnectionCb: AcceptConnectionCallback[Node], 
   socketConfig: SocketConfig = SocketConfig.init(),
   allowConnectionCb: AllowConnectionCallback[Node] = nil,
-  rng = newRng()): UtpDiscv5Protocol {.raises: [Defect, CatchableError].} =
+  rng = newRng()): UtpDiscv5Protocol =
   doAssert(not(isNil(acceptConnectionCb)))
 
   let router = UtpRouter[Node].new(
