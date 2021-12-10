@@ -1,3 +1,11 @@
+# Copyright (c) 2021 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.push raises: [Defect].}
+
 import
   std/[tables, options, sugar],
   chronos, bearssl, chronicles,
@@ -15,17 +23,17 @@ type
   # ``server`` - UtpProtocol object.
   # ``client`` - accepted client utp socket.
   AcceptConnectionCallback*[A] = proc(server: UtpRouter[A],
-                         client: UtpSocket[A]): Future[void] {.gcsafe, raises: [Defect].}
+    client: UtpSocket[A]): Future[void] {.gcsafe, raises: [Defect].}
 
-  # Callback to act as fire wall for incoming peers. Should return true if peer is allowed
-  # to connect.
-  AllowConnectionCallback*[A] =
-    proc(r: UtpRouter[A], remoteAddress: A, connectionId: uint16): bool {.gcsafe, raises: [Defect], noSideEffect.}
+  # Callback to act as firewall for incoming peers. Should return true if peer
+  # is allowed to connect.
+  AllowConnectionCallback*[A] = proc(r: UtpRouter[A], remoteAddress: A,
+    connectionId: uint16): bool {.gcsafe, raises: [Defect], noSideEffect.}
 
-  # Oject responsible for creating and maintaing table of of utp sockets.
-  # caller should use `processIncomingBytes` proc to feed it with incoming byte 
-  # packets, based this input, proper utp sockets will be created, closed, or will
-  # receive data 
+  # Object responsible for creating and maintaining table of utp sockets.
+  # Caller should use `processIncomingBytes` proc to feed it with incoming byte
+  # packets. Based on this input, proper utp sockets will be created, closed,
+  # or will receive data.
   UtpRouter*[A] = ref object
    sockets: Table[UtpSocketKey[A], UtpSocket[A]]
    socketConfig: SocketConfig
@@ -36,13 +44,13 @@ type
    rng*: ref BrHmacDrbgContext
 
 const
-  # Maximal number of tries to genearte unique socket while establishing outgoing
-  # connection.
+  # Maximal number of tries to generate unique socket while establishing
+  # outgoing connection.
   maxSocketGenerationTries = 1000
 
-# this should probably be in standard lib, it allows lazy composition of options i.e
-# one can write: O1 orElse O2 orElse O3, and chain will be evaluated to first option
-# which isSome()
+# This should probably be in standard lib, it allows lazy composition of options
+# i.e one can write: O1 orElse O2 orElse O3, and chain will be evaluated to
+# first option which isSome()
 template orElse[A](a: Option[A], b: Option[A]): Option[A] =
   if (a.isSome()):
     a
@@ -70,13 +78,13 @@ proc len*[A](s: UtpRouter[A]): int =
 proc registerUtpSocket[A](p: UtpRouter, s: UtpSocket[A]) =
   ## Register socket, overwriting already existing one
   p.sockets[s.socketKey] = s
-  # Install deregister handler, so when socket will get closed, in will be promptly
+  # Install deregister handler, so when socket gets closed, in will be promptly
   # removed from open sockets table
   s.registerCloseCallback(proc () = p.deRegisterUtpSocket(s))
 
 proc registerIfAbsent[A](p: UtpRouter, s: UtpSocket[A]): bool =
-  ## Registers socket only if its not already exsiting in the active sockets table
-  ## return true is socket has been succesfuly registered
+  ## Registers socket only if it's not already existing in the active sockets
+  ## table. Returns true if socket has been succesfuly registered.
   if p.sockets.hasKey(s.socketKey):
     false
   else:
@@ -84,11 +92,11 @@ proc registerIfAbsent[A](p: UtpRouter, s: UtpSocket[A]): bool =
     true
 
 proc new*[A](
-  T: type UtpRouter[A], 
-  acceptConnectionCb: AcceptConnectionCallback[A],
-  allowConnectionCb: AllowConnectionCallback[A],
-  socketConfig: SocketConfig = SocketConfig.init(),
-  rng = newRng()): UtpRouter[A] {.raises: [Defect, CatchableError].} =
+    T: type UtpRouter[A],
+    acceptConnectionCb: AcceptConnectionCallback[A],
+    allowConnectionCb: AllowConnectionCallback[A],
+    socketConfig: SocketConfig = SocketConfig.init(),
+    rng = newRng()): UtpRouter[A] =
   doAssert(not(isNil(acceptConnectionCb)))
   UtpRouter[A](
     sockets: initTable[UtpSocketKey[A], UtpSocket[A]](),
@@ -99,10 +107,10 @@ proc new*[A](
   )
 
 proc new*[A](
-  T: type UtpRouter[A], 
-  acceptConnectionCb: AcceptConnectionCallback[A],
-  socketConfig: SocketConfig = SocketConfig.init(),
-  rng = newRng()): UtpRouter[A] {.raises: [Defect, CatchableError].} =
+    T: type UtpRouter[A],
+    acceptConnectionCb: AcceptConnectionCallback[A],
+    socketConfig: SocketConfig = SocketConfig.init(),
+    rng = newRng()): UtpRouter[A] =
   UtpRouter[A].new(acceptConnectionCb, nil, socketConfig, rng)
 
 # There are different possiblites how connection was established, and we need to 

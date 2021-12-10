@@ -12,8 +12,7 @@ import
   testutils/unittests,
   ../../eth/p2p/discoveryv5/[enr, node, routing_table],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../../eth/utp/utp_router,
-  ../../eth/utp/utp_discov5_protocol,
+  ../../eth/utp/utp_discv5_protocol,
   ../../eth/keys
 
 proc localAddress*(port: int): Address =
