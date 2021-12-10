@@ -66,9 +66,6 @@ task test_trie, "Run trie tests":
 task test_db, "Run db tests":
   runTest("tests/db/all_tests")
 
-task test_ssz, "Run ssz tests":
-  runTest("tests/ssz/all_tests")
-
 task test_utp, "Run utp tests":
   runTest("tests/utp/all_utp_tests")
 
@@ -84,7 +81,6 @@ task test, "Run all tests":
   test_p2p_task()
   test_trie_task()
   test_db_task()
-  test_ssz_task()
   test_utp_task()
 
 task test_discv5_full, "Run discovery v5 and its dependencies tests":
