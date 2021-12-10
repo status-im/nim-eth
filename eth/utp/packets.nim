@@ -61,6 +61,15 @@ type
 # every system, and warnings when monotonic clock is not avaialable.
 proc getMonoTimestamp*(): TimeStampInfo = 
   let currentMoment = Moment.now()
+
+  # Casting this value from int64 to uin32, my lead to some sudden spikes in
+  # timestamp numeric values i.e it is possible that timestamp can suddenly change
+  # from 4294967296 to for example 10, this may lead to sudden spikes in
+  # calculated delays
+  # uTP implementation is resistant to those spikes are as it keeps history of
+  # few last delays on uses smallest one for calculating ledbat window.
+  # so any outlier huge value will be ignored
+  # 
   let timestamp = uint32((currentMoment - zeroMoment).microseconds())
   TimeStampInfo(moment: currentMoment, timestamp: timestamp)
 
