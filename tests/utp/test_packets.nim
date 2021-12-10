@@ -51,7 +51,7 @@ suite "Utp packets encoding/decoding":
     let synPacket = synPacket(5, 10, 20)
     let initialTimestamp = synPacket.header.timestamp
     let initialAckNr = synPacket.header.ackNr
-    let modifiedTimeStamp = initialTimestamp + 10
+    let modifiedTimeStamp = initialTimestamp + 120324
     let modifiedAckNr = initialAckNr + 20
     var encoded = encodePacket(synPacket)
     modifyTimeStampAndAckNr(encoded, modifiedTimeStamp, modifiedAckNr)
