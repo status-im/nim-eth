@@ -9,7 +9,7 @@
 import
   std/[monotimes],
   faststreams,
-  stew/[endians2, results, objects], bearssl,
+  stew/[endians2, results, objects, arrayops], bearssl,
   ../p2p/discoveryv5/random2
 
 export results
@@ -56,9 +56,11 @@ type
 # https://github.com/bittorrent/libutp/blob/master/utp_utils.cpp, to check all the
 # timing assumptions on different platforms
 proc getMonoTimeTimeStamp*(): uint32 = 
+  # TODO
   # this value is equivalent of:
   # uint32((Moment.now() - Moment.init(0, Microseconds)).microseconds())
   # on macOs
+  # so we we can use moment here and return (Moment, uint32) tuple from this function
   let time = getMonoTime()
   cast[uint32](time.ticks() div 1000)
 
@@ -135,6 +137,14 @@ proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
         bytes[20..^1]
 
     ok(Packet(header: header, payload: payload))
+
+proc modifyTimeStampAndAckNr*(packetBytes: var seq[byte], newTimestamp: uint32, newAckNr: uint16) =
+  ## Modifies timestamp and ack nr of already encoded packets. Those fields should be
+  ## filled right before sending, so when re-sending the packet we would like to update
+  ## it without decoding and re-encoding the packet once again
+  doAssert(len(packetBytes) >= minimalHeaderSize)
+  packetBytes[4..7] = toBytesBE(newTimestamp)
+  packetBytes[18..19] = toBytesBE(newAckNr)
 
 # connectionId - should be random not already used number
 # bufferSize - should be pre configured initial buffer size for socket

@@ -46,3 +46,19 @@ suite "Utp packets encoding/decoding":
       packet.header.wndSize == 1048576
       packet.header.seqNr == 16807
       packet.header.ackNr == 1
+
+  test "Modify timestamp of encoded packet":
+    let synPacket = synPacket(5, 10, 20)
+    let initialTimestamp = synPacket.header.timestamp
+    let initialAckNr = synPacket.header.ackNr
+    let modifiedTimeStamp = initialTimestamp + 120324
+    let modifiedAckNr = initialAckNr + 20
+    var encoded = encodePacket(synPacket)
+    modifyTimeStampAndAckNr(encoded, modifiedTimeStamp, modifiedAckNr)
+
+    let decoded = decodePacket(encoded)
+
+    check:
+      decoded.isOk()
+      decoded.get().header.timestamp == modifiedTimeStamp
+      decoded.get().header.ackNr == modifiedAckNr

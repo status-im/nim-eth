@@ -357,9 +357,16 @@ proc sendAck(socket: UtpSocket): Future[void] =
 
 # Should be called before sending packet
 proc setSend(s: UtpSocket, p: var OutgoingPacket): seq[byte] =
+  let currentMoment = Moment.now()
+  let currentTimeStamp = getMonoTimeTimeStamp()
+
   inc p.transmissions
   p.needResend = false
-  p.timeSent = Moment.now()
+  p.timeSent = currentMoment
+  # all bytearrays in outgoing buffer should be properly encoded utp packets
+  # so it is safe to directly modify fields
+  modifyTimeStampAndAckNr(p.packetBytes, currentTimeStamp, s.ackNr)
+
   return p.packetBytes
 
 proc flushPackets(socket: UtpSocket) {.async.} =

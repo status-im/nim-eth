@@ -12,4 +12,5 @@ import
   ./test_discv5_protocol,
   ./test_buffer,
   ./test_utp_socket,
-  ./test_utp_router
+  ./test_utp_router,
+  ./test_clock_drift_calculator
