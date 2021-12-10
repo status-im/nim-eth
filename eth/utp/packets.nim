@@ -9,13 +9,16 @@
 import
   std/[monotimes],
   faststreams,
+  chronos,
   stew/[endians2, results, objects, arrayops], bearssl,
   ../p2p/discoveryv5/random2
 
 export results
 
-const minimalHeaderSize = 20
-const protocolVersion = 1
+const 
+  minimalHeaderSize = 20
+  protocolVersion = 1
+  zeroMoment = Moment.init(0, Nanosecond)
 
 type 
   PacketType* = enum
@@ -47,22 +50,19 @@ type
     header*: PacketHeaderV1
     payload*: seq[uint8]
 
+  TimeStampInfo* = object
+    moment*: Moment
+    timestamp*: uint32
+
 # Important timing assumptions for utp protocol here:
 # 1. Microsecond precisions
 # 2. Monotonicity
 # Reference lib have a lot of checks to assume that this is monotonic on
 # every system, and warnings when monotonic clock is not avaialable.
-# For now we can use basic monotime, later it would be good to analyze:
-# https://github.com/bittorrent/libutp/blob/master/utp_utils.cpp, to check all the
-# timing assumptions on different platforms
-proc getMonoTimeTimeStamp*(): uint32 = 
-  # TODO
-  # this value is equivalent of:
-  # uint32((Moment.now() - Moment.init(0, Microseconds)).microseconds())
-  # on macOs
-  # so we we can use moment here and return (Moment, uint32) tuple from this function
-  let time = getMonoTime()
-  cast[uint32](time.ticks() div 1000)
+proc getMonoTimestamp*(): TimeStampInfo = 
+  let currentMoment = Moment.now()
+  let timestamp = uint32((currentMoment - zeroMoment).microseconds())
+  TimeStampInfo(moment: currentMoment, timestamp: timestamp)
 
 # Simple generator, not useful for cryptography
 proc randUint16*(rng: var BrHmacDrbgContext): uint16 =
@@ -157,7 +157,7 @@ proc synPacket*(seqNr: uint16, rcvConnectionId: uint16, bufferSize: uint32): Pac
     # TODO for we do not handle extensions
     extension: 0'u8,
     connectionId: rcvConnectionId,
-    timestamp: getMonoTimeTimeStamp(),
+    timestamp: getMonoTimestamp().timestamp,
     timestampDiff: 0'u32,
     wndSize: bufferSize,
     seqNr: seqNr,
@@ -174,7 +174,7 @@ proc ackPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16, bufferSiz
     # TODO Handle selective acks
     extension: 0'u8,
     connectionId: sndConnectionId,
-    timestamp: getMonoTimeTimeStamp(),
+    timestamp: getMonoTimestamp().timestamp,
     timestampDiff: timestampDiff,
     wndSize: bufferSize,
     seqNr: seqNr,
@@ -197,7 +197,7 @@ proc dataPacket*(
     # data packets always have extension field set to 0
     extension: 0'u8,
     connectionId: sndConnectionId,
-    timestamp: getMonoTimeTimeStamp(),
+    timestamp: getMonoTimestamp().timestamp,
     timestampDiff: timestampDiff,
     wndSize: bufferSize,
     seqNr: seqNr,
@@ -213,7 +213,7 @@ proc resetPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16): Packet
     # data packets always have extension field set to 0
     extension: 0'u8,
     connectionId: sndConnectionId,
-    timestamp: getMonoTimeTimeStamp(),
+    timestamp: getMonoTimestamp().timestamp,
     # reset packet informs remote about lack of state for given connection, therefore
     # we do not inform remote about its delay.
     timestampDiff: 0,
@@ -237,7 +237,7 @@ proc finPacket*(
     # fin packets always have extension field set to 0
     extension: 0'u8,
     connectionId: sndConnectionId,
-    timestamp: getMonoTimeTimeStamp(),
+    timestamp: getMonoTimestamp().timestamp,
     timestampDiff: timestampDiff,
     wndSize: bufferSize,
     seqNr: seqNr,
