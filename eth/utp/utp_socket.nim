@@ -297,7 +297,7 @@ proc init(
   transmissions: uint16,
   needResend: bool,
   payloadLength: uint32,
-  timeSent: Moment = Moment.now()): T =
+  timeSent: Moment = getMonoTimestamp().moment): T =
   OutgoingPacket(
     packetBytes: packetBytes,
     transmissions: transmissions,
@@ -357,15 +357,14 @@ proc sendAck(socket: UtpSocket): Future[void] =
 
 # Should be called before sending packet
 proc setSend(s: UtpSocket, p: var OutgoingPacket): seq[byte] =
-  let currentMoment = Moment.now()
-  let currentTimeStamp = getMonoTimeTimeStamp()
+  let timestampInfo = getMonoTimestamp()
 
   inc p.transmissions
   p.needResend = false
-  p.timeSent = currentMoment
+  p.timeSent = timestampInfo.moment
   # all bytearrays in outgoing buffer should be properly encoded utp packets
   # so it is safe to directly modify fields
-  modifyTimeStampAndAckNr(p.packetBytes, currentTimeStamp, s.ackNr)
+  modifyTimeStampAndAckNr(p.packetBytes, timestampInfo.timestamp, s.ackNr)
 
   return p.packetBytes
 
@@ -410,7 +409,7 @@ proc shouldDisconnectFromFailedRemote(socket: UtpSocket): bool =
   (socket.retransmitCount >= socket.socketConfig.dataResendsBeforeFailure)
 
 proc checkTimeouts(socket: UtpSocket) {.async.} =
-  let currentTime = Moment.now()
+  let currentTime = getMonoTimestamp().moment
   # flush all packets which needs to be re-send
   if socket.state != Destroy:
     await socket.flushPackets()
@@ -508,7 +507,7 @@ proc getPacketSize*(socket: UtpSocket): int =
 
 proc resetSendTimeout(socket: UtpSocket) =
   socket.retransmitTimeout = socket.rto
-  socket.rtoTimeout = Moment.now() + socket.retransmitTimeout
+  socket.rtoTimeout = getMonoTimestamp().moment + socket.retransmitTimeout
 
 proc handleDataWrite(socket: UtpSocket, data: seq[byte], writeFut: Future[WriteResult]): Future[void] {.async.} =
       if writeFut.finished():
@@ -620,7 +619,7 @@ proc new[A](
   initialAckNr: uint16,
   initialTimeout: Duration
 ): T =
-  let currentTime = Moment.now()
+  let currentTime = getMonoTimestamp().moment
   T(
     remoteAddress: to,
     state: state,
@@ -793,7 +792,7 @@ proc updateTimeouts(socket: UtpSocket, timeSent: Moment, currentTime: Moment) =
   # but usually spec lags after implementation so milliseconds(1000) is used
   socket.rto = max(socket.rtt + (socket.rttVar * 4), milliseconds(1000))
 
-proc ackPacket(socket: UtpSocket, seqNr: uint16): AckResult =
+proc ackPacket(socket: UtpSocket, seqNr: uint16, currentTime: Moment): AckResult =
   let packetOpt = socket.outBuffer.get(seqNr)
   if packetOpt.isSome():
     let packet = packetOpt.get()
@@ -805,8 +804,6 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16): AckResult =
       # TODO analyze if this case can happen with our impl
       return PacketNotSentYet
     
-    let currentTime = Moment.now()
-
     socket.outBuffer.delete(seqNr)
 
     # from spec: The rtt and rtt_var is only updated for packets that were sent only once. 
@@ -830,11 +827,11 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16): AckResult =
     # the packet has already been acked (or not sent)
     PacketAlreadyAcked
 
-proc ackPackets(socket: UtpSocket, nrPacketsToAck: uint16) =
+proc ackPackets(socket: UtpSocket, nrPacketsToAck: uint16, currentTime: Moment) =
   ## Ack packets in outgoing buffer based on ack number in the received packet
   var i = 0
   while i < int(nrPacketsToack):
-    let result = socket.ackPacket(socket.seqNr - socket.curWindowPackets)
+    let result = socket.ackPacket(socket.seqNr - socket.curWindowPackets, currentTime)
     case result
     of PacketAcked:
       dec socket.curWindowPackets
@@ -890,7 +887,7 @@ proc isAckNrInvalid(socket: UtpSocket, packet: Packet): bool =
 # to scheduler which means there could be potentialy several processPacket procs
 # running
 proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
-  let receiptTime = Moment.now()
+  let timestampInfo = getMonoTimestamp()
 
   if socket.isAckNrInvalid(p):
     notice "Received packet with invalid ack nr"
@@ -923,10 +920,8 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     notice "Received packet is totally of the mark"
     return
 
-  var (ackedBytes, minRtt) = socket.calculateAckedbytes(acks, receiptTime)
+  var (ackedBytes, minRtt) = socket.calculateAckedbytes(acks, timestampInfo.moment)
   # TODO caluclate bytes acked by selective acks here (if thats the case)
-
-  let receiptTimestamp = getMonoTimeTimeStamp()
 
   let sentTimeRemote = p.header.timestamp
   
@@ -939,14 +934,14 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     if (sentTimeRemote == 0):
       0'u32
     else:
-      receiptTimestamp - sentTimeRemote
+      timestampInfo.timestamp - sentTimeRemote
 
   socket.replayMicro = remoteDelay
 
   let prevRemoteDelayBase = socket.remoteHistogram.delayBase
 
   if (remoteDelay != 0):
-    socket.remoteHistogram.addSample(remoteDelay, receiptTime)
+    socket.remoteHistogram.addSample(remoteDelay, timestampInfo.moment)
 
   # remote new delay base is less than previous
   # shift our delay base in other direction to take clock skew into account
@@ -959,8 +954,8 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   let actualDelay = p.header.timestampDiff
 
   if actualDelay != 0:
-    socket.ourHistogram.addSample(actualDelay, receiptTime)
-    socket.driftCalculator.addSample(actualDelay, receiptTime)
+    socket.ourHistogram.addSample(actualDelay, timestampInfo.moment)
+    socket.driftCalculator.addSample(actualDelay, timestampInfo.moment)
 
   # adjust base delay if delay estimates exceeds rtt
   if (socket.ourHistogram.getValue() > minRtt):
@@ -989,7 +984,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   if (socket.sendBufferTracker.maxRemoteWindow == 0):
     # when zeroWindowTimer will be hit and maxRemoteWindow still will be equal to 0
     # then it will be reset to minimal value
-    socket.zeroWindowTimer = Moment.now() + socket.socketConfig.remoteWindowResetTimeout
+    socket.zeroWindowTimer = timestampInfo.moment + socket.socketConfig.remoteWindowResetTimeout
    
   # socket.curWindowPackets == acks means that this packet acked all remaining packets
   # including the sent fin packets
@@ -1002,7 +997,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     # but in theory remote could stil write some data on this socket (or even its own fin)
     socket.destroy()
 
-  socket.ackPackets(acks)
+  socket.ackPackets(acks, timestampInfo.moment)
   
   case p.header.pType
     of ST_DATA, ST_FIN:
