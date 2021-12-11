@@ -138,7 +138,7 @@ proc deriveKeys*(n1, n2: NodeID, priv: PrivateKey, pub: PublicKey,
     toOpenArray(res, 0, sizeof(secrets) - 1))
   secrets
 
-proc encryptGCM*(key, nonce, pt, authData: openarray[byte]): seq[byte] =
+proc encryptGCM*(key: AesKey, nonce, pt, authData: openarray[byte]): seq[byte] =
   var ectx: GCM[aes128]
   ectx.init(key, nonce, authData)
   result = newSeq[byte](pt.len + gcmTagSize)
