@@ -250,7 +250,7 @@ proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async.}
 proc bondDiscard(k: KademliaProtocol, n: Node) {.async.}
 
 proc updateRoutingTable(k: KademliaProtocol, n: Node)
-    {.raises: [ValueError, Defect].} =
+    {.raises: [ValueError, Defect], gcsafe.} =
   ## Update the routing table entry for the given node.
   let evictionCandidate = k.routing.addNode(n)
   if not evictionCandidate.isNil:

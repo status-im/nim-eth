@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  std/[os, unittest],
+  std/os,
+  unittest2,
   chronicles,
   ../../eth/db/[kvstore, kvstore_rocksdb],
   ./test_kvstore

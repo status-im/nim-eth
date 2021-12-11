@@ -8,7 +8,7 @@
 
 import
   std/sugar,
-  unittest,
+  unittest2,
   ../../eth/utp/growable_buffer
 
 
@@ -21,7 +21,7 @@ suite "Utp ring buffer":
     check:
       buff.len() == 4
       buff.get(0).isNone()
-  
+
   test "Adding elements to buffer":
     var buff = GrowableCircularBuffer[int].init(size = 4)
     buff.put(11, 11)
@@ -64,7 +64,7 @@ suite "Utp ring buffer":
       not buff.exists(textIdx, x => x.foo == text)
 
     buff[textIdx].foo = text
-    
+
     check:
       buff.exists(textIdx, x => x.foo == text)
 
@@ -82,7 +82,7 @@ suite "Utp ring buffer":
 
   test "Adding elements to buffer while ensuring proper size":
     var buff = GrowableCircularBuffer[int].init(size = 4)
-    
+
     buff.put(11, 11)
     buff.put(12, 12)
     buff.put(13, 13)
@@ -103,7 +103,7 @@ suite "Utp ring buffer":
 
   test "Adding out of order elements to buffer while ensuring proper size":
     var buff = GrowableCircularBuffer[int].init(size = 4)
-    
+
     buff.put(11, 11)
     buff.put(12, 12)
     buff.put(13, 13)

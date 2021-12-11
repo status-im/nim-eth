@@ -4,7 +4,7 @@ description   = "Ethereum Common library"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 1.2.0 & <= 1.2.14",
+requires "nim >= 1.2.0",
          "nimcrypto",
          "stint",
          "secp256k1",
@@ -16,21 +16,25 @@ requires "nim >= 1.2.0 & <= 1.2.14",
          "metrics",
          "sqlite3_abi",
          "confutils",
-         "testutils"
+         "testutils",
+         "unittest2"
+
+var commonParams = " --verbosity:0 --hints:off --skipUserCfg:on --warning[ObservableStores]:off " &
+      getEnv("NIMFLAGS") & " "
 
 proc runTest(path: string, release: bool = true, chronosStrict = true) =
-  echo "\nRunning: ", path
+  echo "\nBuilding and running: ", path
   let releaseMode = if release: "-d:release" else: ""
   let chronosMode =
     if chronosStrict: "-d:chronosStrictException" else: ""
   exec "nim c -r " & releaseMode & " " & chronosMode &
-    " -d:chronicles_log_level=error --verbosity:0 --hints:off " & path
+    " -d:chronicles_log_level=ERROR " & commonParams & path
   rmFile path
 
 proc buildBinary(path: string) =
   echo "\nBuilding: ", path
   exec "nim c -d:release -d:chronosStrictException " &
-    "-d:chronicles_log_level=trace --verbosity:0 --hints:off --threads:on " &
+    "-d:chronicles_log_level=TRACE --threads:on " & commonParams &
     "--warning[CaseTransition]:off --warning[ObservableStores]:off " &
     path
 

@@ -83,27 +83,27 @@ template close*(dbParam: KvStoreRef): KvResult[void] =
   let db = dbParam
   db.closeProc(db.obj)
 
-proc putImpl[T](db: RootRef, key, val: openArray[byte]): KvResult[void] =
+proc putImpl[T](db: RootRef, key, val: openArray[byte]): KvResult[void] {.gcsafe.} =
   mixin put
   put(T(db), key, val)
 
-proc getImpl[T](db: RootRef, key: openArray[byte], onData: DataProc): KvResult[bool] =
+proc getImpl[T](db: RootRef, key: openArray[byte], onData: DataProc): KvResult[bool] {.gcsafe.} =
   mixin get
   get(T(db), key, onData)
 
-proc findImpl[T](db: RootRef, key: openArray[byte], onFind: KeyValueProc): KvResult[int] =
+proc findImpl[T](db: RootRef, key: openArray[byte], onFind: KeyValueProc): KvResult[int] {.gcsafe.} =
   mixin get
   find(T(db), key, onFind)
 
-proc delImpl[T](db: RootRef, key: openArray[byte]): KvResult[void] =
+proc delImpl[T](db: RootRef, key: openArray[byte]): KvResult[void] {.gcsafe.} =
   mixin del
   del(T(db), key)
 
-proc containsImpl[T](db: RootRef, key: openArray[byte]): KvResult[bool] =
+proc containsImpl[T](db: RootRef, key: openArray[byte]): KvResult[bool] {.gcsafe.} =
   mixin contains
   contains(T(db), key)
 
-proc closeImpl[T](db: RootRef): KvResult[void] =
+proc closeImpl[T](db: RootRef): KvResult[void] {.gcsafe.} =
   mixin close
   close(T(db))
 

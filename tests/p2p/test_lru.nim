@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  std/[unittest, options],
+  std/options,
+  unittest2,
   ../../eth/p2p/discoveryv5/lru
 
 suite "LRUCache":

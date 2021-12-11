@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  std/[unittest, strutils],
+  std/strutils,
+  unittest2,
   nimcrypto/[keccak, hash], stew/byteutils,
   ../../eth/trie/[binaries, trie_bitseq],
   ./testutils

@@ -8,7 +8,8 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  std/[options, unittest],
+  std/options,
+  unittest2,
   chronos,
   ../../eth/[rlp, keys, p2p],
   ../../eth/p2p/mock_peers, ../../eth/p2p/rlpx_protocols/[whisper_protocol]

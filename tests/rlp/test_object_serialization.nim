@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  std/[unittest, times],
+  std/times,
+  unittest2,
   stew/byteutils,
   ../../eth/rlp
 

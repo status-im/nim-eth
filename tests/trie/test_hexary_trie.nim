@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  std/[unittest, sequtils, os, algorithm, random],
+  std/[sequtils, os, algorithm, random],
+  unittest2,
   stew/byteutils, nimcrypto/utils,
   ../../eth/trie/[hexary, db, trie_defs],
   ./testutils

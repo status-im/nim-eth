@@ -10,7 +10,7 @@
 {.used.}
 
 import
-  unittest,
+  unittest2,
   ../../eth/keyfile/uuid
 
 suite "Cross-platform UUID test suite":

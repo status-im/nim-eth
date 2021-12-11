@@ -8,10 +8,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  unittest2,
   ../../eth/keys, #../src/private/conversion_bytes,
   ./config
-
-import  unittest
 
 suite "Test key and signature data structure":
 

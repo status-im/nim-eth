@@ -10,7 +10,7 @@
 {.used.}
 
 import
-  std/unittest,
+  unittest2,
   nimcrypto/[utils, keccak],
   ../../eth/keys, ../../eth/p2p/auth
 

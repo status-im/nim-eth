@@ -10,7 +10,7 @@
 {.used.}
 
 import
-  std/unittest,
+  unittest2,
   nimcrypto/hash, nimcrypto/keccak, nimcrypto/utils, bearssl, stew/byteutils,
   ../../eth/keys
 

@@ -1,5 +1,5 @@
 import
-  std/unittest,
+  unittest2,
   stint,
   ../eth/bloom
 

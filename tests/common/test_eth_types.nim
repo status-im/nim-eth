@@ -1,5 +1,5 @@
 import
-  unittest,
+  unittest2,
   nimcrypto/hash,
   serialization/testing/generic_suite,
   ../../eth/common/[eth_types, eth_types_json_serialization]

@@ -9,8 +9,9 @@ import
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./discv5_test_helper
 
-procSuite "Discovery v5 Tests":
-  let rng = newRng()
+suite "Discovery v5 Tests":
+  setup:
+    let rng = newRng()
 
   asyncTest "GetNode":
     # TODO: This could be tested in just a routing table only context

@@ -7,14 +7,14 @@
 {.used.}
 
 import
-  unittest,
+  unittest2,
   ../../eth/utp/packets,
   ../../eth/keys
 
 suite "Utp packets encoding/decoding":
 
   let rng = newRng()
-  
+
   test "Encode/decode syn packet":
     let synPacket = synPacket(5, 10, 20)
     let encoded = encodePacket(synPacket)

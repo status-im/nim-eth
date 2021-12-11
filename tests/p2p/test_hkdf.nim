@@ -1,7 +1,7 @@
 {.used.}
 
 import
-  std/unittest,
+  unittest2,
   nimcrypto, stew/byteutils,
   ../../eth/p2p/discoveryv5/hkdf
 

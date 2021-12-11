@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  std/[unittest, options, sequtils],
+  std/[options, sequtils],
+  unittest2,
   nimcrypto/utils, stew/shims/net,
   ../../eth/p2p/discoveryv5/enr, ../../eth/[keys, rlp]
 

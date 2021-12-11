@@ -8,7 +8,7 @@
 
 import
   chronos,
-  unittest,
+  unittest2,
   ../../eth/utp/clock_drift_calculator
 
 suite "Clock drift calculator":

@@ -10,7 +10,8 @@
 {.used.}
 
 import
-  std/[unittest, net, options],
+  std/[net, options],
+  unittest2,
   ../../eth/p2p/enode
 
 suite "ENode":

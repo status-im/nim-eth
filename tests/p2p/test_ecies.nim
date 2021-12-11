@@ -10,7 +10,7 @@
 {.used.}
 
 import
-  std/unittest,
+  unittest2,
   nimcrypto/[utils, sha2, hmac, rijndael],
   ../../eth/keys, ../../eth/p2p/ecies
 
