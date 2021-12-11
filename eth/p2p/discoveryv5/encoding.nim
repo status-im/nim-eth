@@ -441,12 +441,16 @@ proc decodeMessagePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
     messageOpt: some(message), requestNonce: nonce, srcId: srcId))
 
 proc decodeWhoareyouPacket(c: var Codec, nonce: AESGCMNonce,
-    iv, header: openArray[byte]): DecodeResult[Packet] =
+    iv, header, ct: openArray[byte]): DecodeResult[Packet] =
   # TODO improve this
   let authdata = header[staticHeaderSize..header.high()]
   # We now know the exact size that the authdata should be
   if authdata.len != idNonceSize + sizeof(uint64):
     return err("Invalid header length for whoareyou packet")
+
+  # The `message` part of WHOAREYOU packets is always empty.
+  if ct.len != 0:
+    return err("Invalid message length for whoareyou packet")
 
   var idNonce: IdNonce
   copyMem(addr idNonce[0], unsafeAddr authdata[0], idNonceSize)
@@ -468,7 +472,7 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   # a valid message and thus we could increase here to the size of the smallest
   # message possible.
   if ct.len < gcmTagSize:
-    return err("Invalid message length for ordinary message packet")
+    return err("Invalid message length for handshake message packet")
 
   let
     authdata = header[staticHeaderSize..header.high()]
@@ -580,9 +584,9 @@ proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
       input.toOpenArray(ivSize + header.len, input.high))
 
   of Whoareyou:
-    # Header size got checked in decode header
     return decodeWhoareyouPacket(c, staticHeader.nonce,
-      input.toOpenArray(0, ivSize - 1), header)
+      input.toOpenArray(0, ivSize - 1), header,
+      input.toOpenArray(ivSize + header.len, input.high))
 
   of HandshakeMessage:
     return decodeHandshakePacket(c, fromAddr, staticHeader.nonce,

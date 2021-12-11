@@ -288,7 +288,8 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
     codecB.sessions.store(nodeA.id, nodeA.address.get(),
       hexToByteArray[aesKeySize](readKey), hexToByteArray[aesKeySize](dummyKey))
 
-    let decoded = codecB.decodePacket(nodeA.address.get(), hexToSeqByte(encodedPacket))
+    let decoded = codecB.decodePacket(nodeA.address.get(),
+      hexToSeqByte(encodedPacket))
     check:
       decoded.isOK()
       decoded.get().messageOpt.isSome()
@@ -317,6 +318,9 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
       decoded.get().whoareyou.idNonce == hexToByteArray[idNonceSize](whoareyouIdNonce)
       decoded.get().whoareyou.recordSeq == whoareyouEnrSeq
       decoded.get().whoareyou.challengeData == hexToSeqByte(whoareyouChallengeData)
+
+      codecB.decodePacket(nodeA.address.get(),
+        hexToSeqByte(encodedPacket & "00")).isErr()
 
   test "Ping Handshake Message Packet":
     const
@@ -360,6 +364,9 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
       decoded.get().message.kind == ping
       decoded.get().message.ping.enrSeq == pingEnrSeq
       decoded.get().node.isNone()
+
+      codecB.decodePacket(nodeA.address.get(),
+        hexToSeqByte(encodedPacket & "00")).isErr()
 
   test "Ping Handshake Message Packet with ENR":
     const
@@ -407,6 +414,9 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
       decoded.get().message.kind == ping
       decoded.get().message.ping.enrSeq == pingEnrSeq
       decoded.get().node.isSome()
+
+      codecB.decodePacket(nodeA.address.get(),
+        hexToSeqByte(encodedPacket & "00")).isErr()
 
 suite "Discovery v5.1 Additional Encode/Decode":
   test "Encryption/Decryption":
