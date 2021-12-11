@@ -357,7 +357,7 @@ proc bufValueAfterRequest*(network: LesNetwork, peer: LesPeer,
   return peer.remoteFlowState.bufValue
 
 when defined(testing):
-  import unittest, random, ../../rlpx
+  import unittest2, random, ../../rlpx
 
   proc isMax(s: FlowControlState): bool =
     s.bufValue == s.bufLimit
