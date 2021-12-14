@@ -187,15 +187,16 @@ proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
       if (nextExtension != 0 or extLength != 4):
         return err("Bad format of selective ack extension")
       
+
+      let extension = SelectiveAckExtension(
+        acks: [bytes[22], bytes[23], bytes[24], bytes[25]]
+      )    
+
       let payload =
         if (receivedBytesLength == minimalHeaderSizeWithSelectiveAck):
           @[]
         else:
-          bytes[25..^1]
-
-      let extension = SelectiveAckExtension(
-        acks: [bytes[22], bytes[23], bytes[24], bytes[25]]
-      )
+          bytes[26..^1]
 
       return ok(Packet(header: header, eack: some(extension), payload: payload))
 
