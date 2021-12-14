@@ -189,7 +189,6 @@ jobs:
         if: >
           runner.os == 'Windows'
         run: |
-          echo '${{ github.workspace }}'"/external/mingw-${{ matrix.target.cpu }}/bin" >> $GITHUB_PATH
           echo '${{ github.workspace }}'"/external/dlls-${{ matrix.target.cpu }}" >> $GITHUB_PATH
 
       - name: Derive environment variables
