@@ -73,7 +73,7 @@ template eciesIvPos(): int =
 template eciesTagPos(size: int): int =
   1 + sizeof(PublicKey) + aes128.sizeBlock + size
 
-proc kdf*(data: openarray[byte]): array[KeyLength, byte] {.noInit.} =
+proc kdf*(data: openArray[byte]): array[KeyLength, byte] {.noinit.} =
   ## NIST SP 800-56a Concatenation Key Derivation Function (see section 5.8.1)
   var ctx: sha256
   var counter: uint32
@@ -93,9 +93,9 @@ proc kdf*(data: openarray[byte]): array[KeyLength, byte] {.noInit.} =
   ctx.clear() # clean ctx
   copyMem(addr result[0], addr storage[0], KeyLength)
 
-proc eciesEncrypt*(rng: var BrHmacDrbgContext, input: openarray[byte],
-                   output: var openarray[byte], pubkey: PublicKey,
-                   sharedmac: openarray[byte] = emptyMac): EciesResult[void] =
+proc eciesEncrypt*(rng: var BrHmacDrbgContext, input: openArray[byte],
+                   output: var openArray[byte], pubkey: PublicKey,
+                   sharedmac: openArray[byte] = emptyMac): EciesResult[void] =
   ## Encrypt data with ECIES method using given public key `pubkey`.
   ## ``input``     - input data
   ## ``output``    - output data
@@ -156,10 +156,10 @@ proc eciesEncrypt*(rng: var BrHmacDrbgContext, input: openarray[byte],
 
   ok()
 
-proc eciesDecrypt*(input: openarray[byte],
-                   output: var openarray[byte],
+proc eciesDecrypt*(input: openArray[byte],
+                   output: var openArray[byte],
                    seckey: PrivateKey,
-                   sharedmac: openarray[byte] = emptyMac): EciesResult[void] =
+                   sharedmac: openArray[byte] = emptyMac): EciesResult[void] =
   ## Decrypt data with ECIES method using given private key `seckey`.
   ## ``input``     - input data
   ## ``output``    - output data

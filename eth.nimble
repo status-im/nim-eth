@@ -19,8 +19,9 @@ requires "nim >= 1.2.0",
          "testutils",
          "unittest2"
 
-var commonParams = " --verbosity:0 --hints:off --skipUserCfg:on --warning[ObservableStores]:off " &
-      getEnv("NIMFLAGS") & " "
+let commonParams = " --verbosity:0 --hints:off --skipUserCfg:on " &
+  "--warning[ObservableStores]:off --styleCheck:usages --styleCheck:hint " &
+  getEnv("NIMFLAGS") & " "
 
 proc runTest(path: string, release: bool = true, chronosStrict = true) =
   echo "\nBuilding and running: ", path

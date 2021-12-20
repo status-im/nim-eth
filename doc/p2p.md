@@ -67,7 +67,7 @@ the network. To start the connection process, call `node.connectToNetwork`:
 
 ``` nim
 proc connectToNetwork*(node: var EthereumNode,
-                       bootstrapNodes: openarray[ENode],
+                       bootstrapNodes: openArray[ENode],
                        startListening = true,
                        enableDiscovery = true)
 ```
@@ -106,7 +106,7 @@ p2pProtocol DevP2P(version = 0, rlpxName = "p2p"):
   proc hello(peer: Peer,
              version: uint,
              clientId: string,
-             capabilities: openarray[Capability],
+             capabilities: openArray[Capability],
              listenPort: uint,
              nodeId: P2PNodeId) =
     peer.id = nodeId
@@ -195,7 +195,7 @@ There are few things to note in the above example:
 
 2. Each message defined in the protocol received a corresponding type name,
    matching the message name (e.g. `p2p.hello`). This type will have fields
-   matching the parameter names of the message. If the messages has `openarray`
+   matching the parameter names of the message. If the messages has `openArray`
    params, these will be remapped to `seq` types.
 
 If the designated messages also has an attached handler, the future returned
@@ -219,8 +219,8 @@ p2pProtocol les(version = 2):
   ...
 
   requestResponse:
-    proc getProofs(p: Peer, proofs: openarray[ProofRequest])
-    proc proofs(p: Peer, BV: uint, proofs: openarray[Blob])
+    proc getProofs(p: Peer, proofs: openArray[ProofRequest])
+    proc proofs(p: Peer, BV: uint, proofs: openArray[Blob])
 
   ...
 ```

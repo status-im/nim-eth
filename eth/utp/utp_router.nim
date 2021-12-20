@@ -184,7 +184,7 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       let rstPacket = resetPacket(randUint16(r.rng[]), p.header.connectionId, p.header.seqNr)
       await r.sendCb(sender, encodePacket(rstPacket))
 
-proc processIncomingBytes*[A](r: UtpRouter[A], bytes: seq[byte], sender: A) {.async.} = 
+proc processIncomingBytes*[A](r: UtpRouter[A], bytes: seq[byte], sender: A) {.async.} =
   if (not r.closed):
     let dec = decodePacket(bytes)
     if (dec.isOk()):
@@ -202,11 +202,11 @@ proc generateNewUniqueSocket[A](r: UtpRouter[A], address: A): Option[UtpSocket[A
 
     if r.registerIfAbsent(socket):
       return some(socket)
-    
+
     inc tryCount
 
   return none[UtpSocket[A]]()
-  
+
 proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.}=
     let startFut = s.startOutgoingSocket()
 
@@ -243,7 +243,7 @@ proc connectTo*[A](r: UtpRouter[A], address: A, connectionId: uint16): Future[Co
   let socket = newOutgoingSocket[A](address, r.sendCb, r.socketConfig, connectionId, r.rng[])
 
   if (r.registerIfAbsent(socket)):
-    return await socket.connect() 
+    return await socket.connect()
   else:
     return err(OutgoingConnectionError(kind: SocketAlreadyExists))
 

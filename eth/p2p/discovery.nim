@@ -141,7 +141,7 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
   template flush() =
     block:
       let payload = rlp.encode((nodes, expiration()))
-      let msg = pack(cmdNeighbours, payload, d.privkey)
+      let msg = pack(cmdNeighbours, payload, d.privKey)
       trace "Neighbours to", node, nodes
       d.send(node, msg)
       nodes.setLen(0)
@@ -155,7 +155,7 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
   if nodes.len != 0: flush()
 
 proc newDiscoveryProtocol*(privKey: PrivateKey, address: Address,
-                           bootstrapNodes: openarray[ENode], rng = newRng()
+                           bootstrapNodes: openArray[ENode], rng = newRng()
                            ): DiscoveryProtocol =
   result.new()
   result.privKey = privKey
@@ -214,7 +214,7 @@ proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
   let rng = rlp.listElem(0).toBytes
   # Check for pubkey len
   if rng.len == 64:
-    let nodeId = readUIntBE[256](rng[32 .. ^1])
+    let nodeId = readUintBE[256](rng[32 .. ^1])
     d.kademlia.recvFindNode(node, nodeId)
   else:
     trace "Invalid target public key received"

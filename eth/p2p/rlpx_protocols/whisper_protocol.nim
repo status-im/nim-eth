@@ -163,7 +163,7 @@ p2pProtocol Whisper(version = whisperVersion,
                 bloom: seq[byte],
                 isLightNode: bool)
 
-  proc messages(peer: Peer, envelopes: openarray[Envelope]) =
+  proc messages(peer: Peer, envelopes: openArray[Envelope]) =
     if not peer.state.initialized:
       warn "Handshake not completed yet, discarding messages"
       return

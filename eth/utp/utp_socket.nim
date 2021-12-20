@@ -35,7 +35,7 @@ type
   UtpSocketKey*[A] = object
     remoteAddress*: A
     rcvId*: uint16
-  
+
   OutgoingPacket = object
     packetBytes: seq[byte]
     transmissions: uint16
@@ -50,7 +50,7 @@ type
   SendCallback*[A] = proc (to: A, data: seq[byte]): Future[void] {.gcsafe, raises: [Defect]}
 
   SocketConfig* = object
-    # This is configurable (in contrast to reference impl), as with standard 2 syn resends 
+    # This is configurable (in contrast to reference impl), as with standard 2 syn resends
     # default timeout set to 3seconds and doubling of timeout with each re-send, it
     # means that initial connection would timeout after 21s, which seems rather long
     initialSynTimeout*: Duration
@@ -77,7 +77,7 @@ type
     remoteWindowResetTimeout*: Duration
 
   WriteErrorType* = enum
-    SocketNotWriteable, 
+    SocketNotWriteable,
     FinSent
 
   WriteError* = object
@@ -114,11 +114,11 @@ type
     seqNr: uint16
     # All seq number up to this havve been correctly acked by us
     ackNr: uint16
-    
+
     # Should be completed after succesful connection to remote host or after timeout
     # for the first syn packet
     connectionFuture: Future[void]
-    
+
     # the number of packets in the send queue. Packets that haven't
     # yet been sent count as well as packets marked as needing resend
     # the oldest un-acked packet in the send queue is seq_nr - cur_window_packets
@@ -135,7 +135,7 @@ type
 
     # current retransmit Timeout used to calculate rtoTimeout
     retransmitTimeout: Duration
-    
+
     # calculated round trip time during communication with remote peer
     rtt: Duration
     # calculated round trip time variance
@@ -147,7 +147,7 @@ type
     # RTO timeout will happen when currenTime > rtoTimeout
     rtoTimeout: Moment
 
-    # rcvBuffer 
+    # rcvBuffer
     buffer: AsyncBuffer
 
     # loop called every 500ms to check for on going timeout status
@@ -223,7 +223,7 @@ type
 
   OutgoingConnectionErrorType* = enum
     SocketAlreadyExists, ConnectionTimedOut, ErrorWhileSendingSyn
-  
+
   OutgoingConnectionError* = object
     case kind*: OutgoingConnectionErrorType
     of ErrorWhileSendingSyn:
@@ -243,7 +243,7 @@ const
   # How often each socket check its different on going timers
   checkTimeoutsLoopInterval = milliseconds(500)
 
-  # Defualt initial timeout for first Syn packet 
+  # Defualt initial timeout for first Syn packet
   defaultInitialSynTimeout = milliseconds(3000)
 
   # Initial timeout to receive first Data data packet after receiving initial Syn
@@ -274,7 +274,7 @@ const
   # to zero. i.e when we received a packet from remote peer with `wndSize` set to 0.
   defaultResetWindowTimeout = seconds(15)
 
-  # If remote peer window drops to zero, then after some time we will reset it 
+  # If remote peer window drops to zero, then after some time we will reset it
   # to this value even if we do not receive any more messages from remote peers.
   # Reset period is configured in `SocketConfig`
   minimalRemoteWindow: uint32 = 1500
@@ -307,7 +307,7 @@ proc init(
   )
 
 proc init*(
-  T: type SocketConfig, 
+  T: type SocketConfig,
   initialSynTimeout: Duration = defaultInitialSynTimeout,
   dataResendsBeforeFailure: uint16 = defaultDataResendsBeforeFailure,
   optRcvBuffer: uint32 = defaultOptRcvBuffer,
@@ -345,11 +345,11 @@ proc sendAck(socket: UtpSocket): Future[void] =
   ## Creates and sends ack, based on current socket state. Acks are different from
   ## other packets as we do not track them in outgoing buffet
 
-  let ackPacket = 
+  let ackPacket =
     ackPacket(
       socket.seqNr,
       socket.connectionIdSnd,
-      socket.ackNr, 
+      socket.ackNr,
       socket.getRcvWindowSize(),
       socket.replayMicro
     )
@@ -399,13 +399,13 @@ proc markAllPacketAsLost(s: UtpSocket) =
 
 proc isOpened(socket:UtpSocket): bool =
   return (
-    socket.state == SynRecv or 
-    socket.state == SynSent or 
+    socket.state == SynRecv or
+    socket.state == SynSent or
     socket.state == Connected
   )
 
-proc shouldDisconnectFromFailedRemote(socket: UtpSocket): bool = 
-  (socket.state == SynSent and socket.retransmitCount >= 2) or 
+proc shouldDisconnectFromFailedRemote(socket: UtpSocket): bool =
+  (socket.state == SynSent and socket.retransmitCount >= 2) or
   (socket.retransmitCount >= socket.socketConfig.dataResendsBeforeFailure)
 
 proc checkTimeouts(socket: UtpSocket) {.async.} =
@@ -415,13 +415,13 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
     await socket.flushPackets()
 
   if socket.isOpened():
-    
+
     if (socket.sendBufferTracker.maxRemoteWindow == 0 and currentTime > socket.zeroWindowTimer):
       debug "Reset remote window to minimal value"
       socket.sendBufferTracker.updateMaxRemote(minimalRemoteWindow)
 
     if (currentTime > socket.rtoTimeout):
-      
+
       # TODO add handling of probe time outs. Reference implemenation has mechanism
       # of sending probes to determine mtu size. Probe timeouts do not count to standard
       # timeouts calculations
@@ -431,7 +431,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       if (socket.state == SynRecv):
         socket.destroy()
         return
-      
+
       if socket.shouldDisconnectFromFailedRemote():
         if socket.state == SynSent and (not socket.connectionFuture.finished()):
           socket.connectionFuture.fail(newException(ConnectionError, "Connection to peer timed out"))
@@ -442,7 +442,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       let newTimeout = socket.retransmitTimeout * 2
       socket.retransmitTimeout = newTimeout
       socket.rtoTimeout = currentTime + newTimeout
-      
+
       let currentPacketSize = uint32(socket.getPacketSize())
 
       if (socket.curWindowPackets == 0 and socket.sendBufferTracker.maxWindow > currentPacketSize):
@@ -470,7 +470,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       # as then every selecivly acked packet restes timeout timer and removes packet
       # from out buffer.
       markAllPacketAsLost(socket)
-      
+
       # resend oldest packet if there are some packets in flight
       if (socket.curWindowPackets > 0):
         notice "resending oldest packet in outBuffer"
@@ -531,7 +531,7 @@ proc handleDataWrite(socket: UtpSocket, data: seq[byte], writeFut: Future[WriteR
           if socket.curWindowPackets == 0:
             socket.resetSendTimeout()
 
-          let dataPacket = 
+          let dataPacket =
             dataPacket(
               socket.seqNr,
               socket.connectionIdSnd,
@@ -544,7 +544,7 @@ proc handleDataWrite(socket: UtpSocket, data: seq[byte], writeFut: Future[WriteR
           socket.registerOutgoingPacket(outgoingPacket)
           await socket.sendData(outgoingPacket.packetBytes)
         except CancelledError as exc:
-          # write loop has been cancelled in the middle of processing due to the 
+          # write loop has been cancelled in the middle of processing due to the
           # socket closing
           # this approach can create partial write in case destroyin socket in the
           # the middle of the write
@@ -566,8 +566,8 @@ proc handleClose(socket: UtpSocket): Future[void] {.async.} =
   try:
     if socket.curWindowPackets == 0:
       socket.resetSendTimeout()
-    
-    let finEncoded = 
+
+    let finEncoded =
       encodePacket(
         finPacket(
           socket.seqNr,
@@ -577,13 +577,13 @@ proc handleClose(socket: UtpSocket): Future[void] {.async.} =
           socket.replayMicro
         )
       )
-    socket.registerOutgoingPacket(OutgoingPacket.init(finEncoded, 1, true, 0)) 
+    socket.registerOutgoingPacket(OutgoingPacket.init(finEncoded, 1, true, 0))
     await socket.sendData(finEncoded)
     socket.finSent = true
   except CancelledError as exc:
     raise exc
 
-proc writeLoop(socket: UtpSocket): Future[void] {.async.} = 
+proc writeLoop(socket: UtpSocket): Future[void] {.async.} =
   ## Loop that processes writes on socket
   try:
     while true:
@@ -603,7 +603,7 @@ proc writeLoop(socket: UtpSocket): Future[void] {.async.} =
     socket.writeQueue.clear()
     trace "writeLoop canceled"
 
-proc startWriteLoop(s: UtpSocket) = 
+proc startWriteLoop(s: UtpSocket) =
   s.writeLoop = writeLoop(s)
 
 proc new[A](
@@ -689,7 +689,7 @@ proc newIncomingSocket*[A](
 ): UtpSocket[A] =
   let initialSeqNr = randUint16(rng)
 
-  let (initialState, initialTimeout) = 
+  let (initialState, initialTimeout) =
     if (cfg.incomingSocketReceiveTimeout.isNone()):
       # it does not matter what timeout value we put here, as socket will be in
       # connected state without outgoing packets in buffer so any timeout hit will
@@ -724,7 +724,7 @@ proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async.} =
   socket.startTimeoutLoop()
   await socket.sendData(outgoingPacket.packetBytes)
   await socket.connectionFuture
-  
+
 proc startIncomingSocket*(socket: UtpSocket) {.async.} =
   # Make sure ack was flushed before moving forward
   await socket.sendAck()
@@ -769,7 +769,7 @@ proc updateTimeouts(socket: UtpSocket, timeSent: Moment, currentTime: Moment) =
   ## delta = rtt - packet_rtt
   ## rtt_var += (abs(delta) - rtt_var) / 4;
   ## rtt += (packet_rtt - rtt) / 8;
-  
+
   let packetRtt = currentTime - timeSent
 
   if (socket.rtt.isZero):
@@ -787,7 +787,7 @@ proc updateTimeouts(socket: UtpSocket, timeSent: Moment, currentTime: Moment) =
 
     socket.rttVar = newVar
     socket.rtt = newRtt
-  
+
   # according to spec it should be: timeout = max(rtt + rtt_var * 4, 500)
   # but usually spec lags after implementation so milliseconds(1000) is used
   socket.rto = max(socket.rtt + (socket.rttVar * 4), milliseconds(1000))
@@ -798,15 +798,15 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16, currentTime: Moment): AckResult
     let packet = packetOpt.get()
 
     if packet.transmissions == 0:
-      # according to reference impl it can happen when we get an ack_nr that 
-      # does not exceed what we have stuffed into the outgoing buffer, 
+      # according to reference impl it can happen when we get an ack_nr that
+      # does not exceed what we have stuffed into the outgoing buffer,
       # but does exceed what we have sent
       # TODO analyze if this case can happen with our impl
       return PacketNotSentYet
-    
+
     socket.outBuffer.delete(seqNr)
 
-    # from spec: The rtt and rtt_var is only updated for packets that were sent only once. 
+    # from spec: The rtt and rtt_var is only updated for packets that were sent only once.
     # This avoids problems with figuring out which packet was acked, the first or the second one.
     # it is standard solution to retransmission ambiguity problem
     if packet.transmissions == 1:
@@ -830,7 +830,7 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16, currentTime: Moment): AckResult
 proc ackPackets(socket: UtpSocket, nrPacketsToAck: uint16, currentTime: Moment) =
   ## Ack packets in outgoing buffer based on ack number in the received packet
   var i = 0
-  while i < int(nrPacketsToack):
+  while i < int(nrPacketsToAck):
     let result = socket.ackPacket(socket.seqNr - socket.curWindowPackets, currentTime)
     case result
     of PacketAcked:
@@ -847,7 +847,7 @@ proc calculateAckedbytes(socket: UtpSocket, nrPacketsToAck: uint16, now: Moment)
   var i: uint16 = 0
   var ackedBytes: uint32 = 0
   var minRtt: Duration = InfiniteDuration
-  while i < nrPacketsToack:
+  while i < nrPacketsToAck:
     let seqNr = socket.seqNr - socket.curWindowPackets + i
     let packetOpt = socket.outBuffer.get(seqNr)
     if (packetOpt.isSome() and packetOpt.unsafeGet().transmissions > 0):
@@ -914,7 +914,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   if acks > socket.curWindowPackets:
     # this case happens if the we already received this ack nr
     acks = 0
-  
+
   # If packet is totally of the mark short circout the processing
   if pastExpected >= reorderBufferMaxSize:
     notice "Received packet is totally of the mark"
@@ -924,13 +924,13 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   # TODO caluclate bytes acked by selective acks here (if thats the case)
 
   let sentTimeRemote = p.header.timestamp
-  
-  # we are using uint32 not a Duration, to wrap a round in case of 
+
+  # we are using uint32 not a Duration, to wrap a round in case of
   # sentTimeRemote > receipTimestamp. This can happen as local and remote
   # clock can be not synchornized or even using different system clock.
   # i.e this number itself does not tell anything and is only used to feedback it
   # to remote peer with each sent packet
-  let remoteDelay = 
+  let remoteDelay =
     if (sentTimeRemote == 0):
       0'u32
     else:
@@ -946,8 +946,8 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   # remote new delay base is less than previous
   # shift our delay base in other direction to take clock skew into account
   # but no more than 10ms
-  if (prevRemoteDelayBase != 0 and 
-      wrapCompareLess(socket.remoteHistogram.delayBase, prevRemoteDelayBase) and 
+  if (prevRemoteDelayBase != 0 and
+      wrapCompareLess(socket.remoteHistogram.delayBase, prevRemoteDelayBase) and
       prevRemoteDelayBase - socket.remoteHistogram.delayBase <= 10000'u32):
         socket.ourHistogram.shift(prevRemoteDelayBase - socket.remoteHistogram.delayBase)
 
@@ -960,7 +960,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   # adjust base delay if delay estimates exceeds rtt
   if (socket.ourHistogram.getValue() > minRtt):
     let diff = uint32((socket.ourHistogram.getValue() - minRtt).microseconds())
-    socket.ourHistogram.shift(diff) 
+    socket.ourHistogram.shift(diff)
 
   let (newMaxWindow, newSlowStartTreshold, newSlowStart) =
     applyCongestionControl(
@@ -985,7 +985,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     # when zeroWindowTimer will be hit and maxRemoteWindow still will be equal to 0
     # then it will be reset to minimal value
     socket.zeroWindowTimer = timestampInfo.moment + socket.socketConfig.remoteWindowResetTimeout
-   
+
   # socket.curWindowPackets == acks means that this packet acked all remaining packets
   # including the sent fin packets
   if (socket.finSent and socket.curWindowPackets == acks):
@@ -998,7 +998,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     socket.destroy()
 
   socket.ackPackets(acks, timestampInfo.moment)
-  
+
   case p.header.pType
     of ST_DATA, ST_FIN:
       # To avoid amplification attacks, server socket is in SynRecv state until
@@ -1017,7 +1017,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
         if (len(p.payload) > 0 and (not socket.readShutdown)):
           # we are getting in order data packet, we can flush data directly to the incoming buffer
           await upload(addr socket.buffer, unsafeAddr p.payload[0], p.payload.len())
-        # Bytes have been passed to upper layer, we can increase number of last 
+        # Bytes have been passed to upper layer, we can increase number of last
         # acked packet
         inc socket.ackNr
 
@@ -1029,7 +1029,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
           if ((not socket.reachedFin) and socket.gotFin and socket.eofPktNr == socket.ackNr):
             notice "Reached socket EOF"
             # In case of reaching eof, it is up to user of library what to to with
-            # it. With the current implementation, the most apropriate way would be to 
+            # it. With the current implementation, the most apropriate way would be to
             # destory it (as with our implementation we know that remote is destroying its acked fin)
             # as any other send will either generate timeout, or socket will be forcefully
             # closed by reset
@@ -1043,14 +1043,14 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
           if socket.reorderCount == 0:
             break
-          
+
           let nextPacketNum = socket.ackNr + 1
 
           let maybePacket = socket.inBuffer.get(nextPacketNum)
-          
+
           if maybePacket.isNone():
             break
-          
+
           let packet = maybePacket.unsafeGet()
 
           if (len(packet.payload) > 0 and (not socket.readShutdown)):
@@ -1066,7 +1066,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
         # how many concurrent tasks there are and how to cancel them when socket
         # is closed
         asyncSpawn socket.sendAck()
-      
+
       # we got packet out of order
       else:
         notice "Got out of order packet"
@@ -1075,7 +1075,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
           notice "Got packet past eof"
           return
 
-        # growing buffer before checking the packet is already there to avoid 
+        # growing buffer before checking the packet is already there to avoid
         # looking at older packet due to indices wrap aroud
         socket.inBuffer.ensureSize(pkSeqNr + 1, pastExpected + 1)
 
@@ -1143,14 +1143,14 @@ proc closeWait*(socket: UtpSocket) {.async.} =
   socket.close()
   await socket.closeEvent.wait()
 
-proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] = 
+proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] =
   let retFuture = newFuture[WriteResult]("UtpSocket.write")
 
   if (socket.state != Connected):
     let res = Result[int, WriteError].err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
     retFuture.complete(res)
     return retFuture
-  
+
   # fin should be last packet received by remote side, therefore trying to write
   # after sending fin is considered error
   if socket.sendFinRequested or socket.finSent:
@@ -1159,12 +1159,12 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] =
     return retFuture
 
   var bytesWritten = 0
-  
+
   if len(data) == 0:
     let res = Result[int, WriteError].ok(bytesWritten)
     retFuture.complete(res)
     return retFuture
-  
+
   try:
     socket.writeQueue.putNoWait(WriteRequest(kind: Data, data: data, writer: retFuture))
   except AsyncQueueFullError as e:
@@ -1209,7 +1209,7 @@ proc read*(socket: UtpSocket): Future[seq[byte]] {.async.}=
   var bytes = newSeq[byte]()
 
   readLoop():
-    if socket.readingClosed():  
+    if socket.readingClosed():
       (0, true)
     else:
       let count = socket.buffer.dataLen()
@@ -1237,7 +1237,7 @@ proc numOfBytesInFlight*(socket: UtpSocket): uint32 = socket.sendBufferTracker.c
 # It throws assertion error when number of elements in buffer do not equal kept counter
 proc numPacketsInReordedBuffer*(socket: UtpSocket): int =
   var num = 0
-  for e in socket.inBUffer.items():
+  for e in socket.inBuffer.items():
     if e.isSome():
       inc num
   doAssert(num == int(socket.reorderCount))

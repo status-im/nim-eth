@@ -39,7 +39,7 @@ logScope:
 ## Also does threadvar initialisation.
 ## Must be called before redirectPorts() in each thread.
 proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] =
-  var externalIP: IPAddress
+  var externalIP: IpAddress
 
   if natStrategy == NatAny or natStrategy == NatUpnp:
     if upnp == nil:
@@ -245,7 +245,7 @@ proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
   ## original ports as best effort.
   ## TODO: Allow for tcp or udp port mapping to be optional.
   let extIp = getExternalIP(natStrategy)
-  if extIP.isSome:
+  if extIp.isSome:
     let ip = ValidIpAddress.init(extIp.get)
     let extPorts = ({.gcsafe.}:
       redirectPorts(tcpPort = tcpPort,
@@ -308,7 +308,7 @@ proc setupAddress*(natConfig: NatConfig, bindIp: ValidIpAddress,
 
   case natConfig.nat:
     of NatAny:
-      let bindAddress = initTAddress(bindIP, Port(0))
+      let bindAddress = initTAddress(bindIp, Port(0))
       if bindAddress.isAnyLocal():
         let ip = getRouteIpv4()
         if ip.isErr():
@@ -326,11 +326,11 @@ proc setupAddress*(natConfig: NatConfig, bindIp: ValidIpAddress,
           return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
       elif bindAddress.isPublic():
         # When a specific public interface is provided, use that one.
-        return (some(ValidIpAddress.init(bindIP)), some(tcpPort), some(udpPort))
+        return (some(ValidIpAddress.init(bindIp)), some(tcpPort), some(udpPort))
       else:
         return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
     of NatNone:
-      let bindAddress = initTAddress(bindIP, Port(0))
+      let bindAddress = initTAddress(bindIp, Port(0))
       if bindAddress.isAnyLocal():
         let ip = getRouteIpv4()
         if ip.isErr():
@@ -345,7 +345,7 @@ proc setupAddress*(natConfig: NatConfig, bindIp: ValidIpAddress,
           return (none(ValidIpAddress), some(tcpPort), some(udpPort))
       elif bindAddress.isPublic():
         # When a specific public interface is provided, use that one.
-        return (some(ValidIpAddress.init(bindIP)), some(tcpPort), some(udpPort))
+        return (some(ValidIpAddress.init(bindIp)), some(tcpPort), some(udpPort))
       else:
         error "Bind IP is not a public IP address. Should not use --nat:none option"
         return (none(ValidIpAddress), some(tcpPort), some(udpPort))

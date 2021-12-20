@@ -13,19 +13,19 @@ type
   RocksStoreRef* = ref object of RootObj
     store: RocksDBInstance
 
-proc get*(db: RocksStoreRef, key: openarray[byte], onData: kvstore.DataProc): KvResult[bool] =
+proc get*(db: RocksStoreRef, key: openArray[byte], onData: kvstore.DataProc): KvResult[bool] =
   db.store.get(key, onData)
 
-proc find*(db: RocksStoreRef, prefix: openarray[byte], onFind: kvstore.KeyValueProc): KvResult[int] =
+proc find*(db: RocksStoreRef, prefix: openArray[byte], onFind: kvstore.KeyValueProc): KvResult[int] =
   raiseAssert "Unimplemented"
 
-proc put*(db: RocksStoreRef, key, value: openarray[byte]): KvResult[void] =
+proc put*(db: RocksStoreRef, key, value: openArray[byte]): KvResult[void] =
   db.store.put(key, value)
 
-proc contains*(db: RocksStoreRef, key: openarray[byte]): KvResult[bool] =
+proc contains*(db: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
   db.store.contains(key)
 
-proc del*(db: RocksStoreRef, key: openarray[byte]): KvResult[void] =
+proc del*(db: RocksStoreRef, key: openArray[byte]): KvResult[void] =
   db.store.del(key)
 
 proc close*(db: RocksStoreRef) =

@@ -105,7 +105,7 @@ suite "test api usage":
       rlp.listElem(2).toString == "Donec ligula tortor, egestas eu est vitae"
 
     # test creating RLPs from other RLPs
-    var list = rlpFromBytes encodeList(rlp.listELem(1), rlp.listELem(0))
+    var list = rlpFromBytes encodeList(rlp.listElem(1), rlp.listElem(0))
 
     # test that iteration with enterList/skipElem works as expected
     doAssert list.enterList # We already know that we are working with a list
@@ -191,7 +191,7 @@ suite "test api usage":
               Inf, NegInf, NaN]:
 
       template isNaN(n): bool =
-        classify(n) == fcNaN
+        classify(n) == fcNan
 
       template chk(input) =
         let restored = decode(encode(input), float64)

@@ -52,9 +52,9 @@ procSuite "Utp router unit tests":
     r: UtpRouter[int],
     remote: int,
     pq: AsyncQueue[(Packet, int)],
-    initialRemoteSeq: uint16): (UtpSocket[int], Packet)= 
+    initialRemoteSeq: uint16): (UtpSocket[int], Packet)=
     let connectFuture = router.connectTo(remote)
-    
+
     let (initialPacket, sender) = await pq.get()
 
     check:
@@ -62,10 +62,10 @@ procSuite "Utp router unit tests":
 
     let responseAck =
       ackPacket(
-        initialRemoteSeq, 
-        initialPacket.header.connectionId, 
-        initialPacket.header.seqNr, 
-        testBufferSize, 
+        initialRemoteSeq,
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        testBufferSize,
         0
       )
 
@@ -98,7 +98,7 @@ procSuite "Utp router unit tests":
 
   asyncTest "Incoming connection should be closed when not receving data for period of time when configured":
     let q = newAsyncQueue[UtpSocket[int]]()
-    let router = 
+    let router =
       UtpRouter[int].new(
         registerIncomingSocketCallback(q),
         SocketConfig.init(incomingSocketReceiveTimeout = some(seconds(2))),
@@ -123,7 +123,7 @@ procSuite "Utp router unit tests":
 
   asyncTest "Incoming connection should be in connected state when configured":
     let q = newAsyncQueue[UtpSocket[int]]()
-    let router = 
+    let router =
       UtpRouter[int].new(
         registerIncomingSocketCallback(q),
         SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]()),
@@ -150,7 +150,7 @@ procSuite "Utp router unit tests":
   asyncTest "Incoming connection should change state to connected when receiving data packet":
     let q = newAsyncQueue[UtpSocket[int]]()
     let pq = newAsyncQueue[(Packet, int)]()
-    let router = 
+    let router =
       UtpRouter[int].new(
         registerIncomingSocketCallback(q),
         SocketConfig.init(incomingSocketReceiveTimeout = some(seconds(3))),
@@ -168,20 +168,20 @@ procSuite "Utp router unit tests":
 
     let (initialPacket, _) = await pq.get()
     let socket = await q.get()
-    
+
     check:
       router.len() == 1
       # socket is not configured to be connected until receiving data
       not socket.isConnected()
 
-    let encodedData = 
+    let encodedData =
       encodePacket(
         dataPacket(
           initSeq + 1,
-          initConnId + 1, 
-          initialPacket.header.seqNr - 1, 
-          10, 
-          dataToSend, 
+          initConnId + 1,
+          initialPacket.header.seqNr - 1,
+          10,
+          dataToSend,
           0
         )
       )
@@ -264,7 +264,7 @@ procSuite "Utp router unit tests":
 
     let requestedConnectionId = 1'u16
     let connectFuture = router.connectTo(testSender2, requestedConnectionId)
-    
+
     let (initialPacket, sender) = await pq.get()
 
     check:
@@ -274,17 +274,17 @@ procSuite "Utp router unit tests":
 
     let responseAck =
       ackPacket(
-        initialRemoteSeq, 
-        initialPacket.header.connectionId, 
-        initialPacket.header.seqNr, 
-        testBufferSize, 
+        initialRemoteSeq,
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        testBufferSize,
         0
       )
 
     await router.processIncomingBytes(encodePacket(responseAck), testSender2)
 
     let outgoingSocket = await connectFuture
-  
+
     check:
       outgoingSocket.get().isConnected()
       router.len() == 1
@@ -302,7 +302,7 @@ procSuite "Utp router unit tests":
     router.sendCb = initTestSnd(pq)
 
     let connectFuture = router.connectTo(testSender2)
-    
+
     let (initialPacket, sender) = await pq.get()
 
     check:
@@ -322,14 +322,14 @@ procSuite "Utp router unit tests":
     router.sendCb = initTestSnd(pq)
 
     let connectFuture = router.connectTo(testSender2)
-    
+
     let (initialPacket, sender) = await pq.get()
 
     check:
       initialPacket.header.pType == ST_SYN
       router.len() == 1
 
-    await connectFuture.cancelAndWait() 
+    await connectFuture.cancelAndWait()
 
     check:
       router.len() == 0
@@ -353,7 +353,7 @@ procSuite "Utp router unit tests":
       connectResult.error().kind == ErrorWhileSendingSyn
       cast[TestError](connectResult.error().error) is TestError
       router.len() == 0
-  
+
   asyncTest "Router should clear closed outgoing connections":
     let q = newAsyncQueue[UtpSocket[int]]()
     let pq = newAsyncQueue[(Packet, int)]()
@@ -409,7 +409,7 @@ procSuite "Utp router unit tests":
 
     check:
       router.len() == 0
-  
+
   asyncTest "Router close outgoing connection which receives reset":
     let q = newAsyncQueue[UtpSocket[int]]()
     let pq = newAsyncQueue[(Packet, int)]()

@@ -16,7 +16,7 @@ import
 
 from strutils import toLowerAscii
 
-proc compare(x: openarray[byte], y: openarray[byte]): bool =
+proc compare(x: openArray[byte], y: openArray[byte]): bool =
   result = len(x) == len(y)
   if result:
     for i in 0..(len(x) - 1):

@@ -32,10 +32,10 @@ proc applyCongestionControl*(
   minRtt: Duration,
   calculatedDelay: Duration,
   clockDrift: int32
-): (uint32, uint32, bool) = 
+): (uint32, uint32, bool) =
   if (actualDelay.isZero() or minRtt.isZero() or numOfAckedBytes == 0):
     return (currentMaxWindowSize, currentSlowStartTreshold, currentSlowStart)
-  
+
   let ourDelay = min(minRtt, calculatedDelay)
 
   let target = targetDelay
@@ -64,7 +64,7 @@ proc applyCongestionControl*(
   # double window_factor = (double)min(bytes_acked, max_window) / (double)max(max_window, bytes_acked);
   # double delay_factor = off_target / target;
   # double scaled_gain = MAX_CWND_INCREASE_BYTES_PER_RTT * window_factor * delay_factor;
-  
+
   let windowFactor = float64(min(numOfAckedBytes, currentMaxWindowSize)) / float64(max(currentMaxWindowSize, numOfAckedBytes))
 
   let delayFactor = float64(offTarget) / float64(target.microseconds())
@@ -73,7 +73,7 @@ proc applyCongestionControl*(
 
   let scaledWindow = float64(currentMaxWindowSize) + scaledGain
 
-  let ledbatCwnd: uint32 = 
+  let ledbatCwnd: uint32 =
     if scaledWindow < minWindowSize:
       uint32(minWindowSize)
     else:

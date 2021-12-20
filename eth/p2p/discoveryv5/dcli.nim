@@ -187,7 +187,7 @@ proc run(config: DiscoveryConf) =
       echo "No Talk Response message returned"
   of noCommand:
     d.start()
-    waitfor(discover(d))
+    waitFor(discover(d))
 
 when isMainModule:
   let config = DiscoveryConf.load()

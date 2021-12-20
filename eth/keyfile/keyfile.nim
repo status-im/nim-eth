@@ -221,8 +221,8 @@ proc deriveKey(password: string, salt: string,
 
 proc encryptKey(seckey: PrivateKey,
                 cryptkind: CryptKind,
-                key: openarray[byte],
-                iv: openarray[byte]): KfResult[array[KeyLength, byte]] =
+                key: openArray[byte],
+                iv: openArray[byte]): KfResult[array[KeyLength, byte]] =
   if cryptkind == AES128CTR:
     var crypttext: array[KeyLength, byte]
     var ctx: CTR[aes128]
@@ -233,10 +233,10 @@ proc encryptKey(seckey: PrivateKey,
   else:
     err(NotImplemented)
 
-proc decryptKey(ciphertext: openarray[byte],
+proc decryptKey(ciphertext: openArray[byte],
                 cryptkind: CryptKind,
-                key: openarray[byte],
-                iv: openarray[byte]): KfResult[array[KeyLength, byte]] =
+                key: openArray[byte],
+                iv: openArray[byte]): KfResult[array[KeyLength, byte]] =
   if cryptkind == AES128CTR:
     if len(iv) != aes128.sizeBlock:
       return err(IncorrectIV)
@@ -295,7 +295,7 @@ proc decodeSalt(m: string): string =
   else:
     result = ""
 
-proc compareMac(m1: openarray[byte], m2: openarray[byte]): bool =
+proc compareMac(m1: openArray[byte], m2: openArray[byte]): bool =
   if len(m1) == len(m2) and len(m1) > 0:
     result = equalMem(unsafeAddr m1[0], unsafeAddr m2[0], len(m1))
 

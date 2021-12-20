@@ -94,9 +94,9 @@ proc `==`(a, b: Field): bool =
 proc cmp(a, b: FieldPair): int = cmp(a[0], b[0])
 
 proc makeEnrRaw(seqNum: uint64, pk: PrivateKey,
-    pairs: openarray[FieldPair]): EnrResult[seq[byte]] =
+    pairs: openArray[FieldPair]): EnrResult[seq[byte]] =
   proc append(w: var RlpWriter, seqNum: uint64,
-      pairs: openarray[FieldPair]): seq[byte] =
+      pairs: openArray[FieldPair]): seq[byte] =
     w.append(seqNum)
     for (k, v) in pairs:
       w.append(k)
@@ -124,7 +124,7 @@ proc makeEnrRaw(seqNum: uint64, pk: PrivateKey,
     ok(raw)
 
 proc makeEnrAux(seqNum: uint64, pk: PrivateKey,
-    pairs: openarray[FieldPair]): EnrResult[Record] =
+    pairs: openArray[FieldPair]): EnrResult[Record] =
   var record: Record
   record.pairs = @pairs
   record.seqNum = seqNum
@@ -185,7 +185,7 @@ proc init*(T: type Record, seqNum: uint64,
                            pk: PrivateKey,
                            ip: Option[ValidIpAddress],
                            tcpPort, udpPort: Option[Port],
-                           extraFields: openarray[FieldPair] = []):
+                           extraFields: openArray[FieldPair] = []):
                            EnrResult[T] =
   ## Initialize a `Record` with given sequence number, private key, optional
   ## ip address, tcp port, udp port, and optional custom k:v pairs.
@@ -263,7 +263,7 @@ proc find(r: Record, key: string): Option[int] =
       return some(i)
 
 proc update*(record: var Record, pk: PrivateKey,
-    fieldPairs: openarray[FieldPair]): EnrResult[void] =
+    fieldPairs: openArray[FieldPair]): EnrResult[void] =
   ## Update a `Record` k:v pairs.
   ##
   ## In case any of the k:v pairs is updated or added (new), the sequence number
@@ -306,7 +306,7 @@ proc update*(record: var Record, pk: PrivateKey,
 proc update*(r: var Record, pk: PrivateKey,
                             ip: Option[ValidIpAddress],
                             tcpPort, udpPort: Option[Port] = none[Port](),
-                            extraFields: openarray[FieldPair] = []):
+                            extraFields: openArray[FieldPair] = []):
                             EnrResult[void] =
   ## Update a `Record` with given ip address, tcp port, udp port and optional
   ## custom k:v pairs.
@@ -362,7 +362,7 @@ proc contains*(r: Record, fp: (string, seq[byte])): bool =
     if field.get() == fp[1]:
       return true
 
-proc verifySignatureV4(r: Record, sigData: openarray[byte], content: seq[byte]):
+proc verifySignatureV4(r: Record, sigData: openArray[byte], content: seq[byte]):
     bool =
   let publicKey = r.get(PublicKey)
   if publicKey.isSome:
@@ -441,7 +441,7 @@ proc fromBytesAux(r: var Record): bool {.raises: [RlpError, Defect].} =
 
   verifySignature(r)
 
-proc fromBytes*(r: var Record, s: openarray[byte]): bool =
+proc fromBytes*(r: var Record, s: openArray[byte]): bool =
   ## Loads ENR from rlp-encoded bytes, and validates the signature.
   r.raw = @s
   try:

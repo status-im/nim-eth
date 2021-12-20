@@ -245,7 +245,7 @@ suite "KeyFile test suite":
       jobject = createKeyFileJson(seckey1, "miawmiawcat", 3, AES128CTR, SCRYPT)[]
       privKey = decodeKeyFileJson(jobject, "miawmiawcat")[]
 
-    check privKey.toRaw == secKey1.toRaw
+    check privKey.toRaw == seckey1.toRaw
 
   test "Load non-existent pathname test":
     check:

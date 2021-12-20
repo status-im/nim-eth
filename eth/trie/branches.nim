@@ -145,7 +145,7 @@ proc getWitnessImpl*(db: DB; nodeHash: TrieNodeKey; keyPath: TrieBitSeq; output:
       raise newException(InvalidKeyError, "Key too long")
   of KV_TYPE:
     output.add nodeVal
-    if keyPath.len < node.keyPath.len and node.keyPath[0..<keyPath.len] == keypath:
+    if keyPath.len < node.keyPath.len and node.keyPath[0..<keyPath.len] == keyPath:
       if not getTrieNodesImpl(db, node.child, output): return
     elif keyPath[0..<node.keyPath.len] == node.keyPath:
       getWitnessImpl(db, node.child, keyPath.sliceToEnd(node.keyPath.len), output)

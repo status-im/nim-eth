@@ -15,17 +15,17 @@ type
     deleted: HashSet[seq[byte]]
 
   # XXX: poor's man vtref types
-  PutProc = proc (db: RootRef, key, val: openarray[byte]) {.
+  PutProc = proc (db: RootRef, key, val: openArray[byte]) {.
     gcsafe, raises: [Defect].}
 
-  GetProc = proc (db: RootRef, key: openarray[byte]): seq[byte] {.
+  GetProc = proc (db: RootRef, key: openArray[byte]): seq[byte] {.
     gcsafe, raises: [Defect].}
     ## The result will be empty seq if not found
 
-  DelProc = proc (db: RootRef, key: openarray[byte]) {.
+  DelProc = proc (db: RootRef, key: openArray[byte]) {.
     gcsafe, raises: [Defect].}
 
-  ContainsProc = proc (db: RootRef, key: openarray[byte]): bool {.
+  ContainsProc = proc (db: RootRef, key: openArray[byte]): bool {.
     gcsafe, raises: [Defect].}
 
   TrieDatabaseRef* = ref object
@@ -49,19 +49,19 @@ type
 
   TransactionID* = distinct DbTransaction
 
-proc put*(db: TrieDatabaseRef, key, val: openarray[byte]) {.gcsafe.}
-proc get*(db: TrieDatabaseRef, key: openarray[byte]): seq[byte] {.gcsafe.}
-proc del*(db: TrieDatabaseRef, key: openarray[byte]) {.gcsafe.}
+proc put*(db: TrieDatabaseRef, key, val: openArray[byte]) {.gcsafe.}
+proc get*(db: TrieDatabaseRef, key: openArray[byte]): seq[byte] {.gcsafe.}
+proc del*(db: TrieDatabaseRef, key: openArray[byte]) {.gcsafe.}
 proc beginTransaction*(db: TrieDatabaseRef): DbTransaction {.gcsafe.}
 
 proc keccak*(r: openArray[byte]): KeccakHash =
   keccak256.digest r
 
-proc get*(db: MemoryLayer, key: openarray[byte]): seq[byte] =
+proc get*(db: MemoryLayer, key: openArray[byte]): seq[byte] =
   result = db.records.getOrDefault(@key).value
   traceGet key, result
 
-proc del*(db: MemoryLayer, key: openarray[byte]) =
+proc del*(db: MemoryLayer, key: openArray[byte]) =
   traceDel key
 
   # The database should ensure that the empty key is always active:
@@ -76,10 +76,10 @@ proc del*(db: MemoryLayer, key: openarray[byte]) =
         db.records.del(key)
         db.deleted.incl(key)
 
-proc contains*(db: MemoryLayer, key: openarray[byte]): bool =
+proc contains*(db: MemoryLayer, key: openArray[byte]): bool =
   db.records.hasKey(@key)
 
-proc put*(db: MemoryLayer, key, val: openarray[byte]) =
+proc put*(db: MemoryLayer, key, val: openArray[byte]) =
   tracePut key, val
 
   # TODO: This is quite inefficient and it won't be necessary once
@@ -168,19 +168,19 @@ proc safeDispose*(t: DbTransaction) {.inline.} =
   if (not isNil(t)) and (t.state == Pending):
     t.rollback()
 
-proc putImpl[T](db: RootRef, key, val: openarray[byte]) =
+proc putImpl[T](db: RootRef, key, val: openArray[byte]) =
   mixin put
   put(T(db), key, val)
 
-proc getImpl[T](db: RootRef, key: openarray[byte]): seq[byte] =
+proc getImpl[T](db: RootRef, key: openArray[byte]): seq[byte] =
   mixin get
   return get(T(db), key)
 
-proc delImpl[T](db: RootRef, key: openarray[byte]) =
+proc delImpl[T](db: RootRef, key: openArray[byte]) =
   mixin del
   del(T(db), key)
 
-proc containsImpl[T](db: RootRef, key: openarray[byte]): bool =
+proc containsImpl[T](db: RootRef, key: openArray[byte]): bool =
   mixin contains
   return contains(T(db), key)
 
@@ -194,14 +194,14 @@ proc trieDB*[T: RootRef](x: T): TrieDatabaseRef =
   result.delProc = delImpl[T]
   result.containsProc = containsImpl[T]
 
-proc put*(db: TrieDatabaseRef, key, val: openarray[byte]) =
+proc put*(db: TrieDatabaseRef, key, val: openArray[byte]) =
   var t = db.mostInnerTransaction
   if t != nil:
     t.modifications.put(key, val)
   else:
     db.putProc(db.obj, key, val)
 
-proc get*(db: TrieDatabaseRef, key: openarray[byte]): seq[byte] =
+proc get*(db: TrieDatabaseRef, key: openArray[byte]): seq[byte] =
   # TODO: This is quite inefficient and it won't be necessary once
   # https://github.com/nim-lang/Nim/issues/7457 is developed.
   let key = @key
@@ -216,14 +216,14 @@ proc get*(db: TrieDatabaseRef, key: openarray[byte]): seq[byte] =
   if db.getProc != nil:
     result = db.getProc(db.obj, key)
 
-proc del*(db: TrieDatabaseRef, key: openarray[byte]) =
+proc del*(db: TrieDatabaseRef, key: openArray[byte]) =
   var t = db.mostInnerTransaction
   if t != nil:
     t.modifications.del(key)
   else:
     db.delProc(db.obj, key)
 
-proc contains*(db: TrieDatabaseRef, key: openarray[byte]): bool =
+proc contains*(db: TrieDatabaseRef, key: openArray[byte]): bool =
   # TODO: This is quite inefficient and it won't be necessary once
   # https://github.com/nim-lang/Nim/issues/7457 is developed.
   let key = @key

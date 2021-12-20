@@ -77,7 +77,7 @@ type
     of pong:
       pong*: PongMessage
     of findnode:
-      findNode*: FindNodeMessage
+      findnode*: FindNodeMessage
     of nodes:
       nodes*: NodesMessage
     of talkreq:
@@ -98,7 +98,7 @@ type
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   when T is PingMessage: ping
   elif T is PongMessage: pong
-  elif T is FindNodeMessage: findNode
+  elif T is FindNodeMessage: findnode
   elif T is NodesMessage: nodes
   elif T is TalkReqMessage: talkreq
   elif T is TalkRespMessage: talkresp

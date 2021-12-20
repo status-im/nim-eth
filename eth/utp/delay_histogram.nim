@@ -6,7 +6,7 @@
 
 {.push raises: [Defect].}
 
-import 
+import
   chronos,
   ./utp_utils
 
@@ -45,8 +45,8 @@ proc addSample*(h: var DelayHistogram, sample: uint32, currentTime: Moment) =
     h.delayBaseHistory[h.delayBaseIdx] = sample
 
   if wrapCompareLess(sample, h.delayBase):
-    h.delay_base = sample
-  
+    h.delayBase = sample
+
   let delay = sample - h.delayBase
 
   h.currentDelayHistory[h.currentDelyIdx] = delay

@@ -11,8 +11,8 @@ proc localAddress*(port: int): Address =
 
 proc initDiscoveryNode*(rng: ref BrHmacDrbgContext, privKey: PrivateKey,
                         address: Address,
-                        bootstrapRecords: openarray[Record] = [],
-                        localEnrFields: openarray[(string, seq[byte])] = [],
+                        bootstrapRecords: openArray[Record] = [],
+                        localEnrFields: openArray[(string, seq[byte])] = [],
                         previousRecord = none[enr.Record]()):
                         discv5_protocol.Protocol =
   # set bucketIpLimit to allow bucket split
@@ -30,13 +30,13 @@ proc initDiscoveryNode*(rng: ref BrHmacDrbgContext, privKey: PrivateKey,
 
   result.open()
 
-proc nodeIdInNodes*(id: NodeId, nodes: openarray[Node]): bool =
+proc nodeIdInNodes*(id: NodeId, nodes: openArray[Node]): bool =
   for n in nodes:
     if id == n.id: return true
 
 proc generateNode*(privKey: PrivateKey, port: int = 20302,
     ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1"),
-    localEnrFields: openarray[FieldPair] = []): Node =
+    localEnrFields: openArray[FieldPair] = []): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, some(ip),
     some(port), some(port), localEnrFields).expect("Properly intialized private key")

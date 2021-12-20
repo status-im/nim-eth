@@ -272,7 +272,7 @@ proc chooseFieldType(n: NimNode): NimNode =
   ## and selects the corresponding field type for use in the
   ## message object type (i.e. `p2p.hello`).
   ##
-  ## For now, only openarray types are remapped to sequences.
+  ## For now, only openArray types are remapped to sequences.
   result = n
   if n.kind == nnkBracketExpr and eqIdent(n[0], "openArray"):
     result = n.copyNimTree
@@ -352,7 +352,7 @@ proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
 
   userHandlerProc.body.insert 0, prelude
 
-  # We allow the user handler to use `openarray` params, but we turn
+  # We allow the user handler to use `openArray` params, but we turn
   # those into sequences to make the `async` pragma happy.
   for i in 1 ..< userHandlerProc.params.len:
     var param = userHandlerProc.params[i]
@@ -428,7 +428,7 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
   for param, paramType in procDef.typedInputParams(skip = 1):
     recFields.add newTree(nnkIdentDefs,
       newTree(nnkPostfix, ident("*"), param), # The fields are public
-      chooseFieldType(paramType),             # some types such as openarray
+      chooseFieldType(paramType),             # some types such as openArray
       newEmptyNode())                         # are automatically remapped
 
   if recFields.len == 1 and protocol.useSingleRecordInlining:
@@ -564,7 +564,7 @@ proc createSendProc*(msg: Message,
     newEmptyNode(),
     newStmtList()) ## body
 
-  if proctype == nnkProcDef:
+  if procType == nnkProcDef:
     for p in msg.procDef.pragma:
       if not eqIdent(p, "async"):
         def.addPragma p

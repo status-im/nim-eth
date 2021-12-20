@@ -130,10 +130,10 @@ proc appendBlob(self: var RlpWriter, data: openArray[byte], startMarker: byte) =
 proc appendImpl(self: var RlpWriter, data: string) =
   appendBlob(self, data.toOpenArrayByte(0, data.high), BLOB_START_MARKER)
 
-proc appendBlob(self: var RlpWriter, data: openarray[byte]) =
+proc appendBlob(self: var RlpWriter, data: openArray[byte]) =
   appendBlob(self, data, BLOB_START_MARKER)
 
-proc appendBlob(self: var RlpWriter, data: openarray[char]) =
+proc appendBlob(self: var RlpWriter, data: openArray[char]) =
   appendBlob(self, data.toOpenArrayByte(0, data.high), BLOB_START_MARKER)
 
 proc appendInt(self: var RlpWriter, i: Integer) =
@@ -169,10 +169,10 @@ template appendImpl(self: var RlpWriter, e: enum) =
 template appendImpl(self: var RlpWriter, b: bool) =
   appendImpl(self, int(b))
 
-proc appendImpl[T](self: var RlpWriter, listOrBlob: openarray[T]) =
+proc appendImpl[T](self: var RlpWriter, listOrBlob: openArray[T]) =
   mixin append
 
-  # TODO: This append proc should be overloaded by `openarray[byte]` after
+  # TODO: This append proc should be overloaded by `openArray[byte]` after
   # nim bug #7416 is fixed.
   when T is (byte or char):
     self.appendBlob(listOrBlob)

@@ -304,13 +304,13 @@ proc append*(rlpWriter: var RlpWriter, value: StUint) =
   else:
     rlpWriter.append(value.truncate(int))
 
-proc read*(rlp: var Rlp, T: type Stint): T {.inline.} =
+proc read*(rlp: var Rlp, T: type StInt): T {.inline.} =
   # The Ethereum Yellow Paper defines the RLP serialization only
   # for unsigned integers:
   {.fatal: "RLP serialization of signed integers is not allowed".}
   discard
 
-proc append*(rlpWriter: var RlpWriter, value: Stint) =
+proc append*(rlpWriter: var RlpWriter, value: StInt) =
   # The Ethereum Yellow Paper defines the RLP serialization only
   # for unsigned integers:
   {.fatal: "RLP serialization of signed integers is not allowed".}
@@ -671,7 +671,7 @@ method getCodeByHash*(db: AbstractChainDB, hash: KeccakHash): Blob {.base, gcsaf
 method getSetting*(db: AbstractChainDB, key: string): seq[byte] {.base, gcsafe.} =
   notImplemented()
 
-method setSetting*(db: AbstractChainDB, key: string, val: openarray[byte]) {.base, gcsafe.} =
+method setSetting*(db: AbstractChainDB, key: string, val: openArray[byte]) {.base, gcsafe.} =
   notImplemented()
 
 method getHeaderProof*(db: AbstractChainDB, req: ProofRequest): Blob {.base, gcsafe.} =
@@ -686,10 +686,10 @@ method getHelperTrieProof*(db: AbstractChainDB, req: HelperTrieProofRequest): Bl
 method getTransactionStatus*(db: AbstractChainDB, txHash: KeccakHash): TransactionStatusMsg {.base, gcsafe.} =
   notImplemented()
 
-method addTransactions*(db: AbstractChainDB, transactions: openarray[Transaction]) {.base, gcsafe.} =
+method addTransactions*(db: AbstractChainDB, transactions: openArray[Transaction]) {.base, gcsafe.} =
   notImplemented()
 
-method persistBlocks*(db: AbstractChainDB, headers: openarray[BlockHeader], bodies: openarray[BlockBody]): ValidationResult {.base, gcsafe.} =
+method persistBlocks*(db: AbstractChainDB, headers: openArray[BlockHeader], bodies: openArray[BlockBody]): ValidationResult {.base, gcsafe.} =
   notImplemented()
 
 method getForkId*(db: AbstractChainDB, n: BlockNumber): ForkID {.base, gcsafe.} =

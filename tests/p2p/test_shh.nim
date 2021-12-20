@@ -226,11 +226,11 @@ suite "Whisper envelope":
     var env = Envelope(ttl: 1, data: @[byte 0xde, 0xad, 0xbe, 0xef])
     # PoW calculation with no leading zeroes
     env.nonce = 100000
-    check hashAndPoW(env) == ("A788E02A95BFC673709E97CA81E39CA903BAD5638D3388964C51EB64952172D6",
+    check hashAndPow(env) == ("A788E02A95BFC673709E97CA81E39CA903BAD5638D3388964C51EB64952172D6",
                               0.07692307692307693)
     # PoW calculation with 8 leading zeroes
     env.nonce = 276
-    check hashAndPoW(env) == ("00E2374C6353C243E4073E209A7F2ACB2506522AF318B3B78CF9A88310A2A11C",
+    check hashAndPow(env) == ("00E2374C6353C243E4073E209A7F2ACB2506522AF318B3B78CF9A88310A2A11C",
                               19.692307692307693)
 
 suite "Whisper queue":

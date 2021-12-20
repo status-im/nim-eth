@@ -49,8 +49,8 @@ proc addSample*(c: var ClockDriftCalculator, actualDelay: uint32, currentTime: M
   let distDown = c.averageDelayBase - actualDelay
 
   let distUp = actualDelay - c.averageDelayBase
-  
-  let averageDelaySample = 
+
+  let averageDelaySample =
     if (distDown > distUp):
       # averageDelayBase is smaller that actualDelay, sample should be positive
       int64(distUp)
