@@ -15,13 +15,17 @@
 
 import
   std/[tables, options, hashes, net],
-  nimcrypto, stint, chronicles, bearssl, stew/[results, byteutils],
+  nimcrypto, stint, chronicles, bearssl, stew/[results, byteutils], metrics,
   ".."/../[rlp, keys],
   "."/[messages, node, enr, hkdf, sessions]
 
 from stew/objects import checkedEnumAssign
 
 export keys
+
+declareCounter discovery_session_lru_cache_hits, "Session LRU cache hits"
+declareCounter discovery_session_lru_cache_misses, "Session LRU cache misses"
+declareCounter discovery_session_decrypt_failures, "Session decrypt failures"
 
 logScope:
   topics = "discv5"
@@ -206,6 +210,7 @@ proc encodeMessagePacket*(rng: var BrHmacDrbgContext, c: var Codec,
   var initiatorKey, recipientKey: AesKey
   if c.sessions.load(toId, toAddr, recipientKey, initiatorKey):
     messageEncrypted = encryptGCM(initiatorKey, nonce, message, @iv & header)
+    discovery_session_lru_cache_hits.inc()
   else:
     # We might not have the node's keys if the handshake hasn't been performed
     # yet. That's fine, we send a random-packet and we will be responded with
@@ -217,6 +222,7 @@ proc encodeMessagePacket*(rng: var BrHmacDrbgContext, c: var Codec,
     var randomData: array[gcmTagSize + 4, byte]
     brHmacDrbgGenerate(rng, randomData)
     messageEncrypted.add(randomData)
+    discovery_session_lru_cache_misses.inc()
 
   let maskedHeader = encryptHeader(toId, iv, header)
 
@@ -423,8 +429,11 @@ proc decodeMessagePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
     # Don't consider this an error, simply haven't done a handshake yet or
     # the session got removed.
     trace "Decrypting failed (no keys)"
+    discovery_session_lru_cache_misses.inc()
     return ok(Packet(flag: Flag.OrdinaryMessage, requestNonce: nonce,
       srcId: srcId))
+
+  discovery_session_lru_cache_hits.inc()
 
   let pt = decryptGCM(recipientKey, nonce, ct, @iv & @header)
   if pt.isNone():
@@ -432,6 +441,7 @@ proc decodeMessagePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
     # peer's side and a random message is send.
     trace "Decrypting failed (invalid keys)"
     c.sessions.del(srcId, fromAddr)
+    discovery_session_decrypt_failures.inc()
     return ok(Packet(flag: Flag.OrdinaryMessage, requestNonce: nonce,
       srcId: srcId))
 
