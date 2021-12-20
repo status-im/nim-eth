@@ -144,7 +144,7 @@ proc isFull(k: KBucket): bool = k.len == BUCKET_SIZE
 
 proc contains(k: KBucket, n: Node): bool = n in k.nodes
 
-proc binaryGetBucketForNode(buckets: openarray[KBucket], n: Node):
+proc binaryGetBucketForNode(buckets: openArray[KBucket], n: Node):
     KBucket {.raises: [ValueError, Defect].} =
   ## Given a list of ordered buckets, returns the bucket for a given node.
   let bucketPos = lowerBound(buckets, n.id) do(a: KBucket, b: NodeId) -> int:
@@ -158,7 +158,7 @@ proc binaryGetBucketForNode(buckets: openarray[KBucket], n: Node):
   if result.isNil:
     raise newException(ValueError, "No bucket found for node with id " & $n.id)
 
-proc computeSharedPrefixBits(nodes: openarray[Node]): int =
+proc computeSharedPrefixBits(nodes: openArray[Node]): int =
   ## Count the number of prefix bits shared by all nodes.
   if nodes.len < 2:
     return ID_SIZE
@@ -176,7 +176,7 @@ proc computeSharedPrefixBits(nodes: openarray[Node]): int =
 
 proc init(r: var RoutingTable, thisNode: Node) =
   r.thisNode = thisNode
-  r.buckets = @[newKBucket(0.u256, high(Uint256))]
+  r.buckets = @[newKBucket(0.u256, high(UInt256))]
   randomize() # for later `randomNodes` selection
 
 proc splitBucket(r: var RoutingTable, index: int) =

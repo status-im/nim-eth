@@ -14,7 +14,7 @@ type
 proc cmp(lhs, rhs: TestOp): int = cmp(lhs.idx, rhs.idx)
 proc `<=`(lhs, rhs: TestOp): bool = lhs.idx <= rhs.idx
 
-proc runSingleTest(testSequence: openarray[TestOp],
+proc runSingleTest(testSequence: openArray[TestOp],
                    secureMode: bool,
                    expectedRootHash: string): bool =
   var

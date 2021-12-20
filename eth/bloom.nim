@@ -28,12 +28,12 @@ proc init*(_: type BloomFilter, h: MDigest[256]): BloomFilter =
 
 # TODO: The following 2 procs should be one genric, but it doesn't compile. Nim bug?
 proc incl*(f: var BloomFilter, v: string) = f.incl(keccak256.digest(v))
-proc incl*(f: var BloomFilter, v: openarray[byte]) = f.incl(keccak256.digest(v))
+proc incl*(f: var BloomFilter, v: openArray[byte]) = f.incl(keccak256.digest(v))
 
 proc contains*(f: BloomFilter, h: MDigest[256]): bool =
   for bits in bloomBits(h):
     if (f.value and bits).isZero: return false
   return true
 
-template contains*[T](f: BloomFilter, v: openarray[T]): bool =
+template contains*[T](f: BloomFilter, v: openArray[T]): bool =
   f.contains(keccak256.digest(v))

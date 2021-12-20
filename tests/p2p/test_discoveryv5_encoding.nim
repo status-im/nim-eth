@@ -292,7 +292,7 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
     let decoded = codecB.decodePacket(nodeA.address.get(),
       hexToSeqByte(encodedPacket))
     check:
-      decoded.isOK()
+      decoded.isOk()
       decoded.get().messageOpt.isSome()
       decoded.get().messageOpt.get().reqId.id == hexToSeqByte(pingReqId)
       decoded.get().messageOpt.get().kind == ping
@@ -313,7 +313,7 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
       hexToSeqByte(encodedPacket))
 
     check:
-      decoded.isOK()
+      decoded.isOk()
       decoded.get().flag == Flag.Whoareyou
       decoded.get().whoareyou.requestNonce == hexToByteArray[gcmNonceSize](whoareyouRequestNonce)
       decoded.get().whoareyou.idNonce == hexToByteArray[idNonceSize](whoareyouIdNonce)
@@ -352,7 +352,7 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
         challengeData: hexToSeqByte(whoareyouChallengeData))
       pubkey = some(privKeyA.toPublicKey())
       challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey)
-      key = HandShakeKey(nodeId: nodeA.id, address: nodeA.address.get())
+      key = HandshakeKey(nodeId: nodeA.id, address: nodeA.address.get())
 
     check: not codecB.handshakes.hasKeyOrPut(key, challenge)
 
@@ -402,7 +402,7 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
         challengeData: hexToSeqByte(whoareyouChallengeData))
       pubkey = none(PublicKey)
       challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey)
-      key = HandShakeKey(nodeId: nodeA.id, address: nodeA.address.get())
+      key = HandshakeKey(nodeId: nodeA.id, address: nodeA.address.get())
 
     check: not codecB.handshakes.hasKeyOrPut(key, challenge)
 
@@ -520,7 +520,7 @@ suite "Discovery v5.1 Additional Encode/Decode":
 
     let decoded = codecB.decodePacket(nodeA.address.get(), data)
 
-    let key = HandShakeKey(nodeId: nodeB.id, address: nodeB.address.get())
+    let key = HandshakeKey(nodeId: nodeB.id, address: nodeB.address.get())
     var challenge: Challenge
 
     check:

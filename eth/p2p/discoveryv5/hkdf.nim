@@ -1,7 +1,7 @@
 import nimcrypto
 
-proc hkdf*(HashType: typedesc, ikm, salt, info: openarray[byte],
-    output: var openarray[byte]) =
+proc hkdf*(HashType: typedesc, ikm, salt, info: openArray[byte],
+    output: var openArray[byte]) =
   var ctx: HMAC[HashType]
   ctx.init(salt)
   ctx.update(ikm)

@@ -29,7 +29,7 @@ procSuite "SqStoreRef":
 
     let insertStmt = db.prepareStmt(
       "INSERT INTO records(value) VALUES (?);",
-      openarray[byte], void).get
+      openArray[byte], void).get
 
     let insert1Res = insertStmt.exec [byte 1, 2, 3, 4]
     let insert2Res = insertStmt.exec @[]
@@ -63,11 +63,11 @@ procSuite "SqStoreRef":
 
     let selectRangeStmt = db.prepareStmt(
       "SELECT value FROM records WHERE key >= ? and key < ?;",
-      (int64, int64), openarray[byte]).get
+      (int64, int64), openArray[byte]).get
 
     block:
       var allBytes = newSeq[byte]()
-      let selectRangeRes = selectRangeStmt.exec((0'i64, 5'i64)) do (bytes: openarray[byte]) {.gcsafe.}:
+      let selectRangeRes = selectRangeStmt.exec((0'i64, 5'i64)) do (bytes: openArray[byte]) {.gcsafe.}:
         allBytes.add byte(bytes.len)
         allBytes.add bytes
 
@@ -80,7 +80,7 @@ procSuite "SqStoreRef":
                      0,
                      1, 5]
     block:
-      let selectRangeRes = selectRangeStmt.exec((10'i64, 20'i64)) do (bytes: openarray[byte]):
+      let selectRangeRes = selectRangeStmt.exec((10'i64, 20'i64)) do (bytes: openArray[byte]):
         echo "Got unexpected bytes: ", bytes
 
       check:
@@ -106,7 +106,7 @@ procSuite "SqStoreRef":
       ]
 
   test "Tuple with byte arrays support":
-    # openarray[byte] requires either Nim 1.4
+    # openArray[byte] requires either Nim 1.4
     # or hardcoding the seq[byte] and array[N, byte] paths
     let db = SqStoreRef.init("", "test", inMemory = true)[]
     defer: db.close()

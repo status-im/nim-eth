@@ -461,7 +461,7 @@ proc init*(
   let
     name =
       if inMemory: ":memory:"
-      else: basepath / name & ".sqlite3"
+      else: basePath / name & ".sqlite3"
     flags =
       # For some reason, opening multiple in-memory databases doesn't work if
       # one of them is read-only - for now, disable read-only mode for them

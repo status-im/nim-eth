@@ -28,7 +28,7 @@ proc hash(x: UtpSocketKey[Node]): Hash =
 proc initSendCallback(
     t: protocol.Protocol, subProtocolName: seq[byte]): SendCallback[Node] =
   return (
-    proc (to: Node, data: seq[byte]): Future[void] = 
+    proc (to: Node, data: seq[byte]): Future[void] =
       let fut = newFuture[void]()
       # TODO: In discovery v5 each talkreq waits for a talkresp, but here we
       # would really like the fire and forget semantics (similar to udp).
@@ -54,7 +54,7 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     @[]
   else:
     @[]
-    
+
 proc new*(
     T: type UtpDiscv5Protocol,
     p: protocol.Protocol,

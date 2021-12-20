@@ -31,7 +31,7 @@ type SendBufferTracker* = ref object
 proc new*(
   T: type SendBufferTracker,
   currentWindow: uint32,
-  maxRemoteWindow: uint32, 
+  maxRemoteWindow: uint32,
   maxSndBufferSize: uint32,
   maxWindow: uint32): T =
   return (
@@ -70,7 +70,7 @@ proc updateMaxRemote*(t: SendBufferTracker, newRemoteWindow: uint32) =
   t.maxRemoteWindow = newRemoteWindow
   t.checkWaiters()
 
-proc updateMaxWindowSize*(t: SendBufferTracker, newRemoteWindow: uint32, maxWindow: uint32) = 
+proc updateMaxWindowSize*(t: SendBufferTracker, newRemoteWindow: uint32, maxWindow: uint32) =
   t.maxRemoteWindow = newRemoteWindow
   t.maxWindow = maxWindow
   t.checkWaiters()

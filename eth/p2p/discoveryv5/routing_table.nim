@@ -93,7 +93,7 @@ type
     NoAddress
 
 # xor distance functions
-func distance*(a, b: NodeId): Uint256 =
+func distance*(a, b: NodeId): UInt256 =
   ## Calculate the distance to a NodeId.
   a xor b
 
@@ -137,7 +137,7 @@ const
   XorDistanceCalculator* = DistanceCalculator(calculateDistance: distance,
     calculateLogDistance: logDistance, calculateIdAtDistance: idAtDistance)
 
-func distance*(r: RoutingTable, a, b: NodeId): Uint256 =
+func distance*(r: RoutingTable, a, b: NodeId): UInt256 =
   r.distanceCalculator.calculateDistance(a, b)
 
 func logDistance*(r: RoutingTable, a, b: NodeId): uint16 =
@@ -172,7 +172,7 @@ proc ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
     return false
   # Check ip limit for routing table
   if not r.ipLimits.inc(ip):
-    b.iplimits.dec(ip)
+    b.ipLimits.dec(ip)
     return false
 
   return true
@@ -225,7 +225,7 @@ proc inRange(k: KBucket, n: Node): bool =
 
 proc contains(k: KBucket, n: Node): bool = n in k.nodes
 
-proc binaryGetBucketForNode*(buckets: openarray[KBucket],
+proc binaryGetBucketForNode*(buckets: openArray[KBucket],
                             id: NodeId): KBucket =
   ## Given a list of ordered buckets, returns the bucket for a given `NodeId`.
   ## Returns nil if no bucket in range for given `id` is found.
@@ -233,13 +233,13 @@ proc binaryGetBucketForNode*(buckets: openarray[KBucket],
     cmp(a.iend, b)
 
   # Prevent cases where `lowerBound` returns an out of range index e.g. at empty
-  # openarray, or when the id is out range for all buckets in the openarray.
+  # openArray, or when the id is out range for all buckets in the openArray.
   if bucketPos < buckets.len:
     let bucket = buckets[bucketPos]
     if bucket.istart <= id and id <= bucket.iend:
       result = bucket
 
-proc computeSharedPrefixBits(nodes: openarray[NodeId]): int =
+proc computeSharedPrefixBits(nodes: openArray[NodeId]): int =
   ## Count the number of prefix bits shared by all nodes.
   if nodes.len < 2:
     return ID_SIZE
@@ -266,7 +266,7 @@ proc init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop
   ## `bitsPerHop` is default set to 5 as recommended by original Kademlia paper.
   RoutingTable(
     localNode: localNode,
-    buckets: @[KBucket.new(0.u256, high(Uint256), ipLimits.bucketIpLimit)],
+    buckets: @[KBucket.new(0.u256, high(UInt256), ipLimits.bucketIpLimit)],
     bitsPerHop: bitsPerHop,
     ipLimits: IpLimits(limit: ipLimits.tableIpLimit),
     distanceCalculator: distanceCalculator,
@@ -478,7 +478,7 @@ proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
 proc len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len
 
-proc moveRight[T](arr: var openarray[T], a, b: int) =
+proc moveRight[T](arr: var openArray[T], a, b: int) =
   ## In `arr` move elements in range [a, b] right by 1.
   var t: T
   shallowCopy(t, arr[b + 1])

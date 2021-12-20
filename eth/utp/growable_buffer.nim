@@ -16,19 +16,19 @@ export options
 # utp implementation.
 # Another alternative would be to use standard deque from deques module, and caluclate
 # item indexes from their sequence numbers.
-type 
+type
   GrowableCircularBuffer*[A] = object
     items: seq[Option[A]]
     mask: int
 
 # provided size will always be adjusted to next power of two
-proc init*[A](T: type GrowableCircularBuffer[A], size: Natural = 16): T = 
+proc init*[A](T: type GrowableCircularBuffer[A], size: Natural = 16): T =
   let powOfTwoSize = nextPowerOfTwo(size)
   T(
     items: newSeq[Option[A]](size),
     mask: powOfTwoSize - 1
   )
-  
+
 proc get*[A](buff: GrowableCircularBuffer[A], i: Natural): Option[A] =
   buff.items[i and buff.mask]
 
@@ -52,7 +52,7 @@ proc exists*[A](buff: GrowableCircularBuffer[A], i: Natural, check: proc (x: A):
   else:
     false
 
-proc `[]`*[A](buff: var GrowableCircularBuffer[A], i: Natural): var A = 
+proc `[]`*[A](buff: var GrowableCircularBuffer[A], i: Natural): var A =
   ## Returns contents of the `var GrowableCircularBuffer`. If it is not set, then an exception
   ## is thrown.
   buff.items[i and buff.mask].get()

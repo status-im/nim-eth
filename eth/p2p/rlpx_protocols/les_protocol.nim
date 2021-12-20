@@ -144,13 +144,13 @@ template updateBV: BufValueInt =
   bufValueAfterRequest(lesNetwork, lesPeer,
                        perProtocolMsgId, requestCostQuantity)
 
-func getValue(values: openarray[KeyValuePair],
+func getValue(values: openArray[KeyValuePair],
               key: string, T: typedesc): Option[T] =
   for v in values:
     if v.key == key:
       return some(rlp.decode(v.value, T))
 
-func getRequiredValue(values: openarray[KeyValuePair],
+func getRequiredValue(values: openArray[KeyValuePair],
                       key: string, T: typedesc): T =
   for v in values:
     if v.key == key:
@@ -166,7 +166,7 @@ p2pProtocol les(version = lesVersion,
                 incomingRequestDecorator = incomingRequestDecorator,
                 incomingResponseThunkDecorator = incomingResponseDecorator):
   handshake:
-    proc status(p: Peer, values: openarray[KeyValuePair])
+    proc status(p: Peer, values: openArray[KeyValuePair])
 
   onPeerConnected do (peer: Peer):
     let
@@ -254,7 +254,7 @@ p2pProtocol les(version = lesVersion,
        headNumber: BlockNumber,
        headTotalDifficulty: DifficultyInt,
        reorgDepth: BlockNumber,
-       values: openarray[KeyValuePair],
+       values: openArray[KeyValuePair],
        announceType: AnnounceType) =
 
     if peer.state.announceType == AnnounceType.None:
@@ -288,7 +288,7 @@ p2pProtocol les(version = lesVersion,
     proc blockHeaders(
            peer: Peer,
            bufValue: BufValueInt,
-           blocks: openarray[BlockHeader])
+           blocks: openArray[BlockHeader])
 
   ## On-damand data retrieval
   ##
@@ -296,7 +296,7 @@ p2pProtocol les(version = lesVersion,
   requestResponse:
     proc getBlockBodies(
            peer: Peer,
-           blocks: openarray[KeccakHash]) {.
+           blocks: openArray[KeccakHash]) {.
            costQuantity(blocks.len, max = maxBodiesFetch), gcsafe.} =
 
       let blocks = peer.network.chain.getBlockBodies(blocks)
@@ -305,12 +305,12 @@ p2pProtocol les(version = lesVersion,
     proc blockBodies(
            peer: Peer,
            bufValue: BufValueInt,
-           bodies: openarray[BlockBody])
+           bodies: openArray[BlockBody])
 
   requestResponse:
     proc getReceipts(
            peer: Peer,
-           hashes: openarray[KeccakHash])
+           hashes: openArray[KeccakHash])
            {.costQuantity(hashes.len, max = maxReceiptsFetch).} =
 
       let receipts = peer.network.chain.getReceipts(hashes)
@@ -319,12 +319,12 @@ p2pProtocol les(version = lesVersion,
     proc receipts(
            peer: Peer,
            bufValue: BufValueInt,
-           receipts: openarray[Receipt])
+           receipts: openArray[Receipt])
 
   requestResponse:
     proc getProofs(
            peer: Peer,
-           proofs: openarray[ProofRequest]) {.
+           proofs: openArray[ProofRequest]) {.
            costQuantity(proofs.len, max = maxProofsFetch).} =
 
       let proofs = peer.network.chain.getProofs(proofs)
@@ -333,7 +333,7 @@ p2pProtocol les(version = lesVersion,
     proc proofs(
            peer: Peer,
            bufValue: BufValueInt,
-           proofs: openarray[Blob])
+           proofs: openArray[Blob])
 
   requestResponse:
     proc getContractCodes(
@@ -354,7 +354,7 @@ p2pProtocol les(version = lesVersion,
   requestResponse:
     proc getHeaderProofs(
            peer: Peer,
-           reqs: openarray[ProofRequest]) {.
+           reqs: openArray[ProofRequest]) {.
            costQuantity(reqs.len, max = maxHeaderProofsFetch).} =
 
       let proofs = peer.network.chain.getHeaderProofs(reqs)
@@ -363,12 +363,12 @@ p2pProtocol les(version = lesVersion,
     proc headerProofs(
            peer: Peer,
            bufValue: BufValueInt,
-           proofs: openarray[Blob])
+           proofs: openArray[Blob])
 
   requestResponse:
     proc getHelperTrieProofs(
            peer: Peer,
-           reqs: openarray[HelperTrieProofRequest]) {.
+           reqs: openArray[HelperTrieProofRequest]) {.
            costQuantity(reqs.len, max = maxProofsFetch).} =
 
       var nodes, auxData: seq[Blob]
@@ -387,7 +387,7 @@ p2pProtocol les(version = lesVersion,
   requestResponse:
     proc sendTxV2(
            peer: Peer,
-           transactions: openarray[Transaction]) {.
+           transactions: openArray[Transaction]) {.
            costQuantity(transactions.len, max = maxTransactionsFetch).} =
 
       let chain = peer.network.chain
@@ -409,7 +409,7 @@ p2pProtocol les(version = lesVersion,
 
     proc getTxStatus(
            peer: Peer,
-           transactions: openarray[Transaction]) {.
+           transactions: openArray[Transaction]) {.
            costQuantity(transactions.len, max = maxTransactionsFetch).} =
 
       let chain = peer.network.chain
@@ -422,7 +422,7 @@ p2pProtocol les(version = lesVersion,
     proc txStatus(
            peer: Peer,
            bufValue: BufValueInt,
-           transactions: openarray[TransactionStatusMsg])
+           transactions: openArray[TransactionStatusMsg])
 
 proc configureLes*(node: EthereumNode,
                    # Client options:

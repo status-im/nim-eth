@@ -33,7 +33,7 @@ proc packData(payload: openArray[byte], pk: PrivateKey): seq[byte] =
     msgHash = keccak256.digest(signature & payloadSeq)
   result = @(msgHash.data) & signature & payloadSeq
 
-proc nodeIdInNodes(id: NodeId, nodes: openarray[Node]): bool =
+proc nodeIdInNodes(id: NodeId, nodes: openArray[Node]): bool =
   for n in nodes:
     if id == n.id: return true
 

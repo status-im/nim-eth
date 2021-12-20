@@ -676,7 +676,7 @@ suite "Discovery v5 Tests":
     # Check handshake duplicates
     check receiveNode.codec.handshakes.len == 1
     # Check if it is for the first packet that a handshake is stored
-    let key = HandShakeKey(nodeId: sendNode.id, address: a)
+    let key = HandshakeKey(nodeId: sendNode.id, address: a)
     check receiveNode.codec.handshakes[key].whoareyouData.requestNonce ==
       firstRequestNonce
 

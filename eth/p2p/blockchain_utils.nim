@@ -30,7 +30,7 @@ proc getBlockHeaders*(db: AbstractChainDB, req: BlocksRequest): seq[BlockHeader]
 
 template fetcher*(fetcherName, fetchingFunc, InputType, ResultType: untyped) =
   proc fetcherName*(db: AbstractChainDB,
-                    lookups: openarray[InputType]): seq[ResultType] {.gcsafe.} =
+                    lookups: openArray[InputType]): seq[ResultType] {.gcsafe.} =
     for lookup in lookups:
       let fetched = fetchingFunc(db, lookup)
       if fetched.hasData:
@@ -47,6 +47,6 @@ fetcher getProofs,         getProof,         ProofRequest,  Blob
 fetcher getHeaderProofs,   getHeaderProof,   ProofRequest,  Blob
 
 proc getHelperTrieProofs*(db: AbstractChainDB,
-                          reqs: openarray[HelperTrieProofRequest],
+                          reqs: openArray[HelperTrieProofRequest],
                           outNodes: var seq[Blob], outAuxData: var seq[Blob]) =
   discard

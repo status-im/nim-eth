@@ -71,10 +71,10 @@ p2pProtocol eth(version = protocolVersion,
                 bestHash: KeccakHash,
                 genesisHash: KeccakHash)
 
-  proc newBlockHashes(peer: Peer, hashes: openarray[NewBlockHashesAnnounce]) =
+  proc newBlockHashes(peer: Peer, hashes: openArray[NewBlockHashesAnnounce]) =
     discard
 
-  proc transactions(peer: Peer, transactions: openarray[Transaction]) =
+  proc transactions(peer: Peer, transactions: openArray[Transaction]) =
     discard
 
   requestResponse:
@@ -85,17 +85,17 @@ p2pProtocol eth(version = protocolVersion,
 
       await response.send(peer.network.chain.getBlockHeaders(request))
 
-    proc blockHeaders(p: Peer, headers: openarray[BlockHeader])
+    proc blockHeaders(p: Peer, headers: openArray[BlockHeader])
 
   requestResponse:
-    proc getBlockBodies(peer: Peer, hashes: openarray[KeccakHash]) {.gcsafe.} =
+    proc getBlockBodies(peer: Peer, hashes: openArray[KeccakHash]) {.gcsafe.} =
       if hashes.len > maxBodiesFetch:
         await peer.disconnect(BreachOfProtocol)
         return
 
       await response.send(peer.network.chain.getBlockBodies(hashes))
 
-    proc blockBodies(peer: Peer, blocks: openarray[BlockBody])
+    proc blockBodies(peer: Peer, blocks: openArray[BlockBody])
 
   proc newBlock(peer: Peer, bh: NewBlockAnnounce, totalDifficulty: DifficultyInt) =
     discard
@@ -103,15 +103,15 @@ p2pProtocol eth(version = protocolVersion,
   nextID 13
 
   requestResponse:
-    proc getNodeData(peer: Peer, hashes: openarray[KeccakHash]) =
+    proc getNodeData(peer: Peer, hashes: openArray[KeccakHash]) =
       await response.send(peer.network.chain.getStorageNodes(hashes))
 
-    proc nodeData(peer: Peer, data: openarray[Blob])
+    proc nodeData(peer: Peer, data: openArray[Blob])
 
   requestResponse:
-    proc getReceipts(peer: Peer, hashes: openarray[KeccakHash]) = discard
+    proc getReceipts(peer: Peer, hashes: openArray[KeccakHash]) = discard
       # TODO: implement `getReceipts` and reactivate this code
       # await response.send(peer.network.chain.getReceipts(hashes))
 
-    proc receipts(peer: Peer, receipts: openarray[Receipt])
+    proc receipts(peer: Peer, receipts: openArray[Receipt])
 

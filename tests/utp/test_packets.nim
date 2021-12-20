@@ -24,9 +24,9 @@ suite "Utp packets encoding/decoding":
     check:
       len(encoded) == 20
       decoded.isOk()
-      
+
     let synPacketDec = decoded.get()
-    
+
     check:
       synPacketDec == synPacket
 
@@ -38,9 +38,9 @@ suite "Utp packets encoding/decoding":
     check:
       len(encoded) == 20
       decoded.isOk()
-      
+
     let finPacketDec = decoded.get()
-    
+
     check:
       finPacketDec == finPacket
 
@@ -52,9 +52,9 @@ suite "Utp packets encoding/decoding":
     check:
       len(encoded) == 20
       decoded.isOk()
-      
+
     let resetPacketDec = decoded.get()
-    
+
     check:
       resetPacketDec == resetPacket
 
@@ -66,9 +66,9 @@ suite "Utp packets encoding/decoding":
     check:
       len(encoded) == 20
       decoded.isOk()
-      
+
     let ackPacketDec = decoded.get()
-    
+
     check:
       ackPacketDec == ackPacket
 
@@ -81,9 +81,9 @@ suite "Utp packets encoding/decoding":
     check:
       len(encoded) == 26
       decoded.isOk()
-      
+
     let ackPacketDec = decoded.get()
-    
+
     check:
       ackPacketDec == ackPacket
       ackPacketDec.eack.isSome()
@@ -112,7 +112,7 @@ suite "Utp packets encoding/decoding":
     # delete last byte, now packet is to short
     encoded3.del(encoded3.high)
     let err3 = decodePacket(encoded3)
-    
+
     check:
       err3.isErr()
       err3.error() == "Packet too short for selective ack extension"

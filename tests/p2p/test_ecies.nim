@@ -14,7 +14,7 @@ import
   nimcrypto/[utils, sha2, hmac, rijndael],
   ../../eth/keys, ../../eth/p2p/ecies
 
-proc compare[A, B](x: openarray[A], y: openarray[B], s: int = 0): bool =
+proc compare[A, B](x: openArray[A], y: openArray[B], s: int = 0): bool =
   result = true
   doAssert(s >= 0)
   var size = if s == 0: min(len(x), len(y)) else: min(s, min(len(x), len(y)))

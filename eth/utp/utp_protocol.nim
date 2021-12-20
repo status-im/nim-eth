@@ -68,18 +68,18 @@ proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
 
 proc initSendCallback(t: DatagramTransport): SendCallback[TransportAddress] =
   return (
-    proc (to: TransportAddress, data: seq[byte]): Future[void] = 
+    proc (to: TransportAddress, data: seq[byte]): Future[void] =
       t.sendTo(to, data)
   )
 
 proc new*(
-  T: type UtpProtocol, 
-  acceptConnectionCb: AcceptConnectionCallback[TransportAddress], 
+  T: type UtpProtocol,
+  acceptConnectionCb: AcceptConnectionCallback[TransportAddress],
   address: TransportAddress,
   socketConfig: SocketConfig = SocketConfig.init(),
   allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
   rng = newRng()): UtpProtocol {.raises: [Defect, CatchableError].} =
-  
+
   doAssert(not(isNil(acceptConnectionCb)))
 
   let router = UtpRouter[TransportAddress].new(
@@ -97,7 +97,7 @@ proc shutdownWait*(p: UtpProtocol): Future[void] {.async.} =
   ## closes all managed utp sockets and then underlying transport
   await p.utpRouter.shutdownWait()
   await p.transport.closeWait()
- 
+
 proc connectTo*(r: UtpProtocol, address: TransportAddress): Future[ConnectionResult[TransportAddress]] =
   return r.utpRouter.connectTo(address)
 

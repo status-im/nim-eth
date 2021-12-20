@@ -74,13 +74,13 @@ proc hashAndSave*(self: BinaryTrie, node: openArray[byte]): TrieNodeKey =
   self.db.put(result, node)
 
 template saveKV(self: BinaryTrie, keyPath: TrieBitSeq | bool, child: openArray[byte]): untyped =
-  self.hashAndsave(encodeKVNode(keyPath, child))
+  self.hashAndSave(encodeKVNode(keyPath, child))
 
 template saveLeaf(self: BinaryTrie, value: openArray[byte]): untyped =
-  self.hashAndsave(encodeLeafNode(value))
+  self.hashAndSave(encodeLeafNode(value))
 
 template saveBranch(self: BinaryTrie, L, R: openArray[byte]): untyped =
-  self.hashAndsave(encodeBranchNode(L, R))
+  self.hashAndSave(encodeBranchNode(L, R))
 
 proc setBranchNode(self: BinaryTrie, keyPath: TrieBitSeq, node: TrieNode,
   value: openArray[byte], deleteSubtrie = false): TrieNodeKey

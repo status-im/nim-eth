@@ -53,7 +53,7 @@ type
   HandshakeFlag* = enum
     Initiator,      ## `Handshake` owner is connection initiator
     Responder,      ## `Handshake` owner is connection responder
-    Eip8            ## Flag indicates that EIP-8 handshake is used
+    EIP8            ## Flag indicates that EIP-8 handshake is used
 
   AuthError* = enum
     EcdhError       = "auth: ECDH shared secret could not be calculated"
@@ -127,7 +127,7 @@ proc tryInit*(
 proc authMessagePreEIP8(h: var Handshake,
                         rng: var BrHmacDrbgContext,
                         pubkey: PublicKey,
-                        output: var openarray[byte],
+                        output: var openArray[byte],
                         outlen: var int,
                         flag: byte = 0,
                         encrypt: bool = true): AuthResult[void] =
@@ -166,7 +166,7 @@ proc authMessagePreEIP8(h: var Handshake,
 proc authMessageEIP8(h: var Handshake,
                      rng: var BrHmacDrbgContext,
                      pubkey: PublicKey,
-                     output: var openarray[byte],
+                     output: var openArray[byte],
                      outlen: var int,
                      flag: byte = 0,
                      encrypt: bool = true): AuthResult[void] =
@@ -225,7 +225,7 @@ proc authMessageEIP8(h: var Handshake,
 
 proc ackMessagePreEIP8(h: var Handshake,
                        rng: var BrHmacDrbgContext,
-                       output: var openarray[byte],
+                       output: var openArray[byte],
                        outlen: var int,
                        flag: byte = 0,
                        encrypt: bool = true): AuthResult[void] =
@@ -252,7 +252,7 @@ proc ackMessagePreEIP8(h: var Handshake,
 
 proc ackMessageEIP8(h: var Handshake,
                     rng: var BrHmacDrbgContext,
-                    output: var openarray[byte],
+                    output: var openArray[byte],
                     outlen: var int,
                     flag: byte = 0,
                     encrypt: bool = true): AuthResult[void] =
@@ -314,7 +314,7 @@ template ackSize*(h: Handshake, encrypt: bool = true): int =
 
 proc authMessage*(h: var Handshake, rng: var BrHmacDrbgContext,
                   pubkey: PublicKey,
-                  output: var openarray[byte],
+                  output: var openArray[byte],
                   outlen: var int, flag: byte = 0,
                   encrypt: bool = true): AuthResult[void] =
   ## Create new AuthMessage for specified `pubkey` and store it inside
@@ -325,7 +325,7 @@ proc authMessage*(h: var Handshake, rng: var BrHmacDrbgContext,
     authMessagePreEIP8(h, rng, pubkey, output, outlen, flag, encrypt)
 
 proc ackMessage*(h: var Handshake, rng: var BrHmacDrbgContext,
-                 output: var openarray[byte],
+                 output: var openArray[byte],
                  outlen: var int, flag: byte = 0,
                  encrypt: bool = true): AuthResult[void] =
   ## Create new AckMessage and store it inside of `output`, size of generated
@@ -335,7 +335,7 @@ proc ackMessage*(h: var Handshake, rng: var BrHmacDrbgContext,
   else:
     ackMessagePreEIP8(h, rng, output, outlen, flag, encrypt)
 
-proc decodeAuthMessageV4(h: var Handshake, m: openarray[byte]): AuthResult[void] =
+proc decodeAuthMessageV4(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes V4 AuthMessage.
   var
     buffer: array[PlainAuthMessageV4Length, byte]
@@ -361,7 +361,7 @@ proc decodeAuthMessageV4(h: var Handshake, m: openarray[byte]): AuthResult[void]
 
   ok()
 
-proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthResult[void] =
+proc decodeAuthMessageEIP8(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AuthMessage.
   let size = uint16.fromBytesBE(m)
   h.expectedLength = int(size) + 2
@@ -408,7 +408,7 @@ proc decodeAuthMessageEip8(h: var Handshake, m: openarray[byte]): AuthResult[voi
   except CatchableError:
     err(RlpError)
 
-proc decodeAckMessageEip8*(h: var Handshake, m: openarray[byte]): AuthResult[void] =
+proc decodeAckMessageEIP8*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AckMessage.
   let size = uint16.fromBytesBE(m)
 
@@ -442,7 +442,7 @@ proc decodeAckMessageEip8*(h: var Handshake, m: openarray[byte]): AuthResult[voi
   except CatchableError:
     err(RlpError)
 
-proc decodeAckMessageV4(h: var Handshake, m: openarray[byte]): AuthResult[void] =
+proc decodeAckMessageV4(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes V4 AckMessage.
   var
     buffer: array[PlainAckMessageV4Length, byte]
@@ -457,7 +457,7 @@ proc decodeAckMessageV4(h: var Handshake, m: openarray[byte]): AuthResult[void] 
 
   ok()
 
-proc decodeAuthMessage*(h: var Handshake, input: openarray[byte]): AuthResult[void] =
+proc decodeAuthMessage*(h: var Handshake, input: openArray[byte]): AuthResult[void] =
   ## Decodes AuthMessage from `input`.
   if len(input) < AuthMessageV4Length:
     return err(IncompleteError)
@@ -466,12 +466,12 @@ proc decodeAuthMessage*(h: var Handshake, input: openarray[byte]): AuthResult[vo
     let res = h.decodeAuthMessageV4(input)
     if res.isOk(): return res
 
-  let res = h.decodeAuthMessageEip8(input)
+  let res = h.decodeAuthMessageEIP8(input)
   if res.isOk():
     h.flags.incl(EIP8)
   res
 
-proc decodeAckMessage*(h: var Handshake, input: openarray[byte]): AuthResult[void] =
+proc decodeAckMessage*(h: var Handshake, input: openArray[byte]): AuthResult[void] =
   ## Decodes AckMessage from `input`.
   if len(input) < AckMessageV4Length:
     return err(IncompleteError)
@@ -479,13 +479,13 @@ proc decodeAckMessage*(h: var Handshake, input: openarray[byte]): AuthResult[voi
     let res = h.decodeAckMessageV4(input)
     if res.isOk(): return res
 
-  let res = h.decodeAckMessageEip8(input)
+  let res = h.decodeAckMessageEIP8(input)
   if res.isOk(): h.flags.incl(EIP8)
   res
 
 proc getSecrets*(
-  h: Handshake, authmsg: openarray[byte],
-  ackmsg: openarray[byte]): ConnectionSecret =
+  h: Handshake, authmsg: openArray[byte],
+  ackmsg: openArray[byte]): ConnectionSecret =
   ## Derive secrets from handshake `h` using encrypted AuthMessage `authmsg` and
   ## encrypted AckMessage `ackmsg`.
   var

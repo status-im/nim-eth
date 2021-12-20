@@ -2,7 +2,7 @@
 
 import
   std/[sets, options],
-  stew/results, stew/shims/net, chronicles, chronos, 
+  stew/results, stew/shims/net, chronicles, chronos,
   "."/[node, enr, routing_table]
 
 logScope:
@@ -25,7 +25,7 @@ proc validIp(sender, address: IpAddress): bool =
   # https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
   return true
 
-proc verifyNodesRecords(enrs: openarray[Record], fromNode: Node, nodesLimit: int,
+proc verifyNodesRecords(enrs: openArray[Record], fromNode: Node, nodesLimit: int,
     distances: Option[seq[uint16]]): seq[Node] =
   ## Verify and convert ENRs to a sequence of nodes. Only ENRs that pass
   ## verification will be added. ENRs are verified for duplicates, invalid
@@ -79,8 +79,8 @@ proc verifyNodesRecords(enrs: openarray[Record], fromNode: Node, nodesLimit: int
       seen.incl(n)
       result.add(n)
 
-proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node, nodesLimit: int): seq[Node] =
+proc verifyNodesRecords*(enrs: openArray[Record], fromNode: Node, nodesLimit: int): seq[Node] =
   verifyNodesRecords(enrs, fromNode, nodesLimit, none[seq[uint16]]())
 
-proc verifyNodesRecords*(enrs: openarray[Record], fromNode: Node, nodesLimit: int, distances: seq[uint16]): seq[Node] =
+proc verifyNodesRecords*(enrs: openArray[Record], fromNode: Node, nodesLimit: int, distances: seq[uint16]): seq[Node] =
   verifyNodesRecords(enrs, fromNode, nodesLimit, some[seq[uint16]](distances))

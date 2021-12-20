@@ -353,7 +353,7 @@ proc readImpl[E](rlp: var Rlp, T: type seq[E]): T =
     for elem in rlp:
       result.add rlp.read(E)
 
-proc readImpl[E](rlp: var Rlp, T: type openarray[E]): seq[E] =
+proc readImpl[E](rlp: var Rlp, T: type openArray[E]): seq[E] =
   result = readImpl(rlp, seq[E])
 
 proc readImpl(rlp: var Rlp, T: type[object|tuple],
@@ -406,7 +406,7 @@ proc `>>`*[T](rlp: var Rlp, location: var T) =
 template readRecordType*(rlp: var Rlp, T: type, wrappedInList: bool): auto =
   readImpl(rlp, T, wrappedInList)
 
-proc decode*(bytes: openarray[byte]): RlpNode =
+proc decode*(bytes: openArray[byte]): RlpNode =
   var rlp = rlpFromBytes(bytes)
   rlp.toNodes
 

@@ -53,7 +53,7 @@ proc roundup16*(x: int): int {.inline.} =
 template toa(a, b, c: untyped): untyped =
   toOpenArray((a), (b), (b) + (c) - 1)
 
-proc sxor[T](a: var openarray[T], b: openarray[T]) {.inline.} =
+proc sxor[T](a: var openArray[T], b: openArray[T]) {.inline.} =
   doAssert(len(a) == len(b))
   for i in 0 ..< len(a):
     a[i] = a[i] xor b[i]
@@ -80,9 +80,9 @@ template decryptedLength*(size: int): int =
   ## Returns size of decrypted message for body with length `size`.
   roundup16(size)
 
-proc encrypt*(c: var SecretState, header: openarray[byte],
-              frame: openarray[byte],
-              output: var openarray[byte]): RlpxResult[void] =
+proc encrypt*(c: var SecretState, header: openArray[byte],
+              frame: openArray[byte],
+              output: var openArray[byte]): RlpxResult[void] =
   ## Encrypts `header` and `frame` using SecretState `c` context and store
   ## result into `output`.
   ##
@@ -136,7 +136,7 @@ proc encrypt*(c: var SecretState, header: openarray[byte],
   copyMem(addr output[frameMacPos], addr frameMac.data[0], RlpHeaderLength)
   ok()
 
-proc encryptMsg*(msg: openarray[byte], secrets: var SecretState): seq[byte] =
+proc encryptMsg*(msg: openArray[byte], secrets: var SecretState): seq[byte] =
   var header: RlpxHeader
 
   if uint32(msg.len) > maxUInt24:
@@ -163,8 +163,8 @@ proc encryptMsg*(msg: openarray[byte], secrets: var SecretState): seq[byte] =
 proc getBodySize*(a: RlpxHeader): int =
   (int(a[0]) shl 16) or (int(a[1]) shl 8) or int(a[2])
 
-proc decryptHeader*(c: var SecretState, data: openarray[byte],
-                    output: var openarray[byte]): RlpxResult[void] =
+proc decryptHeader*(c: var SecretState, data: openArray[byte],
+                    output: var openArray[byte]): RlpxResult[void] =
   ## Decrypts header `data` using SecretState `c` context and store
   ## result into `output`.
   ##
@@ -201,15 +201,15 @@ proc decryptHeader*(c: var SecretState, data: openarray[byte],
     result = ok()
 
 proc decryptHeaderAndGetMsgSize*(c: var SecretState,
-                                 encryptedHeader: openarray[byte],
+                                 encryptedHeader: openArray[byte],
                                  outSize: var int): RlpxResult[void] =
   var decryptedHeader: RlpxHeader
   result = decryptHeader(c, encryptedHeader, decryptedHeader)
   if result.isOk():
     outSize = decryptedHeader.getBodySize
 
-proc decryptBody*(c: var SecretState, data: openarray[byte], bodysize: int,
-                  output: var openarray[byte], outlen: var int): RlpxResult[void] =
+proc decryptBody*(c: var SecretState, data: openArray[byte], bodysize: int,
+                  output: var openArray[byte], outlen: var int): RlpxResult[void] =
   ## Decrypts body `data` using SecretState `c` context and store
   ## result into `output`.
   ##

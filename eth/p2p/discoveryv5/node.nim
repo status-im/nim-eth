@@ -60,7 +60,7 @@ func newNode*(r: Record): Result[Node, cstring] =
 
 func update*(n: Node, pk: PrivateKey, ip: Option[ValidIpAddress],
     tcpPort, udpPort: Option[Port] = none[Port](),
-    extraFields: openarray[FieldPair] = []): Result[void, cstring] =
+    extraFields: openArray[FieldPair] = []): Result[void, cstring] =
   ? n.record.update(pk, ip, tcpPort, udpPort, extraFields)
 
   if ip.isSome():

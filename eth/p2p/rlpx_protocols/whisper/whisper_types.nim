@@ -189,7 +189,7 @@ proc fullBloom*(): Bloom =
   for i in 0..<result.len:
     result[i] = 0xFF
 
-proc encryptAesGcm(plain: openarray[byte], key: SymKey,
+proc encryptAesGcm(plain: openArray[byte], key: SymKey,
     iv: array[gcmIVLen, byte]): seq[byte] =
   ## Encrypt using AES-GCM, making sure to append tag and iv, in that order
   var gcm: GCM[aes256]
@@ -203,7 +203,7 @@ proc encryptAesGcm(plain: openarray[byte], key: SymKey,
   result.add tag
   result.add iv
 
-proc decryptAesGcm(cipher: openarray[byte], key: SymKey): Option[seq[byte]] =
+proc decryptAesGcm(cipher: openArray[byte], key: SymKey): Option[seq[byte]] =
   ## Decrypt AES-GCM ciphertext and validate authenticity - assumes
   ## cipher-tag-iv format of the buffer
   if cipher.len < gcmTagLen + gcmIVLen:
@@ -310,7 +310,7 @@ proc encode*(rng: var BrHmacDrbgContext, self: Payload): Option[seq[byte]] =
   # No encryption!
   return some(plain)
 
-proc decode*(data: openarray[byte], dst = none[PrivateKey](),
+proc decode*(data: openArray[byte], dst = none[PrivateKey](),
     symKey = none[SymKey]()): Option[DecodedPayload] =
   ## Decode data into payload, potentially trying to decrypt if keys are
   ## provided

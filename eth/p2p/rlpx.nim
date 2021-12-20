@@ -170,7 +170,7 @@ proc numProtocols(d: Dispatcher): int =
   d.activeProtocols.len
 
 proc getDispatcher(node: EthereumNode,
-                   otherPeerCapabilities: openarray[Capability]): Dispatcher =
+                   otherPeerCapabilities: openArray[Capability]): Dispatcher =
   # TODO: sub-optimal solution until progress is made here:
   # https://github.com/nim-lang/Nim/issues/7457
   # We should be able to find an existing dispatcher without allocating a new one
@@ -945,7 +945,7 @@ proc checkUselessPeer(peer: Peer) {.raises: [UselessPeerError, Defect].} =
     # XXX: Send disconnect + UselessPeer
     raise newException(UselessPeerError, "Useless peer")
 
-proc initPeerState*(peer: Peer, capabilities: openarray[Capability])
+proc initPeerState*(peer: Peer, capabilities: openArray[Capability])
     {.raises: [UselessPeerError, Defect].} =
   peer.dispatcher = getDispatcher(peer.network, capabilities)
   checkUselessPeer(peer)
@@ -1015,7 +1015,7 @@ template `^`(arr): auto =
   # variable as an open array
   arr.toOpenArray(0, `arr Len` - 1)
 
-proc initSecretState(hs: var Handshake, authMsg, ackMsg: openarray[byte],
+proc initSecretState(hs: var Handshake, authMsg, ackMsg: openArray[byte],
     p: Peer) =
   var secrets = hs.getSecrets(authMsg, ackMsg)
   initSecretState(secrets, p.secretsState)
@@ -1101,7 +1101,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
       result.waitSingleMsg(DevP2P.hello),
       10.seconds)
 
-    if not validatePubKeyInHello(response, remote.node.pubKey):
+    if not validatePubKeyInHello(response, remote.node.pubkey):
       warn "Remote nodeId is not its public key" # XXX: Do we care?
 
     trace "DevP2P handshake completed", peer = remote,
@@ -1145,7 +1145,7 @@ proc rlpxAccept*(node: EthereumNode,
   result.network = node
 
   var handshake =
-    HandShake.tryInit(node.rng[], node.keys, {auth.Responder}).tryGet
+    Handshake.tryInit(node.rng[], node.keys, {auth.Responder}).tryGet
 
   var ok = false
   try:

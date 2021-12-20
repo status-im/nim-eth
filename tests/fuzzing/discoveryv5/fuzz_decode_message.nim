@@ -6,14 +6,14 @@ test:
   block:
     let decoded = decodeMessage(payload)
 
-    if decoded.isOK():
+    if decoded.isOk():
       let message = decoded.get()
       var encoded: seq[byte]
       case message.kind
       of unused: break
       of ping: encoded = encodeMessage(message.ping, message.reqId)
       of pong: encoded = encodeMessage(message.pong, message.reqId)
-      of findNode: encoded = encodeMessage(message.findNode, message.reqId)
+      of findnode: encoded = encodeMessage(message.findNode, message.reqId)
       of nodes: encoded = encodeMessage(message.nodes, message.reqId)
       of talkreq: encoded = encodeMessage(message.talkreq, message.reqId)
       of talkresp: encoded = encodeMessage(message.talkresp, message.reqId)

@@ -6,7 +6,7 @@ import
   ../../eth/keys, ../../eth/p2p/discoveryv5/[routing_table, node, enr],
   ./discv5_test_helper
 
-func customDistance*(a, b: NodeId): Uint256 =
+func customDistance*(a, b: NodeId): UInt256 =
   if a >= b:
     a - b
   else:
@@ -31,8 +31,8 @@ suite "Routing Table Tests":
     bucketIpLimit: BUCKET_SIZE + REPLACEMENT_CACHE_SIZE + 1)
 
   let customDistanceCalculator = DistanceCalculator(
-    calculateDistance: customDistance, 
-    calculateLogDistance: customLogDistance, 
+    calculateDistance: customDistance,
+    calculateLogDistance: customLogDistance,
     calculateIdAtDistance: customIdAdDist)
 
   test "Add local node":
