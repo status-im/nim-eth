@@ -168,7 +168,7 @@ proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
         if (receivedBytesLength == minimalHeaderSize):
           @[]
         else:
-          bytes[20..^1]
+          bytes[minimalHeaderSize..^1]
 
       return ok(Packet(header: header, eack: none[SelectiveAckExtension](), payload: payload))
     else:
@@ -189,14 +189,14 @@ proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
 
 
       let extension = SelectiveAckExtension(
-        acks: [bytes[22], bytes[23], bytes[24], bytes[25]]
+        acks: toArray(4, bytes.toOpenArray(22, 25))
       )
 
       let payload =
         if (receivedBytesLength == minimalHeaderSizeWithSelectiveAck):
           @[]
         else:
-          bytes[26..^1]
+          bytes[minimalHeaderSizeWithSelectiveAck..^1]
 
       return ok(Packet(header: header, eack: some(extension), payload: payload))
 
