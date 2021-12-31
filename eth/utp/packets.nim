@@ -48,8 +48,8 @@ type
     # sequence number the sender of the packet last received in the other direction
     ackNr*: uint16
 
-  SelectiveAckExtension = object
-    acks: array[acksArrayLength, byte]
+  SelectiveAckExtension* = object
+    acks*: array[4, byte]
 
   Packet* = object
     header*: PacketHeaderV1

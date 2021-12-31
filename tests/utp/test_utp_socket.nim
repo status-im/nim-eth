@@ -7,7 +7,7 @@
 {.used.}
 
 import
-  std/[algorithm, random, sequtils],
+  std/[algorithm, random, sequtils, options],
   chronos, bearssl, chronicles,
   testutils/unittests,
   ./test_utils,
@@ -22,70 +22,11 @@ procSuite "Utp socket unit test":
   let testBufferSize = 1024'u32
   let defaultRcvOutgoingId = 314'u16
 
-  proc initTestSnd(q: AsyncQueue[Packet]): SendCallback[TransportAddress]=
-    return  (
-      proc (to: TransportAddress, bytes: seq[byte]): Future[void] =
-        let p = decodePacket(bytes).get()
-        q.addLast(p)
-    )
-
-  proc generateDataPackets(
-    numberOfPackets: uint16,
-    initialSeqNr: uint16,
-    connectionId: uint16,
-    ackNr: uint16,
-    rng: var BrHmacDrbgContext): seq[Packet] =
-    let packetSize = 100
-    var packets = newSeq[Packet]()
-    var i = 0'u16
-    while i < numberOfPackets:
-      let packet = dataPacket(
-        initialSeqNr + i,
-        connectionId,
-        ackNr,
-        testBufferSize,
-        generateByteArray(rng, packetSize),
-        0
-      )
-      packets.add(packet)
-
-      inc i
-
-    packets
-
   proc packetsToBytes(packets: seq[Packet]): seq[byte] =
     var resultBytes = newSeq[byte]()
     for p in packets:
       resultBytes.add(p.payload)
     return resultBytes
-
-  template connectOutGoingSocket(
-    initialRemoteSeq: uint16,
-    q: AsyncQueue[Packet],
-    remoteReceiveBuffer: uint32 = testBufferSize,
-    cfg: SocketConfig = SocketConfig.init()): (UtpSocket[TransportAddress], Packet) =
-    let sock1 = newOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, defaultRcvOutgoingId, rng[])
-    asyncSpawn sock1.startOutgoingSocket()
-    let initialPacket = await q.get()
-
-    check:
-      initialPacket.header.pType == ST_SYN
-
-    let responseAck =
-      ackPacket(
-        initialRemoteSeq,
-        initialPacket.header.connectionId,
-        initialPacket.header.seqNr,
-        remoteReceiveBuffer,
-        0
-      )
-
-    await sock1.processPacket(responseAck)
-
-    check:
-      sock1.isConnected()
-
-    (sock1, initialPacket)
 
   asyncTest "Starting outgoing socket should send Syn packet":
     let q = newAsyncQueue[Packet]()
@@ -187,10 +128,11 @@ procSuite "Utp socket unit test":
     # TODO test is valid until implementing selective acks
     let q = newAsyncQueue[Packet]()
     let initalRemoteSeqNr = 10'u16
+    let numOfPackets = 10'u16
 
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initalRemoteSeqNr, q)
 
-    var packets = generateDataPackets(10, initalRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, rng[])
+    var packets = generateDataPackets(numOfPackets, initalRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, rng[])
 
     let data = packetsToBytes(packets)
 
@@ -200,12 +142,28 @@ procSuite "Utp socket unit test":
     for p in packets:
       await outgoingSocket.processPacket(p)
 
-    let ack2 = await q.get()
+    var sentAcks: seq[Packet] = @[]
+    
+    for i in 0'u16..<numOfPackets:
+      let ack = await q.get()
+      sentAcks.add(ack)
+
+    # all packets except last one should be selective acks, without bumped ackNr
+    for i in 0'u16..<numOfPackets - 1:
+      check:
+        sentAcks[i].header.ackNr == initalRemoteSeqNr - 1
+        sentAcks[i].eack.isSome()
+
+    # last ack should be normal ack packet (not selective one), and it should ack
+    # all remaining packets
+    let lastAck = sentAcks[numOfPackets - 1]
 
     check:
-      ack2.header.pType == ST_STATE
+      lastAck.header.pType == ST_STATE
       # we are acking in one shot whole 10 packets
-      ack2.header.ackNr == initalRemoteSeqNr + uint16(len(packets) - 1)
+      lastAck.header.ackNr == initalRemoteSeqNr + uint16(len(packets) - 1)
+
+      lastAck.eack.isNone()
 
     let receivedData = await outgoingSocket.read(len(data))
 
@@ -218,10 +176,11 @@ procSuite "Utp socket unit test":
     # TODO test is valid until implementing selective acks
     let q = newAsyncQueue[Packet]()
     let initalRemoteSeqNr = 10'u16
+    let numOfPackets = 3'u16
 
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initalRemoteSeqNr, q)
 
-    var packets = generateDataPackets(3, initalRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, rng[])
+    var packets = generateDataPackets(numOfPackets, initalRemoteSeqNr, initialPacket.header.connectionId, initialPacket.header.seqNr, rng[])
 
     let data = packetsToBytes(packets)
 
@@ -235,12 +194,28 @@ procSuite "Utp socket unit test":
     for p in packets:
       await outgoingSocket.processPacket(p)
 
-    let ack2 = await q.get()
+    var sentAcks: seq[Packet] = @[]
+    
+    for i in 0'u16..<numOfPackets:
+      let ack = await q.get()
+      sentAcks.add(ack)
+
+    # all packets except last one should be selective acks, without bumped ackNr
+    for i in 0'u16..<numOfPackets - 1:
+      check:
+        sentAcks[i].header.ackNr == initalRemoteSeqNr - 1
+        sentAcks[i].eack.isSome()
+
+    # last ack should be normal ack packet (not selective one), and it should ack
+    # all remaining packets
+    let lastAck = sentAcks[numOfPackets - 1]
 
     check:
-      ack2.header.pType == ST_STATE
+      lastAck.header.pType == ST_STATE
       # we are acking in one shot whole 10 packets
-      ack2.header.ackNr == initalRemoteSeqNr + uint16(len(packets) - 1)
+      lastAck.header.ackNr == initalRemoteSeqNr + uint16(len(packets) - 1)
+
+      lastAck.eack.isNone()
 
     let receivedData = await outgoingSocket.read(len(data))
 
@@ -250,7 +225,6 @@ procSuite "Utp socket unit test":
     await outgoingSocket.destroyWait()
 
   asyncTest "Processing packets in random order":
-    # TODO test is valid until implementing selective acks
     let q = newAsyncQueue[Packet]()
     let initalRemoteSeqNr = 10'u16
 

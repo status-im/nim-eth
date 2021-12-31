@@ -9,7 +9,7 @@
 import
   std/sugar,
   chronos, chronicles, bearssl,
-  stew/results,
+  stew/[results, bitops2],
   ./send_buffer_tracker,
   ./growable_buffer,
   ./packets,
@@ -340,20 +340,6 @@ proc registerOutgoingPacket(socket: UtpSocket, oPacket: OutgoingPacket) =
 
 proc sendData(socket: UtpSocket, data: seq[byte]): Future[void] =
   socket.send(socket.remoteAddress, data)
-
-proc sendAck(socket: UtpSocket): Future[void] =
-  ## Creates and sends ack, based on current socket state. Acks are different from
-  ## other packets as we do not track them in outgoing buffet
-
-  let ackPacket =
-    ackPacket(
-      socket.seqNr,
-      socket.connectionIdSnd,
-      socket.ackNr,
-      socket.getRcvWindowSize(),
-      socket.replayMicro
-    )
-  socket.sendData(encodePacket(ackPacket))
 
 # Should be called before sending packet
 proc setSend(s: UtpSocket, p: var OutgoingPacket): seq[byte] =
@@ -725,12 +711,6 @@ proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async.} =
   await socket.sendData(outgoingPacket.packetBytes)
   await socket.connectionFuture
 
-proc startIncomingSocket*(socket: UtpSocket) {.async.} =
-  # Make sure ack was flushed before moving forward
-  await socket.sendAck()
-  socket.startWriteLoop()
-  socket.startTimeoutLoop()
-
 proc isConnected*(socket: UtpSocket): bool =
   socket.state == Connected
 
@@ -881,6 +861,124 @@ proc isAckNrInvalid(socket: UtpSocket, packet: Packet): bool =
     )
   )
 
+# counts the number of bytes acked by selective ack header
+proc calculateSelectiveAckBytes*(socket: UtpSocket,  receivedPackedAckNr: uint16, ext: SelectiveAckExtension): uint32 =
+  # we add 2, as the first bit in the mask therefore represents ackNr + 2 becouse
+  # ackNr + 1 (i.e next expected packet) is considered lost.
+  let base = receivedPackedAckNr + 2
+
+  if socket.curWindowPackets == 0:
+    return 0
+
+  var ackedBytes = 0'u32
+
+  var bits = (len(ext.acks)) * 8 - 1
+  
+  while bits >= 0:
+    let v = base + uint16(bits)
+
+    if (socket.seqNr - v - 1) >= socket.curWindowPackets - 1:
+      dec bits
+      continue
+
+    let maybePacket = socket.outBuffer.get(v)
+
+    if (maybePacket.isNone() or maybePacket.unsafeGet().transmissions == 0):
+      dec bits
+      continue
+    
+    let pkt = maybePacket.unsafeGet()
+
+    if (getBit(ext.acks, bits)):
+      ackedBytes = ackedBytes + pkt.payloadLength
+    
+    dec bits
+
+  return ackedBytes
+
+# ack packets (removes them from out going buffer) based on selective ack extension header
+proc selectiveAckPackets(socket: UtpSocket,  receivedPackedAckNr: uint16, ext: SelectiveAckExtension, currentTime: Moment): void =
+   # we add 2, as the first bit in the mask therefore represents ackNr + 2 becouse
+  # ackNr + 1 (i.e next expected packet) is considered lost.
+  let base = receivedPackedAckNr + 2
+
+  if socket.curWindowPackets == 0:
+    return
+
+  var bits = (len(ext.acks)) * 8 - 1
+  
+  while bits >= 0:
+    let v = base + uint16(bits)
+
+    if (socket.seqNr - v - 1) >= socket.curWindowPackets - 1:
+      dec bits
+      continue
+
+    let maybePacket = socket.outBuffer.get(v)
+
+    if (maybePacket.isNone() or maybePacket.unsafeGet().transmissions == 0):
+      dec bits
+      continue
+    
+    let pkt = maybePacket.unsafeGet()
+
+    if (getBit(ext.acks, bits)):
+      discard socket.ackPacket(v, currentTime)
+    
+    dec bits
+
+# Public mainly for test purposes
+# generates bit mask which indicates which packets are already in socket
+# reorder buffer
+# from speck:
+# The bitmask has reverse byte order. The first byte represents packets [ack_nr + 2, ack_nr + 2 + 7] in reverse order
+# The least significant bit in the byte represents ack_nr + 2, the most significant bit in the byte represents ack_nr + 2 + 7
+# The next byte in the mask represents [ack_nr + 2 + 8, ack_nr + 2 + 15] in reverse order, and so on
+proc generateSelectiveAckBitMask*(socket: UtpSocket): array[4, byte] =
+  let window = min(32, socket.inBuffer.len())
+  var i = 0
+  var m: uint32 = 0
+  while i < window:
+    if (socket.inBuffer.get(socket.ackNr + uint16(i) + 2).isSome()):
+      m = m or uint32(1 shl i)
+    inc i
+  var arr: array[4, uint8] = [0'u8, 0, 0, 0]
+  arr[0] = uint8(m)
+  arr[1] = uint8(m shr 8)
+  arr[2] = uint8(m shr 16)
+  arr[3] = uint8(m shr 24)
+  return arr
+
+# Generates ack packet based on current state of the socket.
+proc generateAckPacket*(socket: UtpSocket): Packet = 
+    let bitmask =
+      if (socket.reorderCount != 0 and (not socket.reachedFin)):
+        some(socket.generateSelectiveAckBitMask())
+      else:
+        none[array[4, byte]]()
+
+    ackPacket(
+      socket.seqNr,
+      socket.connectionIdSnd,
+      socket.ackNr,
+      socket.getRcvWindowSize(),
+      socket.replayMicro,
+      bitmask
+    )
+
+proc sendAck(socket: UtpSocket): Future[void] =
+  ## Creates and sends ack, based on current socket state. Acks are different from
+  ## other packets as we do not track them in outgoing buffet
+
+  let ackPacket = socket.generateAckPacket()
+  socket.sendData(encodePacket(ackPacket))
+
+proc startIncomingSocket*(socket: UtpSocket) {.async.} =
+  # Make sure ack was flushed before moving forward
+  await socket.sendAck()
+  socket.startWriteLoop()
+  socket.startTimeoutLoop()
+
 # TODO at socket level we should handle only FIN/DATA/ACK packets. Refactor to make
 # it enforcable by type system
 # TODO re-think synchronization of this procedure, as each await inside gives control
@@ -888,7 +986,7 @@ proc isAckNrInvalid(socket: UtpSocket, packet: Packet): bool =
 # running
 proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   let timestampInfo = getMonoTimestamp()
-
+  
   if socket.isAckNrInvalid(p):
     notice "Received packet with invalid ack nr"
     return
@@ -922,6 +1020,10 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
   var (ackedBytes, minRtt) = socket.calculateAckedbytes(acks, timestampInfo.moment)
   # TODO caluclate bytes acked by selective acks here (if thats the case)
+
+  if (p.eack.isSome()):
+    let selectiveAckedBytes = socket.calculateSelectiveAckBytes(pkAckNr, p.eack.unsafeGet())
+    ackedBytes = ackedBytes + selectiveAckedBytes
 
   let sentTimeRemote = p.header.timestamp
 
@@ -999,6 +1101,14 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
   socket.ackPackets(acks, timestampInfo.moment)
 
+  # packets in front may have been acked by selective ack, decrease window until we hit
+  # a packet that is still waiting to be acked
+  while (socket.curWindowPackets > 0 and socket.outBuffer.get(socket.seqNr - socket.curWindowPackets).isNone()):
+    dec socket.curWindowPackets
+
+  if (p.eack.isSome()):
+    socket.selectiveAckPackets(pkAckNr, p.eack.unsafeGet(), timestampInfo.moment)
+
   case p.header.pType
     of ST_DATA, ST_FIN:
       # To avoid amplification attacks, server socket is in SynRecv state until
@@ -1014,6 +1124,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
       # we got in order packet
       if (pastExpected == 0 and (not socket.reachedFin)):
+        notice "Got in order packet"
         if (len(p.payload) > 0 and (not socket.readShutdown)):
           # we are getting in order data packet, we can flush data directly to the incoming buffer
           await upload(addr socket.buffer, unsafeAddr p.payload[0], p.payload.len())
@@ -1085,8 +1196,10 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
           socket.inBuffer.put(pkSeqNr, p)
           inc socket.reorderCount
           notice "added out of order packet in reorder buffer"
-          # TODO for now we do not sent any ack as we do not handle selective acks
-          # add sending of selective acks
+          # we send ack packet, as we reoreder count is > 0, so the eack bitmask will be 
+          # generated
+          asyncSpawn socket.sendAck()
+
     of ST_STATE:
       if (socket.state == SynSent and (not socket.connectionFuture.finished())):
         socket.state = Connected
@@ -1220,13 +1333,11 @@ proc read*(socket: UtpSocket): Future[seq[byte]] {.async.}=
 
 # Check how many packets are still in the out going buffer, usefull for tests or
 # debugging.
-# It throws assertion error when number of elements in buffer do not equal kept counter
 proc numPacketsInOutGoingBuffer*(socket: UtpSocket): int =
   var num = 0
   for e in socket.outBuffer.items():
     if e.isSome():
       inc num
-  doAssert(num == int(socket.curWindowPackets))
   num
 
 # Check how many payload bytes are still in flight
