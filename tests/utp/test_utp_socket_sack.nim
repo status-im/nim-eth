@@ -116,6 +116,17 @@ procSuite "Utp socket selective acks unit test":
         check:
           getBit(bitMask, idx - 1)
 
+  asyncTest "Socket should generate max 4 bytes bit mask even if there is more missing packets":
+    let testCases = @[
+      toSeq(1..40)
+    ]
+
+    for missingIndexes in testCases:
+      let bitMask = await connectAndProcessMissingPacketWithIndexes(missingIndexes)
+      check:
+        numOfSetBits(bitMask) == 32
+        len(bitMask) == 4
+      
   type TestCase = object
     # number of packet to generate by writitng side
     numOfPackets: int

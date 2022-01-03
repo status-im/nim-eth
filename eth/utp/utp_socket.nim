@@ -927,6 +927,8 @@ proc selectiveAckPackets(socket: UtpSocket,  receivedPackedAckNr: uint16, ext: S
     
     dec bits
 
+  # TODO Add handling of fast timeouts and duplicate acks counting
+
 # Public mainly for test purposes
 # generates bit mask which indicates which packets are already in socket
 # reorder buffer
@@ -934,19 +936,14 @@ proc selectiveAckPackets(socket: UtpSocket,  receivedPackedAckNr: uint16, ext: S
 # The bitmask has reverse byte order. The first byte represents packets [ack_nr + 2, ack_nr + 2 + 7] in reverse order
 # The least significant bit in the byte represents ack_nr + 2, the most significant bit in the byte represents ack_nr + 2 + 7
 # The next byte in the mask represents [ack_nr + 2 + 8, ack_nr + 2 + 15] in reverse order, and so on
-proc generateSelectiveAckBitMask*(socket: UtpSocket): array[4, byte] =
+proc generateSelectiveAckBitMask*(socket: UtpSocket): array[4, byte] = 
   let window = min(32, socket.inBuffer.len())
+  var arr: array[4, uint8] = [0'u8, 0, 0, 0]
   var i = 0
-  var m: uint32 = 0
   while i < window:
     if (socket.inBuffer.get(socket.ackNr + uint16(i) + 2).isSome()):
-      m = m or uint32(1 shl i)
+      setBit(arr, i)
     inc i
-  var arr: array[4, uint8] = [0'u8, 0, 0, 0]
-  arr[0] = uint8(m)
-  arr[1] = uint8(m shr 8)
-  arr[2] = uint8(m shr 16)
-  arr[3] = uint8(m shr 24)
   return arr
 
 # Generates ack packet based on current state of the socket.
