@@ -25,6 +25,12 @@ proc hash(x: UtpSocketKey[Node]): Hash =
   h = h !& x.rcvId.hash
   !$h
 
+func `$`*(x: UtpSocketKey[Node]): string =
+  "(remoteId: " & $x.remoteAddress.id &  
+  ", remoteAddress: " & $x.remoteAddress.address & 
+  ", rcvId: "& $x.rcvId &
+  ")"
+
 proc initSendCallback(
     t: protocol.Protocol, subProtocolName: seq[byte]): SendCallback[Node] =
   return (

@@ -137,13 +137,15 @@ proc shouldAllowConnection[A](r: UtpRouter[A], remoteAddress: A, connectionId: u
     r.allowConnection(r, remoteAddress, connectionId)
 
 proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
-  notice "Received packet ", packet = p
+  debug "Received packet ",
+    sender = sender,
+    packetType = p.header.pType
 
   case p.header.pType
   of ST_RESET:
     let maybeSocket = r.getSocketOnReset(sender, p.header.connectionId)
     if maybeSocket.isSome():
-      notice "Received rst packet on known connection closing"
+      debug "Received RST packet on known connection closing"
       let socket = maybeSocket.unsafeGet()
       # reference implementation acutally changes the socket state to reset state unless
       # user explicitly closed socket before. The only difference between reset and destroy
@@ -152,35 +154,38 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       # explictly.
       socket.destroy()
     else:
-      notice "Received rst packet for not known connection"
+      debug "Received RST packet for not known connection, ignoring"
   of ST_SYN:
     # Syn packet are special, and we need to add 1 to header connectionId
     let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId + 1)
     let maybeSocket = r.getUtpSocket(socketKey)
     if (maybeSocket.isSome()):
-      notice "Ignoring SYN for already existing connection"
+      debug "Ignoring SYN for already existing connection"
     else:
       if (r.shouldAllowConnection(sender, p.header.connectionId)):
-        notice "Received SYN for not known connection. Initiating incoming connection"
+        debug "Received SYN for not known connection. Initiating incoming connection"
         # Initial ackNr is set to incoming packer seqNr
         let incomingSocket = newIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
         r.registerUtpSocket(incomingSocket)
         await incomingSocket.startIncomingSocket()
         # Based on configuration, socket is passed to upper layer either in SynRecv
         # or Connected state
+        info "Accepting incoming connection",
+          to = incomingSocket.socketKey
         asyncSpawn r.acceptConnection(r, incomingSocket)
       else:
-        notice "Connection declined"
+        debug "Connection declined"
   else:
     let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId)
     let maybeSocket = r.getUtpSocket(socketKey)
     if (maybeSocket.isSome()):
+      debug "Received FIN/DATA/ACK packet on exsiting socket"
       let socket = maybeSocket.unsafeGet()
       await socket.processPacket(p)
     else:
       # TODO add keeping track of recently send reset packets and do not send reset
       # to peers which we recently send reset to.
-      notice "Recevied FIN/DATA/ACK on not known socket sending reset"
+      debug "Recevied FIN/DATA/ACK on not known socket sending reset"
       let rstPacket = resetPacket(randUint16(r.rng[]), p.header.connectionId, p.header.seqNr)
       await r.sendCb(sender, encodePacket(rstPacket))
 
@@ -190,7 +195,8 @@ proc processIncomingBytes*[A](r: UtpRouter[A], bytes: seq[byte], sender: A) {.as
     if (dec.isOk()):
       await processPacket[A](r, dec.get(), sender)
     else:
-      warn "failed to decode packet from address", address = sender
+      let err = dec.error()
+      warn "failed to decode packet from address", address = sender, msg = err
 
 proc generateNewUniqueSocket[A](r: UtpRouter[A], address: A): Option[UtpSocket[A]] =
   ## Tries to generate unique socket, gives up after maxSocketGenerationTries tries
@@ -208,6 +214,9 @@ proc generateNewUniqueSocket[A](r: UtpRouter[A], address: A): Option[UtpSocket[A
   return none[UtpSocket[A]]()
 
 proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.}=
+    info "Intitiating connection",
+      to = s.socketKey
+
     let startFut = s.startOutgoingSocket()
 
     startFut.cancelCallback = proc(udata: pointer) {.gcsafe.} =
@@ -217,11 +226,17 @@ proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.}=
 
     try:
       await startFut
+      info "Outgoing connection succesful",
+        to = s.socketKey
       return ok(s)
     except ConnectionError:
+      info "Outgoing connection timed-out",
+        to = s.socketKey
       s.destroy()
       return err(OutgoingConnectionError(kind: ConnectionTimedOut))
     except CatchableError as e:
+      info "Outgoing connection failed due to send error",
+        to = s.socketKey
       s.destroy()
       # this may only happen if user provided callback will for some reason fail
       return err(OutgoingConnectionError(kind: ErrorWhileSendingSyn, error: e))
