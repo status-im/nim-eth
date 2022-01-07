@@ -13,7 +13,7 @@ import
   ./utp_router,
   ../keys
 
-export utp_router
+export utp_router, protocol
 
 type UtpDiscv5Protocol* = ref object of TalkProtocol
   prot: protocol.Protocol
@@ -26,8 +26,8 @@ proc hash(x: UtpSocketKey[Node]): Hash =
   !$h
 
 func `$`*(x: UtpSocketKey[Node]): string =
-  "(remoteId: " & $x.remoteAddress.id &  
-  ", remoteAddress: " & $x.remoteAddress.address & 
+  "(remoteId: " & $x.remoteAddress.id &
+  ", remoteAddress: " & $x.remoteAddress.address &
   ", rcvId: "& $x.rcvId &
   ")"
 
@@ -66,16 +66,15 @@ proc new*(
     p: protocol.Protocol,
     subProtocolName: seq[byte],
     acceptConnectionCb: AcceptConnectionCallback[Node],
-    socketConfig: SocketConfig = SocketConfig.init(),
     allowConnectionCb: AllowConnectionCallback[Node] = nil,
-    rng = newRng()): UtpDiscv5Protocol =
+    socketConfig: SocketConfig = SocketConfig.init()): UtpDiscv5Protocol =
   doAssert(not(isNil(acceptConnectionCb)))
 
   let router = UtpRouter[Node].new(
     acceptConnectionCb,
     allowConnectionCb,
     socketConfig,
-    rng
+    p.rng
   )
   router.sendCb = initSendCallback(p, subProtocolName)
 

@@ -145,14 +145,14 @@ procSuite "Utp protocol over discovery v5 tests":
         node1,
         utpProtId,
         registerIncomingSocketCallback(queue),
-        SocketConfig.init(lowSynTimeout))
+        socketConfig = SocketConfig.init(lowSynTimeout))
       utp2 =
         UtpDiscv5Protocol.new(
           node2,
           utpProtId,
           registerIncomingSocketCallback(queue),
-          SocketConfig.init(),
-          allowOneIdCallback(allowedId))
+          allowOneIdCallback(allowedId),
+          SocketConfig.init())
 
     # nodes must know about each other
     check:
@@ -191,7 +191,7 @@ procSuite "Utp protocol over discovery v5 tests":
         node2,
         utpProtId,
         registerIncomingSocketCallback(queue),
-        SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]())
+        socketConfig = SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]())
       )
 
     # nodes must know about each other

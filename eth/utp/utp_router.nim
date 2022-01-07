@@ -113,8 +113,8 @@ proc new*[A](
     rng = newRng()): UtpRouter[A] =
   UtpRouter[A].new(acceptConnectionCb, nil, socketConfig, rng)
 
-# There are different possiblites how connection was established, and we need to 
-# check every case
+# There are different possibilities on how the connection got established, need
+# to check every case.
 proc getSocketOnReset[A](r: UtpRouter[A], sender: A, id: uint16): Option[UtpSocket[A]] =
   # id is our recv id
   let recvKey = UtpSocketKey[A].init(sender, id)
