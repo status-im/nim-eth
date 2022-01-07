@@ -32,7 +32,7 @@ type
 
   MicroSeconds = uint32
 
-  PacketHeaderV1 = object
+  PacketHeaderV1* = object
     pType*: PacketType
     version*: uint8
     extension*: uint8

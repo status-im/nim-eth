@@ -8,6 +8,7 @@
 
 import
   ./test_packets,
+  ./utp_packet_test_vectors,
   ./test_protocol,
   ./test_discv5_protocol,
   ./test_buffer,
