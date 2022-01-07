@@ -145,7 +145,7 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
   of ST_RESET:
     let maybeSocket = r.getSocketOnReset(sender, p.header.connectionId)
     if maybeSocket.isSome():
-      debug "Received RST packet on known connection closing"
+      debug "Received RST packet on known connection, closing socket"
       let socket = maybeSocket.unsafeGet()
       # reference implementation acutally changes the socket state to reset state unless
       # user explicitly closed socket before. The only difference between reset and destroy
@@ -154,7 +154,7 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       # explictly.
       socket.destroy()
     else:
-      debug "Received RST packet for not known connection, ignoring"
+      debug "Received RST packet for unknown connection, ignoring"
   of ST_SYN:
     # Syn packet are special, and we need to add 1 to header connectionId
     let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId + 1)
@@ -163,7 +163,7 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       debug "Ignoring SYN for already existing connection"
     else:
       if (r.shouldAllowConnection(sender, p.header.connectionId)):
-        debug "Received SYN for not known connection. Initiating incoming connection"
+        debug "Received SYN for new connection. Initiating incoming connection"
         # Initial ackNr is set to incoming packer seqNr
         let incomingSocket = newIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
         r.registerUtpSocket(incomingSocket)
@@ -179,13 +179,13 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
     let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId)
     let maybeSocket = r.getUtpSocket(socketKey)
     if (maybeSocket.isSome()):
-      debug "Received FIN/DATA/ACK packet on exsiting socket"
+      debug "Received FIN/DATA/ACK packet on existing socket"
       let socket = maybeSocket.unsafeGet()
       await socket.processPacket(p)
     else:
       # TODO add keeping track of recently send reset packets and do not send reset
       # to peers which we recently send reset to.
-      debug "Recevied FIN/DATA/ACK on not known socket sending reset"
+      debug "Received FIN/DATA/ACK on not known socket sending reset"
       let rstPacket = resetPacket(randUint16(r.rng[]), p.header.connectionId, p.header.seqNr)
       await r.sendCb(sender, encodePacket(rstPacket))
 
@@ -214,7 +214,7 @@ proc generateNewUniqueSocket[A](r: UtpRouter[A], address: A): Option[UtpSocket[A
   return none[UtpSocket[A]]()
 
 proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.}=
-    info "Intitiating connection",
+    info "Initiating connection",
       to = s.socketKey
 
     let startFut = s.startOutgoingSocket()
@@ -226,7 +226,7 @@ proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.}=
 
     try:
       await startFut
-      info "Outgoing connection succesful",
+      info "Outgoing connection successful",
         to = s.socketKey
       return ok(s)
     except ConnectionError:

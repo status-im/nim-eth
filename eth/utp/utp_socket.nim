@@ -413,12 +413,12 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       socket.sendBufferTracker.updateMaxRemote(minimalRemoteWindow)
 
     if (currentTime > socket.rtoTimeout):
-      debug "CheckTimouts rto timout",
+      debug "CheckTimeouts rto timeout",
         socketKey = socket.socketKey,
         state = socket.state,
         maxWindow = socket.sendBufferTracker.maxWindow,
         curWindowPackets = socket.curWindowPackets,
-        curWindowByts = socket.sendBufferTracker.currentWindow
+        curWindowBytes = socket.sendBufferTracker.currentWindow
 
       # TODO add handling of probe time outs. Reference implemenation has mechanism
       # of sending probes to determine mtu size. Probe timeouts do not count to standard
@@ -744,7 +744,7 @@ proc isClosed*(socket: UtpSocket): bool =
   socket.state == Destroy and socket.closeEvent.isSet()
 
 proc destroy*(s: UtpSocket) =
-  info "Destrotying socket",
+  info "Destroying socket",
     to = s.socketKey
   ## Moves socket to destroy state and clean all reasources.
   ## Remote is not notified in any way about socket end of life
@@ -1129,7 +1129,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   socket.slowStart = newSlowStart
   socket.slowStartTreshold = newSlowStartTreshold
 
-  debug "Applied ledbat congestion controler",
+  debug "Applied ledbat congestion controller",
     maxWindow = newMaxWindow,
     remoteWindow = p.header.wndSize,
     slowStartTreshold = newSlowStartTreshold,
@@ -1140,7 +1140,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     # then it will be reset to minimal value
     socket.zeroWindowTimer = timestampInfo.moment + socket.socketConfig.remoteWindowResetTimeout
 
-    debug "Remote window size droped to 0",
+    debug "Remote window size dropped to 0",
       currentTime = timestampInfo.moment,
       resetZeroWindowTime = socket.zeroWindowTimer
 
