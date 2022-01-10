@@ -907,7 +907,7 @@ proc calculateSelectiveAckBytes*(socket: UtpSocket,  receivedPackedAckNr: uint16
   var ackedBytes = 0'u32
 
   var bits = (len(ext.acks)) * 8 - 1
-  
+
   while bits >= 0:
     let v = base + uint16(bits)
 
@@ -920,12 +920,12 @@ proc calculateSelectiveAckBytes*(socket: UtpSocket,  receivedPackedAckNr: uint16
     if (maybePacket.isNone() or maybePacket.unsafeGet().transmissions == 0):
       dec bits
       continue
-    
+
     let pkt = maybePacket.unsafeGet()
 
     if (getBit(ext.acks, bits)):
       ackedBytes = ackedBytes + pkt.payloadLength
-    
+
     dec bits
 
   return ackedBytes
@@ -940,7 +940,7 @@ proc selectiveAckPackets(socket: UtpSocket,  receivedPackedAckNr: uint16, ext: S
     return
 
   var bits = (len(ext.acks)) * 8 - 1
-  
+
   while bits >= 0:
     let v = base + uint16(bits)
 
@@ -953,12 +953,12 @@ proc selectiveAckPackets(socket: UtpSocket,  receivedPackedAckNr: uint16, ext: S
     if (maybePacket.isNone() or maybePacket.unsafeGet().transmissions == 0):
       dec bits
       continue
-    
+
     let pkt = maybePacket.unsafeGet()
 
     if (getBit(ext.acks, bits)):
       discard socket.ackPacket(v, currentTime)
-    
+
     dec bits
 
   # TODO Add handling of fast timeouts and duplicate acks counting
@@ -970,7 +970,7 @@ proc selectiveAckPackets(socket: UtpSocket,  receivedPackedAckNr: uint16, ext: S
 # The bitmask has reverse byte order. The first byte represents packets [ack_nr + 2, ack_nr + 2 + 7] in reverse order
 # The least significant bit in the byte represents ack_nr + 2, the most significant bit in the byte represents ack_nr + 2 + 7
 # The next byte in the mask represents [ack_nr + 2 + 8, ack_nr + 2 + 15] in reverse order, and so on
-proc generateSelectiveAckBitMask*(socket: UtpSocket): array[4, byte] = 
+proc generateSelectiveAckBitMask*(socket: UtpSocket): array[4, byte] =
   let window = min(32, socket.inBuffer.len())
   var arr: array[4, uint8] = [0'u8, 0, 0, 0]
   var i = 0
@@ -981,7 +981,7 @@ proc generateSelectiveAckBitMask*(socket: UtpSocket): array[4, byte] =
   return arr
 
 # Generates ack packet based on current state of the socket.
-proc generateAckPacket*(socket: UtpSocket): Packet = 
+proc generateAckPacket*(socket: UtpSocket): Packet =
     let bitmask =
       if (socket.reorderCount != 0 and (not socket.reachedFin)):
         some(socket.generateSelectiveAckBitMask())
@@ -1017,16 +1017,16 @@ proc startIncomingSocket*(socket: UtpSocket) {.async.} =
 # running
 proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
-  debug "Process packet", 
+  debug "Process packet",
     socketKey = socket.socketKey,
-    packetType = p.header.pType, 
+    packetType = p.header.pType,
     seqNr = p.header.seqNr,
     ackNr = p.header.ackNr,
     timestamp = p.header.timestamp,
     timestampDiff = p.header.timestampDiff
 
   let timestampInfo = getMonoTimestamp()
-  
+
   if socket.isAckNrInvalid(p):
     debug "Received packet with invalid ack number",
       ackNr = p.header.ackNr,
@@ -1178,7 +1178,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
         debug "Received FIN packet",
           eofPktNr = pkSeqNr,
           curAckNr = socket.ackNr
-          
+
         socket.gotFin = true
         socket.eofPktNr = pkSeqNr
 
