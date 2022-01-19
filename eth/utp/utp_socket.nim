@@ -1019,8 +1019,8 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
   debug "Process packet",
     socketKey = socket.socketKey,
-    socketAckNr= socket.ackNr,
-    socketSeqNr= socket.seqNr,
+    socketAckNr = socket.ackNr,
+    socketSeqNr = socket.seqNr,
     packetType = p.header.pType,
     seqNr = p.header.seqNr,
     ackNr = p.header.ackNr,
