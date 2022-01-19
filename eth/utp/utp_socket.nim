@@ -1069,9 +1069,9 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     # equals (due to wrapping) 65535
     # this means that remote most probably did not receive our ack, so we need to resend
     # it. We are doing it for last `reorderBufferMaxSize` packets
-    let isPossilbeDuplicatedOldPacket = pastExpected >= (int(uint16.high) + 1) - reorderBufferMaxSize
+    let isPossibleDuplicatedOldPacket = pastExpected >= (int(uint16.high) + 1) - reorderBufferMaxSize
 
-    if (isPossilbeDuplicatedOldPacket and p.header.pType != ST_STATE):
+    if (isPossibleDuplicatedOldPacket and p.header.pType != ST_STATE):
       asyncSpawn socket.sendAck()
 
     debug "Got an invalid packet sequence number, too far off",
