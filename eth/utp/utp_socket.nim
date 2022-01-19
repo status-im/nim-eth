@@ -1019,6 +1019,8 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
   debug "Process packet",
     socketKey = socket.socketKey,
+    socketAckNr= socket.ackNr,
+    socketSeqNr= socket.seqNr,
     packetType = p.header.pType,
     seqNr = p.header.seqNr,
     ackNr = p.header.ackNr,
@@ -1059,6 +1061,19 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
   # If packet is totally of the mark short circout the processing
   if pastExpected >= reorderBufferMaxSize:
+
+    # if `pastExpected` is really big number (for example: uint16.high) then most
+    # probably we are receiving packet which we already received
+    # example: we already received packet with `seqNr = 10` so our `socket.ackNr = 10`
+    # if we receive this packet once again then `pastExpected = 10 - 10 - 1` which 
+    # equals (due to wrapping) 65535
+    # this means that remote most probably did not receive our ack, so we need to resend
+    # it. We are doing it for last `reorderBufferMaxSize` packets
+    let isPossilbeDuplicatedOldPacket = pastExpected >= (int(uint16.high) + 1) - reorderBufferMaxSize
+
+    if (isPossilbeDuplicatedOldPacket and p.header.pType != ST_STATE):
+      asyncSpawn socket.sendAck()
+
     debug "Got an invalid packet sequence number, too far off",
       pastExpected = pastExpected
     return
@@ -1231,6 +1246,13 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
           let packet = maybePacket.unsafeGet()
 
           if (len(packet.payload) > 0 and (not socket.readShutdown)):
+            debug "Got packet from reorder buffer",
+              packetBytes = len(packet.payload),
+              packetSeqNr = packet.header.seqNr,
+              packetAckNr = packet.header.ackNr,
+              socketSeqNr = socket.seqNr,
+              socekrAckNr = socket.ackNr
+
             await upload(addr socket.buffer, unsafeAddr packet.payload[0], packet.payload.len())
 
           socket.inBuffer.delete(nextPacketNum)
@@ -1427,6 +1449,9 @@ proc numPacketsInOutGoingBuffer*(socket: UtpSocket): int =
 
 # Check how many payload bytes are still in flight
 proc numOfBytesInFlight*(socket: UtpSocket): uint32 = socket.sendBufferTracker.currentBytesInFlight()
+
+# Check how many bytes are in incoming buffer
+proc numOfBytesInIncomingBuffer*(socket: UtpSocket): uint32 = uint32(socket.buffer.dataLen())
 
 # Check how many packets are still in the reorder buffer, usefull for tests or
 # debugging.

@@ -163,7 +163,8 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       debug "Ignoring SYN for already existing connection"
     else:
       if (r.shouldAllowConnection(sender, p.header.connectionId)):
-        debug "Received SYN for new connection. Initiating incoming connection"
+        debug "Received SYN for new connection. Initiating incoming connection",
+          synSeqNr = p.header.seqNr
         # Initial ackNr is set to incoming packer seqNr
         let incomingSocket = newIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
         r.registerUtpSocket(incomingSocket)
