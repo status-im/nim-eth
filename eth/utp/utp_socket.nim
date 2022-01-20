@@ -367,9 +367,13 @@ proc flushPackets(socket: UtpSocket) {.async.} =
     let shouldSendPacket = socket.outBuffer.exists(i, (p: OutgoingPacket) => (p.transmissions == 0 or p.needResend == true))
     if (shouldSendPacket):
       if socket.sendBufferTracker.reserveNBytes(socket.outBuffer[i].payloadLength):
+        debug "Resending packet during flush",
+          pkSeqNr = i
         let toSend = socket.setSend(socket.outBuffer[i])
         await socket.sendData(toSend)
       else:
+        debug "Should resend packet during flush but there is no place in send buffer",
+          pkSeqNr = i
         # there is no place in send buffer, stop flushing
         return
     inc i
@@ -380,6 +384,8 @@ proc markAllPacketAsLost(s: UtpSocket) =
 
     let packetSeqNr = s.seqNr - 1 - i
     if (s.outBuffer.exists(packetSeqNr, (p: OutgoingPacket) => p.transmissions > 0 and p.needResend == false)):
+      debug "Marking packet as lost",
+        pkSeqNr = packetSeqNr
       s.outBuffer[packetSeqNr].needResend = true
       let packetPayloadLength = s.outBuffer[packetSeqNr].payloadLength
       # lack of waiters notification in case of timeout effectivly means that
@@ -453,12 +459,22 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
         # than to fit at least one packet.
         let oldMaxWindow = socket.sendBufferTracker.maxWindow
         let newMaxWindow = max((oldMaxWindow * 2) div 3,  currentPacketSize)
+
+        debug "Decaying max window due to socket idling",
+          oldMaxWindow = oldMaxWindow,
+          newMaxWindow = newMaxWindow
+      
         socket.sendBufferTracker.updateMaxWindowSize(
           # maxRemote window does not change
           socket.sendBufferTracker.maxRemoteWindow,
           newMaxWindow
         )
       else:
+      
+        debug "Reseting window size do fit a least one packet",
+          oldWindowSize = socket.sendBufferTracker.maxWindow,
+          newWindowSize = currentPacketSize
+
         # delay was so high that window has shrunk below one packet. Reset window
         # to fit a least one packet and start with slow start
         socket.sendBufferTracker.updateMaxWindowSize(
@@ -479,18 +495,26 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
         let oldestPacketSeqNr = socket.seqNr - socket.curWindowPackets
         # TODO add handling of fast timeout
 
-        debug "Resending oldest packet in outBuffer",
-          seqNr = oldestPacketSeqNr,
-          curWindowPackets = socket.curWindowPackets
-
         doAssert(
           socket.outBuffer.get(oldestPacketSeqNr).isSome(),
           "oldest packet should always be available when there is data in flight"
         )
+
         let payloadLength = socket.outBuffer[oldestPacketSeqNr].payloadLength
         if (socket.sendBufferTracker.reserveNBytes(payloadLength)):
+          debug "Resending oldest packet in outBuffer",
+            seqNr = oldestPacketSeqNr,
+            curWindowPackets = socket.curWindowPackets
+
           let dataToSend = socket.setSend(socket.outBuffer[oldestPacketSeqNr])
           await socket.sendData(dataToSend)
+        else:
+          # TODO Logs added here to check if we need to check for spcae in send buffer
+          # reference impl does not do it.
+          debug "Should resend oldest packet in outBuffer but there is no place for more bytes in send buffer",
+            seqNr = oldestPacketSeqNr,
+            curWindowPackets = socket.curWindowPackets
+
 
     # TODO add sending keep alives when necessary
 
@@ -1002,6 +1026,12 @@ proc sendAck(socket: UtpSocket): Future[void] =
   ## other packets as we do not track them in outgoing buffet
 
   let ackPacket = socket.generateAckPacket()
+
+  debug "Sending STATE packet",
+    pkSeqNr = ackPacket.header.seqNr,
+    pkAckNr = ackPacket.header.ackNr,
+    gotEACK = ackPacket.eack.isSome()
+
   socket.sendData(encodePacket(ackPacket))
 
 proc startIncomingSocket*(socket: UtpSocket) {.async.} =
@@ -1021,6 +1051,7 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     socketKey = socket.socketKey,
     socketAckNr = socket.ackNr,
     socketSeqNr = socket.seqNr,
+    windowPackets = socket.curWindowPackets,
     packetType = p.header.pType,
     seqNr = p.header.seqNr,
     ackNr = p.header.ackNr,
@@ -1059,6 +1090,10 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     # this case happens if the we already received this ack nr
     acks = 0
 
+  debug "Packet state variables",
+    pastExpected = pastExpected,
+    acks = acks
+
   # If packet is totally of the mark short circout the processing
   if pastExpected >= reorderBufferMaxSize:
 
@@ -1080,9 +1115,12 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
   var (ackedBytes, minRtt) = socket.calculateAckedbytes(acks, timestampInfo.moment)
 
+  debug "Bytes acked by classic ack",
+      bytesAcked = ackedBytes
+  
   if (p.eack.isSome()):
     let selectiveAckedBytes = socket.calculateSelectiveAckBytes(pkAckNr, p.eack.unsafeGet())
-    debug "Selective ack bytes",
+    debug "Bytes acked by selective ack",
       bytesAcked = selectiveAckedBytes
     ackedBytes = ackedBytes + selectiveAckedBytes
 
@@ -1176,6 +1214,8 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
   # a packet that is still waiting to be acked
   while (socket.curWindowPackets > 0 and socket.outBuffer.get(socket.seqNr - socket.curWindowPackets).isNone()):
     dec socket.curWindowPackets
+    debug "Packet in front hase been acked by selective ack. Decrese window",
+      windowPackets = socket.curWindowPackets
 
   if (p.eack.isSome()):
     socket.selectiveAckPackets(pkAckNr, p.eack.unsafeGet(), timestampInfo.moment)
@@ -1259,6 +1299,12 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
 
           inc socket.ackNr
           dec socket.reorderCount
+
+        debug "Socket state after processing in order packet",
+          socketKey = socket.socketKey,
+          socketAckNr = socket.ackNr,
+          reorderCount = socket.reorderCount,
+          windowPackets = socket.curWindowPackets
 
         # TODO for now we just schedule concurrent task with ack sending. It may
         # need improvement, as with this approach there is no direct control over

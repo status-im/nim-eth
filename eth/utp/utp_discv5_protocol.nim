@@ -13,7 +13,10 @@ import
   ./utp_router,
   ../keys
 
-export utp_router, protocol
+export utp_router, protocol, chronicles
+
+logScope:
+  topics = "utp_discv5_protocol"
 
 type UtpDiscv5Protocol* = ref object of TalkProtocol
   prot: protocol.Protocol
@@ -52,6 +55,7 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
   let maybeSender = p.prot.getNode(srcId)
 
   if maybeSender.isSome():
+    debug "Received utp payload from known node. Start processing"
     let sender =  maybeSender.unsafeGet()
     # processIncomingBytes may respond to remote by using talkreq requests
     asyncSpawn p.router.processIncomingBytes(request, sender)
@@ -59,6 +63,7 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     # always receives a talkresp.
     @[]
   else:
+    debug "Received utp payload from unknown node. Ignore"
     @[]
 
 proc new*(
