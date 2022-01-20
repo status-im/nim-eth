@@ -728,7 +728,9 @@ proc newIncomingSocket*[A](
       # it does not matter what timeout value we put here, as socket will be in
       # connected state without outgoing packets in buffer so any timeout hit will
       # just double rto without any penalties
-      (Connected, milliseconds(0))
+      # although we cannont use 0, as then timeout will be constantly re-set to 500ms
+      # and there will be a lot of not usefull work done
+      (Connected, defaultInitialSynTimeout)
     else:
       let timeout = cfg.incomingSocketReceiveTimeout.unsafeGet()
       (SynRecv, timeout)
