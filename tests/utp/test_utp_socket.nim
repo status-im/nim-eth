@@ -124,6 +124,49 @@ procSuite "Utp socket unit test":
 
     await outgoingSocket.destroyWait()
 
+  asyncTest "Processing duplicated fresh data packet should ack it and stop processing":
+    let q = newAsyncQueue[Packet]()
+    let initalRemoteSeqNr = 10'u16
+    let data = @[1'u8, 2'u8, 3'u8]
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initalRemoteSeqNr, q)
+
+    let dataP1 =
+      dataPacket(
+        initalRemoteSeqNr,
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        testBufferSize,
+        data,
+        0
+      )
+
+    await outgoingSocket.processPacket(dataP1)
+
+    let ack1 = await q.get()
+
+    check:
+      ack1.header.pType == ST_STATE
+      ack1.header.ackNr == initalRemoteSeqNr
+
+    let receivedBytes = await outgoingSocket.read(len(data))
+
+    check:
+      receivedBytes == data
+
+    # remote re-send data packet, most probably due to lost ack
+    await outgoingSocket.processPacket(dataP1)
+
+    let ack2 = await q.get()
+
+    check:
+      ack2.header.pType == ST_STATE
+      ack2.header.ackNr == initalRemoteSeqNr
+      # we do not upload data one more time
+      outgoingSocket.numOfBytesInIncomingBuffer() == 0'u32
+
+    await outgoingSocket.destroyWait()
+
   asyncTest "Processing out of order data packet should buffer it until receiving in order one":
     # TODO test is valid until implementing selective acks
     let q = newAsyncQueue[Packet]()
