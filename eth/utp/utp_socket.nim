@@ -469,8 +469,10 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
           socket.sendBufferTracker.maxRemoteWindow,
           newMaxWindow
         )
-      else:
-      
+      elif (socket.sendBufferTracker.maxWindow < currentPacketSize):
+        # due to high delay window has shrunk below packet size
+        # which means that we cannot send more data
+        # reset it to fit at least one packet
         debug "Reseting window size do fit a least one packet",
           oldWindowSize = socket.sendBufferTracker.maxWindow,
           newWindowSize = currentPacketSize
