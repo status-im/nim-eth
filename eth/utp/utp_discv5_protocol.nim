@@ -7,9 +7,9 @@
 {.push raises: [Defect].}
 
 import
-  std/[hashes],
+  std/[hashes, sugar],
   chronos, chronicles,
-  ../p2p/discoveryv5/protocol,
+  ../p2p/discoveryv5/[protocol, messages, encoding],
   ./utp_router,
   ../keys
 
@@ -18,64 +18,82 @@ export utp_router, protocol, chronicles
 logScope:
   topics = "utp_discv5_protocol"
 
-type UtpDiscv5Protocol* = ref object of TalkProtocol
-  prot: protocol.Protocol
-  router: UtpRouter[Node]
+type 
+  NodeAddress* = object
+    nodeId*: NodeId
+    address*: Address
 
-proc hash(x: UtpSocketKey[Node]): Hash =
+  UtpDiscv5Protocol* = ref object of TalkProtocol
+    prot: protocol.Protocol
+    router: UtpRouter[NodeAddress]
+
+proc init*(T: type NodeAddress, nodeId: NodeId, address: Address): NodeAddress = 
+  NodeAddress(nodeId: nodeId, address: address)
+
+proc init*(T: type NodeAddress, node: Node): Option[NodeAddress] = 
+  node.address.map((address: Address) => NodeAddress(nodeId: node.id, address: address))
+
+proc hash(x: NodeAddress): Hash =
+  var h = 0
+  h = h !& x.nodeId.hash
+  h = h !& x.address.hash
+  !$h
+
+proc hash(x: UtpSocketKey[NodeAddress]): Hash =
   var h = 0
   h = h !& x.remoteAddress.hash
   h = h !& x.rcvId.hash
   !$h
 
-func `$`*(x: UtpSocketKey[Node]): string =
-  "(remoteId: " & $x.remoteAddress.id &
+func `$`*(x: UtpSocketKey[NodeAddress]): string =
+  "(remoteId: " & $x.remoteAddress.nodeId &
   ", remoteAddress: " & $x.remoteAddress.address &
   ", rcvId: "& $x.rcvId &
   ")"
 
+proc talkReqDirect(p: protocol.Protocol, n: NodeAddress, protocol, request: seq[byte]): Future[void] =
+  let
+    reqId = RequestId.init(p.rng[])
+    message = encodeMessage(TalkReqMessage(protocol: protocol, request: request), reqId)
+
+    (data, nonce) = encodeMessagePacket(p.rng[], p.codec, n.nodeId, n.address, message)
+
+  trace "Send message packet", dstId = n.nodeId, address = n.address, kind = MessageKind.talkreq
+  p.send(n.address, data)
+    
 proc initSendCallback(
-    t: protocol.Protocol, subProtocolName: seq[byte]): SendCallback[Node] =
+    t: protocol.Protocol, subProtocolName: seq[byte]): SendCallback[NodeAddress] =
   return (
-    proc (to: Node, data: seq[byte]): Future[void] =
+    proc (to: NodeAddress, data: seq[byte]): Future[void] =
       let fut = newFuture[void]()
-      # TODO: In discovery v5 each talkreq waits for a talkresp, but here we
-      # would really like the fire and forget semantics (similar to udp).
-      # For now start talkreq/talkresp in background, and discard its result.
-      # That way we also lose information about any possible errors.
-      # Consider adding talkreq proc which does not wait for the response.
-      discard t.talkreq(to, subProtocolName, data)
+      # hidden assumption here is that nodes already have established discv5 session
+      # between each other. In our use case this should be true as openning stream
+      # is only done after succesful OFFER/ACCEPT or FINDCONTENT/CONTENT exchange
+      # which forces nodes to establish session between each other.
+      discard t.talkReqDirect(to, subProtocolName, data)
       fut.complete()
       return fut
   )
 
 proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     srcId: NodeId, srcUdpAddress: Address): seq[byte] =
-  let p = UtpDiscv5Protocol(protocol)
-  let maybeSender = p.prot.getNode(srcId)
-
-  if maybeSender.isSome():
-    debug "Received utp payload from known node. Start processing"
-    let sender =  maybeSender.unsafeGet()
-    # processIncomingBytes may respond to remote by using talkreq requests
-    asyncSpawn p.router.processIncomingBytes(request, sender)
-    # We always send empty responses as discv5 spec requires that talkreq
-    # always receives a talkresp.
-    @[]
-  else:
-    debug "Received utp payload from unknown node. Ignore"
-    @[]
+  let 
+    p = UtpDiscv5Protocol(protocol)
+    nodeAddress = NodeAddress.init(srcId, srcUdpAddress)
+  debug "Received utp payload from known node. Start processing",
+    nodeId = nodeAddress.nodeId, address = nodeAddress.address
+  asyncSpawn p.router.processIncomingBytes(request, nodeAddress)
 
 proc new*(
     T: type UtpDiscv5Protocol,
     p: protocol.Protocol,
     subProtocolName: seq[byte],
-    acceptConnectionCb: AcceptConnectionCallback[Node],
-    allowConnectionCb: AllowConnectionCallback[Node] = nil,
+    acceptConnectionCb: AcceptConnectionCallback[NodeAddress],
+    allowConnectionCb: AllowConnectionCallback[NodeAddress] = nil,
     socketConfig: SocketConfig = SocketConfig.init()): UtpDiscv5Protocol =
   doAssert(not(isNil(acceptConnectionCb)))
 
-  let router = UtpRouter[Node].new(
+  let router = UtpRouter[NodeAddress].new(
     acceptConnectionCb,
     allowConnectionCb,
     socketConfig,
@@ -94,12 +112,12 @@ proc new*(
   )
   prot
 
-proc connectTo*(r: UtpDiscv5Protocol, address: Node):
-    Future[ConnectionResult[Node]] =
+proc connectTo*(r: UtpDiscv5Protocol, address: NodeAddress):
+    Future[ConnectionResult[NodeAddress]] =
   return r.router.connectTo(address)
 
-proc connectTo*(r: UtpDiscv5Protocol, address: Node, connectionId: uint16):
-    Future[ConnectionResult[Node]] =
+proc connectTo*(r: UtpDiscv5Protocol, address: NodeAddress, connectionId: uint16):
+    Future[ConnectionResult[NodeAddress]] =
   return r.router.connectTo(address, connectionId)
 
 proc shutdown*(r: UtpDiscv5Protocol) =

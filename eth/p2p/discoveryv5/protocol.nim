@@ -224,7 +224,7 @@ proc updateRecord*(
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
-proc send(d: Protocol, a: Address, data: seq[byte]) =
+proc send*(d: Protocol, a: Address, data: seq[byte]) =
   let ta = initTAddress(a.ip, a.port)
   let f = d.transp.sendTo(ta, data)
   f.callback = proc(data: pointer) {.gcsafe.} =
