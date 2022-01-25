@@ -211,6 +211,45 @@ proc exec*[Params, Res](s: SqliteStmt[Params, Res],
     discard sqlite3_reset(s) # same return information as step
     discard sqlite3_clear_bindings(s) # no errors possible
 
+iterator exec*[Params, Res](s: SqliteStmt[Params, Res],
+                            params: Params, item: var Res): KvResult[void] =
+  let s = RawStmtPtr s
+  var done = false
+  when params is tuple:
+    var i = 1
+    for param in fields(params):
+      if (let v = bindParam(s, i, param); v != SQLITE_OK):
+        yield KvResult[void].err($sqlite3_errstr(v))
+        done = true # Silly iterators
+        break
+
+      inc i
+  else:
+    if (let v = bindParam(s, 1, params); v != SQLITE_OK):
+      yield KvResult[void].err($sqlite3_errstr(v))
+      done = true # Silly iterators
+
+  defer:
+    # release implicit transaction
+    discard sqlite3_reset(s) # same return information as step
+    discard sqlite3_clear_bindings(s) # no errors possible
+
+  if not done:
+    while true:
+      let v = sqlite3_step(s)
+      case v
+      of SQLITE_ROW:
+        item = readResult(s, Res)
+        yield KvResult[void].ok()
+      of SQLITE_DONE:
+        break
+      else:
+        yield KvResult[void].err($sqlite3_errstr(v))
+
+iterator exec*[Res](s: SqliteStmt[NoParams, Res], item: var Res): KvResult[void] =
+  for r in exec(s, (), item):
+    yield r
+
 template exec*(s: SqliteStmt[NoParams, void]): KvResult[void] =
   exec(s, ())
 
