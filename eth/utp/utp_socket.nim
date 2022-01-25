@@ -200,6 +200,14 @@ type
     # indicator if we're in slow-start (exponential growth) phase
     slowStart: bool
 
+    # indiciator if we're in fast time out mode i.e we will resent
+    # oldest packet un-acket in case of newer packet arriving
+    fastTimeout: bool
+
+    # Sequence number of the next packet we are allowed to fast-resend. This is
+    # necessary to make sure we only fast resend once per packet
+    fastResendSeqNr: uint16
+
     #the slow-start threshold, in bytes
     slowStartTreshold: uint32
 
@@ -391,7 +399,7 @@ proc markAllPacketAsLost(s: UtpSocket) =
       # lack of waiters notification in case of timeout effectivly means that
       # we do not allow any new bytes to enter snd buffer in case of new free space
       # due to timeout.
-      s.sendBufferTracker.decreaseCurrentWindow(packetPayloadLength, notifyWaiters = false)
+      s.sendBufferTracker.decreaseCurrentWindow(packetPayloadLength)
 
     inc i
 
@@ -405,6 +413,20 @@ proc isOpened(socket:UtpSocket): bool =
 proc shouldDisconnectFromFailedRemote(socket: UtpSocket): bool =
   (socket.state == SynSent and socket.retransmitCount >= 2) or
   (socket.retransmitCount >= socket.socketConfig.dataResendsBeforeFailure)
+
+# Forces asynchronous re-send of packet waiting in outgoing buffer
+proc forceResendPacket(socket: UtpSocket, pkSeqNr: uint16) =
+  doAssert(
+    socket.outBuffer.get(pkSeqNr).isSome(),
+    "Force resend should be called only on packet still in outgoing buffer"
+  )
+  if socket.outBuffer[pkSeqNr].needResend:
+    # if needResend is set to true it means that packet payload was already
+    # removed from the bytes window and need to be re-added. 
+    socket.sendBufferTracker.forceReserveNBytes(socket.outBuffer[pkSeqNr].payloadLength)
+
+  let data = socket.setSend(socket.outBuffer[pkSeqNr])
+  discard socket.sendData(data)
 
 proc checkTimeouts(socket: UtpSocket) {.async.} =
   let currentTime = getMonoTimestamp().moment
@@ -493,30 +515,19 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
 
       # resend oldest packet if there are some packets in flight
       if (socket.curWindowPackets > 0):
-        inc socket.retransmitCount
         let oldestPacketSeqNr = socket.seqNr - socket.curWindowPackets
-        # TODO add handling of fast timeout
+       
+        inc socket.retransmitCount
+        socket.fastTimeout = true
+        
+        debug "Resending oldest packet",
+          pkSeqNr = oldestPacketSeqNr,
+          retransmitCount = socket.retransmitCount,
+          curWindowPackets = socket.curWindowPackets
 
-        doAssert(
-          socket.outBuffer.get(oldestPacketSeqNr).isSome(),
-          "oldest packet should always be available when there is data in flight"
-        )
-
-        let payloadLength = socket.outBuffer[oldestPacketSeqNr].payloadLength
-        if (socket.sendBufferTracker.reserveNBytes(payloadLength)):
-          debug "Resending oldest packet in outBuffer",
-            seqNr = oldestPacketSeqNr,
-            curWindowPackets = socket.curWindowPackets
-
-          let dataToSend = socket.setSend(socket.outBuffer[oldestPacketSeqNr])
-          await socket.sendData(dataToSend)
-        else:
-          # TODO Logs added here to check if we need to check for spcae in send buffer
-          # reference impl does not do it.
-          debug "Should resend oldest packet in outBuffer but there is no place for more bytes in send buffer",
-            seqNr = oldestPacketSeqNr,
-            curWindowPackets = socket.curWindowPackets
-
+        # Oldest packet should always be present, so it is safe to call force
+        # resend
+        socket.forceResendPacket(oldestPacketSeqNr)
 
     # TODO add sending keep alives when necessary
 
@@ -684,6 +695,8 @@ proc new[A](
     zeroWindowTimer: currentTime + cfg.remoteWindowResetTimeout,
     socketKey: UtpSocketKey.init(to, rcvId),
     slowStart: true,
+    fastTimeout: false,
+    fastResendSeqNr: initialSeqNr,
     slowStartTreshold: cfg.optSndBuffer,
     ourHistogram: DelayHistogram.init(currentTime),
     remoteHistogram: DelayHistogram.init(currentTime),
@@ -860,7 +873,10 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16, currentTime: Moment): AckResult
     # been considered timed-out, and is not included in
     # the cur_window anymore
     if (not packet.needResend):
-      socket.sendBufferTracker.decreaseCurrentWindow(packet.payloadLength, notifyWaiters = true)
+      socket.sendBufferTracker.decreaseCurrentWindow(packet.payloadLength)
+
+    # we notify all waiters that there is possibly new space in send buffer
+    socket.sendBufferTracker.notifyWaiters()
 
     socket.retransmitCount = 0
     PacketAcked
@@ -1212,6 +1228,10 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     # but in theory remote could stil write some data on this socket (or even its own fin)
     socket.destroy()
 
+  # Update fast resend counter to avoid resending old packet twice
+  if wrapCompareLess(socket.fastResendSeqNr, pkAckNr + 1):
+    socket.fastResendSeqNr = pkAckNr + 1
+
   socket.ackPackets(acks, timestampInfo.moment)
 
   # packets in front may have been acked by selective ack, decrease window until we hit
@@ -1221,6 +1241,32 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     debug "Packet in front hase been acked by selective ack. Decrese window",
       windowPackets = socket.curWindowPackets
 
+  # fast timeout
+  if socket.fastTimeout:
+    let oldestOutstandingPktSeqNr = socket.seqNr - socket.curWindowPackets
+
+    debug "Hit fast timeout re-send",
+      curWindowPackets = socket.curWindowPackets,
+      oldesPkSeqNr = oldestOutstandingPktSeqNr,
+      fastResendSeqNr = socket.fastResendSeqNr
+
+
+    if oldestOutstandingPktSeqNr != socket.fastResendSeqNr:
+      # fastResendSeqNr do not point to oldest unacked packet, we probably already resent
+      # packet that timed-out. Leave fast timeout mode
+      socket.fastTimeout = false
+    else:
+      let shouldReSendPacket = socket.outBuffer.exists(oldestOutstandingPktSeqNr, (p: OutgoingPacket) => p.transmissions > 0)
+      if shouldReSendPacket:
+        debug "Packet fast timeout resend",
+          pkSeqNr = oldestOutstandingPktSeqNr
+
+        inc socket.fastResendSeqNr
+        
+        # Is is safe to call force resend as we already checked shouldReSendPacket
+        # condition
+        socket.forceResendPacket(oldestOutstandingPktSeqNr)
+  
   if (p.eack.isSome()):
     socket.selectiveAckPackets(pkAckNr, p.eack.unsafeGet(), timestampInfo.moment)
 

@@ -51,7 +51,7 @@ proc currentFreeBytes*(t: SendBufferTracker): uint32 =
   else:
     return maxSend - t.currentWindow
 
-proc checkWaiters(t: SendBufferTracker) =
+proc notifyWaiters*(t: SendBufferTracker) =
   var i = 0
   while i < len(t.waiters):
     let freeSpace = t.currentFreeBytes()
@@ -68,18 +68,16 @@ proc checkWaiters(t: SendBufferTracker) =
 
 proc updateMaxRemote*(t: SendBufferTracker, newRemoteWindow: uint32) =
   t.maxRemoteWindow = newRemoteWindow
-  t.checkWaiters()
+  t.notifyWaiters()
 
 proc updateMaxWindowSize*(t: SendBufferTracker, newRemoteWindow: uint32, maxWindow: uint32) =
   t.maxRemoteWindow = newRemoteWindow
   t.maxWindow = maxWindow
-  t.checkWaiters()
+  t.notifyWaiters()
 
-proc decreaseCurrentWindow*(t: SendBufferTracker, value: uint32, notifyWaiters: bool) =
+proc decreaseCurrentWindow*(t: SendBufferTracker, value: uint32) =
   doAssert(t.currentWindow >= value)
   t.currentWindow = t.currentWindow - value
-  if (notifyWaiters):
-    t.checkWaiters()
 
 proc reserveNBytesWait*(t: SendBufferTracker, n: uint32): Future[void] =
   let fut = newFuture[void]("SendBufferTracker.reserveNBytesWait")
@@ -98,5 +96,8 @@ proc reserveNBytes*(t: SendBufferTracker, n: uint32): bool =
     return true
   else:
     return false
+
+proc forceReserveNBytes*(t: SendBufferTracker, n: uint32) =
+  t.currentWindow = t.currentWindow + n
 
 proc currentBytesInFlight*(t: SendBufferTracker): uint32 = t.currentWindow

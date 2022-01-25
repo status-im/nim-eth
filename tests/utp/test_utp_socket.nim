@@ -1331,6 +1331,8 @@ procSuite "Utp socket unit test":
 
     await outgoingSocket.processPacket(dataP1)
 
+    let fastResend = await q.get()
+
     let ack = await q.get()
 
     check:
@@ -1343,5 +1345,71 @@ procSuite "Utp socket unit test":
       # should be updated
       thirdSend.header.timestamp > secondSend.header.timestamp
       thirdSend.header.ackNr > secondSend.header.ackNr
+
+    await outgoingSocket.destroyWait()
+
+  asyncTest "Should support fast timeout ":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    # small writes to make sure it will be 3 different packets
+    let dataToWrite1 = @[1'u8]
+    let dataToWrite2 = @[1'u8]
+    let dataToWrite3 = @[1'u8]
+
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    let writeRes1 = await outgoingSocket.write(dataToWrite1)
+    let writeRes2 = await outgoingSocket.write(dataToWrite2)
+    let writeRes3 = await outgoingSocket.write(dataToWrite3)  
+
+    check:
+      writeRes1.isOk()
+      writeRes2.isOk()
+      writeRes3.isOk()
+
+    # drain queue of all sent packets
+    let sent1 = await q.get()
+    let sent2 = await q.get()
+    let sent3 = await q.get()
+
+    # wait for first timeout. Socket will enter fast timeout mode
+    let reSent1 = await q.get()
+
+    check:
+      # check that re-sent packet is the oldest one
+      reSent1.payload == sent1.payload
+      reSent1.header.seqNr == sent1.header.seqNr
+
+    # ack which will ack our re-sent packet
+    let responseAck =
+      ackPacket(
+        initialRemoteSeq,
+        initialPacket.header.connectionId,
+        reSent1.header.seqNr,
+        testBufferSize,
+        0
+      )
+
+    await outgoingSocket.processPacket(responseAck)
+
+    let fastResentPacket = await q.get()
+
+    check:
+      # second packet is now oldest unacked packet so it should be the one which
+      # is send during fast resend
+      fastResentPacket.payload == sent2.payload
+      fastResentPacket.header.seqNr == sent2.header.seqNr
+
+    # duplicate ack, processing it should not fast-resend any packet
+    await outgoingSocket.processPacket(responseAck)
+
+    let resent3 = await q.get()
+
+    check:
+      # in next timeout cycle packet nr3 is the only one waiting for re-send
+      resent3.payload == sent3.payload
+      resent3.header.seqNr == sent3.header.seqNr
 
     await outgoingSocket.destroyWait()
