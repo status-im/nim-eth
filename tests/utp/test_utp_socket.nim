@@ -370,7 +370,7 @@ procSuite "Utp socket unit test":
         )
         await socket.processPacket(ack)
     except CancelledError:
-      echo "foo"
+      discard
 
   asyncTest "Hitting RTO timeout with packets in flight should not decay window":
     let q = newAsyncQueue[Packet]()

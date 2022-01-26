@@ -19,7 +19,7 @@ const targetDelay = milliseconds(100)
 # Typically it's less. TCP increases one MSS per RTT, which is 1500
 const maxCwndIncreaseBytesPerRtt = 3000
 
-const minWindowSize = 10
+const minWindowSize* = 10
 
 proc applyCongestionControl*(
   currentMaxWindowSize: uint32,

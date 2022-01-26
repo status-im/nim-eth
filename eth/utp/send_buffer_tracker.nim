@@ -70,6 +70,10 @@ proc updateMaxRemote*(t: SendBufferTracker, newRemoteWindow: uint32) =
   t.maxRemoteWindow = newRemoteWindow
   t.notifyWaiters()
 
+proc updateMaxWindow*(t: SendBufferTracker, maxWindow: uint32) =
+  t.maxWindow = maxWindow
+  t.notifyWaiters()
+
 proc updateMaxWindowSize*(t: SendBufferTracker, newRemoteWindow: uint32, maxWindow: uint32) =
   t.maxRemoteWindow = newRemoteWindow
   t.maxWindow = maxWindow
