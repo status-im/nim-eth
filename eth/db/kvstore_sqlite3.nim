@@ -229,7 +229,6 @@ iterator exec*[Params, Res](s: SqliteStmt[Params, Res],
   else:
     if (let v = bindParam(s, 1, params); v != SQLITE_OK):
       res = KvResult[void].err($sqlite3_errstr(v))
-      done = true # Silly iterators
 
   defer:
     # release implicit transaction
