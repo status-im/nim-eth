@@ -214,19 +214,21 @@ proc exec*[Params, Res](s: SqliteStmt[Params, Res],
 iterator exec*[Params, Res](s: SqliteStmt[Params, Res],
                             params: Params, item: var Res): KvResult[void] =
   let s = RawStmtPtr s
-  var done = false
+
+  # we use a mutable `res` variable here to avoid the code bloat that multiple
+  # `yield` statements cause when inlining the loop body
+  var res = KvResult[void].ok()
   when params is tuple:
     var i = 1
     for param in fields(params):
       if (let v = bindParam(s, i, param); v != SQLITE_OK):
-        yield KvResult[void].err($sqlite3_errstr(v))
-        done = true # Silly iterators
+        res = KvResult[void].err($sqlite3_errstr(v))
         break
 
       inc i
   else:
     if (let v = bindParam(s, 1, params); v != SQLITE_OK):
-      yield KvResult[void].err($sqlite3_errstr(v))
+      res = KvResult[void].err($sqlite3_errstr(v))
       done = true # Silly iterators
 
   defer:
@@ -234,17 +236,19 @@ iterator exec*[Params, Res](s: SqliteStmt[Params, Res],
     discard sqlite3_reset(s) # same return information as step
     discard sqlite3_clear_bindings(s) # no errors possible
 
-  if not done:
-    while true:
-      let v = sqlite3_step(s)
-      case v
-      of SQLITE_ROW:
-        item = readResult(s, Res)
-        yield KvResult[void].ok()
-      of SQLITE_DONE:
-        break
-      else:
-        yield KvResult[void].err($sqlite3_errstr(v))
+  while res.isOk():
+    let v = sqlite3_step(s)
+    case v
+    of SQLITE_ROW:
+      item = readResult(s, Res)
+      yield KvResult[void].ok()
+    of SQLITE_DONE:
+      break
+    else:
+      res = KvResult[void].err($sqlite3_errstr(v))
+
+  if not res.isOk():
+    yield res
 
 iterator exec*[Res](s: SqliteStmt[NoParams, Res], item: var Res): KvResult[void] =
   for r in exec(s, (), item):
