@@ -133,6 +133,9 @@ procSuite "Utp socket selective acks unit test":
     # indexes of packets which should be delivered to remote
     packetsDelivered: seq[int]
 
+    # indexes of packets which should be re-sent in resend testcases
+    packetsResent: seq[int]
+
   let selectiveAckTestCases = @[
       TestCase(numOfPackets: 2, packetsDelivered: @[1]),
       TestCase(numOfPackets: 10, packetsDelivered: @[1, 3, 5, 7, 9]),
@@ -144,6 +147,32 @@ procSuite "Utp socket selective acks unit test":
       TestCase(numOfPackets: 33, packetsDelivered: toSeq(1..32))
     ]
 
+  proc setupTestCase(
+    dataToWrite: seq[byte],
+    initialRemoteSeq: uint16,
+    outgoingQueue: AsyncQueue[Packet],
+    incomingQueue: AsyncQueue[Packet],
+    testCase: TestCase): Future[(UtpSocket[TransportAddress], UtpSocket[TransportAddress], seq[Packet])] {.async.} =
+    let (outgoingSocket, incomingSocket) = 
+      connectOutGoingSocketWithIncoming(
+        initialRemoteSeq,
+        outgoingQueue,
+        incomingQueue
+      )
+
+    var packets: seq[Packet] = @[]
+
+    for _ in 0..<testCase.numOfPackets:
+      discard await outgoingSocket.write(dataToWrite)
+      let packet = await outgoingQueue.get()
+      packets.add(packet)
+    
+    for toDeliver in testCase.packetsDelivered:
+      await incomingSocket.processPacket(packets[toDeliver])
+
+
+    return (outgoingSocket, incomingSocket, packets)
+
   asyncTest "Socket should calculate number of bytes acked by selective acks":
     let dataSize = 10
     let initialRemoteSeq = 10'u16
@@ -152,23 +181,14 @@ procSuite "Utp socket selective acks unit test":
     for testCase in selectiveAckTestCases:
       let outgoingQueue = newAsyncQueue[Packet]()
       let incomingQueue = newAsyncQueue[Packet]()
-    
-      let (outgoingSocket, incomingSocket) = 
-        connectOutGoingSocketWithIncoming(
-          initialRemoteSeq,
-          outgoingQueue,
-          incomingQueue
-        )
 
-      var packets: seq[Packet] = @[]
-
-      for _ in 0..<testCase.numOfPackets:
-        discard await outgoingSocket.write(smallData)
-        let packet = await outgoingQueue.get()
-        packets.add(packet)
-      
-      for toDeliver in testCase.packetsDelivered:
-        await incomingSocket.processPacket(packets[toDeliver])
+      let (outgoingSocket, incomingSocket, _) = await setupTestCase(
+        smallData,
+        initialRemoteSeq,
+        outgoingQueue,
+        incomingQueue,
+        testCase
+      )
 
       let finalAck = incomingSocket.generateAckPacket()
 
@@ -201,22 +221,13 @@ procSuite "Utp socket selective acks unit test":
       let outgoingQueue = newAsyncQueue[Packet]()
       let incomingQueue = newAsyncQueue[Packet]()
     
-      let (outgoingSocket, incomingSocket) = 
-        connectOutGoingSocketWithIncoming(
-          initialRemoteSeq,
-          outgoingQueue,
-          incomingQueue
-        )
-
-      var packets: seq[Packet] = @[]
-
-      for _ in 0..<testCase.numOfPackets:
-        discard await outgoingSocket.write(smallData)
-        let packet = await outgoingQueue.get()
-        packets.add(packet)
-      
-      for toDeliver in testCase.packetsDelivered:
-        await incomingSocket.processPacket(packets[toDeliver])
+      let (outgoingSocket, incomingSocket, _) = await setupTestCase(
+        smallData,
+        initialRemoteSeq,
+        outgoingQueue,
+        incomingQueue,
+        testCase
+      )
 
       let finalAck = incomingSocket.generateAckPacket()
 
@@ -242,3 +253,67 @@ procSuite "Utp socket selective acks unit test":
 
       await outgoingSocket.destroyWait()
       await incomingSocket.destroyWait()
+
+  let packetResendTestCases = @[
+    TestCase(numOfPackets: 4, packetsDelivered: @[2, 3], packetsResent: @[]),
+    TestCase(numOfPackets: 4, packetsDelivered: @[1, 2, 3], packetsResent: @[0]),
+    TestCase(numOfPackets: 5, packetsDelivered: @[2, 3, 4], packetsResent: @[0, 1]),
+    TestCase(numOfPackets: 6, packetsDelivered: @[3, 4, 5], packetsResent: @[0, 1, 2]),
+    TestCase(numOfPackets: 7, packetsDelivered: @[4, 5, 6], packetsResent: @[0, 1, 2, 3]),
+    TestCase(numOfPackets: 8, packetsDelivered: @[5, 6, 7], packetsResent: @[0, 1, 2, 3]),
+    TestCase(numOfPackets: 10, packetsDelivered: @[3, 7, 8], packetsResent: @[0, 1, 2]),
+    TestCase(numOfPackets: 10, packetsDelivered: @[1, 2, 3, 7, 8, 9], packetsResent: @[0, 4, 5, 6]),
+    TestCase(numOfPackets: 10, packetsDelivered: @[1, 8, 9], packetsResent: @[0])
+  ]
+
+  asyncTest "Socket should re-send packets when there are at least 3 packets acked ahead":
+    let dataSize = 10
+    let initialRemoteSeq = 10'u16
+    let smallData = generateByteArray(rng[], 10)
+
+    for testCase in packetResendTestCases:
+      let outgoingQueue = newAsyncQueue[Packet]()
+      let incomingQueue = newAsyncQueue[Packet]()
+
+      let (outgoingSocket, incomingSocket, initialPackets) = await setupTestCase(
+        smallData,
+        initialRemoteSeq,
+        outgoingQueue,
+        incomingQueue,
+        testCase
+      )
+
+      let initialBufferSize = outgoingSocket.currentMaxWindowSize()
+
+      let finalAck = incomingSocket.generateAckPacket()
+
+      check:
+        finalAck.eack.isSome()
+
+      let mask = finalAck.eack.unsafeGet().acks
+
+      let numOfDeliveredPackets = len(testCase.packetsDelivered)
+
+      check:
+        numOfSetBits(mask) == numOfDeliveredPackets
+
+      await outgoingSocket.processPacket(finalAck)
+
+      for idx in testCase.packetsResent:
+        let resentPacket = await outgoingQueue.get()
+        check:
+          resentPacket.header.seqNr == initialPackets[idx].header.seqNr
+
+      let endBufferSize = outgoingSocket.currentMaxWindowSize()
+      
+      if len(testCase.packetsResent) == 0:
+        check:
+          # when there is no packet loss (no resent packets), buffer size increases
+          # due to packets acked by selective ack
+          endBufferSize > initialBufferSize
+      else:
+        check:
+          # due to ledbat congestion control we cannot assert on precise end buffer size,
+          # but due to packet loss we are sure it shoul be smaller that at the beginning
+          # becouse of 0.5 muliplayer
+          endBufferSize < initialBufferSize
