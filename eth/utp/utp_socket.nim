@@ -994,7 +994,12 @@ proc calculateSelectiveAckBytes*(socket: UtpSocket,  receivedPackedAckNr: uint16
 proc tryDecayWindow(socket: UtpSocket, now: Moment) =
   if (now - socket.lastWindowDecay >= maxWindowDecay):
     socket.lastWindowDecay = now
-    let newMaxWindow =  max(uint16(0.5 * float64(socket.sendBufferTracker.maxWindow)), uint16(minWindowSize))
+    let newMaxWindow =  max(uint32(0.5 * float64(socket.sendBufferTracker.maxWindow)), uint32(minWindowSize))
+    
+    debug "Decaying maxWindow",
+      oldWindow = socket.sendBufferTracker.maxWindow,
+      newWindow = newMaxWindow
+
     socket.sendBufferTracker.updateMaxWindow(newMaxWindow)
     socket.slowStart = false
     socket.slowStartTreshold = newMaxWindow
@@ -1039,6 +1044,8 @@ proc selectiveAckPackets(socket: UtpSocket,  receivedPackedAckNr: uint16, ext: S
     let pkt = maybePacket.unsafeGet()
 
     if bitSet:
+      debug "Packet acked by selective ack",
+        pkSeqNr = v
       discard socket.ackPacket(v, currentTime)
       dec bits
       continue
@@ -1077,10 +1084,14 @@ proc selectiveAckPackets(socket: UtpSocket,  receivedPackedAckNr: uint16, ext: S
     
     registerLoss = true
     # it is safe to call as we already checked that packet is in send buffer
-    debug "Resend packet",
-      pkSeqNr = seqNrToResend
+
     socket.forceResendPacket(seqNrToResend)
     socket.fastResendSeqNr = seqNrToResend + 1
+
+    debug "Resent packet",
+      pkSeqNr = seqNrToResend,
+      fastResendSeqNr = socket.fastResendSeqNr
+
     inc packetsSent
 
     # resend max 4 packets, this is not defined in spec but reference impl has
@@ -1216,6 +1227,10 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     pkAckNr == socket.seqNr - socket.curWindowPackets - 1 and 
     p.header.pType == ST_STATE:
       inc socket.duplicateAck
+
+      debug "Recevied duplicated ack",
+        pkAckNr = pkAckNr,
+        duplicatAckCounter = socket.duplicateAck
   else:
     socket.duplicateAck = 0
   # spec says that in case of duplicate ack counter larger that duplicateAcksBeforeResend
