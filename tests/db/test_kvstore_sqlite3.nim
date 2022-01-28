@@ -225,3 +225,11 @@ procSuite "SqStoreRef":
       check:
         selectRes.isOk and selectRes.get == true
         abc == val
+
+      var found = false
+      var row: selectStmt.Result
+      for rowRes in selectStmt.exec(row):
+        rowRes.expect("working db")
+        check abc == row
+        found = true
+      check found
