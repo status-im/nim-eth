@@ -74,7 +74,7 @@ nim-eth dependencies) tests, one can run following command:
 # Install required modules
 nimble install
 # Run only discovery v5 related test suite
-nimble tests_discv5_full
+nimble test_discv5_full
 ```
 
 ## dcli
