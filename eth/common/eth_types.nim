@@ -244,6 +244,14 @@ func baseFee*(h: BlockHeader | BlockHeaderRef): UInt256 =
 template `baseFee=`*(h: BlockHeader | BlockHeaderRef, data: UInt256) =
   h.fee = some(data)
 
+# starting from EIP-4399, `mixHash`/`mixDigest` field will be alled `random`
+# https://github.com/ethereum/EIPs/blob/bd156daf2afa38aa95bc2137d3121ff536e50645/EIPS/eip-4399.md
+template random*(h: BlockHeader | BlockHeaderRef): Hash256 =
+  h.mixDigest
+
+template `random=`*(h: BlockHeader | BlockHeaderRef, hash: Hash256) =
+  h.mixDigest = hash
+
 func toBlockNonce*(n: uint64): BlockNonce =
   n.toBytesBE()
 

@@ -74,6 +74,9 @@ task test_db, "Run db tests":
 task test_utp, "Run utp tests":
   runTest("tests/utp/all_utp_tests")
 
+task test_common, "Run common tests":
+  runTest("tests/common/test_eth_types")
+
 task test, "Run all tests":
   for filename in [
       "test_bloom",
@@ -87,6 +90,7 @@ task test, "Run all tests":
   test_trie_task()
   test_db_task()
   test_utp_task()
+  test_common_task()
 
 task test_discv5_full, "Run discovery v5 and its dependencies tests":
   test_keys_task()
