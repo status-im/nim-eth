@@ -9,26 +9,31 @@ export net
 proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
 
-proc initDiscoveryNode*(rng: ref BrHmacDrbgContext, privKey: PrivateKey,
-                        address: Address,
-                        bootstrapRecords: openArray[Record] = [],
-                        localEnrFields: openArray[(string, seq[byte])] = [],
-                        previousRecord = none[enr.Record]()):
-                        discv5_protocol.Protocol =
+proc initDiscoveryNode*(
+    rng: ref BrHmacDrbgContext,
+    privKey: PrivateKey,
+    address: Address,
+    bootstrapRecords: openArray[Record] = [],
+    localEnrFields: openArray[(string, seq[byte])] = [],
+    previousRecord = none[enr.Record]()):
+    discv5_protocol.Protocol =
   # set bucketIpLimit to allow bucket split
-  let tableIpLimits = TableIpLimits(tableIpLimit: 1000,  bucketIpLimit: 24)
+  let config = DiscoveryConfig.init(1000, 24, 5)
 
-  result = newProtocol(privKey,
-                       some(address.ip),
-                       some(address.port), some(address.port),
-                       bindPort = address.port,
-                       bootstrapRecords = bootstrapRecords,
-                       localEnrFields = localEnrFields,
-                       previousRecord = previousRecord,
-                       tableIpLimits = tableIpLimits,
-                       rng = rng)
+  let protocol = newProtocol(
+    privKey,
+    some(address.ip),
+    some(address.port), some(address.port),
+    bindPort = address.port,
+    bootstrapRecords = bootstrapRecords,
+    localEnrFields = localEnrFields,
+    previousRecord = previousRecord,
+    config = config,
+    rng = rng)
 
-  result.open()
+  protocol.open()
+
+  protocol
 
 proc nodeIdInNodes*(id: NodeId, nodes: openArray[Node]): bool =
   for n in nodes:

@@ -116,6 +116,10 @@ const
   ## call
 
 type
+  DiscoveryConfig* = object
+    tableIpLimits*: TableIpLimits
+    bitsPerHop*: int
+
   Protocol* = ref object
     transp: DatagramTransport
     localNode*: Node
@@ -147,6 +151,11 @@ type
     protocolHandler*: TalkProtocolHandler
 
   DiscResult*[T] = Result[T, cstring]
+
+const
+  defaultDiscoveryConfig* = DiscoveryConfig(
+    tableIpLimits: DefaultTableIpLimits,
+    bitsPerHop: DefaultBitsPerHop)
 
 proc addNode*(d: Protocol, node: Node): bool =
   ## Add `Node` to discovery routing table.
@@ -880,18 +889,32 @@ proc ipMajorityLoop(d: Protocol) {.async.} =
   except CancelledError:
     trace "ipMajorityLoop canceled"
 
-proc newProtocol*(privKey: PrivateKey,
-                  enrIp: Option[ValidIpAddress],
-                  enrTcpPort, enrUdpPort: Option[Port],
-                  localEnrFields: openArray[(string, seq[byte])] = [],
-                  bootstrapRecords: openArray[Record] = [],
-                  previousRecord = none[enr.Record](),
-                  bindPort: Port,
-                  bindIp = IPv4_any(),
-                  enrAutoUpdate = false,
-                  tableIpLimits = DefaultTableIpLimits,
-                  rng = newRng()):
-                  Protocol =
+func init*(
+    T: type DiscoveryConfig,
+    tableIpLimit: uint,
+    bucketIpLimit: uint,
+    bitsPerHop: int): T =
+
+  DiscoveryConfig(
+    tableIpLimits: TableIpLimits(
+      tableIpLimit: tableIpLimit,
+      bucketIpLimit: bucketIpLimit),
+    bitsPerHop: bitsPerHop
+  )
+
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Option[ValidIpAddress],
+    enrTcpPort, enrUdpPort: Option[Port],
+    localEnrFields: openArray[(string, seq[byte])] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = none[enr.Record](),
+    bindPort: Port,
+    bindIp = IPv4_any(),
+    enrAutoUpdate = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng()):
+    Protocol =
   # TODO: Tried adding bindPort = udpPort as parameter but that gave
   # "Error: internal error: environment misses: udpPort" in nim-beacon-chain.
   # Anyhow, nim-beacon-chain would also require some changes to support port
@@ -933,7 +956,8 @@ proc newProtocol*(privKey: PrivateKey,
     bootstrapRecords: @bootstrapRecords,
     ipVote: IpVote.init(),
     enrAutoUpdate: enrAutoUpdate,
-    routingTable: RoutingTable.init(node, DefaultBitsPerHop, tableIpLimits, rng),
+    routingTable: RoutingTable.init(
+      node, config.bitsPerHop, config.tableIpLimits, rng),
     rng: rng)
 
 template listeningAddress*(p: Protocol): Address =
