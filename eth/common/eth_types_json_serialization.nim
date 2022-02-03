@@ -23,7 +23,7 @@ proc writeValue*(w: var JsonWriter, value: StUint) {.inline.} =
 proc readValue*(r: var JsonReader, value: var StUint) {.inline.} =
   value = parse(r.readValue(string), type(value))
 
-proc writeValue*(w: var JsonWriter, value: Stint) =
+proc writeValue*(w: var JsonWriter, value: StInt) =
   # The Ethereum Yellow Paper defines the RLP serialization only
   # for unsigned integers:
   {.error: "RLP serialization of signed integers is not allowed".}

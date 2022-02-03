@@ -394,11 +394,11 @@ proc decodeMessage*(body: openArray[byte]): DecodeResult[Message] =
       of unused: return err("Invalid message type")
       of ping: rlp.decode(message.ping)
       of pong: rlp.decode(message.pong)
-      of findnode: rlp.decode(message.findNode)
+      of findNode: rlp.decode(message.findNode)
       of nodes: rlp.decode(message.nodes)
-      of talkreq: rlp.decode(message.talkreq)
-      of talkresp: rlp.decode(message.talkresp)
-      of regtopic, ticket, regconfirmation, topicquery:
+      of talkReq: rlp.decode(message.talkReq)
+      of talkResp: rlp.decode(message.talkResp)
+      of regTopic, ticket, regConfirmation, topicQuery:
         # We just pass the empty type of this message without attempting to
         # decode, so that the protocol knows what was received.
         # But we ignore the message as per specification as "the content and

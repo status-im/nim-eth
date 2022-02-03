@@ -341,13 +341,13 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
   of ping:
     discovery_message_requests_incoming.inc()
     d.handlePing(srcId, fromAddr, message.ping, message.reqId)
-  of findnode:
+  of findNode:
     discovery_message_requests_incoming.inc()
-    d.handleFindNode(srcId, fromAddr, message.findnode, message.reqId)
-  of talkreq:
+    d.handleFindNode(srcId, fromAddr, message.findNode, message.reqId)
+  of talkReq:
     discovery_message_requests_incoming.inc()
-    d.handleTalkReq(srcId, fromAddr, message.talkreq, message.reqId)
-  of regtopic, topicquery:
+    d.handleTalkReq(srcId, fromAddr, message.talkReq, message.reqId)
+  of regTopic, topicQuery:
     discovery_message_requests_incoming.inc()
     discovery_message_requests_incoming.inc(labelValues = ["no_response"])
     trace "Received unimplemented message kind", kind = message.kind,
@@ -574,7 +574,7 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
     d.replaceNode(toNode)
     return err(nodes.error)
 
-proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
+proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
     Future[DiscResult[seq[byte]]] {.async.} =
   ## Send a discovery talkreq message.
   ##
@@ -584,9 +584,9 @@ proc talkreq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
   let resp = await d.waitMessage(toNode, reqId)
 
   if resp.isSome():
-    if resp.get().kind == talkresp:
+    if resp.get().kind == talkResp:
       d.routingTable.setJustSeen(toNode)
-      return ok(resp.get().talkresp.response)
+      return ok(resp.get().talkResp.response)
     else:
       d.replaceNode(toNode)
       discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
@@ -612,7 +612,7 @@ proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
     Future[seq[Node]] {.async.} =
   let dists = lookupDistances(target, destNode.id)
 
-  # Instead of doing max `lookupRequestLimit` findNode requests,  make use
+  # Instead of doing max `lookupRequestLimit` findNode requests, make use
   # of the discv5.1 functionality to request nodes for multiple distances.
   let r = await d.findNode(destNode, dists)
   if r.isOk:

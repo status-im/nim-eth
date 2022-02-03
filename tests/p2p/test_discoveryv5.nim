@@ -688,7 +688,7 @@ suite "Discovery v5 Tests":
         rng, PrivateKey.random(rng[]), localAddress(20302))
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
-      talkresp = await discv5_protocol.talkreq(node1, node2.localNode,
+      talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
         @[byte 0x01], @[])
 
     check:
@@ -713,7 +713,7 @@ suite "Discovery v5 Tests":
     let echoProtocol = TalkProtocol(protocolHandler: handler)
 
     check node2.registerTalkProtocol(talkProtocol, echoProtocol).isOk()
-    let talkresp = await discv5_protocol.talkreq(node1, node2.localNode,
+    let talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
       talkProtocol, "hello".toBytes())
 
     check:
