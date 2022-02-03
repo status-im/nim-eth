@@ -65,8 +65,8 @@ suite "Discovery v5.1 Protocol Message Encodings":
     let message = decoded.get()
     check:
       message.reqId == reqId
-      message.kind == findnode
-      message.findnode.distances == distances
+      message.kind == findNode
+      message.findNode.distances == distances
 
   test "Nodes Response (empty)":
     let
@@ -125,9 +125,9 @@ suite "Discovery v5.1 Protocol Message Encodings":
     let message = decoded.get()
     check:
       message.reqId == reqId
-      message.kind == talkreq
-      message.talkreq.protocol == "echo".toBytes()
-      message.talkreq.request == "hi".toBytes()
+      message.kind == talkReq
+      message.talkReq.protocol == "echo".toBytes()
+      message.talkReq.request == "hi".toBytes()
 
   test "Talk Response":
     let
@@ -143,8 +143,8 @@ suite "Discovery v5.1 Protocol Message Encodings":
     let message = decoded.get()
     check:
       message.reqId == reqId
-      message.kind == talkresp
-      message.talkresp.response == "hi".toBytes()
+      message.kind == talkResp
+      message.talkResp.response == "hi".toBytes()
 
   test "Ping with too large RequestId":
     let

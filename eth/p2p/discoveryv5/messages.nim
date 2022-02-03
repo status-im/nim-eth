@@ -26,14 +26,14 @@ type
 
     ping = 0x01
     pong = 0x02
-    findnode = 0x03
+    findNode = 0x03
     nodes = 0x04
-    talkreq = 0x05
-    talkresp = 0x06
-    regtopic = 0x07
+    talkReq = 0x05
+    talkResp = 0x06
+    regTopic = 0x07
     ticket = 0x08
-    regconfirmation = 0x09
-    topicquery = 0x0A
+    regConfirmation = 0x09
+    topicQuery = 0x0A
 
   RequestId* = object
     id*: seq[byte]
@@ -76,32 +76,32 @@ type
       ping*: PingMessage
     of pong:
       pong*: PongMessage
-    of findnode:
-      findnode*: FindNodeMessage
+    of findNode:
+      findNode*: FindNodeMessage
     of nodes:
       nodes*: NodesMessage
-    of talkreq:
-      talkreq*: TalkReqMessage
-    of talkresp:
-      talkresp*: TalkRespMessage
-    of regtopic:
+    of talkReq:
+      talkReq*: TalkReqMessage
+    of talkResp:
+      talkResp*: TalkRespMessage
+    of regTopic:
       regtopic*: RegTopicMessage
     of ticket:
       ticket*: TicketMessage
-    of regconfirmation:
-      regconfirmation*: RegConfirmationMessage
-    of topicquery:
-      topicquery*: TopicQueryMessage
+    of regConfirmation:
+      regConfirmation*: RegConfirmationMessage
+    of topicQuery:
+      topicQuery*: TopicQueryMessage
     else:
       discard
 
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   when T is PingMessage: ping
   elif T is PongMessage: pong
-  elif T is FindNodeMessage: findnode
+  elif T is FindNodeMessage: findNode
   elif T is NodesMessage: nodes
-  elif T is TalkReqMessage: talkreq
-  elif T is TalkRespMessage: talkresp
+  elif T is TalkReqMessage: talkReq
+  elif T is TalkRespMessage: talkResp
 
 proc read*(rlp: var Rlp, T: type RequestId): T
     {.raises: [ValueError, RlpError, Defect].} =

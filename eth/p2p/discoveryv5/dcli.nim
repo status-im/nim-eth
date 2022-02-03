@@ -3,14 +3,15 @@ import
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, stew/byteutils,
   ../../keys, ../../net/nat,
-  "."/[enr, node, protocol]
+  "."/[enr, node],
+  "."/protocol as discv5_protocol
 
 type
   DiscoveryCmd* = enum
     noCommand
     ping
-    findnode
-    talkreq
+    findNode
+    talkReq
 
   DiscoveryConf* = object
     logLevel* {.
@@ -75,7 +76,7 @@ type
         argument
         desc: "ENR URI of the node to a send ping message"
         name: "node" .}: Node
-    of findnode:
+    of findNode:
       distance* {.
         defaultValue: 255
         desc: "Distance parameter for the findNode message"
@@ -86,10 +87,10 @@ type
         argument
         desc: "ENR URI of the node to send a findNode message"
         name: "node" .}: Node
-    of talkreq:
-      talkreqTarget* {.
+    of talkReq:
+      talkReqTarget* {.
         argument
-        desc: "ENR URI of the node to send a talkreq message"
+        desc: "ENR URI of the node to send a talkReq message"
         name: "node" .}: Node
 
 func defaultListenAddress*(conf: DiscoveryConf): ValidIpAddress =
@@ -131,7 +132,7 @@ proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T =
 proc completeCmdArg*(T: type PrivateKey, val: TaintedString): seq[string] =
   return @[]
 
-proc discover(d: protocol.Protocol) {.async.} =
+proc discover(d: discv5_protocol.Protocol) {.async.} =
   while true:
     let discovered = await d.queryRandom()
     info "Lookup finished", nodes = discovered.len
@@ -171,7 +172,7 @@ proc run(config: DiscoveryConf) =
       echo pong[]
     else:
       echo "No Pong message returned"
-  of findnode:
+  of findNode:
     let nodes = waitFor d.findNode(config.findNodeTarget, @[config.distance])
     if nodes.isOk():
       echo "Received valid records:"
@@ -179,8 +180,8 @@ proc run(config: DiscoveryConf) =
         echo $node.record & " - " & shortLog(node)
     else:
       echo "No Nodes message returned"
-  of talkreq:
-    let talkresp = waitFor d.talkreq(config.talkreqTarget, @[], @[])
+  of talkReq:
+    let talkresp = waitFor d.talkReq(config.talkReqTarget, @[], @[])
     if talkresp.isOk():
       echo talkresp[]
     else:
