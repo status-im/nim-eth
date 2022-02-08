@@ -23,6 +23,8 @@ type
     transport: DatagramTransport
     utpRouter: UtpRouter[TransportAddress]
 
+  SendCallbackBuilder* = proc (d: DatagramTransport): SendCallback[TransportAddress] {.gcsafe, raises: [Defect].}
+
 # This should probably be defined in TransportAddress module, as hash function should
 # be consitent with equality function
 # in nim zero arrays always have hash equal to 0, irrespectively of array size, to
@@ -78,6 +80,7 @@ proc new*(
   address: TransportAddress,
   socketConfig: SocketConfig = SocketConfig.init(),
   allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
+  sendCallbackBuilder: SendCallbackBuilder = nil,
   rng = newRng()): UtpProtocol {.raises: [Defect, CatchableError].} =
 
   doAssert(not(isNil(acceptConnectionCb)))
@@ -90,7 +93,12 @@ proc new*(
   )
 
   let ta = newDatagramTransport(processDatagram, udata = router, local = address)
-  router.sendCb = initSendCallback(ta)
+
+  if (sendCallbackBuilder == nil):
+    router.sendCb = initSendCallback(ta)
+  else:
+    router.sendCb = sendCallbackBuilder(ta)
+
   UtpProtocol(transport: ta, utpRouter: router)
 
 proc shutdownWait*(p: UtpProtocol): Future[void] {.async.} =
