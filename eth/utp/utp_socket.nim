@@ -191,7 +191,8 @@ type
 
     writeLoop: Future[void]
 
-    zeroWindowTimer: Moment
+    # timer which is started when peer max window drops below current packet size
+    zeroWindowTimer: Option[Moment]
 
     # last measured delay between current local timestamp, and remote sent
     # timestamp. In microseconds
@@ -287,7 +288,7 @@ const
   allowedAckWindow*: uint16 = 3
 
   # Timeout after which the send window will be reset to its minimal value after it dropped
-  # to zero. i.e when we received a packet from remote peer with `wndSize` set to 0.
+  # belwo our current packet size. i.e when we received a packet from remote peer with `wndSize` set to number <= current packet size
   defaultResetWindowTimeout = seconds(15)
 
   # If remote peer window drops to zero, then after some time we will reset it
@@ -446,10 +447,15 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
     await socket.flushPackets()
 
   if socket.isOpened():
+    let currentPacketSize = uint32(socket.getPacketSize())
 
-    if (socket.sendBufferTracker.maxRemoteWindow == 0 and currentTime > socket.zeroWindowTimer):
-      debug "Reset remote window to minimal value"
-      socket.sendBufferTracker.updateMaxRemote(minimalRemoteWindow)
+    if (socket.zeroWindowTimer.isSome() and currentTime > socket.zeroWindowTimer.unsafeGet()):
+      if socket.sendBufferTracker.maxRemoteWindow <= currentPacketSize:
+         socket.sendBufferTracker.updateMaxRemote(minimalRemoteWindow)
+      socket.zeroWindowTimer = none[Moment]()
+      debug "Reset remote window to minimal value",
+        minRemote = minimalRemoteWindow
+     
 
     if (currentTime > socket.rtoTimeout):
       debug "CheckTimeouts rto timeout",
@@ -487,7 +493,7 @@ proc checkTimeouts(socket: UtpSocket) {.async.} =
       # on timeout reset duplicate ack counter
       socket.duplicateAck = 0
 
-      let currentPacketSize = uint32(socket.getPacketSize())
+     
 
       if (socket.curWindowPackets == 0 and socket.sendBufferTracker.maxWindow > currentPacketSize):
         # there are no packets in flight even though there is place for more than whole packet
@@ -708,7 +714,7 @@ proc new[A](
     sendBufferTracker: SendBufferTracker.new(0, 1024 * 1024, cfg.optSndBuffer, startMaxWindow),
     # queue with infinite size
     writeQueue: newAsyncQueue[WriteRequest](),
-    zeroWindowTimer: currentTime + cfg.remoteWindowResetTimeout,
+    zeroWindowTimer: none[Moment](),
     socketKey: UtpSocketKey.init(to, rcvId),
     slowStart: true,
     fastTimeout: false,
@@ -1316,13 +1322,14 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     let diff = uint32((socket.ourHistogram.getValue() - minRtt).microseconds())
     socket.ourHistogram.shift(diff)
 
+  let currentPacketSize = uint32(socket.getPacketSize())
   let (newMaxWindow, newSlowStartTreshold, newSlowStart) =
     applyCongestionControl(
       socket.sendBufferTracker.maxWindow,
       socket.slowStart,
       socket.slowStartTreshold,
       socket.socketConfig.optSndBuffer,
-      uint32(socket.getPacketSize()),
+      currentPacketSize,
       microseconds(actualDelay),
       ackedBytes,
       minRtt,
@@ -1341,14 +1348,15 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     slowStartTreshold = newSlowStartTreshold,
     slowstart = newSlowStart
 
-  if (socket.sendBufferTracker.maxRemoteWindow == 0):
+  if (socket.zeroWindowTimer.isNone() and socket.sendBufferTracker.maxRemoteWindow <= currentPacketSize):
     # when zeroWindowTimer will be hit and maxRemoteWindow still will be equal to 0
     # then it will be reset to minimal value
-    socket.zeroWindowTimer = timestampInfo.moment + socket.socketConfig.remoteWindowResetTimeout
+    socket.zeroWindowTimer = some(timestampInfo.moment + socket.socketConfig.remoteWindowResetTimeout)
 
-    debug "Remote window size dropped to 0",
+    debug "Remote window size dropped below packet size",
       currentTime = timestampInfo.moment,
-      resetZeroWindowTime = socket.zeroWindowTimer
+      resetZeroWindowTime = socket.zeroWindowTimer,
+      currentPacketSize = currentPacketSize
 
   # socket.curWindowPackets == acks means that this packet acked all remaining packets
   # including the sent fin packets
