@@ -288,7 +288,8 @@ const
   allowedAckWindow*: uint16 = 3
 
   # Timeout after which the send window will be reset to its minimal value after it dropped
-  # belwo our current packet size. i.e when we received a packet from remote peer with `wndSize` set to number <= current packet size
+  # lower than our current packet size. i.e when we received a packet 
+  # from remote peer with `wndSize` set to number <= current packet size
   defaultResetWindowTimeout = seconds(15)
 
   # If remote peer window drops to zero, then after some time we will reset it
@@ -610,7 +611,7 @@ proc handleDataWrite(socket: UtpSocket, data: seq[byte], writeFut: Future[WriteR
     except CancelledError as exc:
       # write loop has been cancelled in the middle of processing due to the
       # socket closing
-      # this approach can create partial write in case destroyin socket in the
+      # this approach can create partial write in when destroying the socket in the
       # the middle of the write
       doAssert(socket.state == Destroy)
       if (not writeFut.finished()):
@@ -621,7 +622,7 @@ proc handleDataWrite(socket: UtpSocket, data: seq[byte], writeFut: Future[WriteR
     bytesWritten = bytesWritten + len(dataSlice)
     i = lastOrEnd + 1
 
-  # Before completeing future with success (as all data was sent sucessfuly)
+  # Before completing the future with success (as all data was sent successfully)
   # we need to check if user did not cancel write on his end
   if (not writeFut.finished()):
     writeFut.complete(Result[int, WriteError].ok(bytesWritten))
