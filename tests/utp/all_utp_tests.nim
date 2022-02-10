@@ -15,4 +15,5 @@ import
   ./test_utp_socket,
   ./test_utp_socket_sack,
   ./test_utp_router,
-  ./test_clock_drift_calculator
+  ./test_clock_drift_calculator,
+  ./test_protocol_integration
