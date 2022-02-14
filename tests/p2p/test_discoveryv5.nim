@@ -5,7 +5,7 @@ import
   chronos, chronicles, stint, testutils/unittests, stew/shims/net,
   stew/byteutils, bearssl,
   ../../eth/keys,
-  ../../eth/p2p/discoveryv5/[enr, node, routing_table, encoding, sessions, messages, nodes_verification],
+  ../../eth/p2p/discoveryv5/[transport, enr, node, routing_table, encoding, sessions, messages, nodes_verification],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./discv5_test_helper
 
@@ -607,15 +607,15 @@ suite "Discovery v5 Tests":
 
       let (packet, _) = encodeMessagePacket(rng[], codec,
         receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
-      receiveNode.receive(a, packet)
+      receiveNode.transport.receive(a, packet)
 
     # Checking different nodeIds but same address
-    check receiveNode.codec.handshakes.len == 5
+    check receiveNode.transport.codec.handshakes.len == 5
     # TODO: Could get rid of the sleep by storing the timeout future of the
     # handshake
     await sleepAsync(handshakeTimeout)
     # Checking handshake cleanup
-    check receiveNode.codec.handshakes.len == 0
+    check receiveNode.transport.codec.handshakes.len == 0
 
     await receiveNode.closeWait()
 
@@ -637,15 +637,15 @@ suite "Discovery v5 Tests":
       let a = localAddress(20303 + i)
       let (packet, _) = encodeMessagePacket(rng[], codec,
         receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
-      receiveNode.receive(a, packet)
+      receiveNode.transport.receive(a, packet)
 
     # Checking different nodeIds but same address
-    check receiveNode.codec.handshakes.len == 5
+    check receiveNode.transport.codec.handshakes.len == 5
     # TODO: Could get rid of the sleep by storing the timeout future of the
     # handshake
     await sleepAsync(handshakeTimeout)
     # Checking handshake cleanup
-    check receiveNode.codec.handshakes.len == 0
+    check receiveNode.transport.codec.handshakes.len == 0
 
     await receiveNode.closeWait()
 
@@ -669,15 +669,15 @@ suite "Discovery v5 Tests":
     for i in 0 ..< 5:
       let (packet, requestNonce) = encodeMessagePacket(rng[], codec,
         receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
-      receiveNode.receive(a, packet)
+      receiveNode.transport.receive(a, packet)
       if i == 0:
         firstRequestNonce = requestNonce
 
     # Check handshake duplicates
-    check receiveNode.codec.handshakes.len == 1
+    check receiveNode.transport.codec.handshakes.len == 1
     # Check if it is for the first packet that a handshake is stored
     let key = HandshakeKey(nodeId: sendNode.id, address: a)
-    check receiveNode.codec.handshakes[key].whoareyouData.requestNonce ==
+    check receiveNode.transport.codec.handshakes[key].whoareyouData.requestNonce ==
       firstRequestNonce
 
     await receiveNode.closeWait()
