@@ -15,7 +15,8 @@
 import
   std/[hashes, net],
   stew/arrayops,
-  ../../rlp, ./enr
+  ".."/../[rlp, keys],
+  ./enr
 
 type
   MessageKind* = enum
@@ -142,3 +143,8 @@ proc append*(writer: var RlpWriter, ip: IpAddress) =
 
 proc hash*(reqId: RequestId): Hash =
   hash(reqId.id)
+
+proc init*(T: type RequestId, rng: var BrHmacDrbgContext): T =
+  var reqId = RequestId(id: newSeq[byte](8)) # RequestId must be <= 8 bytes
+  brHmacDrbgGenerate(rng, reqId.id)
+  reqId

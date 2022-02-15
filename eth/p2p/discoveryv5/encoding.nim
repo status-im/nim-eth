@@ -558,8 +558,3 @@ proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
     return decodeHandshakePacket(c, fromAddr, staticHeader.nonce,
       input.toOpenArray(0, ivSize - 1), header,
       input.toOpenArray(ivSize + header.len, input.high))
-
-proc init*(T: type RequestId, rng: var BrHmacDrbgContext): T =
-  var reqId = RequestId(id: newSeq[byte](8)) # RequestId must be <= 8 bytes
-  brHmacDrbgGenerate(rng, reqId.id)
-  reqId
