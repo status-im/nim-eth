@@ -251,10 +251,12 @@ procSuite "Utp socket selective acks unit test":
 
       await outgoingSocket.processPacket(finalAck)
 
-      await waitUntil(proc (): bool =  outgoingSocket.numPacketsInOutGoingBuffer() == testCase.numOfPackets - len(testCase.packetsDelivered)) 
+      let expectedPackets = testCase.numOfPackets - len(testCase.packetsDelivered)
+      
+      await waitUntil(proc (): bool =  outgoingSocket.numPacketsInOutGoingBuffer() == expectedPackets) 
 
       check:
-        outgoingSocket.numPacketsInOutGoingBuffer() == testCase.numOfPackets - len(testCase.packetsDelivered)
+        outgoingSocket.numPacketsInOutGoingBuffer() == expectedPackets
 
       await outgoingSocket.destroyWait()
       await incomingSocket.destroyWait()
