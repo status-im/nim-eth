@@ -102,6 +102,16 @@ type
     of Close:
       discard
 
+  SocketEventType = enum
+    NewPacket, CheckTimeouts
+
+  SocketEvent = object
+    case kind: SocketEventType
+    of CheckTimeouts:
+      discard
+    of NewPacket:
+      packet: Packet
+
   UtpSocket*[A] = ref object
     remoteAddress*: A
     state: ConnectionState
@@ -190,6 +200,10 @@ type
     writeQueue: AsyncQueue[WriteRequest]
 
     writeLoop: Future[void]
+
+    eventQueue: AsyncQueue[SocketEvent]
+
+    eventLoop: Future[void]
 
     # timer which is started when peer max window drops below current packet size
     zeroWindowTimer: Option[Moment]
@@ -557,7 +571,7 @@ proc checkTimeoutsLoop(s: UtpSocket) {.async.} =
   try:
     while true:
       await sleepAsync(checkTimeoutsLoopInterval)
-      await s.checkTimeouts()
+      await s.eventQueue.put(SocketEvent(kind: CheckTimeouts))
   except CancelledError:
     trace "checkTimeoutsLoop canceled"
 
@@ -676,132 +690,6 @@ proc writeLoop(socket: UtpSocket): Future[void] {.async.} =
 proc startWriteLoop(s: UtpSocket) =
   s.writeLoop = writeLoop(s)
 
-proc new[A](
-  T: type UtpSocket[A],
-  to: A,
-  snd: SendCallback[A],
-  state: ConnectionState,
-  cfg: SocketConfig,
-  direction: ConnectionDirection,
-  rcvId: uint16,
-  sndId: uint16,
-  initialSeqNr: uint16,
-  initialAckNr: uint16,
-  initialTimeout: Duration
-): T =
-  let currentTime = getMonoTimestamp().moment
-  T(
-    remoteAddress: to,
-    state: state,
-    direction: direction,
-    socketConfig: cfg,
-    connectionIdRcv: rcvId,
-    connectionIdSnd: sndId,
-    seqNr: initialSeqNr,
-    ackNr: initialAckNr,
-    connectionFuture: newFuture[void](),
-    outBuffer: GrowableCircularBuffer[OutgoingPacket].init(),
-    inBuffer: GrowableCircularBuffer[Packet].init(),
-    retransmitTimeout: initialTimeout,
-    rtoTimeout: currentTime + initialTimeout,
-    # Initial timeout values taken from reference implemntation
-    rtt: milliseconds(0),
-    rttVar: milliseconds(800),
-    rto: milliseconds(3000),
-    buffer: AsyncBuffer.init(int(cfg.optRcvBuffer)),
-    closeEvent: newAsyncEvent(),
-    closeCallbacks: newSeq[Future[void]](),
-    # start with 1mb assumption, field will be updated with first received packet
-    sendBufferTracker: SendBufferTracker.new(0, 1024 * 1024, cfg.optSndBuffer, startMaxWindow),
-    # queue with infinite size
-    writeQueue: newAsyncQueue[WriteRequest](),
-    zeroWindowTimer: none[Moment](),
-    socketKey: UtpSocketKey.init(to, rcvId),
-    slowStart: true,
-    fastTimeout: false,
-    fastResendSeqNr: initialSeqNr,
-    lastWindowDecay: currentTime - maxWindowDecay,
-    slowStartTreshold: cfg.optSndBuffer,
-    ourHistogram: DelayHistogram.init(currentTime),
-    remoteHistogram: DelayHistogram.init(currentTime),
-    driftCalculator: ClockDriftCalculator.init(currentTime),
-    send: snd
-  )
-
-proc newOutgoingSocket*[A](
-  to: A,
-  snd: SendCallback[A],
-  cfg: SocketConfig,
-  rcvConnectionId: uint16,
-  rng: var BrHmacDrbgContext
-): UtpSocket[A] =
-  let sndConnectionId = rcvConnectionId + 1
-  let initialSeqNr = randUint16(rng)
-
-  UtpSocket[A].new(
-    to,
-    snd,
-    SynSent,
-    cfg,
-    Outgoing,
-    rcvConnectionId,
-    sndConnectionId,
-    initialSeqNr,
-    # Initialy ack nr is 0, as we do not know remote inital seqnr
-    0,
-    cfg.initialSynTimeout
-  )
-
-proc newIncomingSocket*[A](
-  to: A,
-  snd: SendCallback[A],
-  cfg: SocketConfig,
-  connectionId: uint16,
-  ackNr: uint16,
-  rng: var BrHmacDrbgContext
-): UtpSocket[A] =
-  let initialSeqNr = randUint16(rng)
-
-  let (initialState, initialTimeout) =
-    if (cfg.incomingSocketReceiveTimeout.isNone()):
-      # it does not matter what timeout value we put here, as socket will be in
-      # connected state without outgoing packets in buffer so any timeout hit will
-      # just double rto without any penalties
-      # although we cannont use 0, as then timeout will be constantly re-set to 500ms
-      # and there will be a lot of not usefull work done
-      (Connected, defaultInitialSynTimeout)
-    else:
-      let timeout = cfg.incomingSocketReceiveTimeout.unsafeGet()
-      (SynRecv, timeout)
-
-  UtpSocket[A].new(
-    to,
-    snd,
-    initialState,
-    cfg,
-    Incoming,
-    connectionId + 1,
-    connectionId,
-    initialSeqNr,
-    ackNr,
-    initialTimeout
-  )
-
-proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async.} =
-  doAssert(socket.state == SynSent)
-  let packet = synPacket(socket.seqNr, socket.connectionIdRcv, socket.getRcvWindowSize())
-  debug "Sending SYN packet", 
-    seqNr = packet.header.seqNr,
-    connectionId = packet.header.connectionId
-  # set number of transmissions to 1 as syn packet will be send just after
-  # initiliazation
-  let outgoingPacket = OutgoingPacket.init(encodePacket(packet), 1, false, 0)
-  socket.registerOutgoingPacket(outgoingPacket)
-  socket.startWriteLoop()
-  socket.startTimeoutLoop()
-  await socket.sendData(outgoingPacket.packetBytes)
-  await socket.connectionFuture
-
 proc isConnected*(socket: UtpSocket): bool =
   socket.state == Connected
 
@@ -814,6 +702,7 @@ proc destroy*(s: UtpSocket) =
   ## Moves socket to destroy state and clean all reasources.
   ## Remote is not notified in any way about socket end of life
   s.state = Destroy
+  s.eventLoop.cancel()
   s.writeLoop.cancel()
   s.checkTimeoutsLoop.cancel()
   s.closeEvent.fire()
@@ -1164,18 +1053,12 @@ proc sendAck(socket: UtpSocket): Future[void] =
 
   socket.sendData(encodePacket(ackPacket))
 
-proc startIncomingSocket*(socket: UtpSocket) {.async.} =
-  # Make sure ack was flushed before moving forward
-  await socket.sendAck()
-  socket.startWriteLoop()
-  socket.startTimeoutLoop()
-
 # TODO at socket level we should handle only FIN/DATA/ACK packets. Refactor to make
 # it enforcable by type system
 # TODO re-think synchronization of this procedure, as each await inside gives control
 # to scheduler which means there could be potentialy several processPacket procs
 # running
-proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
+proc processPacketInternal(socket: UtpSocket, p: Packet) {.async.} =
 
   debug "Process packet",
     socketKey = socket.socketKey,
@@ -1547,6 +1430,25 @@ proc processPacket*(socket: UtpSocket, p: Packet) {.async.} =
     of ST_SYN:
       debug "Received ST_SYN on known socket, ignoring"
 
+proc processPacket*(socket: UtpSocket, p: Packet): Future[void] = 
+  socket.eventQueue.put(SocketEvent(kind: NewPacket, packet: p))
+
+proc eventLoop(socket: UtpSocket) {.async.} =
+  try:
+    while true:
+      let ev = await socket.eventQueue.get()
+      case ev.kind
+      of NewPacket:
+        await socket.processPacketInternal(ev.packet)
+      of CheckTimeouts:
+        discard
+      await socket.checkTimeouts()
+  except CancelledError:
+    trace "main socket event loop cancelled"
+
+proc startEventLoop(s: UtpSocket) =
+  s.eventLoop = eventLoop(s)
+
 proc atEof*(socket: UtpSocket): bool =
   # socket is considered at eof when remote side sent us fin packet
   # and we have processed all packets up to fin
@@ -1702,6 +1604,8 @@ proc numPacketsInReordedBuffer*(socket: UtpSocket): int =
   doAssert(num == int(socket.reorderCount))
   num
 
+proc numOfEventsInEventQueue*(socket: UtpSocket): int = len(socket.eventQueue)
+
 proc connectionId*[A](socket: UtpSocket[A]): uint16 =
   ## Connection id is id which is used in first SYN packet which establishes the connection
   ## so for Outgoing side it is actually its rcv_id, and for Incoming side it is
@@ -1715,3 +1619,138 @@ proc connectionId*[A](socket: UtpSocket[A]): uint16 =
 # Check what is current available window size for this socket
 proc currentMaxWindowSize*[A](socket: UtpSocket[A]): uint32 =
   socket.sendBufferTracker.maxWindow
+
+proc new[A](
+  T: type UtpSocket[A],
+  to: A,
+  snd: SendCallback[A],
+  state: ConnectionState,
+  cfg: SocketConfig,
+  direction: ConnectionDirection,
+  rcvId: uint16,
+  sndId: uint16,
+  initialSeqNr: uint16,
+  initialAckNr: uint16,
+  initialTimeout: Duration
+): T =
+  let currentTime = getMonoTimestamp().moment
+  T(
+    remoteAddress: to,
+    state: state,
+    direction: direction,
+    socketConfig: cfg,
+    connectionIdRcv: rcvId,
+    connectionIdSnd: sndId,
+    seqNr: initialSeqNr,
+    ackNr: initialAckNr,
+    connectionFuture: newFuture[void](),
+    outBuffer: GrowableCircularBuffer[OutgoingPacket].init(),
+    inBuffer: GrowableCircularBuffer[Packet].init(),
+    retransmitTimeout: initialTimeout,
+    rtoTimeout: currentTime + initialTimeout,
+    # Initial timeout values taken from reference implemntation
+    rtt: milliseconds(0),
+    rttVar: milliseconds(800),
+    rto: milliseconds(3000),
+    buffer: AsyncBuffer.init(int(cfg.optRcvBuffer)),
+    closeEvent: newAsyncEvent(),
+    closeCallbacks: newSeq[Future[void]](),
+    # start with 1mb assumption, field will be updated with first received packet
+    sendBufferTracker: SendBufferTracker.new(0, 1024 * 1024, cfg.optSndBuffer, startMaxWindow),
+    # queue with infinite size
+    writeQueue: newAsyncQueue[WriteRequest](),
+    eventQueue: newAsyncQueue[SocketEvent](),
+    zeroWindowTimer: none[Moment](),
+    socketKey: UtpSocketKey.init(to, rcvId),
+    slowStart: true,
+    fastTimeout: false,
+    fastResendSeqNr: initialSeqNr,
+    lastWindowDecay: currentTime - maxWindowDecay,
+    slowStartTreshold: cfg.optSndBuffer,
+    ourHistogram: DelayHistogram.init(currentTime),
+    remoteHistogram: DelayHistogram.init(currentTime),
+    driftCalculator: ClockDriftCalculator.init(currentTime),
+    send: snd
+  )
+
+proc newOutgoingSocket*[A](
+  to: A,
+  snd: SendCallback[A],
+  cfg: SocketConfig,
+  rcvConnectionId: uint16,
+  rng: var BrHmacDrbgContext
+): UtpSocket[A] =
+  let sndConnectionId = rcvConnectionId + 1
+  let initialSeqNr = randUint16(rng)
+
+  UtpSocket[A].new(
+    to,
+    snd,
+    SynSent,
+    cfg,
+    Outgoing,
+    rcvConnectionId,
+    sndConnectionId,
+    initialSeqNr,
+    # Initialy ack nr is 0, as we do not know remote inital seqnr
+    0,
+    cfg.initialSynTimeout
+  )
+
+proc newIncomingSocket*[A](
+  to: A,
+  snd: SendCallback[A],
+  cfg: SocketConfig,
+  connectionId: uint16,
+  ackNr: uint16,
+  rng: var BrHmacDrbgContext
+): UtpSocket[A] =
+  let initialSeqNr = randUint16(rng)
+
+  let (initialState, initialTimeout) =
+    if (cfg.incomingSocketReceiveTimeout.isNone()):
+      # it does not matter what timeout value we put here, as socket will be in
+      # connected state without outgoing packets in buffer so any timeout hit will
+      # just double rto without any penalties
+      # although we cannont use 0, as then timeout will be constantly re-set to 500ms
+      # and there will be a lot of not usefull work done
+      (Connected, defaultInitialSynTimeout)
+    else:
+      let timeout = cfg.incomingSocketReceiveTimeout.unsafeGet()
+      (SynRecv, timeout)
+
+  UtpSocket[A].new(
+    to,
+    snd,
+    initialState,
+    cfg,
+    Incoming,
+    connectionId + 1,
+    connectionId,
+    initialSeqNr,
+    ackNr,
+    initialTimeout
+  )
+
+proc startIncomingSocket*(socket: UtpSocket) {.async.} =
+  # Make sure ack was flushed before moving forward
+  await socket.sendAck() 
+  socket.startEventLoop()
+  socket.startWriteLoop()
+  socket.startTimeoutLoop()
+
+proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async.} =
+  doAssert(socket.state == SynSent)
+  let packet = synPacket(socket.seqNr, socket.connectionIdRcv, socket.getRcvWindowSize())
+  debug "Sending SYN packet", 
+    seqNr = packet.header.seqNr,
+    connectionId = packet.header.connectionId
+  # set number of transmissions to 1 as syn packet will be send just after
+  # initiliazation
+  let outgoingPacket = OutgoingPacket.init(encodePacket(packet), 1, false, 0)
+  socket.registerOutgoingPacket(outgoingPacket)
+  socket.startEventLoop()
+  socket.startWriteLoop()
+  socket.startTimeoutLoop()
+  await socket.sendData(outgoingPacket.packetBytes)
+  await socket.connectionFuture

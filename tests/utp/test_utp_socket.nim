@@ -295,7 +295,6 @@ procSuite "Utp socket unit test":
     await outgoingSocket.destroyWait()
 
   asyncTest "Ignoring totally out of order packet":
-    # TODO test is valid until implementing selective acks
     let q = newAsyncQueue[Packet]()
     let initalRemoteSeqNr = 10'u16
 
@@ -305,10 +304,10 @@ procSuite "Utp socket unit test":
 
     await outgoingSocket.processPacket(packets[1024])
 
-    check:
-      outgoingSocket.numPacketsInReordedBuffer() == 0
-
     await outgoingSocket.processPacket(packets[1023])
+
+    # give some time to process those packets
+    await sleepAsync(milliseconds(500))
 
     check:
       outgoingSocket.numPacketsInReordedBuffer() == 1
@@ -348,6 +347,8 @@ procSuite "Utp socket unit test":
       )
 
     await outgoingSocket.processPacket(responseAck)
+
+    await waitUntil(proc (): bool = outgoingSocket.numPacketsInOutGoingBuffer() == 0)
 
     check:
       outgoingSocket.numPacketsInOutGoingBuffer() == 0
@@ -530,6 +531,8 @@ procSuite "Utp socket unit test":
       )
 
     await outgoingSocket.processPacket(responseAck)
+
+    await waitUntil(proc (): bool = outgoingSocket.isConnected())
 
     check:
       outgoingSocket.isConnected()
@@ -768,6 +771,8 @@ procSuite "Utp socket unit test":
 
     await outgoingSocket.processPacket(responseAck)
 
+    await waitUntil(proc (): bool = not outgoingSocket.isConnected())
+
     check:
       not outgoingSocket.isConnected()
 
@@ -1004,6 +1009,8 @@ procSuite "Utp socket unit test":
       )
 
     await outgoingSocket.processPacket(responseAck)
+
+    await waitUntil(proc (): bool = int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite))
 
     check:
       # only first packet has been acked so there should still by 5 bytes left

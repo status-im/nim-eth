@@ -188,6 +188,8 @@ procSuite "Utp router unit tests":
 
     await router.processIncomingBytes(encodedData, testSender)
 
+    await waitUntil(proc (): bool = socket.numOfEventsInEventQueue() == 0)
+    
     check:
       socket.isConnected()
 
