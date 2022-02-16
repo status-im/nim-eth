@@ -230,7 +230,7 @@ proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
       message: NodesMessage, reqId: RequestId) {.nimcall.} =
     trace "Respond message packet", dstId = toId, address = toAddr,
       kind = MessageKind.nodes
-    d.transport.send(toId, toAddr, encodeMessage(message, reqId))
+    d.transport.sendMessage(toId, toAddr, encodeMessage(message, reqId))
 
   if nodes.len == 0:
     # In case of 0 nodes, a reply is still needed
@@ -258,7 +258,7 @@ proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
     port: fromAddr.port.uint16)
   trace "Respond message packet", dstId = fromId, address = fromAddr,
     kind = MessageKind.pong
-  d.transport.send(fromId, fromAddr, encodeMessage(pong, reqId))
+  d.transport.sendMessage(fromId, fromAddr, encodeMessage(pong, reqId))
 
 proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
     fn: FindNodeMessage, reqId: RequestId) =
@@ -294,7 +294,7 @@ proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
 
   trace "Respond message packet", dstId = fromId, address = fromAddr,
     kind = MessageKind.talkresp
-  d.transport.send(fromId, fromAddr, encodeMessage(talkresp, reqId))
+  d.transport.sendMessage(fromId, fromAddr, encodeMessage(talkresp, reqId))
 
 proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
     message: Message) =

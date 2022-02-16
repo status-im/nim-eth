@@ -31,7 +31,7 @@ type
     node: Node
     message: seq[byte]
 
-proc send*(t: Transport, a: Address, data: seq[byte]) =
+proc sendToA(t: Transport, a: Address, data: seq[byte]) =
   let ta = initTAddress(a.ip, a.port)
   let f = t.transp.sendTo(ta, data)
   f.callback = proc(data: pointer) {.gcsafe.} =
@@ -50,12 +50,12 @@ proc send*(t: Transport, a: Address, data: seq[byte]) =
 
 proc send(t: Transport, n: Node, data: seq[byte]) =
   doAssert(n.address.isSome())
-  t.send(n.address.get(), data)
+  t.sendToA(n.address.get(), data)
 
-proc send*(t: Transport, toId: NodeId, toAddr: Address, message: seq[byte]) =
+proc sendMessage*(t: Transport, toId: NodeId, toAddr: Address, message: seq[byte]) =
   let (data, _) = encodeMessagePacket(t.rng[], t.codec, toId, toAddr,
     message)
-  t.send(toAddr, data)
+  t.sendToA(toAddr, data)
 
 # TODO: This could be improved to do the clean-up immediatily in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
@@ -93,7 +93,7 @@ proc sendWhoareyou(t: Transport, toId: NodeId, a: Address,
       t.codec.handshakes.del(key)
 
     trace "Send whoareyou", dstId = toId, address = a
-    t.send(a, data)
+    t.sendToA(a, data)
   else:
     debug "Node with this id already has ongoing handshake, ignoring packet"
 
