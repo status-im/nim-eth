@@ -933,6 +933,11 @@ proc newProtocol*(
     record = enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort,
       extraFields).expect("Record within size limits")
 
+  debug "Initializing discovery v5",
+    enrIp, enrTcpPort, enrUdpPort, enrAutoUpdate,
+    bootstrapEnrs = bootstrapRecords, localEnrFields,
+    bindPort, bindIp
+
   info "ENR initialized", ip = enrIp, tcp = enrTcpPort, udp = enrUdpPort,
     seqNum = record.seqNum, uri = toURI(record)
   if enrIp.isNone():
