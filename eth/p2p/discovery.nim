@@ -281,8 +281,8 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
     debug "Receive failed", exc = e.name, err = e.msg
 
 proc open*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
-  # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(IPv4_any(), d.address.udpPort)
+  # Bind to un- or specific IP / IPv6 / etc
+  let ta = initTAddress(d.address.ip, d.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
 proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] =

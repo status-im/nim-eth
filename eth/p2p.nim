@@ -81,8 +81,8 @@ proc listeningAddress*(node: EthereumNode): ENode =
   node.toENode()
 
 proc startListening*(node: EthereumNode) {.raises: [CatchableError, Defect].} =
-  # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(IPv4_any(), node.address.tcpPort)
+  # Bind to un- or specific IP / IPv6 / etc
+  let ta = initTAddress(node.address.ip, node.address.tcpPort)
   if node.listeningServer == nil:
     node.listeningServer = createStreamServer(ta, processIncoming,
                                               {ReuseAddr},
