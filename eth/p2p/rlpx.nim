@@ -28,6 +28,20 @@ declarePublicGauge connected_peers, "number of peers in the pool"
 logScope:
   topics = "rlpx"
 
+
+# Nethermind currently sends truncated datagrams. In order to hold the
+# current session, an attempt is made to read from the truncated RLP as
+# much as possible and return something.
+const useNethermindKludge = true
+
+when useNethermindKludge:
+  # This type allows to access the internal RLP byte sequence after casting.
+  # As this depends on the current RLP layout, this method is inherently
+  # fragile but useful for debugging.
+  type MyFringeRlp = object
+    bytes: seq[byte]
+    position: int
+
 type
   ResponderWithId*[MsgType] = object
     peer*: Peer
@@ -207,7 +221,8 @@ proc getDispatcher(node: EthereumNode,
 
 proc getMsgName*(peer: Peer, msgId: int): string =
   if not peer.dispatcher.isNil and
-     msgId < peer.dispatcher.messages.len:
+     msgId < peer.dispatcher.messages.len and
+     not peer.dispatcher.messages[msgId].isNil:
     return peer.dispatcher.messages[msgId].name
   else:
     return case msgId
@@ -506,20 +521,87 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
     await peer.disconnectAndRaise(BreachOfProtocol,
                                   "Cannot read RLPx message id")
 
+template checkedRlpReadFringeCases(
+        peer: Peer; r: var Rlp; MsgType: type): untyped =
+  when MsgType is EmptyList:
+    # No list at all
+    if not r.hasData:
+      return EmptyList()
+    # Non empty list would be accepted as `EmptyList` by rlp parser
+    if r.isList and 0 < r.listlen:
+      raise newException(RlpTypeMismatch, "Empty list expected")
+  when MsgType is DisconnectionReasonList:
+    # Also accepted: a single byte int, or a blob of an int list
+    if r.isBlob:
+      # Single byte reason code
+      if r.blobLen <= 1:
+        # Emulate list (aka object) of reason code
+        return DisconnectionReasonList(
+          value: r.read(int).DisconnectionReason)
+      # Blob of a list (aka object) of reason code
+      var s = r.toBytes.rlpFromBytes
+      if s.isList:
+        # Use sub-list
+        return s.read(MsgType)
+    # Non multi entry list would be accepted as `DiscoReasonList` by rlp parser
+    elif r.listlen != 1:
+      raise newException(RlpTypeMismatch, "Single entry list expected")
+  when MsgType is openArray[KeccakHash]:
+    when useNethermindKludge:
+      # Nethermind problem, the rlp data block truncated to 1024 bytes
+      let raw = cast[MyFringeRlp](r).bytes
+      if 1000 < raw.len and
+         raw[0] < 56 and               # single byte msgId
+         (raw[1] and 0xf9) == 0xf9 and # isList, more then 255 bytes
+         raw[4] == 0xa0:               # isblob, 32 bytes (hash)
+        try:
+          let rLen = (raw[2].int shl 8) or raw[3].int
+          if raw.len < 4 + rLen and (rLen mod 33) == 0:
+            let
+              avail = raw.len - 4
+              nLen = avail - (avail mod 33)
+            # Patch/truncate the the message payload
+            var cooked = raw[0 ..< 4 + nLen]
+            cooked[2] = (nLen shr 8).byte
+            cooked[3] = (nLen and 255).byte
+
+            debug "Truncated hash list",
+              peer = peer,
+              dataType = MsgType.name,
+              nItems = (nLen div 33),
+              advertised = (rLen div 33)
+
+            # Returns a truncated valid list although the dispatcher might
+            # ignore this list message anyway
+            var s = rlpFromBytes(cooked)
+            discard s.read(int)
+            return s.read(MsgType)
+        except: discard
+      # End useNethermindKludge
+      discard
+
 proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type):
     auto {.raises: [RlpError, Defect].} =
   when defined(release):
+    peer.checkedRlpReadFringeCases(r, MsgType)
     return r.read(MsgType)
   else:
     try:
+      peer.checkedRlpReadFringeCases(r, MsgType)
       return r.read(MsgType)
-    except rlp.RlpError as e:
+    except rlp.MalformedRlpError as e:
       debug "Failed rlp.read",
             peer = peer,
             dataType = MsgType.name,
             exception = e.msg
-            # rlpData = r.inspect
-
+            # r.inspect would crash here
+      raise e
+    except rlp.RlpError as e:
+      debug "Failed rlp.read",
+            peer = peer,
+            dataType = MsgType.name,
+            exception = e.msg,
+            rlpData = r.inspect
       raise e
 
 proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
