@@ -207,7 +207,8 @@ proc getDispatcher(node: EthereumNode,
 
 proc getMsgName*(peer: Peer, msgId: int): string =
   if not peer.dispatcher.isNil and
-     msgId < peer.dispatcher.messages.len:
+     msgId < peer.dispatcher.messages.len and
+     not peer.dispatcher.messages[msgId].isNil:
     return peer.dispatcher.messages[msgId].name
   else:
     return case msgId
