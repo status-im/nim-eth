@@ -506,20 +506,53 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
     await peer.disconnectAndRaise(BreachOfProtocol,
                                   "Cannot read RLPx message id")
 
+template checkedRlpReadFringeCases(r: var Rlp, MsgType: type): untyped =
+  when MsgType is EmptyList:
+    # No list at all
+    if not r.hasData:
+      return EmptyList()
+    # Non empty list would be accepted as `EmptyList` by rlp parser
+    if r.isList and 0 < r.listlen:
+      raise newException(RlpTypeMismatch, "Empty list expected")
+  when MsgType is DisconnectionReasonList:
+    # Also accepted: a single byte int, or a blob of an int list
+    if r.isBlob:
+      # Single byte reason code
+      if r.blobLen <= 1:
+        # Emulate list (aka object) of reason code
+        return DisconnectionReasonList(
+          value: r.read(int).DisconnectionReason)
+      # Blob of a list (aka object) of reason code
+      var s = r.toBytes.rlpFromBytes
+      if s.isList:
+        # Use sub-list
+        return s.read(MsgType)
+    # Non multi entry list would be accepted as `DiscoReasonList` by rlp parser
+    elif r.listlen != 1:
+      raise newException(RlpTypeMismatch, "Single entry list expected")
+
 proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type):
     auto {.raises: [RlpError, Defect].} =
   when defined(release):
+    r.checkedRlpReadFringeCases(MsgType)
     return r.read(MsgType)
   else:
     try:
+      r.checkedRlpReadFringeCases(MsgType)
       return r.read(MsgType)
-    except rlp.RlpError as e:
+    except rlp.MalformedRlpError as e:
       debug "Failed rlp.read",
             peer = peer,
             dataType = MsgType.name,
             exception = e.msg
-            # rlpData = r.inspect
-
+            # r.inspect would crash here
+      raise e
+    except rlp.RlpError as e:
+      debug "Failed rlp.read",
+            peer = peer,
+            dataType = MsgType.name,
+            exception = e.msg,
+            rlpData = r.inspect
       raise e
 
 proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
