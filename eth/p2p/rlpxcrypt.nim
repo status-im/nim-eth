@@ -202,6 +202,14 @@ proc decryptHeader*(c: var SecretState, data: openArray[byte],
 
 proc decryptHeaderAndGetMsgSize*(c: var SecretState,
                                  encryptedHeader: openArray[byte],
+                                 outSize: var int,
+                                 outHeader: var RlpxHeader): RlpxResult[void] =
+  result = decryptHeader(c, encryptedHeader, outHeader)
+  if result.isOk():
+    outSize = outHeader.getBodySize
+
+proc decryptHeaderAndGetMsgSize*(c: var SecretState,
+                                 encryptedHeader: openArray[byte],
                                  outSize: var int): RlpxResult[void] =
   var decryptedHeader: RlpxHeader
   result = decryptHeader(c, encryptedHeader, decryptedHeader)
