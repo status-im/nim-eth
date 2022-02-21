@@ -43,6 +43,31 @@ type
   DisconnectionReasonList = object
     value: DisconnectionReason
 
+proc read(rlp: var Rlp; Q: type EmptyList): Q
+    {.raises: [Defect,RlpError].} =
+  ## Rlp mixin: `EmptyList` parser
+  # A non empty list would be accepted as `EmptyList` by rlp parser
+  if not rlp.isList or rlp.listLen != 0:
+    raise newException(RlpTypeMismatch, "Empty list expected")
+
+proc read(rlp: var Rlp; Q: type DisconnectionReasonList): Q
+    {.raises: [Defect,RlpError].} =
+  ## Rlp mixin: `DisconnectionReasonList` parser
+  if rlp.isList:
+    let a = rlp.read(array[1,DisconnectionReason])
+    return DisconnectionReasonList(value: a[0])
+  # Also accepted: a single byte reason code
+  if rlp.blobLen <= 1:
+    let n = rlp.read(int)
+    return DisconnectionReasonList(value: n.DisconnectionReason)
+  # Also accepted: a blob of a list (aka object) of reason code
+  var subList = rlp.toBytes.rlpFromBytes
+  if subList.isList:
+    let a = subList.read(array[1,DisconnectionReason])
+    return DisconnectionReasonList(value: a[0])
+  raise newException(RlpTypeMismatch, "Single entry list expected")
+
+
 const
   devp2pVersion* = 4
   maxMsgSize = 1024 * 1024 * 10
@@ -616,12 +641,28 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
     peer, msgId, ctxId, totalMsgSize, moreData, payload = decryptedBytes.len
 
 
+template logRlpFringeCases(peer: Peer; r: var Rlp; MsgType: type): untyped =
+  discard
+  when MsgType is DisconnectionReasonList:
+    if r.isBlob:
+      if r.blobLen <= 1:
+        debug "Malformed reason list (got blob)",
+          peer = peer,
+          dataType = MsgType.name
+      else:
+        var s = r.toBytes.rlpFromBytes
+        if s.isList:
+          debug "Malformed reason list (got blobbed list)",
+           peer = peer,
+           dataType = MsgType.name
+
 proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type):
     auto {.raises: [RlpError, Defect].} =
   when defined(release):
     return r.read(MsgType)
   else:
     try:
+      peer.logRlpFringeCases(r, MsgType)
       return r.read(MsgType)
     except rlp.RlpError as e:
       debug "Failed rlp.read",

@@ -4,6 +4,11 @@
     "error": "RlpTypeMismatch",
     "description": "Object parameters are expected to be encoded in an RLP list"
   },
+  "Non-empty list when decoding for empty object": {
+    "payload": "03c20420",
+    "error": "RlpTypeMismatch",
+    "description": "Object parameters are expected to be encoded in an RLP list"
+  },
   "Message id that is not supported": {
     "payload": "08",
     "error": "UnsupportedMessageError",
@@ -49,10 +54,15 @@
     "error": "MalformedRlpError",
     "description": "listElem to error on invalid size encoding"
   },
-  "Listing elements when not a list": {
-    "payload": "010a",
+  "Listing single element list when having more entries": {
+    "payload": "01c20420",
     "error": "RlpTypeMismatch",
-    "description": "listElem to assert on not a list"
+    "description": "listElem to assert on not a single entry list"
+  },
+  "Listing single element list when having empty list": {
+    "payload": "01c0",
+    "error": "RlpTypeMismatch",
+    "description": "listElem to assert on not a single entry list"
   },
   "devp2p hello packet version 22 + additional list elements for EIP-8": {
     "payload": "00f87137916b6e6574682f76302e39312f706c616e39cdc5836574683dc6846d6f726b1682270fb840fda1cff674c90c9a197539fe3dfb53086ace64f83ed7c6eabec741f7f381cc803e52ab2cd55d5569bce4347107a310dfd5f88a010cd2ffd1005ca406f1842877c883666f6f836261720304"
