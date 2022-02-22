@@ -72,7 +72,7 @@ template connectOutGoingSocketWithIncoming*(
     rng[]
   )
 
-  asyncSpawn incomingSocket.startIncomingSocket()
+  incomingSocket.startIncomingSocket()
 
   let responseAck = await incomingQueue.get()
 

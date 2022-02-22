@@ -168,7 +168,7 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
         # Initial ackNr is set to incoming packer seqNr
         let incomingSocket = newIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
         r.registerUtpSocket(incomingSocket)
-        await incomingSocket.startIncomingSocket()
+        incomingSocket.startIncomingSocket()
         # Based on configuration, socket is passed to upper layer either in SynRecv
         # or Connected state
         info "Accepting incoming connection",
@@ -235,12 +235,6 @@ proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.}=
         to = s.socketKey
       s.destroy()
       return err(OutgoingConnectionError(kind: ConnectionTimedOut))
-    except CatchableError as e:
-      info "Outgoing connection failed due to send error",
-        to = s.socketKey
-      s.destroy()
-      # this may only happen if user provided callback will for some reason fail
-      return err(OutgoingConnectionError(kind: ErrorWhileSendingSyn, error: e))
 
 # Connect to provided address
 # Reference implementation: https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
