@@ -224,13 +224,18 @@ proc updateRecord*(
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
+proc sendResponse(d: Protocol, dstId: NodeId, dstAddr: Address,
+    message: SomeMessage, reqId: RequestId) =
+  ## send Response using the specifid reqId
+  d.transport.sendMessage(dstId, dstAddr, encodeMessage(message, reqId))
+
 proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
     nodes: openArray[Node]) =
   proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address,
       message: NodesMessage, reqId: RequestId) {.nimcall.} =
     trace "Respond message packet", dstId = toId, address = toAddr,
       kind = MessageKind.nodes
-    d.transport.sendMessage(toId, toAddr, encodeMessage(message, reqId))
+    d.sendResponse(toId, toAddr, message, reqId)
 
   if nodes.len == 0:
     # In case of 0 nodes, a reply is still needed
@@ -258,7 +263,7 @@ proc handlePing(d: Protocol, fromId: NodeId, fromAddr: Address,
     port: fromAddr.port.uint16)
   trace "Respond message packet", dstId = fromId, address = fromAddr,
     kind = MessageKind.pong
-  d.transport.sendMessage(fromId, fromAddr, encodeMessage(pong, reqId))
+  d.sendResponse(fromId, fromAddr, pong, reqId)
 
 proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
     fn: FindNodeMessage, reqId: RequestId) =
@@ -294,7 +299,7 @@ proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
 
   trace "Respond message packet", dstId = fromId, address = fromAddr,
     kind = MessageKind.talkresp
-  d.transport.sendMessage(fromId, fromAddr, encodeMessage(talkresp, reqId))
+  d.sendResponse(fromId, fromAddr, talkresp, reqId)
 
 proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
     message: Message) =
