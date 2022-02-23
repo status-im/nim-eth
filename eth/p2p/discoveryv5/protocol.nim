@@ -383,14 +383,13 @@ proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
     RequestId =
   doAssert(toNode.address.isSome())
   let
-    address = toNode.address.get()
     reqId = RequestId.init(d.rng[])
     message = encodeMessage(m, reqId)
 
   trace "Send message packet", dstId = toNode.id, address, kind = messageKind(T)
   discovery_message_requests_outgoing.inc()
 
-  d.transport.sendMessage(toNode, address, message)
+  d.transport.sendMessage(toNode, message)
   return reqId
 
 proc ping*(d: Protocol, toNode: Node):

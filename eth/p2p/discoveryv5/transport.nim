@@ -68,9 +68,11 @@ proc registerRequest(t: Transport, n: Node, message: seq[byte],
       t.pendingRequests.del(nonce)
 
 ##Todo: remove dependence on message. This should be higher
-proc sendMessage*(t: Transport, toNode: Node, address: Address, message: seq[byte]) =
-  let (data, nonce) = encodeMessagePacket(t.rng[], t.codec, toNode.id,
-    address, message)
+proc sendMessage*(t: Transport, toNode: Node, message: seq[byte]) =
+  doAssert(toNode.address.isSome())
+  let address = toNode.address.get()
+  let (data, nonce) = encodeMessagePacket(t.rng[], t.codec,
+    toNode.id, address, message)
 
   t.registerRequest(toNode, message, nonce)
   t.send(toNode, data)
