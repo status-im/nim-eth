@@ -379,7 +379,7 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Nodes message not received in time")
 
-proc sendMessage*[T: SomeMessage](d: Protocol, toId: NodeId, toAddr: Address, m: T):
+proc sendRequest*[T: SomeMessage](d: Protocol, toId: NodeId, toAddr: Address, m: T):
     RequestId =
   let
     reqId = RequestId.init(d.rng[])
@@ -391,7 +391,7 @@ proc sendMessage*[T: SomeMessage](d: Protocol, toId: NodeId, toAddr: Address, m:
   d.transport.sendMessage(toId, toAddr, message)
   return reqId
 
-proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
+proc sendRequest*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
     RequestId =
   doAssert(toNode.address.isSome())
   let
@@ -409,7 +409,7 @@ proc ping*(d: Protocol, toNode: Node):
   ## Send a discovery ping message.
   ##
   ## Returns the received pong message or an error.
-  let reqId = d.sendMessage(toNode,
+  let reqId = d.sendRequest(toNode,
     PingMessage(enrSeq: d.localNode.record.seqNum))
   let resp = await d.waitMessage(toNode, reqId)
 
@@ -432,7 +432,7 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
   ##
   ## Returns the received nodes or an error.
   ## Received ENRs are already validated and converted to `Node`.
-  let reqId = d.sendMessage(toNode, FindNodeMessage(distances: distances))
+  let reqId = d.sendRequest(toNode, FindNodeMessage(distances: distances))
   let nodes = await d.waitNodes(toNode, reqId)
 
   if nodes.isOk:
@@ -448,7 +448,7 @@ proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
   ## Send a discovery talkreq message.
   ##
   ## Returns the received talkresp message or an error.
-  let reqId = d.sendMessage(toNode,
+  let reqId = d.sendRequest(toNode,
     TalkReqMessage(protocol: protocol, request: request))
   let resp = await d.waitMessage(toNode, reqId)
 
