@@ -403,7 +403,8 @@ proc sendRequest*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
     reqId = RequestId.init(d.rng[])
     message = encodeMessage(m, reqId)
 
-  trace "Send message packet", dstId = toNode.id, address, kind = messageKind(T)
+  trace "Send message packet", dstId = toNode.id,
+    address = toNode.address, kind = messageKind(T)
   discovery_message_requests_outgoing.inc()
 
   d.transport.sendMessage(toNode, message)
