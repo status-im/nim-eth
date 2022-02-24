@@ -188,6 +188,8 @@ procSuite "Utp router unit tests":
 
     await router.processIncomingBytes(encodedData, testSender)
 
+    await waitUntil(proc (): bool = socket.numOfEventsInEventQueue() == 0)
+
     check:
       socket.isConnected()
 
@@ -350,8 +352,8 @@ procSuite "Utp router unit tests":
 
     check:
       connectResult.isErr()
-      connectResult.error().kind == ErrorWhileSendingSyn
-      cast[TestError](connectResult.error().error) is TestError
+      # even though send is failing we will just finish with timeout, 
+      connectResult.error().kind == ConnectionTimedOut
       router.len() == 0
 
   asyncTest "Router should clear closed outgoing connections":

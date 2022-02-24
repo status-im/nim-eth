@@ -48,6 +48,8 @@ procSuite "Utp socket selective acks unit test":
     for p in dataPackets:
       await outgoingSocket.processPacket(p)
 
+    await waitUntil(proc (): bool = outgoingSocket.numOfEventsInEventQueue() == 0)
+
     let extArray = outgoingSocket.generateSelectiveAckBitMask()
 
     await outgoingSocket.destroyWait()
@@ -170,6 +172,7 @@ procSuite "Utp socket selective acks unit test":
     for toDeliver in testCase.packetsDelivered:
       await incomingSocket.processPacket(packets[toDeliver])
 
+    await waitUntil(proc (): bool = incomingSocket.numOfEventsInEventQueue() == 0)
 
     return (outgoingSocket, incomingSocket, packets)
 
@@ -248,8 +251,12 @@ procSuite "Utp socket selective acks unit test":
 
       await outgoingSocket.processPacket(finalAck)
 
+      let expectedPackets = testCase.numOfPackets - len(testCase.packetsDelivered)
+      
+      await waitUntil(proc (): bool =  outgoingSocket.numPacketsInOutGoingBuffer() == expectedPackets) 
+
       check:
-        outgoingSocket.numPacketsInOutGoingBuffer() == testCase.numOfPackets - len(testCase.packetsDelivered)
+        outgoingSocket.numPacketsInOutGoingBuffer() == expectedPackets
 
       await outgoingSocket.destroyWait()
       await incomingSocket.destroyWait()
@@ -298,6 +305,8 @@ procSuite "Utp socket selective acks unit test":
         numOfSetBits(mask) == numOfDeliveredPackets
 
       await outgoingSocket.processPacket(finalAck)
+
+      await waitUntil(proc (): bool = outgoingSocket.numOfEventsInEventQueue() == 0)
 
       for idx in testCase.packetsResent:
         let resentPacket = await outgoingQueue.get()

@@ -44,7 +44,7 @@ template connectOutGoingSocket*(
     )
 
   await sock1.processPacket(responseAck)
-
+  await waitUntil(proc (): bool = sock1.isConnected())
   check:
     sock1.isConnected()
 
@@ -72,12 +72,14 @@ template connectOutGoingSocketWithIncoming*(
     rng[]
   )
 
-  await incomingSocket.startIncomingSocket()
+  incomingSocket.startIncomingSocket()
 
   let responseAck = await incomingQueue.get()
 
   await outgoingSocket.processPacket(responseAck)
-
+  
+  await waitUntil(proc (): bool = outgoingSocket.isConnected())
+  
   check:
     outgoingSocket.isConnected()
 
