@@ -1501,7 +1501,9 @@ proc eventLoop(socket: UtpSocket) {.async.} =
       of NewPacket:
         socket.processPacketInternal(ev.packet)
         
-        while socket.pendingReads.len() > 0:
+        # we processed a packet and rcv buffer size is larger than 0,
+        # check if we can finish some pending readers
+        while socket.pendingReads.len() > 0 and socket.offset > 0:
           let readResult = socket.onRead(socket.pendingReads[0])
           case readResult
           of ReadFinished:
@@ -1547,12 +1549,12 @@ proc eventLoop(socket: UtpSocket) {.async.} =
         else:
           socket.handleClose()
       of WriteReq:
-        if (socket.pendingWrites.len() > 0):
-          # there are still some unfinished writes, waiting to be finished schdule this batch for later
-          socket.pendingWrites.addLast(WriteRequest(kind: Data, data: ev.data, writer: ev.writer))
-        else:
-          # check if the writer was not cancelled in mean time
-          if (not ev.writer.finished()):
+        # check if the writer was not cancelled in mean time
+        if (not ev.writer.finished()):
+          if (socket.pendingWrites.len() > 0):
+            # there are still some unfinished writes, waiting to be finished schdule this batch for later
+            socket.pendingWrites.addLast(WriteRequest(kind: Data, data: ev.data, writer: ev.writer))
+          else:
             let bytesWritten = socket.handleDataWrite(ev.data)
             if (bytesWritten == len(ev.data)):
               # all bytes were written we can finish external future
@@ -1562,8 +1564,9 @@ proc eventLoop(socket: UtpSocket) {.async.} =
               # bytes partially written to buffer, schedule rest of data for later
               socket.pendingWrites.addLast(WriteRequest(kind: Data, data: bytesLeft, writer: ev.writer))
       of ReadReqType:
+        # check if the writer was not cancelled in mean time
         if (not ev.readReq.reader.finished()):
-          if (len(socket.pendingReads) > 0):
+          if (socket.pendingReads.len() > 0):
             # there is already pending unfininshed read request, schedule this one for
             # later
             socket.pendingReads.addLast(ev.readReq)
@@ -1583,6 +1586,14 @@ proc eventLoop(socket: UtpSocket) {.async.} =
       if w.kind == Data and (not w.writer.finished()):
         let res = Result[int, WriteError].err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
         w.writer.complete(res)
+    for r in socket.pendingReads.items():
+      # complete every reader with already read bytes
+      # TODO: it maybe better to refine read api to returl Future[Result[seq[byte], E]]
+      # and return erros for not finished reads
+      if (not r.reader.finished()):
+        r.reader.complete(r.bytesAvailable)
+    socket.pendingWrites.clear()
+    socket.pendingReads.clear()
     trace "main socket event loop cancelled"
 
 proc startEventLoop(s: UtpSocket) =
