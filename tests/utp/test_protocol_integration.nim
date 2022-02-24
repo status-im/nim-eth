@@ -125,8 +125,8 @@ procSuite "Utp protocol over udp tests with loss and delays":
     TestCase.init(45, 10, 40000),
     TestCase.init(25, 15, 40000),
     # super small recv buffer which will be constantly on the brink of being full
-    TestCase.init(15, 5, 40000, SocketConfig.init(optRcvBuffer = uint32(2000), remoteWindowResetTimeout = seconds(5))),
-    TestCase.init(15, 10, 40000, SocketConfig.init(optRcvBuffer = uint32(2000), remoteWindowResetTimeout = seconds(5)))
+    TestCase.init(15, 5, 40000, SocketConfig.init(optRcvBuffer = uint32(6000), remoteWindowResetTimeout = seconds(5))),
+    TestCase.init(15, 10, 40000, SocketConfig.init(optRcvBuffer = uint32(6000), remoteWindowResetTimeout = seconds(5)))
   ]
 
   asyncTest "Write and Read large data in different network conditions":
@@ -172,9 +172,9 @@ procSuite "Utp protocol over udp tests with loss and delays":
 
   let testCases1 = @[
     # small buffers so it will fill up between reads
-    TestCase.init(15, 5, 40000, SocketConfig.init(optRcvBuffer = uint32(2000), remoteWindowResetTimeout = seconds(5)), 10000),
-    TestCase.init(15, 10, 40000, SocketConfig.init(optRcvBuffer = uint32(2000), remoteWindowResetTimeout = seconds(5)), 10000),
-    TestCase.init(15, 15, 40000, SocketConfig.init(optRcvBuffer = uint32(2000), remoteWindowResetTimeout = seconds(5)), 10000)
+    TestCase.init(15, 5, 40000, SocketConfig.init(optRcvBuffer = uint32(6000), remoteWindowResetTimeout = seconds(5)), 10000),
+    TestCase.init(15, 10, 40000, SocketConfig.init(optRcvBuffer = uint32(6000), remoteWindowResetTimeout = seconds(5)), 10000),
+    TestCase.init(15, 15, 40000, SocketConfig.init(optRcvBuffer = uint32(6000), remoteWindowResetTimeout = seconds(5)), 10000)
   ]
 
   proc readWithMultipleReads(s: UtpSocket[TransportAddress], numOfReads: int, bytesPerRead: int): Future[seq[byte]] {.async.}=

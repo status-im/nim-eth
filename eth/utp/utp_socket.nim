@@ -77,6 +77,9 @@ type
     # to zero. i.e when we received a packet from remote peer with `wndSize` set to 0.
     remoteWindowResetTimeout*: Duration
 
+    # Size of reorder buffer calculated as fraction of optRcvBuffer
+    maxSizeOfReorderBuffer: uint32
+
   WriteErrorType* = enum
     SocketNotWriteable,
     FinSent
@@ -102,7 +105,15 @@ type
       discard
 
   SocketEventType = enum
-    NewPacket, CheckTimeouts, CloseReq, WriteReq
+    NewPacket, CheckTimeouts, CloseReq, WriteReq, ReadReqType
+
+  ReadReq = object
+    bytesToRead: int
+    bytesAvailable: seq[uint8]
+    reader: Future[seq[uint8]]
+
+  ReadResult = enum
+    ReadCancelled, ReadFinished, ReadNotFinished, SocketAlreadyFinished
 
   SocketEvent = object
     case kind: SocketEventType
@@ -115,6 +126,8 @@ type
     of WriteReq:
       data: seq[byte]
       writer: Future[WriteResult]
+    of ReadReqType:
+      readReq: ReadReq
 
   UtpSocket*[A] = ref object
     remoteAddress*: A
@@ -158,6 +171,9 @@ type
     # incoming buffer for out of order packets
     inBuffer: GrowableCircularBuffer[Packet]
 
+    # number of bytes in reorder buffer
+    inBufferBytes: uint32
+
     # Number of packets waiting in reorder buffer
     reorderCount: uint16
 
@@ -176,7 +192,13 @@ type
     rtoTimeout: Moment
 
     # rcvBuffer
-    buffer: AsyncBuffer
+    rcvBuffer: seq[byte]
+
+    # current size of rcv buffer
+    offset: int
+  
+    # readers waiting for data
+    pendingReads: Deque[ReadReq]
 
     # loop called every 500ms to check for on going timeout status
     checkTimeoutsLoop: Future[void]
@@ -335,6 +357,16 @@ const
   # minimal time before subseqent window decays
   maxWindowDecay = milliseconds(100)
 
+  # Maximal size of reorder buffer as fraction of optRcvBuffer size following 
+  # semantics apply bases on rcvBuffer set to 1000 bytes:
+  # if there are already 1000 bytes in rcv buffer no more bytes will be accepted to reorder buffer
+  # if there are already 500 bytes in reoreder buffer, no more bytes will be accepted
+  # to it, and only 500 bytes can be accepted to rcv buffer
+  # this way there is always a space in rcv buffer to fit new data if the reordering
+  # happens
+  maxReorderBufferSize = 0.5
+
+
 proc init*[A](T: type UtpSocketKey, remoteAddress: A, rcvId: uint16): T =
   UtpSocketKey[A](remoteAddress: remoteAddress, rcvId: rcvId)
 
@@ -362,13 +394,16 @@ proc init*(
   remoteWindowResetTimeout: Duration = defaultResetWindowTimeout,
   optSndBuffer: uint32 = defaultOptRcvBuffer
   ): T =
+  # TODO make sure optRcvBuffer is nicely divisible by maxReorderBufferSize
+  let reorderBufferSize = uint32(maxReorderBufferSize * float64(optRcvBuffer))
   SocketConfig(
     initialSynTimeout: initialSynTimeout,
     dataResendsBeforeFailure: dataResendsBeforeFailure,
     optRcvBuffer: optRcvBuffer,
     optSndBuffer: optSndBuffer,
     incomingSocketReceiveTimeout: incomingSocketReceiveTimeout,
-    remoteWindowResetTimeout: remoteWindowResetTimeout
+    remoteWindowResetTimeout: remoteWindowResetTimeout,
+    maxSizeOfReorderBuffer: reorderBufferSize
   )
 
 # number of bytes which will fit in current send window
@@ -380,7 +415,7 @@ proc freeWindowBytes(socket: UtpSocket): uint32 =
     return maxSend - socket.currentWindow
 
 proc getRcvWindowSize(socket: UtpSocket): uint32 =
-  let currentDataSize = socket.buffer.dataLen()
+  let currentDataSize = socket.offset
   if currentDataSize > int(socket.socketConfig.optRcvBuffer):
     0'u32
   else:
@@ -438,7 +473,10 @@ proc flushPackets(socket: UtpSocket) =
           pkSeqNr = i
         socket.sendPacket(i)
       else:
-        debug "Should resend packet during flush but there is no place in send buffer",
+        debug "Should resend packet during flush but there is no place in send window",
+          currentBytesWindow = socket.currentWindow,
+          maxRemoteWindow = socket.maxRemoteWindow,
+          maxWindow = socket.maxWindow,
           pkSeqNr = i
         # there is no place in send buffer, stop flushing
         return
@@ -1003,7 +1041,7 @@ proc sendAck(socket: UtpSocket) =
 
 # TODO at socket level we should handle only FIN/DATA/ACK packets. Refactor to make
 # it enforcable by type system
-proc processPacketInternal(socket: UtpSocket, p: Packet) {.async.} =
+proc processPacketInternal(socket: UtpSocket, p: Packet) =
 
   debug "Process packet",
     socketKey = socket.socketKey,
@@ -1261,11 +1299,28 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) {.async.} =
       # we got in order packet
       if (pastExpected == 0 and (not socket.reachedFin)):
         debug "Received in order packet"
-        if (len(p.payload) > 0 and (not socket.readShutdown)):
+        let payloadLength = len(p.payload)
+        if (payloadLength > 0 and (not socket.readShutdown)):
+          # we need to sum both rcv buffer and reorder buffer
+          if (uint32(socket.offset) + socket.inBufferBytes + uint32(payloadLength) > socket.socketConfig.optRcvBuffer):
+            # even though packet is in order and passes all the checks, it would
+            # overflow our receive buffer, it means that we are receiving data
+            # faster than we are reading it. Do not ack this packet, and drop received
+            # data
+            debug "Recevied packet would overflow receive buffer dropping it",
+              pkSeqNr = p.header.seqNr,
+              bytesReceived = payloadLength,
+              rcvbufferSize = socket.offset,
+              reorderBufferSize = socket.inBufferBytes
+            return
+
           debug "Received data packet",
-            bytesReceived = len(p.payload)
+            bytesReceived = payloadLength
           # we are getting in order data packet, we can flush data directly to the incoming buffer
-          await upload(addr socket.buffer, unsafeAddr p.payload[0], p.payload.len())
+          # await upload(addr socket.buffer, unsafeAddr p.payload[0], p.payload.len())
+          moveMem(addr socket.rcvBuffer[socket.offset], unsafeAddr p.payload[0], payloadLength)
+          socket.offset = socket.offset + payloadLength
+        
         # Bytes have been passed to upper layer, we can increase number of last
         # acked packet
         inc socket.ackNr
@@ -1291,9 +1346,6 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) {.async.} =
             # ignore following packets
             socket.reorderCount = 0
 
-            # notify all readers we have reached eof
-            socket.buffer.forget()
-
           if socket.reorderCount == 0:
             break
 
@@ -1305,21 +1357,30 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) {.async.} =
             break
 
           let packet = maybePacket.unsafeGet()
+          let reorderPacketPayloadLength = len(packet.payload)
 
-          if (len(packet.payload) > 0 and (not socket.readShutdown)):
+          if (reorderPacketPayloadLength > 0 and (not socket.readShutdown)):
             debug "Got packet from reorder buffer",
               packetBytes = len(packet.payload),
               packetSeqNr = packet.header.seqNr,
               packetAckNr = packet.header.ackNr,
               socketSeqNr = socket.seqNr,
-              socekrAckNr = socket.ackNr
+              socektAckNr = socket.ackNr,
+              rcvbufferSize = socket.offset,
+              reorderBufferSize = socket.inBufferBytes
+            
+            # Rcv buffer and reorder buffer are sized that it is always possible to 
+            # move data from reorder buffer to rcv buffer without overflow
+            moveMem(addr socket.rcvBuffer[socket.offset], unsafeAddr packet.payload[0], reorderPacketPayloadLength)
+            socket.offset = socket.offset + reorderPacketPayloadLength
 
-            await upload(addr socket.buffer, unsafeAddr packet.payload[0], packet.payload.len())
+          debug "Deleting packet",
+            seqNr = nextPacketNum
 
           socket.inBuffer.delete(nextPacketNum)
-
           inc socket.ackNr
           dec socket.reorderCount
+          socket.inBufferBytes = socket.inBufferBytes - uint32(reorderPacketPayloadLength)
 
         debug "Socket state after processing in order packet",
           socketKey = socket.socketKey,
@@ -1352,13 +1413,27 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) {.async.} =
           debug "Packet with seqNr already received",
             seqNr = pkSeqNr
         else:
-          socket.inBuffer.put(pkSeqNr, p)
-          inc socket.reorderCount
-          debug "added out of order packet to reorder buffer",
-            reorderCount = socket.reorderCount
-          # we send ack packet, as we reoreder count is > 0, so the eack bitmask will be 
-          # generated
-          socket.sendAck()
+          let payloadLength = uint32(len(p.payload))
+          if (socket.inBufferBytes + payloadLength <= socket.socketConfig.maxSizeOfReorderBuffer and
+              socket.inBufferBytes + uint32(socket.offset) + payloadLength <= socket.socketConfig.optRcvBuffer):
+            
+            debug "store packet in reorder buffer",
+              packetBytes = payloadLength,
+              packetSeqNr = p.header.seqNr,
+              packetAckNr = p.header.ackNr,
+              socketSeqNr = socket.seqNr,
+              socektAckNr = socket.ackNr,
+              rcvbufferSize = socket.offset,
+              reorderBufferSize = socket.inBufferBytes
+
+            socket.inBuffer.put(pkSeqNr, p)
+            inc socket.reorderCount
+            socket.inBufferBytes = socket.inBufferBytes + payloadLength
+            debug "added out of order packet to reorder buffer",
+              reorderCount = socket.reorderCount
+            # we send ack packet, as we reoreder count is > 0, so the eack bitmask will be 
+            # generated
+            socket.sendAck()
 
     of ST_STATE:
       if (socket.state == SynSent and (not socket.connectionFuture.finished())):
@@ -1379,14 +1454,67 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) {.async.} =
 proc processPacket*(socket: UtpSocket, p: Packet): Future[void] = 
   socket.eventQueue.put(SocketEvent(kind: NewPacket, packet: p))
 
+template shiftBuffer(t, c: untyped) =
+  if (t).offset > c:
+    if c > 0:
+      moveMem(addr((t).rcvBuffer[0]), addr((t).rcvBuffer[(c)]), (t).offset - (c))
+      (t).offset = (t).offset - (c)
+  else:
+    (t).offset = 0
+
+proc onRead(socket: UtpSocket, readReq: var ReadReq): ReadResult =
+  if readReq.reader.finished():
+    return ReadCancelled
+  
+  if socket.atEof():
+    # buffer is already empty and we reached remote fin, just finish read with whatever
+    # was already read
+    readReq.reader.complete(readReq.bytesAvailable)
+    return SocketAlreadyFinished
+
+  if readReq.bytesToRead == 0:
+    # treat is as read till eof
+    readReq.bytesAvailable.add(socket.rcvBuffer.toOpenArray(0, socket.offset - 1))
+    socket.shiftBuffer(socket.offset)
+    if (socket.atEof()):
+      readReq.reader.complete(readReq.bytesAvailable)
+      return ReadFinished
+    else:
+      return ReadNotFinished
+  else:
+    let bytesAlreadyRead = len(readReq.bytesAvailable)
+    let bytesLeftToRead = readReq.bytesToRead - bytesAlreadyRead
+    let count = min(socket.offset, bytesLeftToRead)
+    readReq.bytesAvailable.add(socket.rcvBuffer.toOpenArray(0, count - 1))
+    socket.shiftBuffer(count)
+    if (len(readReq.bytesAvailable) == readReq.bytesToRead):
+      readReq.reader.complete(readReq.bytesAvailable)
+      return ReadFinished
+    else:
+      return ReadNotFinished
+
 proc eventLoop(socket: UtpSocket) {.async.} =
   try:
     while true:
       let ev = await socket.eventQueue.get()
       case ev.kind
       of NewPacket:
-        await socket.processPacketInternal(ev.packet)
+        socket.processPacketInternal(ev.packet)
         
+        while socket.pendingReads.len() > 0:
+          let readResult = socket.onRead(socket.pendingReads[0])
+          case readResult
+          of ReadFinished:
+            discard socket.pendingReads.popFirst()
+          of ReadNotFinished:
+            # there was not enough bytes in buffer to finish this read request,
+            # stop processing fruther reeads
+            break
+          else:
+            # read was cancelled or socket is already finished move on to next read
+            # request
+            discard socket.pendingReads.popFirst()
+
         # we processed packet, so there could more place in the send buffer
         while socket.pendingWrites.len() > 0:
           let wr = socket.pendingWrites.popFirst()
@@ -1433,6 +1561,22 @@ proc eventLoop(socket: UtpSocket) {.async.} =
               let bytesLeft = ev.data[bytesWritten..ev.data.high]
               # bytes partially written to buffer, schedule rest of data for later
               socket.pendingWrites.addLast(WriteRequest(kind: Data, data: bytesLeft, writer: ev.writer))
+      of ReadReqType:
+        if (not ev.readReq.reader.finished()):
+          if (len(socket.pendingReads) > 0):
+            # there is already pending unfininshed read request, schedule this one for
+            # later
+            socket.pendingReads.addLast(ev.readReq)
+          else:
+            var readReq = ev.readReq
+            let readResult = socket.onRead(readReq)
+            case readResult
+            of ReadNotFinished:
+              socket.pendingReads.addLast(readReq)
+            else:
+              # in any other case we do not need to do any thing 
+              discard
+                    
       socket.checkTimeouts()
   except CancelledError:
     for w in socket.pendingWrites.items():
@@ -1447,7 +1591,7 @@ proc startEventLoop(s: UtpSocket) =
 proc atEof*(socket: UtpSocket): bool =
   # socket is considered at eof when remote side sent us fin packet
   # and we have processed all packets up to fin
-  socket.buffer.dataLen() == 0 and socket.reachedFin
+  socket.offset == 0 and socket.reachedFin
 
 proc readingClosed(socket: UtpSocket): bool =
   socket.atEof() or socket.state == Destroy
@@ -1466,7 +1610,6 @@ proc close*(socket: UtpSocket) =
           # with this approach, all pending writes will be executed before sending fin packet
           # we could also and method which places close request as first one to process
           # but it would complicate the write loop
-          # socket.writeQueue.putNoWait(WriteRequest(kind: Close))
           socket.eventQueue.putNoWait(SocketEvent(kind: CloseReq))
         except AsyncQueueFullError as e:
           # should not happen as our write queue is unbounded
@@ -1515,65 +1658,61 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] =
 
   try:
     socket.eventQueue.putNoWait(SocketEvent(kind: WriteReq, data: data, writer: retFuture))
-    # socket.writeQueue.putNoWait(WriteRequest(kind: Data, data: data, writer: retFuture))
   except AsyncQueueFullError as e:
     # this should not happen as out write queue is unbounded
     raiseAssert e.msg
 
   return retFuture
 
-template readLoop(body: untyped): untyped =
-  while true:
-    let (consumed, done) = body
-    socket.buffer.shift(consumed)
-    if done:
-      break
-    else:
-      if not(socket.readingClosed()):
-        await socket.buffer.wait()
-
-proc read*(socket: UtpSocket, n: Natural): Future[seq[byte]] {.async.}=
-  ## Read all bytes `n` bytes from socket ``socket``.
-  ##
-  ## This procedure allocates buffer seq[byte] and return it as result.
-  var bytes = newSeq[byte]()
-
-  if n == 0:
-    return bytes
-
-  readLoop():
-    if socket.readingClosed():
-      (0, true)
-    else:
-      let count = min(socket.buffer.dataLen(), n - len(bytes))
-      bytes.add(socket.buffer.buffer.toOpenArray(0, count - 1))
-      (count, len(bytes) == n)
-
-  debug "Read data ",
-    remote = socket.socketKey,
-    length = n
-
-  return bytes
-
-proc read*(socket: UtpSocket): Future[seq[byte]] {.async.}=
+proc read*(socket: UtpSocket, n: Natural): Future[seq[byte]] =
   ## Read all bytes from socket ``socket``.
   ##
   ## This procedure allocates buffer seq[byte] and return it as result.
-  var bytes = newSeq[byte]()
+  let fut = newFuture[seq[uint8]]()
 
-  readLoop():
-    if socket.readingClosed():
-      (0, true)
-    else:
-      let count = socket.buffer.dataLen()
-      bytes.add(socket.buffer.buffer.toOpenArray(0, count - 1))
-      (count, false)
+  if socket.readingClosed():
+    fut.complete(newSeq[uint8]())
+    return fut
 
-  debug "Read data ",
-    remote = socket.socketKey,
-    length = len(bytes)
+  try:
+    socket.eventQueue.putNoWait(
+      SocketEvent(
+        kind:ReadReqType,
+        readReq: ReadReq(
+          bytesToRead: n,
+          bytesAvailable: newSeq[uint8](),
+          reader: fut))
+    )
+  except AsyncQueueFullError as e:
+        # should not happen as our write queue is unbounded
+        raiseAssert e.msg
 
-  return bytes
+  return fut
+
+proc read*(socket: UtpSocket): Future[seq[byte]] =
+  ## Read all bytes from socket ``socket``.
+  ##
+  ## This procedure allocates buffer seq[byte] and return it as result.
+  let fut = newFuture[seq[uint8]]()
+
+  if socket.readingClosed():
+    fut.complete(newSeq[uint8]())
+    return fut
+
+  try:
+    socket.eventQueue.putNoWait(
+      SocketEvent(
+        kind:ReadReqType,
+        readReq: ReadReq(
+          bytesToRead: 0,
+          bytesAvailable: newSeq[uint8](),
+          reader: fut))
+    )
+  except AsyncQueueFullError as e:
+        # should not happen as our write queue is unbounded
+        raiseAssert e.msg
+
+  return fut
 
 # Check how many packets are still in the out going buffer, usefull for tests or
 # debugging.
@@ -1588,7 +1727,7 @@ proc numPacketsInOutGoingBuffer*(socket: UtpSocket): int =
 proc numOfBytesInFlight*(socket: UtpSocket): uint32 = socket.currentWindow
 
 # Check how many bytes are in incoming buffer
-proc numOfBytesInIncomingBuffer*(socket: UtpSocket): uint32 = uint32(socket.buffer.dataLen())
+proc numOfBytesInIncomingBuffer*(socket: UtpSocket): uint32 = uint32(socket.offset)
 
 # Check how many packets are still in the reorder buffer, usefull for tests or
 # debugging.
@@ -1654,7 +1793,8 @@ proc new[A](
     rtt: milliseconds(0),
     rttVar: milliseconds(800),
     rto: milliseconds(3000),
-    buffer: AsyncBuffer.init(int(cfg.optRcvBuffer)),
+    rcvBuffer: newSeq[uint8](int(cfg.optRcvBuffer)),
+    pendingReads: initDeque[ReadReq](),
     closeEvent: newAsyncEvent(),
     closeCallbacks: newSeq[Future[void]](),
     pendingWrites: initDeque[WriteRequest](),
