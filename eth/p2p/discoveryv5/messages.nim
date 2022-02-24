@@ -14,8 +14,7 @@
 
 import
   std/[hashes, net],
-  stew/arrayops,
-  ".."/../[rlp, keys],
+  ".."/../[keys],
   ./enr
 
 type
@@ -103,43 +102,6 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   elif T is NodesMessage: nodes
   elif T is TalkReqMessage: talkReq
   elif T is TalkRespMessage: talkResp
-
-proc read*(rlp: var Rlp, T: type RequestId): T
-    {.raises: [ValueError, RlpError, Defect].} =
-  mixin read
-  var reqId: RequestId
-  reqId.id = rlp.toBytes()
-  if reqId.id.len > 8:
-    raise newException(ValueError, "RequestId is > 8 bytes")
-  rlp.skipElem()
-
-  reqId
-
-proc append*(writer: var RlpWriter, value: RequestId) =
-  writer.append(value.id)
-
-proc read*(rlp: var Rlp, T: type IpAddress): T
-    {.raises: [RlpError, Defect].} =
-  let ipBytes = rlp.toBytes()
-  rlp.skipElem()
-
-  if ipBytes.len == 4:
-    var ip: array[4, byte]
-    discard copyFrom(ip, ipBytes)
-    IpAddress(family: IPv4, address_v4: ip)
-  elif ipBytes.len == 16:
-    var ip: array[16, byte]
-    discard copyFrom(ip, ipBytes)
-    IpAddress(family: IPv6, address_v6: ip)
-  else:
-    raise newException(RlpTypeMismatch,
-      "Amount of bytes for IP address is different from 4 or 16")
-
-proc append*(writer: var RlpWriter, ip: IpAddress) =
-  case ip.family:
-  of IpAddressFamily.IPv4:
-    writer.append(ip.address_v4)
-  of IpAddressFamily.IPv6: writer.append(ip.address_v6)
 
 proc hash*(reqId: RequestId): Hash =
   hash(reqId.id)
