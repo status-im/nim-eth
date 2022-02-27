@@ -12,7 +12,7 @@
 import
   std/[net, options],
   unittest2,
-  ../../eth/p2p/enode
+  ../../eth/p2p/[enode, bootnodes]
 
 suite "ENode":
   test "Go-Ethereum tests":
@@ -92,3 +92,20 @@ suite "ENode":
 
       check (results[index].isSome and res.error == results[index].get) or
         res.isOk
+
+  test "Bootnodes test":
+    proc runBNTest(bns: openArray[string]): bool =
+      for z in bns:
+        let res = ENode.fromString(z)
+        if res.isErr: return false
+      true
+
+    check runBNTest(MainnetBootnodes)
+    check runBNTest(RopstenBootnodes)
+    check runBNTest(RinkebyBootnodes)
+    check runBNTest(GoerliBootnodes)
+    check runBNTest(DiscoveryV5Bootnodes)
+    check runBNTest(KovanBootnodes)
+    check runBNTest(StatusBootNodes)
+    check runBNTest(StatusBootNodesStaging)
+    check runBNTest(StatusBootNodesTest)
