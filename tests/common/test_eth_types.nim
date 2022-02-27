@@ -50,9 +50,9 @@ suite "BlockHashOrNumber":
     Json.roundtripTest BlockHashOrNumber(isHash: false, number: 1209231231),
                        "\"1209231231\""
 
-  test "EIP-4399 random field":
+  test "EIP-4399 prevRandao field":
     let hash = Hash256.fromHex "0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
     var blk: BlockHeader
-    blk.random = hash
-    let res = blk.random
+    blk.prevRandao = hash
+    let res = blk.prevRandao
     check hash == res
