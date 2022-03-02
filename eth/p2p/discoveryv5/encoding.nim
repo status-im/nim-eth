@@ -31,12 +31,17 @@ declareCounter discovery_session_decrypt_failures, "Session decrypt failures"
 logScope:
   topics = "discv5"
 
+# Support overriding the default discv5 protocol version and protocol id
+#  via compile time defines (e.g., '-d:discv5_protocol_id=d5waku')
 const
-  version: uint16 = 1
+  discv5_protocol_version {.intdefine.} : uint16 = 1
+  discv5_protocol_id {.strdefine.} = "discv5"
+
+const
+  version = discv5_protocol_version
+  protocolId = toBytes(discv5_protocol_id)
   idSignatureText  = "discovery v5 identity proof"
   keyAgreementPrefix = "discovery v5 key agreement"
-  protocolIdStr = "discv5"
-  protocolId = toBytes(protocolIdStr)
   gcmNonceSize* = 12
   idNonceSize* = 16
   gcmTagSize* = 16
