@@ -1048,6 +1048,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
     socketAckNr = socket.ackNr,
     socketSeqNr = socket.seqNr,
     windowPackets = socket.curWindowPackets,
+    rcvBufferSize = socket.offset,
     packetType = p.header.pType,
     seqNr = p.header.seqNr,
     ackNr = p.header.ackNr,
@@ -1463,6 +1464,12 @@ template shiftBuffer(t, c: untyped) =
     (t).offset = 0
 
 proc onRead(socket: UtpSocket, readReq: var ReadReq): ReadResult =
+  debug "Handling incoming read",
+    rcvBufferSize = socket.offset,
+    reorderBufferSize = socket.inBufferBytes,
+    socketAtEOF = socket.atEof(),
+    readTillEOF = readReq.bytesToRead == 0
+
   if readReq.reader.finished():
     return ReadCancelled
   
@@ -1477,9 +1484,18 @@ proc onRead(socket: UtpSocket, readReq: var ReadReq): ReadResult =
     readReq.bytesAvailable.add(socket.rcvBuffer.toOpenArray(0, socket.offset - 1))
     socket.shiftBuffer(socket.offset)
     if (socket.atEof()):
+
+      debug "Read finished",
+        bytesRead = len(readReq.bytesAvailable),
+        socektAtEof = socket.atEof()
+
       readReq.reader.complete(readReq.bytesAvailable)
       return ReadFinished
     else:
+      debug "Read not finished",
+        bytesRead = len(readReq.bytesAvailable),
+        socektAtEof = socket.atEof()
+
       return ReadNotFinished
   else:
     let bytesAlreadyRead = len(readReq.bytesAvailable)
@@ -1488,9 +1504,17 @@ proc onRead(socket: UtpSocket, readReq: var ReadReq): ReadResult =
     readReq.bytesAvailable.add(socket.rcvBuffer.toOpenArray(0, count - 1))
     socket.shiftBuffer(count)
     if (len(readReq.bytesAvailable) == readReq.bytesToRead):
+      debug "Read finished",
+        bytesRead = len(readReq.bytesAvailable),
+        socektAtEof = socket.atEof()
+
       readReq.reader.complete(readReq.bytesAvailable)
       return ReadFinished
     else:
+      debug "Read not finished",
+        bytesRead = len(readReq.bytesAvailable),
+        socektAtEof = socket.atEof()
+
       return ReadNotFinished
 
 proc eventLoop(socket: UtpSocket) {.async.} =
@@ -1503,7 +1527,7 @@ proc eventLoop(socket: UtpSocket) {.async.} =
         
         # we processed a packet and rcv buffer size is larger than 0,
         # check if we can finish some pending readers
-        while socket.pendingReads.len() > 0 and socket.offset > 0:
+        while socket.pendingReads.len() > 0:
           let readResult = socket.onRead(socket.pendingReads[0])
           case readResult
           of ReadFinished:
