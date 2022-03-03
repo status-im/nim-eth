@@ -120,7 +120,6 @@ procSuite "Utp protocol over udp tests with loss and delays":
     bytesPerRead: int = 0): TestCase =
     TestCase(maxDelay: maxDelay, dropRate: dropRate, bytesToTransfer: bytesToTransfer, cfg: cfg, bytesPerRead: bytesPerRead)
 
-
   let testCases = @[
     TestCase.init(45, 10, 40000),
     TestCase.init(25, 15, 40000),
@@ -228,3 +227,32 @@ procSuite "Utp protocol over udp tests with loss and delays":
       await clientProtocol.shutdownWait()
       await serverProtocol.shutdownWait()
 
+  let testCase2 = @[
+    TestCase.init(45, 0, 40000),
+    TestCase.init(45, 0, 80000),
+    TestCase.init(25, 15, 40000),
+    TestCase.init(15, 5, 40000, SocketConfig.init(optRcvBuffer = uint32(10000), remoteWindowResetTimeout = seconds(5)))
+  ]
+
+  asyncTest "Write large data and read till EOF":
+    for testCase in testCase2:
+      let (
+        clientProtocol,
+        clientSocket,
+        serverProtocol,
+        serverSocket) = await testScenario(testCase.maxDelay, testCase.dropRate, testcase.cfg)
+
+
+      let numBytes = testCase.bytesToTransfer
+      let bytesToTransfer = generateByteArray(rng[], numBytes)
+
+      discard await clientSocket.write(bytesToTransfer)
+      clientSocket.close()
+
+      let read = await serverSocket.read()
+
+      check:
+        read == bytesToTransfer
+
+      await clientProtocol.shutdownWait()
+      await serverProtocol.shutdownWait()
