@@ -29,15 +29,20 @@ proc addCapability*(node: var EthereumNode, p: ProtocolInfo) =
 template addCapability*(node: var EthereumNode, Protocol: type) =
   addCapability(node, Protocol.protocolInfo)
 
-proc newEthereumNode*(keys: KeyPair,
-                      address: Address,
-                      networkId: NetworkId,
-                      chain: AbstractChainDB,
-                      clientId = "nim-eth-p2p/0.2.0", # TODO: read this value from nimble somehow
-                      addAllCapabilities = true,
-                      useCompression: bool = false,
-                      minPeers = 10,
-                      rng = newRng()): EthereumNode =
+proc newEthereumNode*(
+    keys: KeyPair,
+    address: Address,
+    networkId: NetworkId,
+    chain: AbstractChainDB,
+    clientId = "nim-eth-p2p/0.2.0", # TODO: read this value from nimble somehow
+    addAllCapabilities = true,
+    useCompression: bool = false,
+    minPeers = 10,
+    bootstrapNodes: seq[ENode] = @[],
+    bindUdpPort: Port,
+    bindTcpPort: Port,
+    bindIp = IPv4_any(),
+    rng = newRng()): EthereumNode =
 
   if rng == nil: # newRng could fail
     raise (ref Defect)(msg: "Cannot initialize RNG")
@@ -50,6 +55,12 @@ proc newEthereumNode*(keys: KeyPair,
   result.capabilities.newSeq 0
   result.address = address
   result.connectionState = ConnectionState.None
+  result.bindIp = bindIp
+  result.bindPort = bindTcpPort
+
+  result.discovery = newDiscoveryProtocol(
+    keys.seckey, address, bootstrapNodes, bindUdpPort, bindIp, rng)
+
   result.rng = rng
 
   when useSnappy:
@@ -58,10 +69,10 @@ proc newEthereumNode*(keys: KeyPair,
 
   result.protocolStates.newSeq allProtocols.len
 
-  result.peerPool = newPeerPool(result, networkId,
-                                keys, nil,
-                                clientId, address.tcpPort,
-                                minPeers = minPeers)
+  result.peerPool = newPeerPool(
+    result, networkId, keys, nil, clientId, minPeers = minPeers)
+
+  result.peerPool.discovery = result.discovery
 
   if addAllCapabilities:
     for p in allProtocols:
@@ -81,8 +92,8 @@ proc listeningAddress*(node: EthereumNode): ENode =
   node.toENode()
 
 proc startListening*(node: EthereumNode) {.raises: [CatchableError, Defect].} =
-  # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(IPv4_any(), node.address.tcpPort)
+  # TODO: allow binding to both IPv4 & IPv6
+  let ta = initTAddress(node.bindIp, node.bindPort)
   if node.listeningServer == nil:
     node.listeningServer = createStreamServer(ta, processIncoming,
                                               {ReuseAddr},
@@ -90,18 +101,12 @@ proc startListening*(node: EthereumNode) {.raises: [CatchableError, Defect].} =
   node.listeningServer.start()
   info "RLPx listener up", self = node.listeningAddress
 
-proc connectToNetwork*(node: EthereumNode,
-                       bootstrapNodes: seq[ENode],
-                       startListening = true,
-                       enableDiscovery = true,
-                       waitForPeers = true) {.async.} =
+proc connectToNetwork*(
+    node: EthereumNode, startListening = true,
+    enableDiscovery = true, waitForPeers = true) {.async.} =
   doAssert node.connectionState == ConnectionState.None
 
   node.connectionState = Connecting
-  node.discovery = newDiscoveryProtocol(node.keys.seckey,
-                                        node.address,
-                                        bootstrapNodes)
-  node.peerPool.discovery = node.discovery
 
   if startListening:
     p2p.startListening(node)
