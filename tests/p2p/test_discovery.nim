@@ -19,9 +19,10 @@ proc localAddress(port: int): Address =
   result = Address(udpPort: port, tcpPort: port,
                    ip: parseIpAddress("127.0.0.1"))
 
-proc initDiscoveryNode(privKey: PrivateKey, address: Address,
-                        bootnodes: seq[ENode]): DiscoveryProtocol =
-  let node = newDiscoveryProtocol(privKey, address, bootnodes)
+proc initDiscoveryNode(
+    privKey: PrivateKey, address: Address,
+    bootnodes: seq[ENode]): DiscoveryProtocol =
+  let node = newDiscoveryProtocol(privKey, address, bootnodes, address.udpPort)
   node.open()
 
   return node
@@ -68,7 +69,7 @@ procSuite "Discovery Tests":
     for i in nodes:
       for j in nodes:
         if j != i:
-          check(nodeIdInNodes(i.thisNode.id, j.randomNodes(nodes.len - 1)))
+          check(nodeIdInNodes(i.localNode.id, j.randomNodes(nodes.len - 1)))
 
   test "Test Vectors":
     # These are the test vectors from EIP-8:

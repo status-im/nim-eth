@@ -20,10 +20,9 @@ const
   lookupInterval = 5
   connectLoopSleep = chronos.milliseconds(2000)
 
-proc newPeerPool*(network: EthereumNode,
-                  networkId: NetworkId, keyPair: KeyPair,
-                  discovery: DiscoveryProtocol, clientId: string,
-                  listenPort = Port(30303), minPeers = 10): PeerPool =
+proc newPeerPool*(
+    network: EthereumNode, networkId: NetworkId, keyPair: KeyPair,
+    discovery: DiscoveryProtocol, clientId: string, minPeers = 10): PeerPool =
   new result
   result.network = network
   result.keyPair = keyPair
@@ -33,7 +32,6 @@ proc newPeerPool*(network: EthereumNode,
   result.connectedNodes = initTable[Node, Peer]()
   result.connectingNodes = initHashSet[Node]()
   result.observers = initTable[int, PeerObserver]()
-  result.listenPort = listenPort
 
 proc nodesToConnect(p: PeerPool): seq[Node] =
   p.discovery.randomNodes(p.minPeers).filterIt(it notin p.discovery.bootstrapNodes)
@@ -169,6 +167,8 @@ proc run(p: PeerPool) {.async.} =
   trace "Running PeerPool..."
   p.running = true
   while p.running:
+
+    debug "Amount of peers", amount = p.connectedNodes.len()
     var dropConnections = false
     try:
       await p.maybeConnectToMorePeers()

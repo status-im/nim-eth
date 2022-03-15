@@ -25,6 +25,8 @@ type
     keys*: KeyPair
     address*: Address # The external address that the node will be advertising
     peerPool*: PeerPool
+    bindIp*: IpAddress
+    bindPort*: Port
 
     # Private fields:
     capabilities*: seq[Capability]
@@ -64,7 +66,6 @@ type
     connectedNodes*: Table[Node, Peer]
     connectingNodes*: HashSet[Node]
     running*: bool
-    listenPort*: Port
     observers*: Table[int, PeerObserver]
 
   PeerObserver* = object

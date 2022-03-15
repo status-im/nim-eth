@@ -15,11 +15,16 @@ proc setupTestNode*(
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode {.gcsafe.} =
   # Don't create new RNG every time in production code!
   let keys1 = KeyPair.random(rng[])
-  result = newEthereumNode(keys1, localAddress(nextPort), NetworkId(1), nil,
-                           addAllCapabilities = false, rng = rng)
+  var node = newEthereumNode(
+    keys1, localAddress(nextPort), NetworkId(1), nil,
+    addAllCapabilities = false,
+    bindUdpPort = Port(nextPort), bindTcpPort = Port(nextPort),
+    rng = rng)
   nextPort.inc
   for capability in capabilities:
-    result.addCapability capability
+    node.addCapability capability
+
+  node
 
 template sourceDir*: string = currentSourcePath.rsplit(DirSep, 1)[0]
 

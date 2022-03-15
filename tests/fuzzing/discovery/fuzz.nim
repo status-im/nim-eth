@@ -1,4 +1,5 @@
 import
+  std/net,
   testutils/fuzzing, chronicles, nimcrypto/keccak,
   ../../../eth/p2p/[discovery, enode], ../../../eth/[keys, rlp],
   ../../p2p/p2p_test_helper
@@ -18,7 +19,8 @@ init:
   var
     targetNodeKey = PrivateKey.fromHex("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
     targetNodeAddr = localAddress(DefaultListeningPort)
-  targetNode = newDiscoveryProtocol(targetNodeKey, targetNodeAddr, @[])
+  targetNode = newDiscoveryProtocol(
+    targetNodeKey, targetNodeAddr, @[], Port(DefaultListeningPort))
   # Create the transport as else replies on the messages send will fail.
   targetNode.open()
 
