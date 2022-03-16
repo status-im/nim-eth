@@ -6,11 +6,15 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [Defect].}
+
 import
   std/[options, os, strutils, times],
   stew/results, nat_traversal/[miniupnpc, natpmp],
-  chronicles, json_serialization/std/net, chronos,
+  chronicles, json_serialization/std/net, chronos, confutils,
   ../common/utils, ./utils as netutils
+
+export ConfigurationError
 
 type
   NatStrategy* = enum
@@ -155,7 +159,7 @@ var
   natThread: Thread[PortMappingArgs]
   natCloseChan: Channel[bool]
 
-proc repeatPortMapping(args: PortMappingArgs) {.thread.} =
+proc repeatPortMapping(args: PortMappingArgs) {.thread, raises: [Defect, ValueError].} =
   ignoreSignalsInThread()
   let
     (tcpPort, udpPort, description) = args
@@ -173,7 +177,8 @@ proc repeatPortMapping(args: PortMappingArgs) {.thread.} =
     while true:
       # we're being silly here with this channel polling because we can't
       # select on Nim channels like on Go ones
-      let (dataAvailable, _) = natCloseChan.tryRecv()
+      let (dataAvailable, _) = try: natCloseChan.tryRecv()
+        except Exception: (false, false)
       if dataAvailable:
         return
       else:
@@ -186,9 +191,12 @@ proc repeatPortMapping(args: PortMappingArgs) {.thread.} =
 proc stopNatThread() {.noconv.} =
   # stop the thread
 
-  natCloseChan.send(true)
-  natThread.joinThread()
-  natCloseChan.close()
+  try:
+    natCloseChan.send(true)
+    natThread.joinThread()
+    natCloseChan.close()
+  except Exception as exc:
+    warn "Failed to stop NAT port mapping renewal thread", exc = exc.msg
 
   # delete our port mappings
 
@@ -233,9 +241,12 @@ proc redirectPorts*(tcpPort, udpPort: Port, description: string): Option[(Port, 
     # NAT-PMP lease expires or the router is rebooted and forgets all about
     # these mappings.
     natCloseChan.open()
-    natThread.createThread(repeatPortMapping, (externalTcpPort, externalUdpPort, description))
-    # atexit() in disguise
-    addQuitProc(stopNatThread)
+    try:
+      natThread.createThread(repeatPortMapping, (externalTcpPort, externalUdpPort, description))
+      # atexit() in disguise
+      addQuitProc(stopNatThread)
+    except Exception as exc:
+      warn "Failed to create NAT port mapping renewal thread", exc = exc.msg
 
 proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
     clientId: string):
@@ -267,7 +278,7 @@ type
       of true: extIp*: ValidIpAddress
       of false: nat*: NatStrategy
 
-func parseCmdArg*(T: type NatConfig, p: TaintedString): T =
+func parseCmdArg*(T: type NatConfig, p: TaintedString): T {.raises: [Defect, ConfigurationError].} =
   case p.toLowerAscii:
     of "any":
       NatConfig(hasExtIp: false, nat: NatAny)
