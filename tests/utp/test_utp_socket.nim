@@ -1407,3 +1407,61 @@ procSuite "Utp socket unit test":
       resent3.header.seqNr == sent3.header.seqNr
 
     await outgoingSocket.destroyWait()
+
+  asyncTest "Socket should accept data only in connected state":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+    let cfg = SocketConfig.init()
+    let remoteReciveBuffer = 1024'u32
+
+    let dataDropped = @[1'u8]
+    let dataRecived = @[2'u8]
+
+    let sock1 = newOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, defaultRcvOutgoingId, rng[])
+
+    asyncSpawn sock1.startOutgoingSocket()
+
+    let initialPacket = await q.get()
+
+    check:
+      initialPacket.header.pType == ST_SYN
+
+    let dpDropped = dataPacket(
+      initialRemoteSeq,
+      initialPacket.header.connectionId,
+      initialPacket.header.seqNr,
+      testBufferSize,
+      dataDropped,
+      0
+    )
+
+    let dpReceived = dataPacket(
+      initialRemoteSeq,
+      initialPacket.header.connectionId,
+      initialPacket.header.seqNr,
+      testBufferSize,
+      dataRecived,
+      0
+    )
+
+    let responseAck =
+      ackPacket(
+        initialRemoteSeq,
+        initialPacket.header.connectionId,
+        initialPacket.header.seqNr,
+        remoteReciveBuffer,
+        0
+      )
+
+    # even though @[1'u8] is received first, it should be dropped as socket is not
+    # yet in connected state
+    await sock1.processPacket(dpDropped)
+    await sock1.processPacket(responseAck)
+    await sock1.processPacket(dpReceived)
+
+    let receivedData = await sock1.read(1)
+
+    check:
+      receivedData == dataRecived
+
+    await sock1.destroyWait()

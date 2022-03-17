@@ -1052,6 +1052,9 @@ proc tryfinalizeConnection(socket: UtpSocket, p: Packet) =
     socket.state = Connected
     socket.ackNr = p.header.seqNr - 1
 
+    debug "Received Syn-Ack finalizing connection",
+      socketAckNr = socker.ackNr
+
     if (not socket.connectionFuture.finished()):
       socket.connectionFuture.complete()
 
@@ -1299,6 +1302,15 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
     socket.selectiveAckPackets(pkAckNr, p.eack.unsafeGet(), timestampInfo.moment)
 
   if p.header.pType == ST_DATA or p.header.pType == ST_FIN:
+    if socket.state != Connected:
+      debug "Unexpected packet",
+        socketState = socket.state,
+        packetType = p.header.pType
+
+      # we have received user generated packet (DATA or FIN), in not connected
+      # state. Stop processing it.
+      return
+
     if (p.header.pType == ST_FIN and (not socket.gotFin)):
       debug "Received FIN packet",
         eofPktNr = pkSeqNr,
