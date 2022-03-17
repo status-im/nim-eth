@@ -16,7 +16,7 @@ import
 declareCounter utp_received_packets,
   "All correct received uTP packets"
 declareCounter utp_failed_packets,
-  "All received uTP packets which failed deserialization"
+  "All received uTP packets which failed decoding"
 declareGauge utp_established_connections,
   "Current number of established uTP sockets"
 declareCounter utp_allowed_incoming,
