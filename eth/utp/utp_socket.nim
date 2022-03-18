@@ -1053,7 +1053,7 @@ proc tryfinalizeConnection(socket: UtpSocket, p: Packet) =
     socket.ackNr = p.header.seqNr - 1
 
     debug "Received Syn-Ack finalizing connection",
-      socketAckNr = socker.ackNr
+      socketAckNr = socket.ackNr
 
     if (not socket.connectionFuture.finished()):
       socket.connectionFuture.complete()
