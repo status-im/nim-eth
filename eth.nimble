@@ -29,7 +29,7 @@ proc runTest(path: string, release: bool = true, chronosStrict = true) =
   let chronosMode =
     if chronosStrict: "-d:chronosStrictException" else: ""
   exec "nim c -r " & releaseMode & " " & chronosMode &
-    " -d:chronicles_log_level=ERROR " & commonParams & path
+    " -d:chronicles_log_level=DEBUG " & commonParams & path
   rmFile path
 
 proc buildBinary(path: string) =
@@ -83,14 +83,14 @@ task test, "Run all tests":
     ]:
     runTest("tests/" & filename)
 
-  test_keyfile_task()
-  test_keys_task()
-  test_rlp_task()
-  test_p2p_task()
-  test_trie_task()
-  test_db_task()
+  # test_keyfile_task()
+  # test_keys_task()
+  # test_rlp_task()
+  # test_p2p_task()
+  # test_trie_task()
+  # test_db_task()
   test_utp_task()
-  test_common_task()
+  # test_common_task()
 
 task test_discv5_full, "Run discovery v5 and its dependencies tests":
   test_keys_task()
