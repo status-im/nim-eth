@@ -473,11 +473,6 @@ proc flushPackets(socket: UtpSocket) =
           pkSeqNr = i
         socket.sendPacket(i)
       else:
-        debug "Should resend packet during flush but there is no place in send window",
-          currentBytesWindow = socket.currentWindow,
-          maxRemoteWindow = socket.maxRemoteWindow,
-          maxWindow = socket.maxWindow,
-          pkSeqNr = i
         # there is no place in send buffer, stop flushing
         return
     inc i
@@ -612,7 +607,7 @@ proc checkTimeoutsLoop(s: UtpSocket) {.async.} =
   try:
     while true:
       await sleepAsync(checkTimeoutsLoopInterval)
-      await s.eventQueue.put(SocketEvent(kind: CheckTimeouts))
+      s.eventQueue.putNoWait(SocketEvent(kind: CheckTimeouts))
   except CancelledError:
     trace "checkTimeoutsLoop canceled"
 

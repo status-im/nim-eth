@@ -29,7 +29,7 @@ proc runTest(path: string, release: bool = true, chronosStrict = true) =
   let chronosMode =
     if chronosStrict: "-d:chronosStrictException -d:chronosFutureTracking -d:chronosStackTrace" else: ""
   exec "nim c -r " & releaseMode & " " & chronosMode &
-    " -d:chronicles_log_level=DEBUG " & commonParams & path
+    " -d:chronicles_log_level=TRACE " & commonParams & path
   rmFile path
 
 proc buildBinary(path: string) =
