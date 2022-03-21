@@ -27,7 +27,7 @@ proc runTest(path: string, release: bool = true, chronosStrict = true) =
   echo "\nBuilding and running: ", path
   let releaseMode = if release: "-d:release" else: ""
   let chronosMode =
-    if chronosStrict: "-d:chronosStrictException" else: ""
+    if chronosStrict: "-d:chronosStrictException -d:chronosFutureTracking -d:chronosStackTrace" else: ""
   exec "nim c -r " & releaseMode & " " & chronosMode &
     " -d:chronicles_log_level=DEBUG " & commonParams & path
   rmFile path
