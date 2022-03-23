@@ -312,6 +312,8 @@ procSuite "Utp router unit tests":
 
     let connectResult = await connectFuture
 
+    await waitUntil(proc (): bool = router.len() == 0)
+    
     check:
       connectResult.isErr()
       connectResult.error().kind == ConnectionTimedOut
