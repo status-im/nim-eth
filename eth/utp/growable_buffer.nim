@@ -19,32 +19,32 @@ export options
 type
   GrowableCircularBuffer*[A] = object
     items: seq[Option[A]]
-    mask: int
+    mask: uint32
 
 # provided size will always be adjusted to next power of two
-proc init*[A](T: type GrowableCircularBuffer[A], size: Natural = 16): T =
-  let powOfTwoSize = nextPowerOfTwo(size)
+proc init*[A](T: type GrowableCircularBuffer[A], size: uint32 = 16): T =
+  let powOfTwoSize = nextPowerOfTwo(int(size))
   T(
-    items: newSeq[Option[A]](size),
-    mask: powOfTwoSize - 1
+    items: newSeq[Option[A]](powOfTwoSize),
+    mask: uint32(powOfTwoSize - 1)
   )
 
-proc get*[A](buff: GrowableCircularBuffer[A], i: Natural): Option[A] =
+proc get*[A](buff: GrowableCircularBuffer[A], i: uint32): Option[A] =
   buff.items[i and buff.mask]
 
-proc putImpl[A](buff: var GrowableCircularBuffer[A], i: Natural, elem: Option[A]) =
+proc putImpl[A](buff: var GrowableCircularBuffer[A], i: uint32, elem: Option[A]) =
   buff.items[i and buff.mask] = elem
 
-proc put*[A](buff: var GrowableCircularBuffer[A], i: Natural, elem: A) =
+proc put*[A](buff: var GrowableCircularBuffer[A], i: uint32, elem: A) =
   buff.putImpl(i, some(elem))
 
-proc delete*[A](buff: var GrowableCircularBuffer[A], i: Natural) =
+proc delete*[A](buff: var GrowableCircularBuffer[A], i: uint32) =
   buff.putImpl(i, none[A]())
 
-proc hasKey*[A](buff: GrowableCircularBuffer[A], i: Natural): bool =
+proc hasKey*[A](buff: GrowableCircularBuffer[A], i: uint32): bool =
   buff.get(i).isSome()
 
-proc exists*[A](buff: GrowableCircularBuffer[A], i: Natural, check: proc (x: A): bool): bool =
+proc exists*[A](buff: GrowableCircularBuffer[A], i: uint32, check: proc (x: A): bool): bool =
   let maybeElem = buff.get(i)
   if (maybeElem.isSome()):
     let elem = maybeElem.unsafeGet()
@@ -52,32 +52,33 @@ proc exists*[A](buff: GrowableCircularBuffer[A], i: Natural, check: proc (x: A):
   else:
     false
 
-proc `[]`*[A](buff: var GrowableCircularBuffer[A], i: Natural): var A =
+proc `[]`*[A](buff: var GrowableCircularBuffer[A], i: uint32): var A =
   ## Returns contents of the `var GrowableCircularBuffer`. If it is not set, then an exception
   ## is thrown.
   buff.items[i and buff.mask].get()
 
 proc len*[A](buff: GrowableCircularBuffer[A]): int =
-  buff.mask + 1
+  int(buff.mask) + 1
+
+proc calculateNextMask(currentMask: uint32, index:uint32): uint32 =
+  # Increase mask,so that index will fit in buffer size i.e mask + 1
+  if currentMask == uint32.high:
+    return currentMask
+  
+  var newSize = currentMask + 1 
+  while true:
+    newSize = newSize * 2
+    if newSize == 0 or index < newSize:
+      break
+  return newSize - 1
 
 # Item contains the element we want to make space for
 # index is the index in the list.
-proc ensureSize*[A](buff: var GrowableCircularBuffer[A], item: Natural, index: Natural) =
-  # Increase size until is next power of 2 which consists given index
-  proc getNextSize(currentSize: int, index: int): int =
-    var newSize = currentSize
-    while true:
-      newSize = newSize * 2
-      if not (index >= newSize):
-        break
-    newSize
-
+proc ensureSize*[A](buff: var GrowableCircularBuffer[A], item: uint32, index: uint32) =
   if (index > buff.mask):
-    let currentSize = buff.mask + 1
-    let newSize = getNextSize(currentSize, index)
-    let newMask = newSize - 1
-    var newSeq = newSeq[Option[A]](newSize)
-    var i = 0
+    let newMask = calculateNextMask(buff.mask, index)
+    var newSeq = newSeq[Option[A]](int(newMask) + 1)
+    var i = 0'u32
     while i <= buff.mask:
       let idx = item - index + i
       newSeq[idx and newMask] = buff.get(idx)
