@@ -22,6 +22,18 @@ suite "Utp ring buffer":
       buff.len() == 4
       buff.get(0).isNone()
 
+  test "Buffer should be initialised to next power of two":
+    var elemsCounter = 0
+    let buff = GrowableCircularBuffer[int].init(size = 17) 
+    check:
+      buff.len() == 32
+
+    for i in buff.items:
+      inc elemsCounter  
+    
+    check:
+      elemsCounter == 32
+
   test "Adding elements to buffer":
     var buff = GrowableCircularBuffer[int].init(size = 4)
     buff.put(11, 11)
@@ -53,7 +65,7 @@ suite "Utp ring buffer":
   test "Checking if element exists and has some properties":
     var buff = GrowableCircularBuffer[TestObj].init(size = 4)
     let text = "test"
-    let textIdx = 11
+    let textIdx = 11'u32
 
     check:
       not buff.exists(textIdx, x => x.foo == text)
@@ -124,3 +136,39 @@ suite "Utp ring buffer":
       buff.get(15) == none[int]()
       buff.get(16) == none[int]()
       buff.get(17) == some(17)
+
+  test "Ensuring proper wrap around when adding elements to buffer":
+    var buff = GrowableCircularBuffer[int].init(size = 2)
+
+    buff.ensureSize(65535, 0)
+    buff.put(65535, 65535)
+    buff.ensureSize(0, 1)
+    buff.put(0, 0)
+
+    # index 2 will not fit in buffer of size 2 so it will need to be expanded to 4
+    buff.ensureSize(1, 2)
+    buff.put(1, 1)
+
+    check:
+      buff.len() == 4
+
+    buff.ensureSize(2, 3)
+    buff.put(2, 2)
+    # index 4 will not fit in buffer size 4 so it will need to expanded
+    buff.ensureSize(3, 4)
+    buff.put(3, 3)
+
+    # all elements should be available thorugh old indexes
+    check:
+      buff.get(65535) == some(65535)
+      buff.get(0) == some(0)
+      buff.get(1) == some(1)
+      buff.get(2) == some(2)
+      buff.get(3) == some(3)
+      buff.len() == 8
+    
+    var elemsCounter = 0
+    for elem in buff.items:
+      inc elemsCounter
+    check:
+      elemsCounter == 8
