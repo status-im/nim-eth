@@ -43,8 +43,8 @@ type
   DisconnectionReasonList = object
     value: DisconnectionReason
 
-proc read(rlp: var Rlp; Q: type DisconnectionReasonList): Q
-    {.raises: [Defect,RlpError].} =
+proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
+    {.raises: [Defect, RlpError].} =
   ## Rlp mixin: `DisconnectionReasonList` parser
   if rlp.isList:
     # Be strict here: The expression `rlp.read(DisconnectionReasonList)`
