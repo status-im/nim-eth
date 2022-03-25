@@ -54,7 +54,7 @@ proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
     return DisconnectionReasonList(value: a[0])
 
   # Also accepted: a single byte reason code. Is is typically used
-  # by variants of the reference implentation `Geth`
+  # by variants of the reference implementation `Geth`
   if rlp.blobLen <= 1:
     let n = rlp.read(int)
     return DisconnectionReasonList(value: n.DisconnectionReason)
