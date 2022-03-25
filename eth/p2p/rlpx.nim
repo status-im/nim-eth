@@ -59,7 +59,7 @@ proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
     let n = rlp.read(int)
     return DisconnectionReasonList(value: n.DisconnectionReason)
 
-  # Also accepted: a blob of a list (aka object) of reason code. Is is
+  # Also accepted: a blob of a list (aka object) of reason code. It is
   # used by `bor`, a `geth` fork
   var subList = rlp.toBytes.rlpFromBytes
   if subList.isList:
