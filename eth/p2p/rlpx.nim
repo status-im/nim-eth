@@ -50,7 +50,7 @@ proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
     # Be strict here: The expression `rlp.read(DisconnectionReasonList)`
     # accepts lists with at least one item. The array expression wants
     # exactly one item.
-    let a = rlp.read(array[1,DisconnectionReason])
+    let a = rlp.read(array[1, DisconnectionReason])
     return DisconnectionReasonList(value: a[0])
 
   # Also accepted: a single byte reason code. Is is typically used
