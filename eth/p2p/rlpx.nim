@@ -63,7 +63,7 @@ proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
   # used by `bor`, a `geth` fork
   var subList = rlp.toBytes.rlpFromBytes
   if subList.isList:
-    # Diddo, see above.
+    # Ditto, see above.
     let a = subList.read(array[1,DisconnectionReason])
     return DisconnectionReasonList(value: a[0])
   raise newException(RlpTypeMismatch, "Single entry list expected")
