@@ -1465,3 +1465,64 @@ procSuite "Utp socket unit test":
       receivedData == dataRecived
 
     await sock1.destroyWait()
+
+  asyncTest "Clean up all resources when closing due to timeout failure":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let dataToWrite = @[1'u8]
+    let customCfg = SocketConfig.init(dataResendsBeforeFailure = 2, optSndBuffer = 1)
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q, cfg = customCfg)
+
+    let bytesWritten = await outgoingSocket.write(dataToWrite)
+    # this future will never finish as there is not place in write buffer
+    # although it should get properly clearead up when socket is closed
+    let writeFut = outgoingSocket.write(dataToWrite)
+
+    check:
+      bytesWritten.get() == len(dataToWrite)
+
+    let sentPacket = await q.get()
+    # wait for failure and cleanup of all resources
+    await waitUntil(proc (): bool = outgoingSocket.isClosedAndCleanedUpAllResources())
+    check:
+      # main event loop handler should fire and clean up dangling future
+      writeFut.finished()
+    await outgoingSocket.destroyWait()
+
+
+  asyncTest "Receiving ack for fin packet should destroy socket and clean up all resources":
+    let q = newAsyncQueue[Packet]()
+    let initialRemoteSeq = 10'u16
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+
+    outgoingSocket.close()
+
+    let sendFin = await q.get()
+
+    check:
+      sendFin.header.pType == ST_FIN
+
+    let responseAck =
+      ackPacket(
+        initialRemoteSeq,
+        initialPacket.header.connectionId,
+        sendFin.header.seqNr,
+        testBufferSize,
+        0
+      )
+
+    await outgoingSocket.processPacket(responseAck)
+
+    await waitUntil(proc (): bool = not outgoingSocket.isConnected())
+
+    check:
+      not outgoingSocket.isConnected()
+
+    await waitUntil(proc (): bool = outgoingSocket.isClosedAndCleanedUpAllResources())
+
+    check:
+      outgoingSocket.isClosedAndCleanedUpAllResources()
+
+    await outgoingSocket.destroyWait()

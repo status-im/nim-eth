@@ -612,9 +612,13 @@ proc checkTimeoutsLoop(s: UtpSocket) {.async.} =
   try:
     while true:
       await sleepAsync(checkTimeoutsLoopInterval)
-      await s.eventQueue.put(SocketEvent(kind: CheckTimeouts))
-  except CancelledError:
+      s.eventQueue.putNoWait(SocketEvent(kind: CheckTimeouts))
+  except CancelledError as exc:
+    # check timeouts loop is last running future managed by socket, if its
+    # cancelled we can fire closeEvent
+    s.closeEvent.fire()
     trace "checkTimeoutsLoop canceled"
+    raise exc
 
 proc startTimeoutLoop(s: UtpSocket) =
   s.checkTimeoutsLoop = checkTimeoutsLoop(s)
@@ -682,6 +686,10 @@ proc isConnected*(socket: UtpSocket): bool =
 proc isClosed*(socket: UtpSocket): bool =
   socket.state == Destroy and socket.closeEvent.isSet()
 
+proc isClosedAndCleanedUpAllResources*(socket: UtpSocket): bool =
+  ## Test Api to check that all resources are properly cleaned up 
+  socket.isClosed() and socket.eventLoop.cancelled() and socket.checkTimeoutsLoop.cancelled()
+
 proc destroy*(s: UtpSocket) =
   info "Destroying socket",
     to = s.socketKey
@@ -689,8 +697,12 @@ proc destroy*(s: UtpSocket) =
   ## Remote is not notified in any way about socket end of life
   s.state = Destroy
   s.eventLoop.cancel()
-  s.checkTimeoutsLoop.cancel()
-  s.closeEvent.fire()
+  # This procedure initiate cleanup process which goes like:
+  # Cancel EventLoop -> Cancel timeoutsLoop -> Fire closeEvent
+  # This is necessary due to how evenLoop look like i.e it has only one await
+  # point on `eventQueue.get` which trigger cancellation excepion only when
+  # someone will try run `eventQueue.put`. Without `eventQueue.put` , eventLoop
+  # future shows as cancelled, but handler for CancelledError is not run
 
 proc destroyWait*(s: UtpSocket) {.async.} =
   ## Moves socket to destroy state and clean all reasources and wait for all registered
@@ -1609,9 +1621,8 @@ proc eventLoop(socket: UtpSocket) {.async.} =
             else:
               # in any other case we do not need to do any thing 
               discard
-                    
       socket.checkTimeouts()
-  except CancelledError:
+  except CancelledError as exc:
     for w in socket.pendingWrites.items():
       if w.kind == Data and (not w.writer.finished()):
         let res = Result[int, WriteError].err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
@@ -1624,7 +1635,10 @@ proc eventLoop(socket: UtpSocket) {.async.} =
         r.reader.complete(r.bytesAvailable)
     socket.pendingWrites.clear()
     socket.pendingReads.clear()
+    # main eventLoop has been cancelled, try to cancel check timeouts loop
+    socket.checkTimeoutsLoop.cancel()
     trace "main socket event loop cancelled"
+    raise exc
 
 proc startEventLoop(s: UtpSocket) =
   s.eventLoop = eventLoop(s)
