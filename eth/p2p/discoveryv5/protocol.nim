@@ -842,6 +842,22 @@ proc refreshLoop(d: Protocol) {.async.} =
   except CancelledError:
     trace "refreshLoop canceled"
 
+proc updateExternalIp*(d: Protocol, extIp: ValidIpAddress, udpPort: Port): bool =
+  var success = false
+  let
+    previous = d.localNode.address
+    res = d.localNode.update(d.privateKey,
+      ip = some(extIp), udpPort = some(udpPort))
+
+  if res.isErr:
+    warn "Failed updating ENR with newly discovered external address",
+      previous, newExtIp = extIp, newUdpPort = udpPort, error = res.error
+  else:
+    success = true
+    info "Updated ENR with newly discovered external address",
+      previous, newExtIp = extIp, newUdpPort = udpPort, uri = toURI(d.localNode.record)
+  return success
+
 proc ipMajorityLoop(d: Protocol) {.async.} =
   ## When `enrAutoUpdate` is enabled, the IP:port combination returned
   ## by the majority will be used to update the local ENR.
@@ -869,15 +885,9 @@ proc ipMajorityLoop(d: Protocol) {.async.} =
           let address = majority.get()
           let previous = d.localNode.address
           if d.enrAutoUpdate:
-            let res = d.localNode.update(d.privateKey,
-              ip = some(address.ip), udpPort = some(address.port))
-            if res.isErr:
-              warn "Failed updating ENR with newly discovered external address",
-                majority, previous, error = res.error
-            else:
+            let success = d.updateExternalIp(address.ip, address.port)
+            if success:
               discovery_enr_auto_update.inc()
-              info "Updated ENR with newly discovered external address",
-                majority, previous, uri = toURI(d.localNode.record)
           else:
             warn "Discovered new external address but ENR auto update is off",
               majority, previous
