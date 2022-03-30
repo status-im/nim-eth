@@ -23,6 +23,13 @@ type
     NatPmp
     NatNone
 
+  DefaultGatewayStatus = enum
+    NoRoutingInfo
+    DefGwIsPublic
+    DefGwIsPrivate
+    BindAddressIsPublic
+    BindAddressIsPrivate
+
 const
   UPNP_TIMEOUT = 200 # ms
   PORT_MAPPING_INTERVAL = 20 * 60 # seconds
@@ -101,6 +108,35 @@ proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] 
         except ValueError as e:
           error "parseIpAddress() exception", err = e.msg
           return
+
+proc getDefaultGateway(bindIp: ValidIpAddress): (Option[ValidIpAddress], DefaultGatewayStatus) =
+  let bindAddress = initTAddress(bindIp, Port(0))
+
+  if bindAddress.isAnyLocal():
+    let ip = getRouteIpv4()
+    if ip.isErr():
+      # No route was found, log error and continue without IP.
+      error "No routable IP address found, check your network connection", error = ip.error
+      return (none(ValidIpAddress), NoRoutingInfo)
+    elif ip.get().isPublic():
+      return (some(ip.get()), DefGwIsPublic)
+    else:
+      return (none(ValidIpAddress), DefGwIsPrivate)
+  elif bindAddress.isPublic():
+    return (some(ValidIpAddress.init(bindIp)), BindAddressIsPublic)
+  else:
+    return (none(ValidIpAddress), BindAddressIsPrivate)
+
+proc getPublicDefaultGatewayOrExternalIP*(natStrategy: NatStrategy, bindIp: ValidIpAddress, quiet = true): Option[ValidIpAddress] =
+  let (gwIp, gwStatus) = getDefaultGateway(bindIp)
+
+  case gwStatus:
+    of NoRoutingInfo, DefGwIsPublic, BindAddressIsPublic:
+      return gwIP
+    of DefGwIsPrivate, BindAddressIsPrivate:
+      let extIp = getExternalIP(natStrategy, quiet)
+      if extIp.isSome:
+        return some(ValidIpAddress.init(extIp.get))
 
 proc doPortMapping(tcpPort, udpPort: Port, description: string): Option[(Port, Port)] {.gcsafe.} =
   var
@@ -319,46 +355,24 @@ proc setupAddress*(natConfig: NatConfig, bindIp: ValidIpAddress,
 
   case natConfig.nat:
     of NatAny:
-      let bindAddress = initTAddress(bindIp, Port(0))
-      if bindAddress.isAnyLocal():
-        let ip = getRouteIpv4()
-        if ip.isErr():
-          # No route was found, log error and continue without IP.
-          error "No routable IP address found, check your network connection",
-            error = ip.error
-          return (none(ValidIpAddress), some(tcpPort), some(udpPort))
-        elif ip.get().isPublic():
-          return (some(ip.get()), some(tcpPort), some(udpPort))
-        else:
-          # Best route IP is not public, might be an internal network and the
-          # node is either behind a gateway with NAT or for example a container
-          # or VM bridge (or both). Lets try UPnP and NAT-PMP for the case where
-          # the node is behind a gateway with UPnP or NAT-PMP support.
+      let (gwIp, gwStatus) = getDefaultGateway(bindIp)
+
+      case gwStatus:
+        of NoRoutingInfo, DefGwIsPublic, BindAddressIsPublic:
+          return (gwIP, some(tcpPort), some(udpPort))
+        of DefGwIsPrivate, BindAddressIsPrivate:
           return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
-      elif bindAddress.isPublic():
-        # When a specific public interface is provided, use that one.
-        return (some(ValidIpAddress.init(bindIp)), some(tcpPort), some(udpPort))
-      else:
-        return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
     of NatNone:
-      let bindAddress = initTAddress(bindIp, Port(0))
-      if bindAddress.isAnyLocal():
-        let ip = getRouteIpv4()
-        if ip.isErr():
-          # No route was found, log error and continue without IP.
-          error "No routable IP address found, check your network connection",
-            error = ip.error
-          return (none(ValidIpAddress), some(tcpPort), some(udpPort))
-        elif ip.get().isPublic():
-          return (some(ip.get()), some(tcpPort), some(udpPort))
-        else:
+      let (gwIp, gwStatus) = getDefaultGateway(bindIp)
+
+      case gwStatus:
+        of NoRoutingInfo, DefGwIsPublic, BindAddressIsPublic:
+          return (gwIP, some(tcpPort), some(udpPort))
+        of DefGwIsPrivate:
           error "No public IP address found. Should not use --nat:none option"
           return (none(ValidIpAddress), some(tcpPort), some(udpPort))
-      elif bindAddress.isPublic():
-        # When a specific public interface is provided, use that one.
-        return (some(ValidIpAddress.init(bindIp)), some(tcpPort), some(udpPort))
-      else:
-        error "Bind IP is not a public IP address. Should not use --nat:none option"
-        return (none(ValidIpAddress), some(tcpPort), some(udpPort))
+        of BindAddressIsPrivate:
+          error "Bind IP is not a public IP address. Should not use --nat:none option"
+          return (none(ValidIpAddress), some(tcpPort), some(udpPort))
     of NatUpnp, NatPmp:
       return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
