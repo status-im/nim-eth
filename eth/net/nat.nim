@@ -23,10 +23,10 @@ type
     NatPmp
     NatNone
 
-  DefaultGatewayStatus = enum
+  PrefSrcStatus = enum
     NoRoutingInfo
-    DefGwIsPublic
-    DefGwIsPrivate
+    PrefSrcIsPublic
+    PrefSrcIsPrivate
     BindAddressIsPublic
     BindAddressIsPrivate
 
@@ -109,7 +109,13 @@ proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] 
           error "parseIpAddress() exception", err = e.msg
           return
 
-proc getDefaultGateway(bindIp: ValidIpAddress): (Option[ValidIpAddress], DefaultGatewayStatus) =
+# This queries the routing table to get the "preferred source" attribute and
+# checks if it's a public IP. If so, then it's our public IP.
+#
+# Further more, we check if the bind address (user provided, or a "0.0.0.0"
+# default) is a public IP. That's a long shot, because code paths involving a
+# user-provided bind address are not supposed to get here.
+proc getRoutePrefSrc(bindIp: ValidIpAddress): (Option[ValidIpAddress], PrefSrcStatus) =
   let bindAddress = initTAddress(bindIp, Port(0))
 
   if bindAddress.isAnyLocal():
@@ -119,21 +125,22 @@ proc getDefaultGateway(bindIp: ValidIpAddress): (Option[ValidIpAddress], Default
       error "No routable IP address found, check your network connection", error = ip.error
       return (none(ValidIpAddress), NoRoutingInfo)
     elif ip.get().isPublic():
-      return (some(ip.get()), DefGwIsPublic)
+      return (some(ip.get()), PrefSrcIsPublic)
     else:
-      return (none(ValidIpAddress), DefGwIsPrivate)
+      return (none(ValidIpAddress), PrefSrcIsPrivate)
   elif bindAddress.isPublic():
     return (some(ValidIpAddress.init(bindIp)), BindAddressIsPublic)
   else:
     return (none(ValidIpAddress), BindAddressIsPrivate)
 
-proc getPublicDefaultGatewayOrExternalIP*(natStrategy: NatStrategy, bindIp: ValidIpAddress, quiet = true): Option[ValidIpAddress] =
-  let (gwIp, gwStatus) = getDefaultGateway(bindIp)
+# Try to detect a public IP assigned to this host, before trying NAT traversal.
+proc getPublicRoutePrefSrcOrExternalIP*(natStrategy: NatStrategy, bindIp: ValidIpAddress, quiet = true): Option[ValidIpAddress] =
+  let (prefSrcIp, prefSrcStatus) = getRoutePrefSrc(bindIp)
 
-  case gwStatus:
-    of NoRoutingInfo, DefGwIsPublic, BindAddressIsPublic:
-      return gwIP
-    of DefGwIsPrivate, BindAddressIsPrivate:
+  case prefSrcStatus:
+    of NoRoutingInfo, PrefSrcIsPublic, BindAddressIsPublic:
+      return prefSrcIp
+    of PrefSrcIsPrivate, BindAddressIsPrivate:
       let extIp = getExternalIP(natStrategy, quiet)
       if extIp.isSome:
         return some(ValidIpAddress.init(extIp.get))
@@ -355,20 +362,20 @@ proc setupAddress*(natConfig: NatConfig, bindIp: ValidIpAddress,
 
   case natConfig.nat:
     of NatAny:
-      let (gwIp, gwStatus) = getDefaultGateway(bindIp)
+      let (prefSrcIp, prefSrcStatus) = getRoutePrefSrc(bindIp)
 
-      case gwStatus:
-        of NoRoutingInfo, DefGwIsPublic, BindAddressIsPublic:
-          return (gwIP, some(tcpPort), some(udpPort))
-        of DefGwIsPrivate, BindAddressIsPrivate:
+      case prefSrcStatus:
+        of NoRoutingInfo, PrefSrcIsPublic, BindAddressIsPublic:
+          return (prefSrcIp, some(tcpPort), some(udpPort))
+        of PrefSrcIsPrivate, BindAddressIsPrivate:
           return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
     of NatNone:
-      let (gwIp, gwStatus) = getDefaultGateway(bindIp)
+      let (prefSrcIp, prefSrcStatus) = getRoutePrefSrc(bindIp)
 
-      case gwStatus:
-        of NoRoutingInfo, DefGwIsPublic, BindAddressIsPublic:
-          return (gwIP, some(tcpPort), some(udpPort))
-        of DefGwIsPrivate:
+      case prefSrcStatus:
+        of NoRoutingInfo, PrefSrcIsPublic, BindAddressIsPublic:
+          return (prefSrcIp, some(tcpPort), some(udpPort))
+        of PrefSrcIsPrivate:
           error "No public IP address found. Should not use --nat:none option"
           return (none(ValidIpAddress), some(tcpPort), some(udpPort))
         of BindAddressIsPrivate:
