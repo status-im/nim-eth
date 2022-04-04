@@ -95,12 +95,11 @@ proc `xor`[N: static int](a, b: array[N, byte]): array[N, byte] =
 proc mapErrTo[T, E](r: Result[T, E], v: static AuthError): AuthResult[T] =
   r.mapErr(proc (e: E): AuthError = v)
 
-proc tryInit*(
+proc init*(
     T: type Handshake, rng: var BrHmacDrbgContext, host: KeyPair,
     flags: set[HandshakeFlag] = {Initiator},
-    version: uint8 = SupportedRlpxVersion): AuthResult[T] =
+    version: uint8 = SupportedRlpxVersion): T =
   ## Create new `Handshake` object.
-
   var
     initiatorNonce: Nonce
     responderNonce: Nonce
@@ -114,7 +113,7 @@ proc tryInit*(
     expectedLength = AuthMessageV4Length
     brHmacDrbgGenerate(rng, responderNonce)
 
-  return ok(T(
+  return T(
     version: version,
     flags: flags,
     host: host,
@@ -122,7 +121,7 @@ proc tryInit*(
     initiatorNonce: initiatorNonce,
     responderNonce: responderNonce,
     expectedLength: expectedLength
-  ))
+  )
 
 proc authMessagePreEIP8(h: var Handshake,
                         rng: var BrHmacDrbgContext,

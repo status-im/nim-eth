@@ -221,7 +221,7 @@ suite "Ethereum P2P handshake test suite":
     proc newTestHandshake(flags: set[HandshakeFlag]): Handshake =
       if Initiator in flags:
         let pk = PrivateKey.fromHex(testValue("initiator_private_key"))[]
-        result = Handshake.tryInit(rng[], pk.toKeyPair(), flags)[]
+        result = Handshake.init(rng[], pk.toKeyPair(), flags)
 
         let epki = testValue("initiator_ephemeral_private_key")
         result.ephemeral = PrivateKey.fromHex(epki)[].toKeyPair()
@@ -229,7 +229,7 @@ suite "Ethereum P2P handshake test suite":
         result.initiatorNonce[0..^1] = nonce[0..^1]
       elif Responder in flags:
         let pk = PrivateKey.fromHex(testValue("receiver_private_key"))[]
-        result = Handshake.tryInit(rng[], pk.toKeyPair(), flags)[]
+        result = Handshake.init(rng[], pk.toKeyPair(), flags)
         let epkr = testValue("receiver_ephemeral_private_key")
         result.ephemeral = PrivateKey.fromHex(epkr)[].toKeyPair()
         let nonce = fromHex(stripSpaces(testValue("receiver_nonce")))
@@ -333,7 +333,7 @@ suite "Ethereum P2P handshake test suite":
     proc newTestHandshake(flags: set[HandshakeFlag]): Handshake =
       if Initiator in flags:
         let pk = PrivateKey.fromHex(testE8Value("initiator_private_key"))[]
-        result = Handshake.tryInit(rng[], pk.toKeyPair(), flags)[]
+        result = Handshake.init(rng[], pk.toKeyPair(), flags)
 
         let esec = testE8Value("initiator_ephemeral_private_key")
         result.ephemeral = PrivateKey.fromHex(esec)[].toKeyPair()
@@ -341,7 +341,7 @@ suite "Ethereum P2P handshake test suite":
         result.initiatorNonce[0..^1] = nonce[0..^1]
       elif Responder in flags:
         let pk = PrivateKey.fromHex(testE8Value("receiver_private_key"))[]
-        result = Handshake.tryInit(rng[], pk.toKeyPair(), flags)[]
+        result = Handshake.init(rng[], pk.toKeyPair(), flags)
 
         let esec = testE8Value("receiver_ephemeral_private_key")
         result.ephemeral = PrivateKey.fromHex(esec)[].toKeyPair()
