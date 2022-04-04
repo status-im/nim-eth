@@ -1490,7 +1490,6 @@ procSuite "Utp socket unit test":
       writeFut.finished()
     await outgoingSocket.destroyWait()
 
-
   asyncTest "Receiving ack for fin packet should destroy socket and clean up all resources":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
@@ -1524,5 +1523,31 @@ procSuite "Utp socket unit test":
 
     check:
       outgoingSocket.isClosedAndCleanedUpAllResources()
+
+    await outgoingSocket.destroyWait()
+
+  asyncTest "Maximum payload size should be configurable":
+    let q = newAsyncQueue[Packet]()
+    let initalRemoteSeqNr = 10'u16
+    let d = generateByteArray(rng[], 5000)
+    let maxPayloadSize = 800'u32
+    let config = SocketConfig.init(payloadSize = maxPayloadSize)
+
+    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initalRemoteSeqNr, q, cfg = config)
+
+    let wr = await outgoingSocket.write(d)
+
+    check:
+      wr.isOk()
+
+    # Initial max window should allow for at least 2 packets to go through
+    let dp1 = await q.get()
+    let dp2 = await q.get()
+
+    check:
+      dp1.header.pType == ST_DATA
+      len(dp1.payload) == int(maxPayloadSize)
+      dp2.header.pType == ST_DATA
+      len(dp2.payload) == int(maxPayloadSize)
 
     await outgoingSocket.destroyWait()

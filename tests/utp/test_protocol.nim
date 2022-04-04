@@ -424,7 +424,7 @@ procSuite "Utp protocol over udp tests":
 
   asyncTest "Success data transfer of a lot of data should increase available window on sender side":
     let s = await initClientServerScenario()
-
+    let startMaxWindow = 2 * s.clientSocket.getSocketConfig().payloadSize
     check:
       s.clientSocket.isConnected()
       # initially window has value equal to some pre configured constant
@@ -455,6 +455,7 @@ procSuite "Utp protocol over udp tests":
 
   asyncTest "Not used socket should decay its max send window":
     let s = await initClientServerScenario()
+    let startMaxWindow = 2 * s.clientSocket.getSocketConfig().payloadSize
 
     check:
       s.clientSocket.isConnected()
