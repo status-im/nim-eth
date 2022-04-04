@@ -44,12 +44,14 @@ type
     cmdPong = 2
     cmdFindNode = 3
     cmdNeighbours = 4
+    cmdENRRequest = 5
+    cmdENRResponse = 6
 
   DiscProtocolError* = object of CatchableError
 
   DiscResult*[T] = Result[T, cstring]
 
-const MinListLen: array[CommandId, int] = [4, 3, 2, 2]
+const MinListLen: array[CommandId, int] = [4, 3, 2, 2, 1, 2]
 
 proc append*(w: var RlpWriter, a: IpAddress) =
   case a.family
@@ -267,6 +269,9 @@ proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte])
           d.recvNeighbours(node, payload)
         of cmdFindNode:
           d.recvFindNode(node, payload)
+        of cmdENRRequest, cmdENRResponse:
+          # TODO: Implement EIP-868
+          discard
       else:
         trace "Received msg already expired", cmdId, a
     else:
