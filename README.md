@@ -22,12 +22,6 @@ Ethereum-related utilities written in Nim. Includes things like Bloom filters, p
 ## Prerequisites
 
 - Nim & Nimble
-- RocksDB, SQLite, LMDB (required for the trie backend tests)
-
-E.g. on Ubuntu one can run:
-```
-apt install -y librocksdb-dev liblmdb-dev sqlite3
-```
 
 ## Building & Testing
 ```
