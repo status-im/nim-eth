@@ -1212,14 +1212,11 @@ template baseProtocolVersion(peer: Peer): uint =
 proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
   initTracing(devp2pInfo, node.protocols)
 
-  new result
-  result.network = node
-  result.remote = remote
-
+  let peer = Peer(remote: remote, network: node)
   let ta = initTAddress(remote.node.address.ip, remote.node.address.tcpPort)
   var ok = false
   try:
-    result.transport = await connect(ta)
+    peer.transport = await connect(ta)
     var handshake = Handshake.init(
       node.rng[], node.keys, {Initiator, EIP8}, node.baseProtocolVersion)
 
@@ -1227,7 +1224,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     var authMsgLen = 0
     authMessage(
       handshake, node.rng[], remote.node.pubkey, authMsg, authMsgLen).tryGet()
-    var res = await result.transport.write(addr authMsg[0], authMsgLen)
+    var res = await peer.transport.write(addr authMsg[0], authMsgLen)
     if res != authMsgLen:
       raisePeerDisconnected("Unexpected disconnect while authenticating",
                             TcpError)
@@ -1237,39 +1234,40 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     ackMsg.setLen(initialSize)
 
     # TODO: Should we not set some timeouts on these `readExactly`s?
-    await result.transport.readExactly(addr ackMsg[0], len(ackMsg))
+    await peer.transport.readExactly(addr ackMsg[0], len(ackMsg))
+
     var ret = handshake.decodeAckMessage(ackMsg)
     if ret.isErr and ret.error == AuthError.IncompleteError:
       ackMsg.setLen(handshake.expectedLength)
-      await result.transport.readExactly(addr ackMsg[initialSize],
+      await peer.transport.readExactly(addr ackMsg[initialSize],
                                          len(ackMsg) - initialSize)
       ret = handshake.decodeAckMessage(ackMsg)
 
     if ret.isErr():
       debug "rlpxConnect handshake error", error = ret.error
-      if not isNil(result.transport):
-        result.transport.close()
+      if not isNil(peer.transport):
+        peer.transport.close()
       return nil
 
     ret.get()
 
-    node.checkSnappySupport(handshake, result)
-    initSecretState(handshake, ^authMsg, ackMsg, result)
+    node.checkSnappySupport(handshake, peer)
+    initSecretState(handshake, ^authMsg, ackMsg, peer)
 
     # if handshake.remoteHPubkey != remote.node.pubKey:
     #   raise newException(Exception, "Remote pubkey is wrong")
-    logConnectedPeer result
+    logConnectedPeer peer
 
-    var sendHelloFut = result.hello(
+    var sendHelloFut = peer.hello(
       handshake.getVersion(),
       node.clientId,
       node.capabilities,
       uint(node.address.tcpPort),
       node.keys.pubkey.toRaw())
 
-    var response = await result.handshakeImpl(
+    var response = await peer.handshakeImpl(
       sendHelloFut,
-      result.waitSingleMsg(DevP2P.hello),
+      peer.waitSingleMsg(DevP2P.hello),
       10.seconds)
 
     if not validatePubKeyInHello(response, remote.node.pubkey):
@@ -1278,7 +1276,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     trace "DevP2P handshake completed", peer = remote,
       clientId = response.clientId
 
-    await postHelloSteps(result, response)
+    await postHelloSteps(peer, response)
     ok = true
     trace "Peer fully connected", peer = remote, clientId = response.clientId
   except PeerDisconnected as e:
@@ -1303,20 +1301,18 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
       err = e.msg
 
   if not ok:
-    if not isNil(result.transport):
-      result.transport.close()
-    result = nil
+    if not isNil(peer.transport):
+      peer.transport.close()
+    return nil
+  else:
+    return peer
 
 proc rlpxAccept*(node: EthereumNode,
                  transport: StreamTransport): Future[Peer] {.async.} =
   initTracing(devp2pInfo, node.protocols)
 
-  new result
-  result.transport = transport
-  result.network = node
-
+  let peer = Peer(transport: transport, network: node)
   var handshake = Handshake.init(node.rng[], node.keys, {auth.Responder})
-
   var ok = false
   try:
     let initialSize = handshake.expectedLength
@@ -1338,14 +1334,14 @@ proc rlpxAccept*(node: EthereumNode,
       # on the TCP port as it is the first data on the incoming connection,
       # hence log them as trace.
       trace "rlpxAccept handshake error", error = ret.error
-      if not isNil(result.transport):
-        result.transport.close()
+      if not isNil(peer.transport):
+        peer.transport.close()
       return nil
 
     ret.get()
 
-    node.checkSnappySupport(handshake, result)
-    handshake.version = uint8(result.baseProtocolVersion)
+    node.checkSnappySupport(handshake, peer)
+    handshake.version = uint8(peer.baseProtocolVersion)
 
     var ackMsg: array[AckMessageMaxEIP8, byte]
     var ackMsgLen: int
@@ -1355,22 +1351,22 @@ proc rlpxAccept*(node: EthereumNode,
       raisePeerDisconnected("Unexpected disconnect while authenticating",
                             TcpError)
 
-    initSecretState(handshake, authMsg, ^ackMsg, result)
+    initSecretState(handshake, authMsg, ^ackMsg, peer)
 
     let listenPort = transport.localAddress().port
 
-    logAcceptedPeer result
+    logAcceptedPeer peer
 
-    var sendHelloFut = result.hello(
-      result.baseProtocolVersion,
+    var sendHelloFut = peer.hello(
+      peer.baseProtocolVersion,
       node.clientId,
       node.capabilities,
       listenPort.uint,
       node.keys.pubkey.toRaw())
 
-    var response = await result.handshakeImpl(
+    var response = await peer.handshakeImpl(
       sendHelloFut,
-      result.waitSingleMsg(DevP2P.hello),
+      peer.waitSingleMsg(DevP2P.hello),
       10.seconds)
 
     trace "Received Hello", version=response.version, id=response.clientId
@@ -1381,36 +1377,36 @@ proc rlpxAccept*(node: EthereumNode,
     let remote = transport.remoteAddress()
     let address = Address(ip: remote.address, tcpPort: remote.port,
                           udpPort: remote.port)
-    result.remote = newNode(
+    peer.remote = newNode(
       ENode(pubkey: handshake.remoteHPubkey, address: address))
 
-    trace "devp2p handshake completed", peer = result.remote,
+    trace "devp2p handshake completed", peer = peer.remote,
       clientId = response.clientId
 
     # In case there is an outgoing connection started with this peer we give
     # precedence to that one and we disconnect here with `AlreadyConnected`
-    if result.remote in node.peerPool.connectedNodes or
-        result.remote in node.peerPool.connectingNodes:
+    if peer.remote in node.peerPool.connectedNodes or
+        peer.remote in node.peerPool.connectingNodes:
       trace "Duplicate connection in rlpxAccept"
       raisePeerDisconnected("Peer already connecting or connected",
                             AlreadyConnected)
 
-    node.peerPool.connectingNodes.incl(result.remote)
+    node.peerPool.connectingNodes.incl(peer.remote)
 
-    await postHelloSteps(result, response)
+    await postHelloSteps(peer, response)
     ok = true
-    trace "Peer fully connected", peer = result.remote, clientId = response.clientId
+    trace "Peer fully connected", peer = peer.remote, clientId = response.clientId
   except PeerDisconnected as e:
     case e.reason
       of AlreadyConnected, TooManyPeers, MessageTimeout:
-        trace "Disconnect during rlpxAccept", reason = e.reason, peer = result.remote
+        trace "Disconnect during rlpxAccept", reason = e.reason, peer = peer.remote
       else:
         debug "Unexpected disconnect during rlpxAccept", reason = e.reason,
-          msg = e.msg, peer = result.remote
+          msg = e.msg, peer = peer.remote
   except TransportIncompleteError:
-    trace "Connection dropped in rlpxAccept", remote = result.remote
+    trace "Connection dropped in rlpxAccept", remote = peer.remote
   except UselessPeerError:
-    trace "Disconnecting useless peer", peer = result.remote
+    trace "Disconnecting useless peer", peer = peer.remote
   except RlpTypeMismatch:
     # Some peers report capabilities with names longer than 3 chars. We ignore
     # those for now. Maybe we should allow this though.
@@ -1421,9 +1417,11 @@ proc rlpxAccept*(node: EthereumNode,
     error "Unexpected exception in rlpxAccept", exc = e.name, err = e.msg
 
   if not ok:
-    if not isNil(result.transport):
-      result.transport.close()
-    result = nil
+    if not isNil(peer.transport):
+      peer.transport.close()
+    return nil
+  else:
+    return peer
 
 when isMainModule:
 
