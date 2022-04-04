@@ -396,7 +396,7 @@ proc init*(
   ): T =
   # make sure there is always some payload in data packets, and that packets are not to large.
   # with 1480 packet boundary, data packets will have 1500 bytes which seems reasonable
-  doAssert(payloadSize > 0 && payloadSize <= 1480, "payloadSize should always be positive number <= 1480")
+  doAssert(payloadSize > 0 and payloadSize <= 1480, "payloadSize should always be positive number <= 1480")
   # TODO make sure optRcvBuffer is nicely divisible by maxReorderBufferSize
   let reorderBufferSize = uint32(maxReorderBufferSize * float64(optRcvBuffer))
   SocketConfig(
