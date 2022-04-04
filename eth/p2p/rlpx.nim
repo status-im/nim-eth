@@ -1220,8 +1220,8 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
   var ok = false
   try:
     result.transport = await connect(ta)
-    var handshake = Handshake.tryInit(
-      node.rng[], node.keys, {Initiator, EIP8}, node.baseProtocolVersion).tryGet()
+    var handshake = Handshake.init(
+      node.rng[], node.keys, {Initiator, EIP8}, node.baseProtocolVersion)
 
     var authMsg: array[AuthMessageMaxEIP8, byte]
     var authMsgLen = 0
@@ -1236,15 +1236,22 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     var ackMsg = newSeqOfCap[byte](1024)
     ackMsg.setLen(initialSize)
 
+    # TODO: Should we not set some timeouts on these `readExactly`s?
     await result.transport.readExactly(addr ackMsg[0], len(ackMsg))
-
     var ret = handshake.decodeAckMessage(ackMsg)
     if ret.isErr and ret.error == AuthError.IncompleteError:
       ackMsg.setLen(handshake.expectedLength)
       await result.transport.readExactly(addr ackMsg[initialSize],
                                          len(ackMsg) - initialSize)
       ret = handshake.decodeAckMessage(ackMsg)
-    ret.tryGet() # for the raise!
+
+    if ret.isErr():
+      debug "rlpxConnect handshake error", error = ret.error
+      if not isNil(result.transport):
+        result.transport.close()
+      return nil
+
+    ret.get()
 
     node.checkSnappySupport(handshake, result)
     initSecretState(handshake, ^authMsg, ackMsg, result)
@@ -1308,8 +1315,7 @@ proc rlpxAccept*(node: EthereumNode,
   result.transport = transport
   result.network = node
 
-  var handshake =
-    Handshake.tryInit(node.rng[], node.keys, {auth.Responder}).tryGet
+  var handshake = Handshake.init(node.rng[], node.keys, {auth.Responder})
 
   var ok = false
   try:
@@ -1317,15 +1323,26 @@ proc rlpxAccept*(node: EthereumNode,
     var authMsg = newSeqOfCap[byte](1024)
 
     authMsg.setLen(initialSize)
+    # TODO: Should we not set some timeouts on these `readExactly`s?
     await transport.readExactly(addr authMsg[0], len(authMsg))
     var ret = handshake.decodeAuthMessage(authMsg)
     if ret.isErr and ret.error == AuthError.IncompleteError:
-      # Eip8 auth message is likely
+      # Eip8 auth message is possible, but not likely
       authMsg.setLen(handshake.expectedLength)
       await transport.readExactly(addr authMsg[initialSize],
                                   len(authMsg) - initialSize)
       ret = handshake.decodeAuthMessage(authMsg)
-    ret.tryGet() # for the raise!
+
+    if ret.isErr():
+      # It is likely that errors on the handshake Auth is just garbage arriving
+      # on the TCP port as it is the first data on the incoming connection,
+      # hence log them as trace.
+      trace "rlpxAccept handshake error", error = ret.error
+      if not isNil(result.transport):
+        result.transport.close()
+      return nil
+
+    ret.get()
 
     node.checkSnappySupport(handshake, result)
     handshake.version = uint8(result.baseProtocolVersion)
