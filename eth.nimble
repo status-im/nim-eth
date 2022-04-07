@@ -18,8 +18,9 @@ requires "nim >= 1.2.0",
          "testutils",
          "unittest2"
 
-let commonParams = " --verbosity:0 --hints:off --skipUserCfg:on " &
+let commonParams = " --verbosity:0 --skipUserCfg:on " &
   "--warning[ObservableStores]:off --styleCheck:usages --styleCheck:hint " &
+  " --hint[XDeclaredButNotUsed]:off --hint[Processing]:off " &
   getEnv("NIMFLAGS") & " "
 
 proc runTest(path: string, release: bool = true, chronosStrict = true) =
