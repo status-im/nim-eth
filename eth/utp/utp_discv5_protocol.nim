@@ -9,7 +9,7 @@
 import
   std/[hashes, sugar],
   chronos, chronicles,
-  ../p2p/discoveryv5/[protocol, messages, encoding],
+  ../p2p/discoveryv5/[protocol, messages],
   ./utp_router,
   ../keys
 
@@ -53,13 +53,10 @@ func `$`*(x: UtpSocketKey[NodeAddress]): string =
 
 proc talkReqDirect(p: protocol.Protocol, n: NodeAddress, protocol, request: seq[byte]): Future[void] =
   let
-    reqId = RequestId.init(p.rng[])
-    message = encodeMessage(TalkReqMessage(protocol: protocol, request: request), reqId)
-
-    (data, nonce) = encodeMessagePacket(p.rng[], p.codec, n.nodeId, n.address, message)
+    message = TalkReqMessage(protocol: protocol, request: request)
 
   trace "Send message packet", dstId = n.nodeId, address = n.address, kind = MessageKind.talkreq
-  p.send(n.address, data)
+  discard p.sendRequest(n.nodeId, n.address, message)
     
 proc initSendCallback(
     t: protocol.Protocol, subProtocolName: seq[byte]): SendCallback[NodeAddress] =

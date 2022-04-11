@@ -1,6 +1,7 @@
 import
+  stew/results,
   testutils/fuzzing,
-  ../../../eth/rlp, ../../../eth/p2p/discoveryv5/[encoding, messages]
+  ../../../eth/rlp, ../../../eth/p2p/discoveryv5/[messages_encoding, messages]
 
 test:
   block:

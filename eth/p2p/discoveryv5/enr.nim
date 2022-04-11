@@ -15,7 +15,7 @@ import
   stew/shims/net, stew/[base64, results], nimcrypto,
   ".."/../[rlp, keys]
 
-export options, results, keys
+export options, results
 
 const
   maxEnrSize = 300  ## Maximum size of an encoded node record, in bytes.
