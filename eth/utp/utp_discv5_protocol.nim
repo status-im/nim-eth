@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -13,12 +13,12 @@ import
   ./utp_router,
   ../keys
 
-export utp_router, protocol, chronicles
+export utp_router, protocol
 
 logScope:
   topics = "utp_discv5_protocol"
 
-type 
+type
   NodeAddress* = object
     nodeId*: NodeId
     address*: Address
@@ -27,10 +27,10 @@ type
     prot: protocol.Protocol
     router: UtpRouter[NodeAddress]
 
-proc init*(T: type NodeAddress, nodeId: NodeId, address: Address): NodeAddress = 
+proc init*(T: type NodeAddress, nodeId: NodeId, address: Address): NodeAddress =
   NodeAddress(nodeId: nodeId, address: address)
 
-proc init*(T: type NodeAddress, node: Node): Option[NodeAddress] = 
+proc init*(T: type NodeAddress, node: Node): Option[NodeAddress] =
   node.address.map((address: Address) => NodeAddress(nodeId: node.id, address: address))
 
 proc hash(x: NodeAddress): Hash =
@@ -60,7 +60,7 @@ proc talkReqDirect(p: protocol.Protocol, n: NodeAddress, protocol, request: seq[
 
   trace "Send message packet", dstId = n.nodeId, address = n.address, kind = MessageKind.talkreq
   p.send(n.address, data)
-    
+
 proc initSendCallback(
     t: protocol.Protocol, subProtocolName: seq[byte]): SendCallback[NodeAddress] =
   return (
@@ -77,7 +77,7 @@ proc initSendCallback(
 
 proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     srcId: NodeId, srcUdpAddress: Address): seq[byte] =
-  let 
+  let
     p = UtpDiscv5Protocol(protocol)
     nodeAddress = NodeAddress.init(srcId, srcUdpAddress)
   debug "Received utp payload from known node. Start processing",
