@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,6 +12,11 @@ import
   ../keys,
   ./utp_socket,
   ./packets
+
+export utp_socket
+
+logScope:
+  topics = "utp_router"
 
 declareCounter utp_received_packets,
   "All correct received uTP packets"
@@ -27,11 +32,6 @@ declareCounter utp_success_outgoing,
   "Total number of succesful outgoing connections"
 declareCounter utp_failed_outgoing,
   "Total number of failed outgoing connections"
-
-logScope:
-  topics = "utp_router"
-
-export utp_socket
 
 type
   # New remote client connection callback
@@ -132,7 +132,8 @@ proc new*[A](
 
 # There are different possibilities on how the connection got established, need
 # to check every case.
-proc getSocketOnReset[A](r: UtpRouter[A], sender: A, id: uint16): Option[UtpSocket[A]] =
+proc getSocketOnReset[A](
+    r: UtpRouter[A], sender: A, id: uint16): Option[UtpSocket[A]] =
   # id is our recv id
   let recvKey = UtpSocketKey[A].init(sender, id)
 
@@ -146,7 +147,8 @@ proc getSocketOnReset[A](r: UtpRouter[A], sender: A, id: uint16): Option[UtpSock
   .orElse(r.getUtpSocket(sendInitKey).filter(s => s.connectionIdSnd == id))
   .orElse(r.getUtpSocket(sendNoInitKey).filter(s => s.connectionIdSnd == id))
 
-proc shouldAllowConnection[A](r: UtpRouter[A], remoteAddress: A, connectionId: uint16): bool =
+proc shouldAllowConnection[A](
+    r: UtpRouter[A], remoteAddress: A, connectionId: uint16): bool =
   if r.allowConnection == nil:
     # if the callback is not configured it means all incoming connections are allowed
     true
@@ -183,14 +185,15 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
         debug "Received SYN for new connection. Initiating incoming connection",
           synSeqNr = p.header.seqNr
         # Initial ackNr is set to incoming packer seqNr
-        let incomingSocket = newIncomingSocket[A](sender, r.sendCb, r.socketConfig ,p.header.connectionId, p.header.seqNr, r.rng[])
+        let incomingSocket = newIncomingSocket[A](
+          sender, r.sendCb, r.socketConfig,
+          p.header.connectionId, p.header.seqNr, r.rng[])
         r.registerUtpSocket(incomingSocket)
         incomingSocket.startIncomingSocket()
-        # Based on configuration, socket is passed to upper layer either in SynRecv
-        # or Connected state
+        # Based on configuration, socket is passed to upper layer either in
+        # SynRecv or Connected state
         utp_allowed_incoming.inc()
-        info "Accepting incoming connection",
-          to = incomingSocket.socketKey
+        debug "Accepting incoming connection", src = incomingSocket.socketKey
         asyncSpawn r.acceptConnection(r, incomingSocket)
       else:
         utp_declined_incoming.inc()
@@ -203,13 +206,15 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       let socket = maybeSocket.unsafeGet()
       await socket.processPacket(p)
     else:
-      # TODO add keeping track of recently send reset packets and do not send reset
-      # to peers which we recently send reset to.
+      # TODO add keeping track of recently send reset packets and do not send
+      # reset to peers which we recently send reset to.
       debug "Received FIN/DATA/ACK on not known socket sending reset"
-      let rstPacket = resetPacket(randUint16(r.rng[]), p.header.connectionId, p.header.seqNr)
+      let rstPacket = resetPacket(
+        randUint16(r.rng[]), p.header.connectionId, p.header.seqNr)
       await r.sendCb(sender, encodePacket(rstPacket))
 
-proc processIncomingBytes*[A](r: UtpRouter[A], bytes: seq[byte], sender: A) {.async.} =
+proc processIncomingBytes*[A](
+    r: UtpRouter[A], bytes: seq[byte], sender: A) {.async.} =
   if (not r.closed):
     let dec = decodePacket(bytes)
     if (dec.isOk()):
@@ -218,15 +223,17 @@ proc processIncomingBytes*[A](r: UtpRouter[A], bytes: seq[byte], sender: A) {.as
     else:
       utp_failed_packets.inc()
       let err = dec.error()
-      warn "failed to decode packet from address", address = sender, msg = err
+      warn "Failed to decode packet from address", address = sender, msg = err
 
-proc generateNewUniqueSocket[A](r: UtpRouter[A], address: A): Option[UtpSocket[A]] =
-  ## Tries to generate unique socket, gives up after maxSocketGenerationTries tries
+proc generateNewUniqueSocket[A](
+    r: UtpRouter[A], address: A):Option[UtpSocket[A]] =
+  ## Try to generate unique socket, give up after maxSocketGenerationTries tries
   var tryCount = 0
 
   while tryCount < maxSocketGenerationTries:
     let rcvId = randUint16(r.rng[])
-    let socket = newOutgoingSocket[A](address, r.sendCb, r.socketConfig, rcvId, r.rng[])
+    let socket = newOutgoingSocket[A](
+      address, r.sendCb, r.socketConfig, rcvId, r.rng[])
 
     if r.registerIfAbsent(socket):
       return some(socket)
@@ -236,32 +243,31 @@ proc generateNewUniqueSocket[A](r: UtpRouter[A], address: A): Option[UtpSocket[A
   return none[UtpSocket[A]]()
 
 proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.}=
-    info "Initiating connection",
-      to = s.socketKey
+    debug "Initiating connection", dst = s.socketKey
 
     let startFut = s.startOutgoingSocket()
 
     startFut.cancelCallback = proc(udata: pointer) {.gcsafe.} =
-      # if for some reason future will be cancelled, destory socket to clear it from
-      # active socket list
+      # if for some reason the future is cancelled, destroy socket to clear it
+      # from the active socket list
       s.destroy()
 
     try:
       await startFut
       utp_success_outgoing.inc()
-      info "Outgoing connection successful",
-        to = s.socketKey
+      debug "Outgoing connection successful", dst = s.socketKey
       return ok(s)
     except ConnectionError:
       utp_failed_outgoing.inc()
-      info "Outgoing connection timed-out",
-        to = s.socketKey
+      debug "Outgoing connection timed-out", dst = s.socketKey
       s.destroy()
       return err(OutgoingConnectionError(kind: ConnectionTimedOut))
 
 # Connect to provided address
-# Reference implementation: https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
-proc connectTo*[A](r: UtpRouter[A], address: A): Future[ConnectionResult[A]] {.async.} =
+# Reference implementation:
+# https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
+proc connectTo*[A](
+    r: UtpRouter[A], address: A): Future[ConnectionResult[A]] {.async.} =
   let maybeSocket = r.generateNewUniqueSocket(address)
 
   if (maybeSocket.isNone()):
@@ -272,8 +278,11 @@ proc connectTo*[A](r: UtpRouter[A], address: A): Future[ConnectionResult[A]] {.a
 
 # Connect to provided address with provided connection id, if socket with this id
 # and address already exsits return error
-proc connectTo*[A](r: UtpRouter[A], address: A, connectionId: uint16): Future[ConnectionResult[A]] {.async.} =
-  let socket = newOutgoingSocket[A](address, r.sendCb, r.socketConfig, connectionId, r.rng[])
+proc connectTo*[A](
+    r: UtpRouter[A], address: A, connectionId: uint16):
+    Future[ConnectionResult[A]] {.async.} =
+  let socket = newOutgoingSocket[A](
+    address, r.sendCb, r.socketConfig, connectionId, r.rng[])
 
   if (r.registerIfAbsent(socket)):
     return await socket.connect()
@@ -282,7 +291,7 @@ proc connectTo*[A](r: UtpRouter[A], address: A, connectionId: uint16): Future[Co
 
 proc shutdown*[A](r: UtpRouter[A]) =
   # stop processing any new packets and close all sockets in background without
-  # notifing remote peers
+  # notifying remote peers
   r.closed = true
   for s in r.allSockets():
     s.destroy()
@@ -290,12 +299,12 @@ proc shutdown*[A](r: UtpRouter[A]) =
 proc shutdownWait*[A](r: UtpRouter[A]) {.async.} =
   var activeSockets: seq[UtpSocket[A]] = @[]
   # stop processing any new packets and close all sockets without
-  # notifing remote peers
+  # notifying remote peers
   r.closed = true
 
-  # we need to make copy as calling socket.destroyWait() removes socket from the table
-  # and iterator throws error. Antother option would be to wait until number of opensockets
-  # go to 0
+  # Need to make a copy as calling socket.destroyWait() removes the socket from
+  # the table and iterator throws error. Another option would be to wait until
+  # the number of open sockets drops to 0
   for s in r.allSockets():
     activeSockets.add(s)
 
