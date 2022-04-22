@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -52,24 +52,31 @@
 ## https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#115-guard-against-kademlia-implementation-flaws
 ##
 ## The result is that in an implementation which just stores buckets per
-## logarithmic distance, it simply needs to return the right bucket. In our
+## logarithmic distance, it simply needs to return the right bucket. In this
 ## split-bucket implementation, this cannot be done as such and thus the closest
 ## neighbours search is still done. And to do this, a reverse calculation of an
 ## id at given logarithmic distance is needed (which is why there is the
 ## `idAtDistance` proc). Next, nodes with invalid distances need to be filtered
 ## out to be compliant to the specification. This can most likely get further
-## optimised, but it sounds likely better to switch away from the split-bucket
-## approach. I believe that the main benefit it has is improved lookups
-## (due to no unbalanced branches), and it looks like this will be negated by
-## limiting the returned nodes to only the ones of the requested logarithmic
-## distance for the `FindNode` call.
+## optimised, but if it would turn out to be an issue, it is probably easier to
+## switch away from the split-bucket approach. The main benefit that the split
+## bucket approach has is improved lookups (less hops due to no unbalanced
+## branches), but lookup functionality of Kademlia is not something that is
+## typically used in discv5. It is mostly used as a secure mechanism to find &
+## select peers.
 
-## This `FindNode` change in discovery v5 will also have an effect on the
+## This `FindNode` change in discovery v5 could also have an effect on the
 ## efficiency of the network. Work will be moved from the receiver of
-## `FindNodes` to the requester. But this also means more network traffic,
-## as less nodes will potentially be passed around per `FindNode` call, and thus
-## more requests will be needed for a lookup (adding bandwidth and latency).
-## This might be a concern for mobile devices.
+## `FindNodes` to the requester. But this could also mean more network traffic,
+## as less nodes may potentially be passed around per `FindNode` call, and thus
+## more requests may be needed for a lookup (adding bandwidth and latency).
+## For this reason Discovery v5.1 has added the possibility to send a `FindNode`
+## request with multiple distances specified. This implementation will
+## underneath still use the neighbours search, specifically for the first
+## distance provided. This means that if distances with wide gaps are provided,
+## it could be that only nodes matching the first distance are returned.
+## When distance 0 is provided in the requested list of distances, only the own
+## ENR will be returned.
 
 {.push raises: [Defect].}
 
@@ -78,7 +85,8 @@ import
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/[endians2, results], chronicles, chronos, stint, bearssl, metrics,
   ".."/../[rlp, keys, async_utils],
-  "."/[messages, encoding, node, routing_table, enr, random2, sessions, ip_vote, nodes_verification]
+  "."/[messages, encoding, node, routing_table, enr, random2, sessions, ip_vote,
+    nodes_verification]
 
 import nimcrypto except toHex
 
@@ -144,7 +152,9 @@ type
     node: Node
     message: seq[byte]
 
-  TalkProtocolHandler* = proc(p: TalkProtocol, request: seq[byte], fromId: NodeId, fromUdpAddress: Address): seq[byte]
+  TalkProtocolHandler* = proc(
+    p: TalkProtocol, request: seq[byte],
+    fromId: NodeId, fromUdpAddress: Address): seq[byte]
     {.gcsafe, raises: [Defect].}
 
   TalkProtocol* = ref object of RootObj
