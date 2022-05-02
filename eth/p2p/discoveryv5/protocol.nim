@@ -90,7 +90,8 @@ import
 
 import nimcrypto except toHex
 
-export options, results, node, enr
+export
+  options, results, node, enr, encoding.maxDiscv5PacketSize
 
 declareCounter discovery_message_requests_outgoing,
   "Discovery protocol outgoing message requests", labels = ["response"]
