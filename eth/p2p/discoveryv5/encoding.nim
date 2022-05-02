@@ -43,6 +43,11 @@ const
   staticHeaderSize = protocolId.len + 2 + 2 + 1 + gcmNonceSize
   authdataHeadSize = sizeof(NodeId) + 1 + 1
   whoareyouSize = ivSize + staticHeaderSize + idNonceSize + 8
+  # It's mentioned in the specification that 1280 is the maximum size for the
+  # discovery v5 packet, not for the UDP datagram. Thus this limit is applied on
+  # the UDP payload and the UDP header is not taken into account.
+  # https://github.com/ethereum/devp2p/blob/26e380b1f3a57db16fbdd4528dde82104c77fa38/discv5/discv5-wire.md#udp-communication
+  maxDiscv5PacketSize* = 1280
 
 type
   AESGCMNonce* = array[gcmNonceSize, byte]
@@ -579,7 +584,10 @@ proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
   ## WHOAREYOU packet. In case of the latter a `newNode` might be provided.
   # Smallest packet is Whoareyou packet so that is the minimum size
   if input.len() < whoareyouSize:
-    return err("Packet size too short")
+    return err("Packet size too small")
+
+  if input.len() > maxDiscv5PacketSize:
+    return err("Packet size too big")
 
   # TODO: Just pass in the full input? Makes more sense perhaps.
   let (staticHeader, header) = ? decodeHeader(c.localNode.id,

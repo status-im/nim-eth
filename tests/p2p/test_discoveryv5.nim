@@ -1,11 +1,12 @@
 {.used.}
 
 import
-  std/tables,
+  std/[tables, sequtils],
   chronos, chronicles, stint, testutils/unittests, stew/shims/net,
   stew/byteutils, bearssl,
   ../../eth/keys,
-  ../../eth/p2p/discoveryv5/[enr, node, routing_table, encoding, sessions, messages, nodes_verification],
+  ../../eth/p2p/discoveryv5/[enr, node, routing_table, encoding, sessions,
+    messages, nodes_verification],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./discv5_test_helper
 
@@ -706,8 +707,10 @@ suite "Discovery v5 Tests":
         rng, PrivateKey.random(rng[]), localAddress(20303))
       talkProtocol = "echo".toBytes()
 
-    proc handler(protocol: TalkProtocol, request: seq[byte], fromId: NodeId, fromUdpAddress: Address): seq[byte]
-        {.gcsafe, raises: [Defect].} =
+    proc handler(
+        protocol: TalkProtocol, request: seq[byte],
+        fromId: NodeId, fromUdpAddress: Address):
+        seq[byte] {.gcsafe, raises: [Defect].} =
       request
 
     let echoProtocol = TalkProtocol(protocolHandler: handler)
@@ -731,8 +734,10 @@ suite "Discovery v5 Tests":
         rng, PrivateKey.random(rng[]), localAddress(20303))
       talkProtocol = "echo".toBytes()
 
-    proc handler(protocol: TalkProtocol, request: seq[byte], fromId: NodeId, fromUdpAddress: Address): seq[byte]
-        {.gcsafe, raises: [Defect].} =
+    proc handler(
+        protocol: TalkProtocol, request: seq[byte],
+        fromId: NodeId, fromUdpAddress: Address):
+        seq[byte] {.gcsafe, raises: [Defect].} =
       request
 
     let echoProtocol = TalkProtocol(protocolHandler: handler)
@@ -741,6 +746,86 @@ suite "Discovery v5 Tests":
       node2.registerTalkProtocol(talkProtocol, echoProtocol).isOk()
       node2.registerTalkProtocol(talkProtocol, echoProtocol).isErr()
       node2.registerTalkProtocol("test".toBytes(), echoProtocol).isOk()
+
+    await node1.closeWait()
+    await node2.closeWait()
+
+  asyncTest "Max packet size: Request":
+    let
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+      talkProtocol = "echo".toBytes()
+
+    proc handler(
+        protocol: TalkProtocol, request: seq[byte],
+        fromId: NodeId, fromUdpAddress: Address):
+        seq[byte] {.gcsafe, raises: [Defect].} =
+      request
+
+    let echoProtocol = TalkProtocol(protocolHandler: handler)
+
+    check node2.registerTalkProtocol(talkProtocol, echoProtocol).isOk()
+    # Do a ping first so a session is created, that makes the next message to
+    # be an ordinary message and more easy to reverse calculate packet sizes for
+    # than for a handshake message.
+    check (await node1.ping(node2.localNode)).isOk()
+
+    block: # 1172 = 1280 - 103 - 4 - 1 = max - talkreq - "echo" - rlp blob
+      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
+        talkProtocol, repeat(byte 6, 1172))
+
+      check:
+        talkresp.isOk()
+
+    block: # > 1280 -> should fail
+      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
+        talkProtocol, repeat(byte 6, 1173))
+
+      check:
+        talkresp.isErr()
+
+    await node1.closeWait()
+    await node2.closeWait()
+
+  asyncTest "Max packet size: Response":
+    let
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+      talkProtocol = "echo".toBytes()
+
+    proc handler(
+        protocol: TalkProtocol, request: seq[byte],
+        fromId: NodeId, fromUdpAddress: Address):
+        seq[byte] {.gcsafe, raises: [Defect].} =
+      # Return the request + same protocol id + 2 bytes, to make it 1 byte
+      # bigger than the request
+      request & "echo12".toBytes()
+
+    let echoProtocol = TalkProtocol(protocolHandler: handler)
+
+    check node2.registerTalkProtocol(talkProtocol, echoProtocol).isOk()
+    # Do a ping first so a session is created, that makes the next message to
+    # be an ordinary message and more easy to reverse calculate packet sizes for
+    # than for a handshake message.
+    check (await node1.ping(node2.localNode)).isOk()
+
+    block: # 1171 -> response will be 1 byte bigger thus this should pass
+      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
+        talkProtocol, repeat(byte 6, 1171))
+
+      check:
+        talkresp.isOk()
+
+    block: # 1172 -> response will be 1 byte bigger thus this should fail
+      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
+        talkProtocol, repeat(byte 6, 1172))
+
+      check:
+        talkresp.isErr()
 
     await node1.closeWait()
     await node2.closeWait()
