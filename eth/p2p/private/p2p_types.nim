@@ -1,3 +1,4 @@
+
 # nim-eth
 # Copyright (c) 2018-2021 Status Research & Development GmbH
 # Licensed and distributed under either of
@@ -8,6 +9,7 @@
 import
   std/[deques, tables],
   bearssl, chronos,
+  stew/results,
   ".."/../[rlp, keys], ".."/../common/eth_types,
   ".."/[enode, kademlia, discovery, rlpxcrypt]
 
@@ -199,3 +201,21 @@ func `==`*(a, b: NetworkId): bool {.inline.} =
 
 func `$`*(x: NetworkId): string {.inline.} =
   `$`(uint(x))
+
+proc to*(n: int; T: type DisconnectionReason): Result[T,string] =
+  ## Savely map integer argument to `DisconnectionReason` enum type. Return
+  ## an error text if that fails.
+  if T.low.int <= n and n <= T.high.int:
+    return ok(n.T)
+  const
+    pfx = "Disconnect reason code out of bounds " &
+      $DisconnectionReason.low.int & ".." & $DisconnectionReason.high.int &
+      " (got: "
+  err(pfx & $n & ")")
+
+proc read*(rlp: var Rlp; T: type DisconnectionReason): T =
+  ## Rlp mixin: `DisconnectionReason` parser
+  let rc = rlp.read(int).to(T)
+  if rc.isErr:
+    raise newException(MalformedRlpError, rc.error)
+  rc.value
