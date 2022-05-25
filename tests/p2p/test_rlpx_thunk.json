@@ -61,7 +61,12 @@
   },
   "Listing single element list with entry off enum range": {
     "payload": "01c116",
-    "error": "MalformedRlpError",
+    "error": "RlpTypeMismatch",
+    "description": "Disconnect reason code out of bounds 0..16 (got: 22)"
+  },
+  "Listing single element off enum range": {
+    "payload": "0116",
+    "error": "RlpTypeMismatch",
     "description": "Disconnect reason code out of bounds 0..16 (got: 22)"
   },
   "devp2p hello packet version 22 + additional list elements for EIP-8": {

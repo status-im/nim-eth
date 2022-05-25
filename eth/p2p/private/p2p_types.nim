@@ -214,8 +214,11 @@ proc to*(n: int; T: type DisconnectionReason): Result[T,string] =
   err(pfx & $n & ")")
 
 proc read*(rlp: var Rlp; T: type DisconnectionReason): T =
-  ## Rlp mixin: `DisconnectionReason` parser
+  ## Rlp mixin: `DisconnectionReason` parser. An enum parser is also provided
+  ## by the RLP package albeit with a different error message. A dedicated
+  ## parser and error message generator `to()` is handy here as there is no
+  ## default solution for decoding `array[1,DisconnectionReason])`.
   let rc = rlp.read(int).to(T)
   if rc.isErr:
-    raise newException(MalformedRlpError, rc.error)
+    raise newException(RlpTypeMismatch, rc.error)
   rc.value

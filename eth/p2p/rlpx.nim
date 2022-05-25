@@ -61,7 +61,7 @@ proc read[T: DisconnectionReason](rlp: var Rlp; W: type array[1,T]): T
   # fixed-size array (aka blob), see function `eth/rlp.readImpl()`.
   let rc = rlp.read(array[1,int])[0].to(T)
   if rc.isErr:
-    raise newException(MalformedRlpError, rc.error)
+    raise newException(RlpTypeMismatch, rc.error)
   rc.value
 
 proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
