@@ -54,16 +54,6 @@ type
   DisconnectionReasonList = object
     value: DisconnectionReason
 
-proc read[T: DisconnectionReason](rlp: var Rlp; W: type array[1,T]): T
-    {.gcsafe, raises: [RlpError, Defect].} =
-  ## Rlp mixin: `array[1,DisconnectionReason]` parser
-  # Need to parse for an `int` type as a `byte` (or a `char`) would expect a
-  # fixed-size array (aka blob), see function `eth/rlp.readImpl()`.
-  let rc = rlp.read(array[1,int])[0].to(T)
-  if rc.isErr:
-    raise newException(RlpTypeMismatch, rc.error)
-  rc.value
-
 proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
     {.gcsafe, raises: [RlpError, Defect].} =
   ## Rlp mixin: `DisconnectionReasonList` parser
@@ -73,7 +63,7 @@ proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
     # accepts lists with at least one item. The array expression wants
     # exactly one item.
     return DisconnectionReasonList(
-      value: rlp.read(array[1,DisconnectionReason]))
+      value: rlp.read(array[1,DisconnectionReason])[0])
 
   # Also accepted: a single byte reason code. Is is typically used
   # by variants of the reference implementation `Geth`
@@ -87,7 +77,7 @@ proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
   if subList.isList:
     # Ditto, see above.
     return DisconnectionReasonList(
-      value: subList.read(array[1,DisconnectionReason]))
+      value: subList.read(array[1,DisconnectionReason])[0])
 
   raise newException(RlpTypeMismatch, "Single entry list expected")
 

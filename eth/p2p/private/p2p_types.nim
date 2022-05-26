@@ -201,24 +201,3 @@ func `==`*(a, b: NetworkId): bool {.inline.} =
 
 func `$`*(x: NetworkId): string {.inline.} =
   `$`(uint(x))
-
-proc to*(n: int; T: type DisconnectionReason): Result[T,string] =
-  ## Savely map integer argument to `DisconnectionReason` enum type. Return
-  ## an error text if that fails.
-  if T.low.int <= n and n <= T.high.int:
-    return ok(n.T)
-  const
-    pfx = "Disconnect reason code out of bounds " &
-      $DisconnectionReason.low.int & ".." & $DisconnectionReason.high.int &
-      " (got: "
-  err(pfx & $n & ")")
-
-proc read*(rlp: var Rlp; T: type DisconnectionReason): T =
-  ## Rlp mixin: `DisconnectionReason` parser. An enum parser is also provided
-  ## by the RLP package albeit with a different error message. A dedicated
-  ## parser and error message generator `to()` is handy here as there is no
-  ## default solution for decoding `array[1,DisconnectionReason])`.
-  let rc = rlp.read(int).to(T)
-  if rc.isErr:
-    raise newException(RlpTypeMismatch, rc.error)
-  rc.value
