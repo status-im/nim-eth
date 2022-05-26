@@ -1,3 +1,4 @@
+
 # nim-eth
 # Copyright (c) 2018-2021 Status Research & Development GmbH
 # Licensed and distributed under either of
@@ -8,6 +9,7 @@
 import
   std/[deques, tables],
   bearssl, chronos,
+  stew/results,
   ".."/../[rlp, keys], ".."/../common/eth_types,
   ".."/[enode, kademlia, discovery, rlpxcrypt]
 

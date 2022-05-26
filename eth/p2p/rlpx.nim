@@ -55,28 +55,30 @@ type
     value: DisconnectionReason
 
 proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
-    {.raises: [Defect, RlpError].} =
+    {.gcsafe, raises: [RlpError, Defect].} =
   ## Rlp mixin: `DisconnectionReasonList` parser
+
   if rlp.isList:
     # Be strict here: The expression `rlp.read(DisconnectionReasonList)`
     # accepts lists with at least one item. The array expression wants
     # exactly one item.
-    let a = rlp.read(array[1, DisconnectionReason])
-    return DisconnectionReasonList(value: a[0])
+    return DisconnectionReasonList(
+      value: rlp.read(array[1,DisconnectionReason])[0])
 
   # Also accepted: a single byte reason code. Is is typically used
   # by variants of the reference implementation `Geth`
   if rlp.blobLen <= 1:
-    let n = rlp.read(int)
-    return DisconnectionReasonList(value: n.DisconnectionReason)
+    return DisconnectionReasonList(
+      value: rlp.read(DisconnectionReason))
 
   # Also accepted: a blob of a list (aka object) of reason code. It is
   # used by `bor`, a `geth` fork
   var subList = rlp.toBytes.rlpFromBytes
   if subList.isList:
     # Ditto, see above.
-    let a = subList.read(array[1,DisconnectionReason])
-    return DisconnectionReasonList(value: a[0])
+    return DisconnectionReasonList(
+      value: subList.read(array[1,DisconnectionReason])[0])
+
   raise newException(RlpTypeMismatch, "Single entry list expected")
 
 
