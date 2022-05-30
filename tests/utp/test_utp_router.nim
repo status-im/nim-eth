@@ -335,6 +335,8 @@ procSuite "Utp router unit tests":
 
     await connectFuture.cancelAndWait()
 
+    await waitUntil(proc (): bool = router.len() == 0)
+
     check:
       router.len() == 0
 
