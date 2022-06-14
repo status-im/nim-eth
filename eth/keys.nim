@@ -16,12 +16,13 @@
 
 import
   std/strformat,
-  secp256k1, bearssl, stew/[byteutils, objects, results],
+  secp256k1, bearssl/hash as bhash, bearssl/rand,
+  stew/[byteutils, objects, results],
   nimcrypto/[hash, keccak]
 
 from nimcrypto/utils import burnMem
 
-export secp256k1, results, bearssl
+export secp256k1, results, rand
 
 const
   KeyLength* = SkEcdhRawSecretSize - 1
@@ -51,24 +52,15 @@ type
 template pubkey*(v: KeyPair): PublicKey = PublicKey(SkKeyPair(v).pubkey)
 template seckey*(v: KeyPair): PrivateKey = PrivateKey(SkKeyPair(v).seckey)
 
-proc newRng*(): ref BrHmacDrbgContext =
+proc newRng*(): ref HmacDrbgContext =
   # You should only create one instance of the RNG per application / library
   # Ref is used so that it can be shared between components
-  # TODO consider moving to bearssl
-  var seeder = brPrngSeederSystem(nil)
-  if seeder == nil:
-    return nil
+  HmacDrbgContext.new()
 
-  var rng = (ref BrHmacDrbgContext)()
-  brHmacDrbgInit(addr rng[], addr sha256Vtable, nil, 0)
-  if seeder(addr rng.vtable) == 0:
-    return nil
-  rng
-
-proc random*(T: type PrivateKey, rng: var BrHmacDrbgContext): T =
+proc random*(T: type PrivateKey, rng: var HmacDrbgContext): T =
   let rngPtr = unsafeAddr rng # doesn't escape
   proc callRng(data: var openArray[byte]) =
-    brHmacDrbgGenerate(rngPtr[], data)
+    generate(rngPtr[], data)
 
   T(SkSecretKey.random(callRng))
 
@@ -106,7 +98,7 @@ func toRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] =
 
 func toRawCompressed*(pubkey: PublicKey): array[33, byte] {.borrow.}
 
-proc random*(T: type KeyPair, rng: var BrHmacDrbgContext): T =
+proc random*(T: type KeyPair, rng: var HmacDrbgContext): T =
   let seckey = SkSecretKey(PrivateKey.random(rng))
   KeyPair(SkKeyPair(
     seckey: seckey,

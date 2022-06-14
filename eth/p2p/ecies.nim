@@ -13,7 +13,7 @@
 {.push raises: [Defect].}
 
 import
-  bearssl, stew/[results, endians2],
+  stew/[results, endians2],
   nimcrypto/[rijndael, bcmode, hash, hmac, sha2, utils],
   ../keys
 
@@ -93,7 +93,7 @@ proc kdf*(data: openArray[byte]): array[KeyLength, byte] {.noinit.} =
   ctx.clear() # clean ctx
   copyMem(addr result[0], addr storage[0], KeyLength)
 
-proc eciesEncrypt*(rng: var BrHmacDrbgContext, input: openArray[byte],
+proc eciesEncrypt*(rng: var HmacDrbgContext, input: openArray[byte],
                    output: var openArray[byte], pubkey: PublicKey,
                    sharedmac: openArray[byte] = emptyMac): EciesResult[void] =
   ## Encrypt data with ECIES method using given public key `pubkey`.
@@ -107,12 +107,9 @@ proc eciesEncrypt*(rng: var BrHmacDrbgContext, input: openArray[byte],
     encKey: array[aes128.sizeKey, byte]
     cipher: CTR[aes128]
     ctx: HMAC[sha256]
-    iv: array[aes128.sizeBlock, byte]
 
   if len(output) < eciesEncryptedLength(len(input)):
     return err(BufferOverrun)
-
-  brHmacDrbgGenerate(rng, iv)
 
   var
     ephemeral = KeyPair.random(rng)
@@ -130,13 +127,13 @@ proc eciesEncrypt*(rng: var BrHmacDrbgContext, input: openArray[byte],
   var header = cast[ptr EciesHeader](addr output[0])
   header.version = 0x04
   header.pubkey = ephemeral.pubkey.toRaw()
-  header.iv = iv
+  rng.generate(header[].iv)
 
   clear(ephemeral)
 
   var so = eciesDataPos()
   var eo = so + len(input)
-  cipher.init(encKey, iv)
+  cipher.init(encKey, header.iv)
   cipher.encrypt(input, toOpenArray(output, so, eo))
   burnMem(encKey)
   cipher.clear()

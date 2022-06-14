@@ -9,7 +9,7 @@
 
 import
   std/[tables, hashes, times, algorithm, sets, sequtils, random],
-  chronos, bearssl, chronicles, stint, nimcrypto/keccak,
+  chronos, chronicles, stint, nimcrypto/keccak,
   ../keys,
   ./enode
 
@@ -26,7 +26,7 @@ type
     pongFutures: Table[seq[byte], Future[bool]]
     pingFutures: Table[Node, Future[bool]]
     neighboursCallbacks: Table[Node, proc(n: seq[Node]) {.gcsafe, raises: [Defect].}]
-    rng: ref BrHmacDrbgContext
+    rng: ref HmacDrbgContext
 
   NodeId* = UInt256
 
@@ -452,12 +452,7 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
   result = closest
 
 proc lookupRandom*(k: KademliaProtocol): Future[seq[Node]] =
-  var id: NodeId
-  var buf: array[sizeof(id), byte]
-  brHmacDrbgGenerate(k.rng[], buf)
-  copyMem(addr id, addr buf[0], sizeof(id))
-
-  k.lookup(id)
+  k.lookup(k.rng[].generate(NodeId))
 
 proc resolve*(k: KademliaProtocol, id: NodeId): Future[Node] {.async.} =
   let closest = await k.lookup(id)

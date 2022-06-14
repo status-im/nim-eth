@@ -8,7 +8,7 @@
 
 import
   sequtils,
-  chronos, bearssl,
+  chronos,
   testutils/unittests,
   ./test_utils,
   ../../eth/utp/utp_router,

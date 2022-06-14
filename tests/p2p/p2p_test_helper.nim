@@ -1,6 +1,6 @@
 import
   std/strutils,
-  chronos, bearssl,
+  chronos,
   ../../eth/[keys, p2p], ../../eth/p2p/[discovery, enode]
 
 var nextPort = 30303
@@ -11,7 +11,7 @@ proc localAddress*(port: int): Address =
                    ip: parseIpAddress("127.0.0.1"))
 
 proc setupTestNode*(
-    rng: ref BrHmacDrbgContext,
+    rng: ref HmacDrbgContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode {.gcsafe.} =
   # Don't create new RNG every time in production code!
   let keys1 = KeyPair.random(rng[])

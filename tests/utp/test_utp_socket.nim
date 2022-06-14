@@ -8,7 +8,7 @@
 
 import
   std/[algorithm, random, sequtils, options],
-  chronos, bearssl, chronicles,
+  chronos, chronicles,
   testutils/unittests,
   ./test_utils,
   ../../eth/utp/utp_router,
@@ -186,7 +186,7 @@ procSuite "Utp socket unit test":
       await outgoingSocket.processPacket(p)
 
     var sentAcks: seq[Packet] = @[]
-    
+
     for i in 0'u16..<numOfPackets:
       let ack = await q.get()
       sentAcks.add(ack)
@@ -238,7 +238,7 @@ procSuite "Utp socket unit test":
       await outgoingSocket.processPacket(p)
 
     var sentAcks: seq[Packet] = @[]
-    
+
     for i in 0'u16..<numOfPackets:
       let ack = await q.get()
       sentAcks.add(ack)
@@ -389,7 +389,7 @@ procSuite "Utp socket unit test":
 
     await waitUntil(proc (): bool = outgoingSocket.numPacketsInOutGoingBuffer() == 0)
 
-    let maxWindowAfterSuccesfulSends = outgoingSocket.currentMaxWindowSize() 
+    let maxWindowAfterSuccesfulSends = outgoingSocket.currentMaxWindowSize()
 
     check:
       # after processing a lot of data, our window size should be a lot bigger than our packet size
@@ -397,7 +397,7 @@ procSuite "Utp socket unit test":
 
     # cancel acking process, next writes will for sure timeout
     await acker.cancelAndWait()
-    
+
     # data which fits one packet and will timeout
     let smallerData = generateByteArray(rng[], 100)
 
@@ -411,7 +411,7 @@ procSuite "Utp socket unit test":
 
     # ignore also first re-send
     discard await q.get()
-    
+
     let maxWindowAfterTimeout = outgoingSocket.currentMaxWindowSize()
 
     check:
@@ -1197,7 +1197,7 @@ procSuite "Utp socket unit test":
 
     # write result will be successfull as send buffer has space
     let writeResult = await outgoingSocket.write(someData)
-    
+
     # this will finish in seconds(3) as only after this time window will be set to min value
     let p = await q.get()
 
@@ -1356,7 +1356,7 @@ procSuite "Utp socket unit test":
 
     let writeRes1 = await outgoingSocket.write(dataToWrite1)
     let writeRes2 = await outgoingSocket.write(dataToWrite2)
-    let writeRes3 = await outgoingSocket.write(dataToWrite3)  
+    let writeRes3 = await outgoingSocket.write(dataToWrite3)
 
     check:
       writeRes1.isOk()

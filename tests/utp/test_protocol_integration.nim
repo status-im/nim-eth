@@ -8,7 +8,7 @@
 
 import
   std/[sequtils, tables, options, sugar],
-  chronos, bearssl,
+  chronos,
   testutils/unittests,
   ./test_utils,
   ../../eth/utp/utp_router,
@@ -17,7 +17,7 @@ import
   ../../eth/p2p/discoveryv5/random2
 
 
-proc connectTillSuccess(p: UtpProtocol, to: TransportAddress, maxTries: int = 20): Future[UtpSocket[TransportAddress]] {.async.} = 
+proc connectTillSuccess(p: UtpProtocol, to: TransportAddress, maxTries: int = 20): Future[UtpSocket[TransportAddress]] {.async.} =
   var i = 0
   while true:
     let res = await p.connectTo(to)
@@ -31,7 +31,7 @@ proc connectTillSuccess(p: UtpProtocol, to: TransportAddress, maxTries: int = 20
 
 proc buildAcceptConnection(
     t: ref Table[UtpSocketKey[TransportAddress], UtpSocket[TransportAddress]]
-  ): AcceptConnectionCallback[TransportAddress] = 
+  ): AcceptConnectionCallback[TransportAddress] =
   return (
     proc (server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] =
       let fut = newFuture[void]()
@@ -42,7 +42,7 @@ proc buildAcceptConnection(
   )
 
 proc getServerSocket(
-  t: ref Table[UtpSocketKey[TransportAddress], UtpSocket[TransportAddress]], 
+  t: ref Table[UtpSocketKey[TransportAddress], UtpSocket[TransportAddress]],
   clientAddress: TransportAddress,
   clientConnectionId: uint16): Option[UtpSocket[TransportAddress]] =
   let serverSocketKey = UtpSocketKey[TransportAddress](remoteAddress: clientAddress, rcvId: clientConnectionId + 1)
@@ -68,27 +68,27 @@ procSuite "Utp protocol over udp tests with loss and delays":
         )
     )
 
-  proc testScenario(maxDelay: int, dropRate: int, cfg: SocketConfig = SocketConfig.init()): 
+  proc testScenario(maxDelay: int, dropRate: int, cfg: SocketConfig = SocketConfig.init()):
     Future[(
-      UtpProtocol, 
-      UtpSocket[TransportAddress], 
-      UtpProtocol, 
+      UtpProtocol,
+      UtpSocket[TransportAddress],
+      UtpProtocol,
       UtpSocket[TransportAddress])
     ] {.async.} =
 
     var connections1 = newTable[UtpSocketKey[TransportAddress], UtpSocket[TransportAddress]]()
     let address1 = initTAddress("127.0.0.1", 9080)
-    let utpProt1 = 
+    let utpProt1 =
       UtpProtocol.new(
-        buildAcceptConnection(connections1), 
+        buildAcceptConnection(connections1),
         address1,
         socketConfig = cfg,
-        sendCallbackBuilder = sendBuilder(maxDelay, dropRate), 
+        sendCallbackBuilder = sendBuilder(maxDelay, dropRate),
         rng = rng)
 
     var connections2 = newTable[UtpSocketKey[TransportAddress], UtpSocket[TransportAddress]]()
     let address2 = initTAddress("127.0.0.1", 9081)
-    let utpProt2 = 
+    let utpProt2 =
       UtpProtocol.new(
         buildAcceptConnection(connections2),
         address2,
@@ -112,9 +112,9 @@ procSuite "Utp protocol over udp tests with loss and delays":
     cfg: SocketConfig
 
   proc init(
-    T: type TestCase, 
-    maxDelay: int, 
-    dropRate: int, 
+    T: type TestCase,
+    maxDelay: int,
+    dropRate: int,
     bytesToTransfer: int,
     cfg: SocketConfig = SocketConfig.init(),
     bytesPerRead: int = 0): TestCase =
@@ -152,7 +152,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
 
       discard clientSocket.write(bytesToTransfer)
       discard serverSocket.write(bytesToTransfer)
-      
+
       let serverReadFut = serverSocket.read(numBytes)
       let clientReadFut = clientSocket.read(numBytes)
 
@@ -165,7 +165,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
       check:
         clientRead == bytesToTransfer
         serverRead == bytesToTransfer
-      
+
       await clientProtocol.shutdownWait()
       await serverProtocol.shutdownWait()
 
@@ -184,7 +184,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
       res.add(bytes)
       inc i
     return res
-    
+
   asyncTest "Write and Read large data in different network conditions split over several reads":
     for testCase in testCases1:
 
@@ -208,7 +208,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
 
       discard clientSocket.write(bytesToTransfer)
       discard serverSocket.write(bytesToTransfer)
-      
+
       let numOfReads = int(testCase.bytesToTransfer / testCase.bytesPerRead)
       let serverReadFut = serverSocket.readWithMultipleReads(numOfReads, testCase.bytesPerRead)
       let clientReadFut = clientSocket.readWithMultipleReads(numOfReads, testCase.bytesPerRead)

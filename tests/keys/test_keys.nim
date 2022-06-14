@@ -11,7 +11,7 @@
 
 import
   unittest2,
-  nimcrypto/hash, nimcrypto/keccak, nimcrypto/utils, bearssl, stew/byteutils,
+  nimcrypto/hash, nimcrypto/keccak, nimcrypto/utils, stew/byteutils,
   ../../eth/keys
 
 from strutils import toLowerAscii
@@ -218,8 +218,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
   test "ECDSA/100 signatures":
     # signature test
     for i in 1..100:
-      var m: array[32, byte]
-      brHmacDrbgGenerate(rng[], m)
+      let m = rng[].generate(array[32, byte])
       var s = PrivateKey.random(rng[])
       var key = s.toPublicKey()
       let sig = sign(s, SkMessage(m))

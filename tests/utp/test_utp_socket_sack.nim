@@ -8,7 +8,7 @@
 
 import
   std/[options, sequtils],
-  chronos, bearssl, chronicles,
+  chronos, chronicles,
   stew/bitops2,
   testutils/unittests,
   ./test_utils,
@@ -62,7 +62,7 @@ procSuite "Utp socket selective acks unit test":
       numOfSetBits = numOfSetBits + countOnes(b)
     return numOfSetBits
 
-  proc hasOnlyOneBitSet(arr: openArray[byte]): bool = 
+  proc hasOnlyOneBitSet(arr: openArray[byte]): bool =
     return numOfSetBits(arr) == 1
 
   asyncTest "Socket with empty buffer should generate array with only zeros":
@@ -75,7 +75,7 @@ procSuite "Utp socket selective acks unit test":
 
     check:
       extArray == [0'u8, 0, 0, 0]
-  
+
   asyncTest "Socket should generate correct bit mask for each missing packet":
     # 1 means that received packet is packet just after expected packet i.e
     # packet.seqNr - receivingSocket.ackNr = 2
@@ -113,7 +113,7 @@ procSuite "Utp socket selective acks unit test":
       let bitMask = await connectAndProcessMissingPacketWithIndexes(missingIndexes)
       check:
         numOfSetBits(bitMask) == len(missingIndexes)
-      
+
       for idx in missingIndexes:
         check:
           getBit(bitMask, idx - 1)
@@ -128,7 +128,7 @@ procSuite "Utp socket selective acks unit test":
       check:
         numOfSetBits(bitMask) == 32
         len(bitMask) == 4
-      
+
   type TestCase = object
     # number of packet to generate by writitng side
     numOfPackets: int
@@ -155,7 +155,7 @@ procSuite "Utp socket selective acks unit test":
     outgoingQueue: AsyncQueue[Packet],
     incomingQueue: AsyncQueue[Packet],
     testCase: TestCase): Future[(UtpSocket[TransportAddress], UtpSocket[TransportAddress], seq[Packet])] {.async.} =
-    let (outgoingSocket, incomingSocket) = 
+    let (outgoingSocket, incomingSocket) =
       connectOutGoingSocketWithIncoming(
         initialRemoteSeq,
         outgoingQueue,
@@ -168,7 +168,7 @@ procSuite "Utp socket selective acks unit test":
       discard await outgoingSocket.write(dataToWrite)
       let packet = await outgoingQueue.get()
       packets.add(packet)
-    
+
     for toDeliver in testCase.packetsDelivered:
       await incomingSocket.processPacket(packets[toDeliver])
 
@@ -209,7 +209,7 @@ procSuite "Utp socket selective acks unit test":
 
       let ackedBytes = outgoingSocket.calculateSelectiveAckBytes(finalAck.header.ackNr, finalAck.eack.unsafeGet())
 
-      check: 
+      check:
         int(ackedBytes) == len(testCase.packetsDelivered) * dataSize
 
       await outgoingSocket.destroyWait()
@@ -223,7 +223,7 @@ procSuite "Utp socket selective acks unit test":
     for testCase in selectiveAckTestCases:
       let outgoingQueue = newAsyncQueue[Packet]()
       let incomingQueue = newAsyncQueue[Packet]()
-    
+
       let (outgoingSocket, incomingSocket, _) = await setupTestCase(
         smallData,
         initialRemoteSeq,
@@ -252,8 +252,8 @@ procSuite "Utp socket selective acks unit test":
       await outgoingSocket.processPacket(finalAck)
 
       let expectedPackets = testCase.numOfPackets - len(testCase.packetsDelivered)
-      
-      await waitUntil(proc (): bool =  outgoingSocket.numPacketsInOutGoingBuffer() == expectedPackets) 
+
+      await waitUntil(proc (): bool =  outgoingSocket.numPacketsInOutGoingBuffer() == expectedPackets)
 
       check:
         outgoingSocket.numPacketsInOutGoingBuffer() == expectedPackets
@@ -314,7 +314,7 @@ procSuite "Utp socket selective acks unit test":
           resentPacket.header.seqNr == initialPackets[idx].header.seqNr
 
       let endBufferSize = outgoingSocket.currentMaxWindowSize()
-      
+
       if len(testCase.packetsResent) == 0:
         check:
           # when there is no packet loss (no resent packets), buffer size increases

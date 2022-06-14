@@ -456,18 +456,15 @@ suite "Discovery v5.1 Additional Encode/Decode":
     check decryptGCM(encryptionKey, nonce, invalidCipher, ad).isNone()
 
   test "Encrypt / Decrypt header":
-    var nonce: AESGCMNonce
-    brHmacDrbgGenerate(rng[], nonce)
     let
+      nonce = rng[].generate(AESGCMNonce)
       privKey = PrivateKey.random(rng[])
       nodeId = privKey.toPublicKey().toNodeId()
       authdata = newSeq[byte](32)
       staticHeader = encodeStaticHeader(Flag.OrdinaryMessage, nonce,
         authdata.len())
       header = staticHeader & authdata
-
-    var iv: array[128 div 8, byte]
-    brHmacDrbgGenerate(rng[], iv)
+      iv = rng[].generate(array[128 div 8, byte])
 
     let
       encrypted = encryptHeader(nodeId, iv, header)
@@ -511,8 +508,7 @@ suite "Discovery v5.1 Additional Encode/Decode":
       decoded[].requestNonce == nonce
 
   test "Encode / Decode Whoareyou Packet":
-    var requestNonce: AESGCMNonce
-    brHmacDrbgGenerate(rng[], requestNonce)
+    let requestNonce = rng[].generate(AESGCMNonce)
     let recordSeq = 0'u64
 
     let data = encodeWhoareyouPacket(rng[], codecA, nodeB.id,
@@ -532,9 +528,8 @@ suite "Discovery v5.1 Additional Encode/Decode":
       decoded[].whoareyou.recordSeq == recordSeq
 
   test "Encode / Decode Handshake Message Packet":
-    var requestNonce: AESGCMNonce
-    brHmacDrbgGenerate(rng[], requestNonce)
     let
+      requestNonce = rng[].generate(AESGCMNonce)
       recordSeq = 1'u64
       m = PingMessage(enrSeq: 0)
       reqId = RequestId.init(rng[])
@@ -563,9 +558,8 @@ suite "Discovery v5.1 Additional Encode/Decode":
       decoded.get().node.isNone()
 
   test "Encode / Decode Handshake Message Packet with ENR":
-    var requestNonce: AESGCMNonce
-    brHmacDrbgGenerate(rng[], requestNonce)
     let
+      requestNonce = rng[].generate(AESGCMNonce)
       recordSeq = 0'u64
       m = PingMessage(enrSeq: 0)
       reqId = RequestId.init(rng[])

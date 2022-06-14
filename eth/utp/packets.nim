@@ -10,7 +10,7 @@ import
   std/[monotimes],
   faststreams,
   chronos,
-  stew/[endians2, results, objects, arrayops], bearssl,
+  stew/[endians2, results, objects, arrayops],
   ../p2p/discoveryv5/random2
 
 export results
@@ -80,11 +80,11 @@ proc getMonoTimestamp*(): TimeStampInfo =
   TimeStampInfo(moment: currentMoment, timestamp: timestamp)
 
 # Simple generator, not useful for cryptography
-proc randUint16*(rng: var BrHmacDrbgContext): uint16 =
+proc randUint16*(rng: var HmacDrbgContext): uint16 =
   uint16(rand(rng, int(high(uint16))))
 
 # Simple generator, not useful for cryptography
-proc randUint32*(rng: var BrHmacDrbgContext): uint32 =
+proc randUint32*(rng: var HmacDrbgContext): uint32 =
   uint32(rand(rng, int(high(uint32))))
 
 proc encodeTypeVer(h: PacketHeaderV1): uint8 =

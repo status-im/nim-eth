@@ -8,7 +8,7 @@
 
 import
   std/[tables, options, hashes, sugar, math],
-  chronos, chronicles, bearssl,
+  chronos, chronicles,
   ./utp_router,
   ../keys
 

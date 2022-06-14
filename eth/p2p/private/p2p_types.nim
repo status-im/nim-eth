@@ -8,7 +8,7 @@
 
 import
   std/[deques, tables],
-  bearssl, chronos,
+  chronos,
   stew/results,
   ".."/../[rlp, keys], ".."/../common/eth_types,
   ".."/[enode, kademlia, discovery, rlpxcrypt]
@@ -38,7 +38,7 @@ type
     discovery*: DiscoveryProtocol
     when useSnappy:
       protocolVersion*: uint
-    rng*: ref BrHmacDrbgContext
+    rng*: ref HmacDrbgContext
 
   Peer* = ref object
     remote*: Node

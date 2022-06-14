@@ -2,7 +2,6 @@
 
 import
   unittest2,
-  bearssl,
   ../../eth/keys, ../../eth/p2p/discoveryv5/[routing_table, node, enr],
   ./discv5_test_helper
 
@@ -528,7 +527,7 @@ suite "Routing Table Tests":
     var table = RoutingTable.init(local, 1, ipLimits, rng = rng,
       distanceCalculator = customDistanceCalculator)
 
-    let nodes = generateNRandomNodes(rng, numNodes)
+    let nodes = generateNRandomNodes(rng[], numNodes)
 
     for n in nodes:
       check table.addNode(n) == Added
@@ -548,7 +547,7 @@ suite "Routing Table Tests":
     var table = RoutingTable.init(local, 1, ipLimits, rng = rng,
       distanceCalculator = customDistanceCalculator)
 
-    let nodes = generateNRandomNodes(rng, numNodes)
+    let nodes = generateNRandomNodes(rng[], numNodes)
 
     for n in nodes:
       check table.addNode(n) == Added

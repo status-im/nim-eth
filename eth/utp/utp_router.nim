@@ -8,7 +8,7 @@
 
 import
   std/[tables, options, sugar],
-  chronos, bearssl, chronicles, metrics,
+  chronos, chronicles, metrics,
   ../keys,
   ./utp_socket,
   ./packets
@@ -56,7 +56,7 @@ type
    closed: bool
    sendCb*: SendCallback[A]
    allowConnection*: AllowConnectionCallback[A]
-   rng*: ref BrHmacDrbgContext
+   rng*: ref HmacDrbgContext
 
 const
   # Maximal number of tries to generate unique socket while establishing
