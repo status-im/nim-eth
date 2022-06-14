@@ -13,7 +13,7 @@ import
   stew/[endians2, results, objects, arrayops],
   ../p2p/discoveryv5/random2
 
-export results
+export results, random2
 
 const
   minimalHeaderSize = 20
