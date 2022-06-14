@@ -188,7 +188,7 @@ proc authMessageEIP8(h: var Handshake,
     pencsize = eciesEncryptedLength(len(payload))
 
   var padsize = int(rng.generate(byte)) # aka rand(max)
-  while padsize > (AuthMessageV4Length - (pencsize + 2)):
+  while padsize <= (AuthMessageV4Length - (pencsize + 2)):
     padsize = int(rng.generate(byte))
 
   # It is possible to make packet size constant by uncommenting this line
