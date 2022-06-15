@@ -16,7 +16,6 @@ import
   ../../eth/keys,
   ../../eth/p2p/discoveryv5/random2
 
-
 proc connectTillSuccess(p: UtpProtocol, to: TransportAddress, maxTries: int = 20): Future[UtpSocket[TransportAddress]] {.async.} =
   var i = 0
   while true:
@@ -121,11 +120,10 @@ procSuite "Utp protocol over udp tests with loss and delays":
     TestCase(maxDelay: maxDelay, dropRate: dropRate, bytesToTransfer: bytesToTransfer, cfg: cfg, bytesPerRead: bytesPerRead)
 
   let testCases = @[
-    TestCase.init(45, 10, 40000),
-    TestCase.init(25, 15, 40000),
+    TestCase.init(15, 3, 40000),
     # super small recv buffer which will be constantly on the brink of being full
-    TestCase.init(15, 5, 40000, SocketConfig.init(optRcvBuffer = uint32(6000), remoteWindowResetTimeout = seconds(5))),
-    TestCase.init(15, 10, 40000, SocketConfig.init(optRcvBuffer = uint32(6000), remoteWindowResetTimeout = seconds(5)))
+    TestCase.init(10, 3, 40000, SocketConfig.init(optRcvBuffer = uint32(10000), remoteWindowResetTimeout = seconds(5))),
+    TestCase.init(10, 6, 40000, SocketConfig.init(optRcvBuffer = uint32(10000), remoteWindowResetTimeout = seconds(5)))
   ]
 
   asyncTest "Write and Read large data in different network conditions":
@@ -156,8 +154,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
       let serverReadFut = serverSocket.read(numBytes)
       let clientReadFut = clientSocket.read(numBytes)
 
-      yield serverReadFut
-      yield clientReadFut
+      await allFutures(serverReadFut, clientReadFut)
 
       let clientRead = clientReadFut.read()
       let serverRead = serverReadFut.read()
@@ -171,9 +168,9 @@ procSuite "Utp protocol over udp tests with loss and delays":
 
   let testCases1 = @[
     # small buffers so it will fill up between reads
-    TestCase.init(15, 5, 40000, SocketConfig.init(optRcvBuffer = uint32(6000), remoteWindowResetTimeout = seconds(5)), 10000),
-    TestCase.init(15, 10, 40000, SocketConfig.init(optRcvBuffer = uint32(6000), remoteWindowResetTimeout = seconds(5)), 10000),
-    TestCase.init(15, 15, 40000, SocketConfig.init(optRcvBuffer = uint32(6000), remoteWindowResetTimeout = seconds(5)), 10000)
+    TestCase.init(5, 3, 40000, SocketConfig.init(optRcvBuffer = uint32(10000), remoteWindowResetTimeout = seconds(5)), 10000),
+    TestCase.init(10, 6, 40000, SocketConfig.init(optRcvBuffer = uint32(10000), remoteWindowResetTimeout = seconds(5)), 10000),
+    TestCase.init(15, 6, 40000, SocketConfig.init(optRcvBuffer = uint32(10000), remoteWindowResetTimeout = seconds(5)), 10000)
   ]
 
   proc readWithMultipleReads(s: UtpSocket[TransportAddress], numOfReads: int, bytesPerRead: int): Future[seq[byte]] {.async.}=
@@ -213,9 +210,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
       let serverReadFut = serverSocket.readWithMultipleReads(numOfReads, testCase.bytesPerRead)
       let clientReadFut = clientSocket.readWithMultipleReads(numOfReads, testCase.bytesPerRead)
 
-      yield serverReadFut
-
-      yield clientReadFut
+      await allFutures(serverReadFut, clientReadFut)
 
       let clientRead = clientReadFut.read()
       let serverRead = serverReadFut.read()
@@ -228,10 +223,9 @@ procSuite "Utp protocol over udp tests with loss and delays":
       await serverProtocol.shutdownWait()
 
   let testCase2 = @[
-    TestCase.init(45, 0, 40000),
-    TestCase.init(45, 0, 80000),
-    TestCase.init(25, 15, 40000),
-    TestCase.init(15, 5, 40000, SocketConfig.init(optRcvBuffer = uint32(10000), remoteWindowResetTimeout = seconds(5)))
+    TestCase.init(10, 0, 80000),
+    TestCase.init(10, 3, 40000),
+    TestCase.init(15, 6, 40000, SocketConfig.init(optRcvBuffer = uint32(10000), remoteWindowResetTimeout = seconds(5)))
   ]
 
   asyncTest "Write large data and read till EOF":
