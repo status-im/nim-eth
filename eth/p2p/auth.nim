@@ -65,6 +65,7 @@ type
     InvalidAck      = "auth: invalid Authentication ACK message"
     RlpError        = "auth: error while decoding RLP stream"
     IncompleteError = "auth: data incomplete"
+    MalformedPacket = "auth: malformed message data"
 
   Handshake* = object
     version*: uint8             ## protocol version
@@ -404,6 +405,8 @@ proc decodeAuthMessageEIP8(h: var Handshake, m: openArray[byte]): AuthResult[voi
     h.remoteHPubkey = pubkey
     h.version = versionBr[0]
     ok()
+  except system.RangeError:
+    err(MalformedPacket)
   except CatchableError:
     err(RlpError)
 

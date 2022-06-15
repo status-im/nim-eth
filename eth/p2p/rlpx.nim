@@ -62,22 +62,25 @@ proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
     # Be strict here: The expression `rlp.read(DisconnectionReasonList)`
     # accepts lists with at least one item. The array expression wants
     # exactly one item.
-    return DisconnectionReasonList(
-      value: rlp.read(array[1,DisconnectionReason])[0])
+    if rlp.rawData.len < 3:
+      # avoids looping through all items when parsing for an overlarge array
+      return DisconnectionReasonList(
+        value: rlp.read(array[1,DisconnectionReason])[0])
 
   # Also accepted: a single byte reason code. Is is typically used
   # by variants of the reference implementation `Geth`
-  if rlp.blobLen <= 1:
+  elif rlp.blobLen <= 1:
     return DisconnectionReasonList(
       value: rlp.read(DisconnectionReason))
 
   # Also accepted: a blob of a list (aka object) of reason code. It is
   # used by `bor`, a `geth` fork
-  var subList = rlp.toBytes.rlpFromBytes
-  if subList.isList:
-    # Ditto, see above.
-    return DisconnectionReasonList(
-      value: subList.read(array[1,DisconnectionReason])[0])
+  elif rlp.blobLen < 4:
+    var subList = rlp.toBytes.rlpFromBytes
+    if subList.isList:
+      # Ditto, see above.
+      return DisconnectionReasonList(
+        value: subList.read(array[1,DisconnectionReason])[0])
 
   raise newException(RlpTypeMismatch, "Single entry list expected")
 
