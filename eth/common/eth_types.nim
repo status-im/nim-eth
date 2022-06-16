@@ -454,21 +454,16 @@ proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.inline.} =
   let txType = rlp.getByteValue
   rlp.position += 1
 
-  try:
-    case TxType(txType):
-      of TxEip2930:
-        rlp.readTxEip2930(tx)
-        return
-      of TxEip1559:
-        rlp.readTxEip1559(tx)
-        return
-      else:
-        discard
-  except RangeError:
-    discard
-
-  raise newException(UnsupportedRlpError,
-    "TypedTransaction type must be 1 or 2 in this version, got " & $txType)
+  case txType.int:
+    of TxEip2930.ord:
+      rlp.readTxEip2930(tx)
+      return
+    of TxEip1559.ord:
+      rlp.readTxEip1559(tx)
+      return
+    else:
+      raise newException(UnsupportedRlpError,
+        "TypedTransaction type must be 1 or 2 in this version, got " & $txType)
 
 
 proc read*(rlp: var Rlp, T: type Transaction): T =
