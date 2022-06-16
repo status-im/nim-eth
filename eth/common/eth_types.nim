@@ -3,6 +3,9 @@ import
   stew/[endians2, byteutils], chronicles, stint, nimcrypto/[keccak, hash],
   ../rlp, ../trie/[trie_defs, db]
 
+from stew/objects
+  import checkedEnumAssign
+
 export
   stint, read, append, KeccakHash, rlp, options
 
@@ -454,14 +457,21 @@ proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.inline.} =
   let txType = rlp.getByteValue
   rlp.position += 1
 
-  case TxType(txType):
+  var txVal: TxType
+  if checkedEnumAssign(txVal, txType):
+    case txVal:
     of TxEip2930:
       rlp.readTxEip2930(tx)
+      return
     of TxEip1559:
       rlp.readTxEip1559(tx)
+      return
     else:
-      raise newException(UnsupportedRlpError,
-        "TypedTransaction type must be 1 or 2 in this version, got " & $txType)
+      discard
+
+  raise newException(UnsupportedRlpError,
+    "TypedTransaction type must be 1 or 2 in this version, got " & $txType)
+
 
 proc read*(rlp: var Rlp, T: type Transaction): T =
   # Individual transactions are encoded and stored as either `RLP([fields..])`
