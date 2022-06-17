@@ -9,11 +9,6 @@ type AssertionCallback = proc(): bool {.gcsafe, raises: [Defect].}
 let testBufferSize = 1024'u32
 let defaultRcvOutgoingId = 314'u16
 
-proc generateByteArray*(rng: var HmacDrbgContext, length: int): seq[byte] =
-  var bytes = newSeq[byte](length)
-  rng.generate(bytes)
-  bytes
-
 proc waitUntil*(f: AssertionCallback): Future[void] {.async.} =
   while true:
     let res = f()
@@ -101,7 +96,7 @@ proc generateDataPackets*(
       connectionId,
       ackNr,
       testBufferSize,
-      generateByteArray(rng, packetSize),
+      rng.generateBytes(packetSize),
       0
     )
     packets.add(packet)
