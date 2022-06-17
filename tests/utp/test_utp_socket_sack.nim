@@ -179,7 +179,7 @@ procSuite "Utp socket selective acks unit test":
   asyncTest "Socket should calculate number of bytes acked by selective acks":
     let dataSize = 10
     let initialRemoteSeq = 10'u16
-    let smallData = generateByteArray(rng[], 10)
+    let smallData = rng[].generateBytes(10)
 
     for testCase in selectiveAckTestCases:
       let outgoingQueue = newAsyncQueue[Packet]()
@@ -218,7 +218,7 @@ procSuite "Utp socket selective acks unit test":
   asyncTest "Socket should ack packets based on selective ack packet":
     let dataSize = 10
     let initialRemoteSeq = 10'u16
-    let smallData = generateByteArray(rng[], 10)
+    let smallData = rng[].generateBytes(10)
 
     for testCase in selectiveAckTestCases:
       let outgoingQueue = newAsyncQueue[Packet]()
@@ -276,7 +276,7 @@ procSuite "Utp socket selective acks unit test":
   asyncTest "Socket should re-send packets when there are at least 3 packets acked ahead":
     let dataSize = 10
     let initialRemoteSeq = 10'u16
-    let smallData = generateByteArray(rng[], 10)
+    let smallData = rng[].generateBytes(10)
 
     for testCase in packetResendTestCases:
       let outgoingQueue = newAsyncQueue[Packet]()

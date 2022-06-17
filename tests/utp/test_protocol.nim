@@ -210,7 +210,7 @@ procSuite "Utp protocol over udp tests":
       # Server socket is not in connected state, until first data transfer
       (not s.serverSocket.isConnected())
 
-    let bytesToTransfer = generateByteArray(rng[], 100)
+    let bytesToTransfer = rng[].generateBytes(100)
 
     let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
 
@@ -237,7 +237,7 @@ procSuite "Utp protocol over udp tests":
       (not s.serverSocket.isConnected())
 
     # 5000 bytes is over maximal packet size
-    let bytesToTransfer = generateByteArray(rng[], 5000)
+    let bytesToTransfer = rng[].generateBytes(5000)
 
     let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
     let bytesReceivedFromServer = await transferData(s.serverSocket, s.clientSocket, bytesToTransfer)
@@ -266,14 +266,14 @@ procSuite "Utp protocol over udp tests":
 
 
     # 5000 bytes is over maximal packet size
-    let bytesToTransfer = generateByteArray(rng[], 5000)
+    let bytesToTransfer = rng[].generateBytes(5000)
 
     let written = await s.clientSocket.write(bytesToTransfer)
 
     check:
       written.get() == len(bytesToTransfer)
 
-    let bytesToTransfer1 = generateByteArray(rng[], 5000)
+    let bytesToTransfer1 = rng[].generateBytes(5000)
 
     let written1 = await s.clientSocket.write(bytesToTransfer1)
 
@@ -301,8 +301,8 @@ procSuite "Utp protocol over udp tests":
       s.clientSocket2.numPacketsInOutGoingBuffer() == 0
 
     let numBytesToTransfer = 5000
-    let client1Data = generateByteArray(rng[], numBytesToTransfer)
-    let client2Data = generateByteArray(rng[], numBytesToTransfer)
+    let client1Data = rng[].generateBytes(numBytesToTransfer)
+    let client2Data = rng[].generateBytes(numBytesToTransfer)
 
     discard s.clientSocket1.write(client1Data)
     discard s.clientSocket2.write(client2Data)
@@ -327,7 +327,7 @@ procSuite "Utp protocol over udp tests":
       # Server socket is not in connected state, until first data transfer
       (not s.serverSocket.isConnected())
 
-    let bytesToTransfer = generateByteArray(rng[], 100)
+    let bytesToTransfer = rng[].generateBytes(100)
 
     let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
 
@@ -362,9 +362,9 @@ procSuite "Utp protocol over udp tests":
       # Server socket is not in connected state, until first data transfer
       (not s.serverSocket.isConnected())
 
-    let bytesToTransfer1 = generateByteArray(rng[], 1000)
-    let bytesToTransfer2 = generateByteArray(rng[], 1000)
-    let bytesToTransfer3 = generateByteArray(rng[], 1000)
+    let bytesToTransfer1 = rng[].generateBytes(1000)
+    let bytesToTransfer2 = rng[].generateBytes(1000)
+    let bytesToTransfer3 = rng[].generateBytes(1000)
 
     let w1 = await s.clientSocket.write(bytesToTransfer1)
     let w2 = await s.clientSocket.write(bytesToTransfer2)
@@ -436,7 +436,7 @@ procSuite "Utp protocol over udp tests":
       (not s.serverSocket.isConnected())
 
     # big transfer of 50kb
-    let bytesToTransfer = generateByteArray(rng[], 50000)
+    let bytesToTransfer = rng[].generateBytes(50000)
 
     let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
 
@@ -468,7 +468,7 @@ procSuite "Utp protocol over udp tests":
       (not s.serverSocket.isConnected())
 
     # big transfer of 50kb
-    let bytesToTransfer = generateByteArray(rng[], 50000)
+    let bytesToTransfer = rng[].generateBytes(50000)
 
     let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
 

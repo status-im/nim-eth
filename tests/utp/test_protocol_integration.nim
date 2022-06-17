@@ -138,7 +138,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
         serverSocket) = await testScenario(testCase.maxDelay, testCase.dropRate, testcase.cfg)
 
       let smallBytes = 10
-      let smallBytesToTransfer = generateByteArray(rng[], smallBytes)
+      let smallBytesToTransfer = rng[].generateBytes(smallBytes)
       # first transfer and read to make server socket connecteced
       let write1 = await clientSocket.write(smallBytesToTransfer)
       let read1 = await serverSocket.read(smallBytes)
@@ -148,7 +148,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
         read1 == smallBytesToTransfer
 
       let numBytes = testCase.bytesToTransfer
-      let bytesToTransfer = generateByteArray(rng[], numBytes)
+      let bytesToTransfer = rng[].generateBytes(numBytes)
 
       discard clientSocket.write(bytesToTransfer)
       discard serverSocket.write(bytesToTransfer)
@@ -195,7 +195,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
         serverSocket) = await testScenario(testCase.maxDelay, testCase.dropRate, testcase.cfg)
 
       let smallBytes = 10
-      let smallBytesToTransfer = generateByteArray(rng[], smallBytes)
+      let smallBytesToTransfer = rng[].generateBytes(smallBytes)
       # first transfer and read to make server socket connecteced
       let write1 = await clientSocket.write(smallBytesToTransfer)
       let read1 = await serverSocket.read(smallBytes)
@@ -204,7 +204,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
         read1 == smallBytesToTransfer
 
       let numBytes = testCase.bytesToTransfer
-      let bytesToTransfer = generateByteArray(rng[], numBytes)
+      let bytesToTransfer = rng[].generateBytes(numBytes)
 
       discard clientSocket.write(bytesToTransfer)
       discard serverSocket.write(bytesToTransfer)
@@ -244,7 +244,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
 
 
       let numBytes = testCase.bytesToTransfer
-      let bytesToTransfer = generateByteArray(rng[], numBytes)
+      let bytesToTransfer = rng[].generateBytes(numBytes)
 
       discard await clientSocket.write(bytesToTransfer)
       clientSocket.close()

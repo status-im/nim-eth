@@ -17,11 +17,6 @@ import
   ../../eth/keys,
   ../p2p/discv5_test_helper
 
-proc generateByteArray(rng: var HmacDrbgContext, length: int): seq[byte] =
-  var bytes = newSeq[byte](length)
-  rng.generate(bytes)
-  bytes
-
 procSuite "Utp protocol over discovery v5 tests":
   let rng = newRng()
   let utpProtId = "test-utp".toBytes()
@@ -91,7 +86,7 @@ procSuite "Utp protocol over discovery v5 tests":
 
     let serverSocket = await queue.get()
 
-    let bytesToTransfer = generateByteArray(rng[], numOfBytes)
+    let bytesToTransfer = rng[].generateBytes(numOfBytes)
     let written = await clientSocket.write(bytesToTransfer)
 
     let received = await serverSocket.read(numOfBytes)
