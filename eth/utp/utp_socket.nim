@@ -8,7 +8,7 @@
 
 import
   std/[sugar, deques],
-  chronos, chronicles, bearssl,
+  chronos, chronicles,
   stew/[results, bitops2],
   ./growable_buffer,
   ./packets,
@@ -1880,7 +1880,7 @@ proc newOutgoingSocket*[A](
   snd: SendCallback[A],
   cfg: SocketConfig,
   rcvConnectionId: uint16,
-  rng: var BrHmacDrbgContext
+  rng: var HmacDrbgContext
 ): UtpSocket[A] =
   let sndConnectionId = rcvConnectionId + 1
   let initialSeqNr = randUint16(rng)
@@ -1905,7 +1905,7 @@ proc newIncomingSocket*[A](
   cfg: SocketConfig,
   connectionId: uint16,
   ackNr: uint16,
-  rng: var BrHmacDrbgContext
+  rng: var HmacDrbgContext
 ): UtpSocket[A] =
   let initialSeqNr = randUint16(rng)
 

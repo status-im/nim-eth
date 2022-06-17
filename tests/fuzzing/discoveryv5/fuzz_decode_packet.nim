@@ -28,9 +28,9 @@ test:
   # It is not the best idea to generate extra data and encrypt data but we do
   # it like this as the decodeHeader proc does decrypt + decode + decrypt.
   # There is no separate decrypt step that can be skipped because of this.
-  var iv: array[ivSize, byte]
-  brHmacDrbgGenerate(rng[], iv)
-  let maskedHeader = encryptHeader(nodeB.id, iv, payload)
+  let
+    iv = rng[].generate(array[ivSize, byte])
+    maskedHeader = encryptHeader(nodeB.id, iv, payload)
 
   let decoded = decodePacket(codecB, nodeA.address.get(), @iv & maskedHeader)
   if decoded.isErr():

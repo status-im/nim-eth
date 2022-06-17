@@ -1,5 +1,5 @@
 import
-  stew/shims/net, bearssl, chronos,
+  stew/shims/net, chronos,
   ../../eth/keys,
   ../../eth/p2p/discoveryv5/[enr, node, routing_table],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol
@@ -10,7 +10,7 @@ proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
 
 proc initDiscoveryNode*(
-    rng: ref BrHmacDrbgContext,
+    rng: ref HmacDrbgContext,
     privKey: PrivateKey,
     address: Address,
     bootstrapRecords: openArray[Record] = [],
@@ -47,14 +47,14 @@ proc generateNode*(privKey: PrivateKey, port: int = 20302,
     some(port), some(port), localEnrFields).expect("Properly intialized private key")
   result = newNode(enr).expect("Properly initialized node")
 
-proc generateNRandomNodes*(rng: ref BrHmacDrbgContext, n: int): seq[Node] =
+proc generateNRandomNodes*(rng: var HmacDrbgContext, n: int): seq[Node] =
   var res = newSeq[Node]()
   for i in 1..n:
-    let node = generateNode(PrivateKey.random(rng[]))
+    let node = generateNode(PrivateKey.random(rng))
     res.add(node)
   res
 
-proc nodeAndPrivKeyAtDistance*(n: Node, rng: var BrHmacDrbgContext, d: uint32,
+proc nodeAndPrivKeyAtDistance*(n: Node, rng: var HmacDrbgContext, d: uint32,
     ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1")): (Node, PrivateKey) =
   while true:
     let pk = PrivateKey.random(rng)
@@ -62,19 +62,19 @@ proc nodeAndPrivKeyAtDistance*(n: Node, rng: var BrHmacDrbgContext, d: uint32,
     if logDistance(n.id, node.id) == d:
       return (node, pk)
 
-proc nodeAtDistance*(n: Node, rng: var BrHmacDrbgContext, d: uint32,
+proc nodeAtDistance*(n: Node, rng: var HmacDrbgContext, d: uint32,
     ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1")): Node =
   let (node, _) = n.nodeAndPrivKeyAtDistance(rng, d, ip)
   node
 
 proc nodesAtDistance*(
-    n: Node, rng: var BrHmacDrbgContext, d: uint32, amount: int,
+    n: Node, rng: var HmacDrbgContext, d: uint32, amount: int,
     ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1")): seq[Node] =
   for i in 0..<amount:
     result.add(nodeAtDistance(n, rng, d, ip))
 
 proc nodesAtDistanceUniqueIp*(
-    n: Node, rng: var BrHmacDrbgContext, d: uint32, amount: int,
+    n: Node, rng: var HmacDrbgContext, d: uint32, amount: int,
     ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1")): seq[Node] =
   var ta = initTAddress(ip, Port(0))
   for i in 0..<amount:

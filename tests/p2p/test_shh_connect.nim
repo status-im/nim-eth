@@ -11,7 +11,7 @@
 
 import
   std/[sequtils, options, tables],
-  chronos, testutils/unittests, bearssl,
+  chronos, testutils/unittests,
   ../../eth/[keys, p2p], ../../eth/p2p/peer_pool,
   ../../eth/p2p/rlpx_protocols/whisper_protocol,
   ./p2p_test_helper

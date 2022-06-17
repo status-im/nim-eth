@@ -8,7 +8,7 @@
 
 import
   std/[hashes, options],
-  chronos, bearssl, chronicles,
+  chronos, chronicles,
   testutils/unittests,
   ./test_utils,
   ../../eth/utp/utp_router,
@@ -313,7 +313,7 @@ procSuite "Utp router unit tests":
     let connectResult = await connectFuture
 
     await waitUntil(proc (): bool = router.len() == 0)
-    
+
     check:
       connectResult.isErr()
       connectResult.error().kind == ConnectionTimedOut
@@ -356,7 +356,7 @@ procSuite "Utp router unit tests":
 
     check:
       connectResult.isErr()
-      # even though send is failing we will just finish with timeout, 
+      # even though send is failing we will just finish with timeout,
       connectResult.error().kind == ConnectionTimedOut
       router.len() == 0
 

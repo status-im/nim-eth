@@ -9,11 +9,6 @@ type AssertionCallback = proc(): bool {.gcsafe, raises: [Defect].}
 let testBufferSize = 1024'u32
 let defaultRcvOutgoingId = 314'u16
 
-proc generateByteArray*(rng: var BrHmacDrbgContext, length: int): seq[byte] =
-  var bytes = newSeq[byte](length)
-  brHmacDrbgGenerate(rng, bytes)
-  return bytes
-
 proc waitUntil*(f: AssertionCallback): Future[void] {.async.} =
   while true:
     let res = f()
@@ -65,7 +60,7 @@ template connectOutGoingSocketWithIncoming*(
 
   let incomingSocket = newIncomingSocket[TransportAddress](
     testAddress,
-    initTestSnd(incomingQueue), 
+    initTestSnd(incomingQueue),
     cfg,
     initialPacket.header.connectionId,
     initialPacket.header.seqNr,
@@ -77,9 +72,9 @@ template connectOutGoingSocketWithIncoming*(
   let responseAck = await incomingQueue.get()
 
   await outgoingSocket.processPacket(responseAck)
-  
+
   await waitUntil(proc (): bool = outgoingSocket.isConnected())
-  
+
   check:
     outgoingSocket.isConnected()
 
@@ -91,7 +86,7 @@ proc generateDataPackets*(
   initialSeqNr: uint16,
   connectionId: uint16,
   ackNr: uint16,
-  rng: var BrHmacDrbgContext): seq[Packet] =
+  rng: var HmacDrbgContext): seq[Packet] =
   let packetSize = 100
   var packets = newSeq[Packet]()
   var i = 0'u16
@@ -101,7 +96,7 @@ proc generateDataPackets*(
       connectionId,
       ackNr,
       testBufferSize,
-      generateByteArray(rng, packetSize),
+      rng.generateBytes(packetSize),
       0
     )
     packets.add(packet)

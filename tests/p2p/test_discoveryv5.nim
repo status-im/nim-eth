@@ -3,7 +3,7 @@
 import
   std/[tables, sequtils],
   chronos, chronicles, stint, testutils/unittests, stew/shims/net,
-  stew/byteutils, bearssl,
+  stew/byteutils,
   ../../eth/keys,
   ../../eth/p2p/discoveryv5/[enr, node, routing_table, encoding, sessions,
     messages, nodes_verification],

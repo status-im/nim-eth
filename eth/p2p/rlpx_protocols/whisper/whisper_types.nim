@@ -9,7 +9,7 @@
 
 import
   std/[algorithm, bitops, math, options, tables, times, hashes],
-  chronicles, stew/[byteutils, endians2], metrics, bearssl,
+  chronicles, stew/[byteutils, endians2], metrics,
   nimcrypto/[bcmode, hash, keccak, rijndael],
   ".."/../../[keys, rlp, p2p], ../../ecies
 
@@ -160,10 +160,8 @@ proc topicBloom*(topic: Topic): Bloom =
     doAssert idx <= 511
     result[idx div 8] = result[idx div 8] or byte(1 shl (idx and 7'u16))
 
-proc generateRandomID*(rng: var BrHmacDrbgContext): string =
-  var bytes: array[256 div 8, byte]
-  brHmacDrbgGenerate(rng, bytes)
-  toHex(bytes)
+proc generateRandomID*(rng: var HmacDrbgContext): string =
+  toHex(rng.generate(array[256 div 8, byte]))
 
 proc `or`(a, b: Bloom): Bloom =
   for i in 0..<a.len:
@@ -231,7 +229,7 @@ proc decryptAesGcm(cipher: openArray[byte], key: SymKey): Option[seq[byte]] =
 # simply because that makes it closer to EIP 627 - see also:
 # https://github.com/paritytech/parity-ethereum/issues/9652
 
-proc encode*(rng: var BrHmacDrbgContext, self: Payload): Option[seq[byte]] =
+proc encode*(rng: var HmacDrbgContext, self: Payload): Option[seq[byte]] =
   ## Encode a payload according so as to make it suitable to put in an Envelope
   ## The format follows EIP 627 - https://eips.ethereum.org/EIPS/eip-627
 
@@ -284,7 +282,7 @@ proc encode*(rng: var BrHmacDrbgContext, self: Payload): Option[seq[byte]] =
     plain.add self.padding.get()
   else:
     var padding = newSeq[byte](padLen)
-    brHmacDrbgGenerate(rng, padding)
+    rng.generate(padding)
 
     plain.add padding
 
@@ -302,8 +300,7 @@ proc encode*(rng: var BrHmacDrbgContext, self: Payload): Option[seq[byte]] =
     return some(res)
 
   if self.symKey.isSome(): # Symmetric key present - encryption requested
-    var iv: array[gcmIVLen, byte]
-    brHmacDrbgGenerate(rng, iv)
+    let iv = rng.generate(array[gcmIVLen, byte])
 
     return some(encryptAesGcm(plain, self.symKey.get(), iv))
 
@@ -579,7 +576,7 @@ proc initFilter*(src = none[PublicKey](), privateKey = none[PrivateKey](),
          powReq: powReq, allowP2P: allowP2P, bloom: toBloom(topics))
 
 proc subscribeFilter*(
-    rng: var BrHmacDrbgContext, filters: var Filters, filter: Filter,
+    rng: var HmacDrbgContext, filters: var Filters, filter: Filter,
     handler: FilterMsgHandler = nil): string =
   # NOTE: Should we allow a filter without a key? Encryption is mandatory in v6?
   # Check if asymmetric _and_ symmetric key? Now asymmetric just has precedence.

@@ -83,7 +83,7 @@
 import
   std/[tables, sets, options, math, sequtils, algorithm],
   stew/shims/net as stewNet, json_serialization/std/net,
-  stew/[endians2, results], chronicles, chronos, stint, bearssl, metrics,
+  stew/[endians2, results], chronicles, chronos, stint, metrics,
   ".."/../[rlp, keys, async_utils],
   "."/[messages, encoding, node, routing_table, enr, random2, sessions, ip_vote,
     nodes_verification]
@@ -147,7 +147,7 @@ type
     enrAutoUpdate: bool
     talkProtocols*: Table[seq[byte], TalkProtocol] # TODO: Table is a bit of
     # overkill here, use sequence
-    rng*: ref BrHmacDrbgContext
+    rng*: ref HmacDrbgContext
 
   PendingRequest = object
     node: Node

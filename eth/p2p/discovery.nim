@@ -9,7 +9,7 @@
 
 import
   std/times,
-  chronos, stint, nimcrypto/keccak, chronicles, bearssl,
+  chronos, stint, nimcrypto/keccak, chronicles,
   stew/[objects, results],
   ".."/[keys, rlp],
   "."/[kademlia, enode]

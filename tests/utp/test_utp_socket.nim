@@ -8,7 +8,7 @@
 
 import
   std/[algorithm, random, sequtils, options],
-  chronos, bearssl, chronicles,
+  chronos, chronicles,
   testutils/unittests,
   ./test_utils,
   ../../eth/utp/utp_router,
@@ -186,7 +186,7 @@ procSuite "Utp socket unit test":
       await outgoingSocket.processPacket(p)
 
     var sentAcks: seq[Packet] = @[]
-    
+
     for i in 0'u16..<numOfPackets:
       let ack = await q.get()
       sentAcks.add(ack)
@@ -238,7 +238,7 @@ procSuite "Utp socket unit test":
       await outgoingSocket.processPacket(p)
 
     var sentAcks: seq[Packet] = @[]
-    
+
     for i in 0'u16..<numOfPackets:
       let ack = await q.get()
       sentAcks.add(ack)
@@ -378,7 +378,7 @@ procSuite "Utp socket unit test":
     let initialRemoteSeq = 10'u16
 
     # lot of data which will generate at least 5 packets
-    let bigDataTowWrite = generateByteArray(rng[], 10000)
+    let bigDataTowWrite = rng[].generateBytes(10000)
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
 
     let acker = outgoingSocket.ackAllPacket(q, initialRemoteSeq)
@@ -389,7 +389,7 @@ procSuite "Utp socket unit test":
 
     await waitUntil(proc (): bool = outgoingSocket.numPacketsInOutGoingBuffer() == 0)
 
-    let maxWindowAfterSuccesfulSends = outgoingSocket.currentMaxWindowSize() 
+    let maxWindowAfterSuccesfulSends = outgoingSocket.currentMaxWindowSize()
 
     check:
       # after processing a lot of data, our window size should be a lot bigger than our packet size
@@ -397,9 +397,9 @@ procSuite "Utp socket unit test":
 
     # cancel acking process, next writes will for sure timeout
     await acker.cancelAndWait()
-    
+
     # data which fits one packet and will timeout
-    let smallerData = generateByteArray(rng[], 100)
+    let smallerData = rng[].generateBytes(100)
 
     let bytesWritten1 = await outgoingSocket.write(smallerData)
 
@@ -411,7 +411,7 @@ procSuite "Utp socket unit test":
 
     # ignore also first re-send
     discard await q.get()
-    
+
     let maxWindowAfterTimeout = outgoingSocket.currentMaxWindowSize()
 
     check:
@@ -1059,7 +1059,7 @@ procSuite "Utp socket unit test":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
 
-    let dataToWrite = generateByteArray(rng[], 1001)
+    let dataToWrite = rng[].generateBytes(1001)
 
     # remote is initialized with buffer to small to handle whole payload
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q, cfg = SocketConfig.init(optSndBuffer = 1000))
@@ -1101,7 +1101,7 @@ procSuite "Utp socket unit test":
     # remote is initialized with buffer to small to handle whole payload
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q, cfg = SocketConfig.init(optSndBuffer = 1160))
 
-    let twoPacketData = generateByteArray(rng[], int(dataToWirte))
+    let twoPacketData = rng[].generateBytes(int(dataToWirte))
 
     let writeResult = await outgoingSocket.write(twoPacketData)
 
@@ -1140,7 +1140,7 @@ procSuite "Utp socket unit test":
     # we are using ack from remote to setup our snd window size to one packet size on one packet
     await outgoingSocket.processPacket(someAckFromRemote)
 
-    let twoPacketData = generateByteArray(rng[], int(2 * remoteRcvWindowSize))
+    let twoPacketData = rng[].generateBytes(int(2 * remoteRcvWindowSize))
 
     let writeFut = outgoingSocket.write(twoPacketData)
 
@@ -1197,7 +1197,7 @@ procSuite "Utp socket unit test":
 
     # write result will be successfull as send buffer has space
     let writeResult = await outgoingSocket.write(someData)
-    
+
     # this will finish in seconds(3) as only after this time window will be set to min value
     let p = await q.get()
 
@@ -1356,7 +1356,7 @@ procSuite "Utp socket unit test":
 
     let writeRes1 = await outgoingSocket.write(dataToWrite1)
     let writeRes2 = await outgoingSocket.write(dataToWrite2)
-    let writeRes3 = await outgoingSocket.write(dataToWrite3)  
+    let writeRes3 = await outgoingSocket.write(dataToWrite3)
 
     check:
       writeRes1.isOk()
@@ -1529,7 +1529,7 @@ procSuite "Utp socket unit test":
   asyncTest "Maximum payload size should be configurable":
     let q = newAsyncQueue[Packet]()
     let initalRemoteSeqNr = 10'u16
-    let d = generateByteArray(rng[], 5000)
+    let d = rng[].generateBytes(5000)
     let maxPayloadSize = 800'u32
     let config = SocketConfig.init(payloadSize = maxPayloadSize)
 

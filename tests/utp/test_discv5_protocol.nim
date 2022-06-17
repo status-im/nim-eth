@@ -8,7 +8,7 @@
 
 import
   std/options,
-  chronos, bearssl,
+  chronos,
   stew/shims/net, stew/byteutils,
   testutils/unittests,
   ../../eth/p2p/discoveryv5/[enr, node, routing_table],
@@ -16,11 +16,6 @@ import
   ../../eth/utp/utp_discv5_protocol,
   ../../eth/keys,
   ../p2p/discv5_test_helper
-
-proc generateByteArray(rng: var BrHmacDrbgContext, length: int): seq[byte] =
-  var bytes = newSeq[byte](length)
-  brHmacDrbgGenerate(rng, bytes)
-  return bytes
 
 procSuite "Utp protocol over discovery v5 tests":
   let rng = newRng()
@@ -91,7 +86,7 @@ procSuite "Utp protocol over discovery v5 tests":
 
     let serverSocket = await queue.get()
 
-    let bytesToTransfer = generateByteArray(rng[], numOfBytes)
+    let bytesToTransfer = rng[].generateBytes(numOfBytes)
     let written = await clientSocket.write(bytesToTransfer)
 
     let received = await serverSocket.read(numOfBytes)
