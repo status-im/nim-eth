@@ -1,7 +1,7 @@
 import
-  testutils/fuzzing, chronos,
+ testutils/fuzzing, chronos,
   ../../../eth/p2p, ../../../eth/p2p/rlpx, ../../../eth/p2p/private/p2p_types,
-  ../../../eth/p2p/rlpx_protocols/[whisper_protocol, eth_protocol],
+  ../../../eth/p2p/rlpx_protocols/eth_protocol,
   ../../p2p/p2p_test_helper
 
 var
@@ -14,8 +14,8 @@ let rng = newRng()
 # to mock more to get rid of anything sockets, async, etc.
 # However, it can and has provided reasonably quick results anyhow.
 init:
-  node1 = setupTestNode(rng, eth, Whisper)
-  node2 = setupTestNode(rng, eth, Whisper)
+  node1 = setupTestNode(rng, eth)
+  node2 = setupTestNode(rng, eth)
 
   node2.startListening()
   peer = waitFor node1.rlpxConnect(newNode(node2.toENode()))

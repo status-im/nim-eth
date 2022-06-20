@@ -7,7 +7,7 @@
   "Message id that is not supported": {
     "payload": "08",
     "error": "UnsupportedMessageError",
-    "description": "This is a message id not used by devp2p, eth or whisper"
+    "description": "This is a message id not used by devp2p or eth"
   },
   "Message id that is bigger than int32": {
     "payload": "888888888888888888",

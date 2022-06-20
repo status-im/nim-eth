@@ -56,7 +56,6 @@ proc newEthereumNode*(keys: KeyPair,
 
   ```nim
   node.addCapability(eth)
-  node.addCapability(shh)
   ```
 
   Each supplied protocol identifier is a name of a protocol introduced
