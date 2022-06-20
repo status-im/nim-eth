@@ -18,7 +18,7 @@ requires "nim >= 1.2.0",
          "testutils",
          "unittest2"
 
-let commonParams = " --verbosity:0 --hints:off --skipParentCfg --skipUserCfg:on " &
+let commonParams = " --verbosity:0 --hints:off --skipUserCfg:on " &
   "--warning[ObservableStores]:off --styleCheck:usages --styleCheck:hint " &
   getEnv("NIMFLAGS") & " "
 
