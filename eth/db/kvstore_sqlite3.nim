@@ -522,7 +522,7 @@ proc init*(
     except OSError, IOError:
       return err("sqlite: cannot create database directory")
 
-  checkErr sqlite3_open_v2(name, addr env.val, flags.cint, nil)
+  checkErr sqlite3_open_v2(cstring name, addr env.val, flags.cint, nil)
 
   template checkWalPragmaResult(journalModePragma: ptr sqlite3_stmt) =
     if (let x = sqlite3_step(journalModePragma); x != SQLITE_ROW):
@@ -533,7 +533,7 @@ proc init*(
       discard sqlite3_finalize(journalModePragma)
       return err($sqlite3_errstr(x))
 
-    if (let x = sqlite3_column_text(journalModePragma, 0);
+    if (let x = cstring sqlite3_column_text(journalModePragma, 0);
         x != "memory" and x != "wal"):
       discard sqlite3_finalize(journalModePragma)
       return err("Invalid pragma result: " & $x)
