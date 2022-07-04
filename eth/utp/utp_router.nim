@@ -261,7 +261,7 @@ proc innerConnect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.} =
       raise exc
 
 proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] =
-  info "Initiating connection", dst = s.socketKey
+  debug "Initiating connection", dst = s.socketKey
 
   # Create inner future, to make sure we are installing cancelCallback
   # on whole connection future, and not only part of it
