@@ -104,8 +104,4 @@ suite "ENode":
     check runBNTest(RopstenBootnodes)
     check runBNTest(RinkebyBootnodes)
     check runBNTest(GoerliBootnodes)
-    check runBNTest(DiscoveryV5Bootnodes)
     check runBNTest(KovanBootnodes)
-    check runBNTest(StatusBootNodes)
-    check runBNTest(StatusBootNodesStaging)
-    check runBNTest(StatusBootNodesTest)
