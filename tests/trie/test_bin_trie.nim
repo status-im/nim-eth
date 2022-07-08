@@ -12,7 +12,7 @@ suite "binary trie":
   test "different order insert":
     randomize()
     var kv_pairs = randKVPair()
-    var result = zeroHash
+    var res = zeroHash
     for _ in 0..<1: # repeat 3 times
       var db = newMemoryDB()
       var trie = initBinaryTrie(db)
@@ -24,12 +24,12 @@ suite "binary trie":
         let y = c.value
         check y == x
 
-      check result == zeroHash or trie.getRootHash() == result
-      result = trie.getRootHash()
+      check res == zeroHash or trie.getRootHash() == res
+      res = trie.getRootHash()
 
       # insert already exist key/value
       trie.set(kv_pairs[0].key, kv_pairs[0].value)
-      check trie.getRootHash() == result
+      check trie.getRootHash() == res
 
       # Delete all key/value
       random.shuffle(kv_pairs)

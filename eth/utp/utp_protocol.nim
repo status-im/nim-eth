@@ -7,7 +7,7 @@
 {.push raises: [Defect].}
 
 import
-  std/[tables, options, hashes, sugar, math],
+  std/[tables, options, hashes, math],
   chronos, chronicles,
   ./utp_router,
   ../keys

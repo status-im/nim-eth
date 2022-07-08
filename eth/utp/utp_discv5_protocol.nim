@@ -48,7 +48,7 @@ proc hash(x: UtpSocketKey[NodeAddress]): Hash =
 func `$`*(x: UtpSocketKey[NodeAddress]): string =
   "(remoteId: " & $x.remoteAddress.nodeId &
   ", remoteAddress: " & $x.remoteAddress.address &
-  ", rcvId: "& $x.rcvId &
+  ", rcvId: " & $x.rcvId &
   ")"
 
 proc talkReqDirect(p: protocol.Protocol, n: NodeAddress, protocol, request: seq[byte]): Future[void] =

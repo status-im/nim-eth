@@ -120,10 +120,10 @@ suite "Routing Table Tests":
     table.replaceNode(table.nodeToRevalidate())
     block:
       # Should return the last node of the replacement cache successfully.
-      let result = table.getNode(lastNode.id)
+      let res = table.getNode(lastNode.id)
       check:
-        result.isSome()
-        result.get() == lastNode
+        res.isSome()
+        res.get() == lastNode
     block:
       # This node should be removed
       check (table.getNode(bucketNodes[bucketNodes.high].id)).isNone()
@@ -186,10 +186,10 @@ suite "Routing Table Tests":
     for n in 0..<BUCKET_SIZE:
       table.replaceNode(table.nodeToRevalidate())
 
-    let result = table.getNode(doubleNode.id)
+    let res = table.getNode(doubleNode.id)
     check:
-      result.isSome()
-      result.get() == doubleNode
+      res.isSome()
+      res.get() == doubleNode
       table.len == 1
 
   test "Double replacement add":
@@ -212,10 +212,10 @@ suite "Routing Table Tests":
     table.replaceNode(table.nodeToRevalidate())
     block:
       # Should return the last node of the replacement cache successfully.
-      let result = table.getNode(replacementNodes[0].id)
+      let res = table.getNode(replacementNodes[0].id)
       check:
-        result.isSome()
-        result.get() == replacementNodes[0]
+        res.isSome()
+        res.get() == replacementNodes[0]
     block:
       # This node should be removed
       check (table.getNode(bucketNodes[bucketNodes.high].id)).isNone()
@@ -258,16 +258,16 @@ suite "Routing Table Tests":
       table.setJustSeen(replacementNodes[i])
 
     for n in replacementNodes:
-      let result = table.getNode(n.id)
+      let res = table.getNode(n.id)
       check:
-        result.isSome()
-        result.get() == n
+        res.isSome()
+        res.get() == n
 
     for i in 0..<int(BUCKET_SIZE/2):
-      let result = table.getNode(bucketNodes[i].id)
+      let res = table.getNode(bucketNodes[i].id)
       check:
-        result.isSome()
-        result.get() == bucketNodes[i]
+        res.isSome()
+        res.get() == bucketNodes[i]
 
   test "Ip limits on bucket":
     let node = generateNode(PrivateKey.random(rng[]))

@@ -8,7 +8,7 @@
 
 import
   std/options,
-  stew/[byteutils, bitops2],
+  stew/byteutils,
   unittest2,
   ../../eth/utp/packets,
   ../../eth/keys
@@ -32,7 +32,7 @@ suite "Utp packets test vectors":
     )
 
     let encodedSyn = encodePacket(synPacket)
-    
+
     let synBytes = hexToSeqByte("0x41002741c9b699ba00000000001000002e6c0000")
 
     check:
@@ -109,7 +109,7 @@ suite "Utp packets test vectors":
     )
 
     let encodedData = encodePacket(dataPacket)
-    
+
     let dataBytes = hexToSeqByte("0x0100667d0f0cbacf0e710cbf00100000208e41a600010203040506070809")
 
     check:
