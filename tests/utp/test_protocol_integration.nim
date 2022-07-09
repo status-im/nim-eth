@@ -7,10 +7,9 @@
 {.used.}
 
 import
-  std/[sequtils, tables, options, sugar],
+  std/[tables, options],
   chronos,
   testutils/unittests,
-  ./test_utils,
   ../../eth/utp/utp_router,
   ../../eth/utp/utp_protocol,
   ../../eth/keys,

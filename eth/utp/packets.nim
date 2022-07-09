@@ -7,10 +7,9 @@
 {.push raises: [Defect].}
 
 import
-  std/[monotimes],
   faststreams,
   chronos,
-  stew/[endians2, results, objects, arrayops],
+  stew/[endians2, results, objects],
   ../p2p/discoveryv5/random2
 
 export results, random2

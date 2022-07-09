@@ -5,7 +5,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[options, math, sugar]
+  std/[options, math]
 
 export options
 
@@ -64,8 +64,8 @@ proc calculateNextMask(currentMask: uint32, index:uint32): uint32 =
   # Increase mask,so that index will fit in buffer size i.e mask + 1
   if currentMask == uint32.high:
     return currentMask
-  
-  var newSize = currentMask + 1 
+
+  var newSize = currentMask + 1
   while true:
     newSize = newSize * 2
     if newSize == 0 or index < newSize:
