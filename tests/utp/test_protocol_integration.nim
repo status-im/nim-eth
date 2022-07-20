@@ -132,7 +132,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
         clientProtocol,
         clientSocket,
         serverProtocol,
-        serverSocket) = await testScenario(testCase.maxDelay, testCase.dropRate, testcase.cfg)
+        serverSocket) = await testScenario(testCase.maxDelay, testCase.dropRate, testCase.cfg)
 
       let smallBytes = 10
       let smallBytesToTransfer = rng[].generateBytes(smallBytes)
