@@ -8,7 +8,7 @@
 
 import
   std/[algorithm, random, sequtils, options],
-  chronos, chronicles,
+  chronos,
   testutils/unittests,
   ./test_utils,
   ../../eth/utp/utp_router,
