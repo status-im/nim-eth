@@ -1089,7 +1089,7 @@ procSuite "Utp socket unit test":
     let writeResult = await writeFut
 
     check:
-      writeResult.isOK()
+      writeResult.isOk()
 
     await outgoingSocket.destroyWait()
 
