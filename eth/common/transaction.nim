@@ -64,7 +64,7 @@ func rlpEncode*(tx: Transaction): auto =
   case tx.txType
   of TxLegacy:
     if tx.V >= EIP155_CHAIN_ID_OFFSET:
-      tx.rlpEncodeEIP155
+      tx.rlpEncodeEip155
     else:
       tx.rlpEncodeLegacy
   of TxEip2930:

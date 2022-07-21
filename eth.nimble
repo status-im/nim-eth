@@ -18,9 +18,15 @@ requires "nim >= 1.2.0",
          "testutils",
          "unittest2"
 
+let styleCheckStyle =
+  if (NimMajor, NimMinor) < (1, 6):
+    "hint"
+  else:
+    "error"
+
 let commonParams = " --verbosity:0 --hints:off --skipUserCfg:on " &
-  "--warning[ObservableStores]:off --styleCheck:usages --styleCheck:hint " &
-  getEnv("NIMFLAGS") & " "
+  "--warning[ObservableStores]:off --styleCheck:usages --styleCheck:" &
+  styleCheckStyle & " " & getEnv("NIMFLAGS") & " "
 
 proc runTest(path: string, release: bool = true, chronosStrict = true) =
   echo "\nBuilding and running: ", path

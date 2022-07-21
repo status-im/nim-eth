@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 
 import
   std/[algorithm, random, sequtils, options],
-  chronos, chronicles,
+  chronos,
   testutils/unittests,
   ./test_utils,
   ../../eth/utp/utp_router,
@@ -1089,7 +1089,7 @@ procSuite "Utp socket unit test":
     let writeResult = await writeFut
 
     check:
-      writeResult.isOK()
+      writeResult.isOk()
 
     await outgoingSocket.destroyWait()
 

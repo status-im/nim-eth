@@ -11,7 +11,7 @@
 
 import
   unittest2,
-  nimcrypto/[utils, sysrand, keccak],
+  nimcrypto/[utils, sysrand],
   ../../eth/keys, ../../eth/p2p/[auth, rlpxcrypt]
 
 const data = [
