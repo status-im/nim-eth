@@ -82,6 +82,7 @@ proc getUtpSocket[A](s: UtpRouter[A], k: UtpSocketKey[A]): Option[UtpSocket[A]] 
 proc deRegisterUtpSocket[A](s: UtpRouter[A], socket: UtpSocket[A]) =
   s.sockets.del(socket.socketKey)
   utp_established_connections.set(int64(len(s.sockets)))
+  debug "Removed utp socket", dst = socket.socketKey, lenSockets = len(s.sockets)
 
 iterator allSockets[A](s: UtpRouter[A]): UtpSocket[A] =
   for socket in s.sockets.values():
@@ -95,6 +96,7 @@ proc registerUtpSocket[A](p: UtpRouter, s: UtpSocket[A]) =
   ## Register socket, overwriting already existing one
   p.sockets[s.socketKey] = s
   utp_established_connections.set(int64(len(p.sockets)))
+  debug "Registered new utp socket", dst = s.socketKey, lenSockets = len(p.sockets)
   # Install deregister handler, so when socket gets closed, in will be promptly
   # removed from open sockets table
   s.registerCloseCallback(proc () = p.deRegisterUtpSocket(s))
@@ -181,6 +183,14 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
     if (maybeSocket.isSome()):
       debug "Ignoring SYN for already existing connection"
     else:
+      if (len(r.sockets) >= r.socketConfig.maxNumberOfOpenConnections):
+        debug "New incoming connection not allowed due to connection limit",
+          lenConnections = len(r.sockets),
+          limit = r.socketConfig.maxNumberOfOpenConnections
+
+        utp_declined_incoming.inc()
+        return
+
       if (r.shouldAllowConnection(sender, p.header.connectionId)):
         debug "Received SYN for new connection. Initiating incoming connection",
           synSeqNr = p.header.seqNr
@@ -216,13 +226,13 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
 proc processIncomingBytes*[A](
     r: UtpRouter[A], bytes: seq[byte], sender: A) {.async.} =
   if (not r.closed):
-    let dec = decodePacket(bytes)
-    if (dec.isOk()):
+    let decoded = decodePacket(bytes)
+    if (decoded.isOk()):
       utp_received_packets.inc()
-      await processPacket[A](r, dec.get(), sender)
+      await processPacket[A](r, decoded.get(), sender)
     else:
       utp_failed_packets.inc()
-      let err = dec.error()
+      let err = decoded.error()
       warn "Failed to decode packet from address", address = sender, msg = err
 
 proc generateNewUniqueSocket[A](
