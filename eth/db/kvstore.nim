@@ -158,3 +158,7 @@ proc init*(T: type MemStoreRef): T =
   T(
     records: initTable[seq[byte], seq[byte]]()
   )
+
+proc dbBackendRef*(db: KvStoreRef): RootRef =
+  # Allows low level access to the DB driver -- handle with care
+  db.obj

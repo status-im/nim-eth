@@ -258,3 +258,7 @@ template shortTimeReadOnly*(db: TrieDatabaseRef, id: TransactionID, body: untype
     db.setTransactionID(id)
     body
     db.setTransactionID(tmpID)
+
+proc dbBackendRef*(db: TrieDatabaseRef): RootRef =
+  # Allows low level access to the DB driver -- handle with care
+  db.obj
