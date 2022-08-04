@@ -87,6 +87,11 @@ type
     # based on traffic
     payloadSize*: uint32
 
+    # Maximal number of open uTP connections. When hit, no more incoming connections
+    # will be allowed, but it will still be possible to open new outgoing uTP
+    # connections
+    maxNumberOfOpenConnections*: int
+
   WriteErrorType* = enum
     SocketNotWriteable,
     FinSent
@@ -366,6 +371,11 @@ const
   # happens
   maxReorderBufferSize = 0.5
 
+  # Default number of of open utp connections
+  # libutp uses 3000
+  # libtorrent uses ~16000
+  defaultMaxOpenConnections = 8000
+
 proc init*[A](T: type UtpSocketKey, remoteAddress: A, rcvId: uint16): T =
   UtpSocketKey[A](remoteAddress: remoteAddress, rcvId: rcvId)
 
@@ -392,7 +402,8 @@ proc init*(
   incomingSocketReceiveTimeout: Option[Duration] = some(defaultRcvRetransmitTimeout),
   remoteWindowResetTimeout: Duration = defaultResetWindowTimeout,
   optSndBuffer: uint32 = defaultOptRcvBuffer,
-  payloadSize: uint32 = defaultPayloadSize
+  payloadSize: uint32 = defaultPayloadSize,
+  maxNumberOfOpenConnections: int = defaultMaxOpenConnections
   ): T =
   # make sure there is always some payload in data packets, and that packets are not to large.
   # with 1480 packet boundary, data packets will have 1500 bytes which seems reasonable
@@ -407,7 +418,8 @@ proc init*(
     incomingSocketReceiveTimeout: incomingSocketReceiveTimeout,
     remoteWindowResetTimeout: remoteWindowResetTimeout,
     maxSizeOfReorderBuffer: reorderBufferSize,
-    payloadSize: payloadSize
+    payloadSize: payloadSize,
+    maxNumberOfOpenConnections: maxNumberOfOpenConnections
   )
 
 # number of bytes which will fit in current send window
