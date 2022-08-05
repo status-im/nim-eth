@@ -119,15 +119,17 @@ const
   ipMajorityInterval = 5.minutes ## Interval for checking the latest IP:Port
   ## majority and updating this when ENR auto update is set.
   initialLookups = 1 ## Amount of lookups done when populating the routing table
-  handshakeTimeout* = 2.seconds ## timeout for the reply on the
+  defaultHandshakeTimeout* = 2.seconds ## timeout for the reply on the
   ## whoareyou message
-  responseTimeout* = 4.seconds ## timeout for the response of a request-response
+  defaultResponseTimeout* = 4.seconds ## timeout for the response of a request-response
   ## call
 
 type
   DiscoveryConfig* = object
     tableIpLimits*: TableIpLimits
     bitsPerHop*: int
+    handshakeTimeout: Duration
+    responseTimeout: Duration
 
   Protocol* = ref object
     transp: DatagramTransport
@@ -147,6 +149,8 @@ type
     enrAutoUpdate: bool
     talkProtocols*: Table[seq[byte], TalkProtocol] # TODO: Table is a bit of
     # overkill here, use sequence
+    handshakeTimeout: Duration
+    responseTimeout: Duration
     rng*: ref HmacDrbgContext
 
   PendingRequest = object
@@ -166,7 +170,10 @@ type
 const
   defaultDiscoveryConfig* = DiscoveryConfig(
     tableIpLimits: DefaultTableIpLimits,
-    bitsPerHop: DefaultBitsPerHop)
+    bitsPerHop: DefaultBitsPerHop,
+    handshakeTimeout: defaultHandshakeTimeout,
+    responseTimeout: defaultResponseTimeout
+  )
 
 proc addNode*(d: Protocol, node: Node): bool =
   ## Add `Node` to discovery routing table.
@@ -392,7 +399,7 @@ proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
 
     let data = encodeWhoareyouPacket(d.rng[], d.codec, toId, a, requestNonce,
       recordSeq, pubkey)
-    sleepAsync(handshakeTimeout).addCallback() do(data: pointer):
+    sleepAsync(d.handshakeTimeout).addCallback() do(data: pointer):
     # TODO: should we still provide cancellation in case handshake completes
     # correctly?
       d.codec.handshakes.del(key)
@@ -487,7 +494,7 @@ proc registerRequest(d: Protocol, n: Node, message: seq[byte],
     nonce: AESGCMNonce) =
   let request = PendingRequest(node: n, message: message)
   if not d.pendingRequests.hasKeyOrPut(nonce, request):
-    sleepAsync(responseTimeout).addCallback() do(data: pointer):
+    sleepAsync(d.responseTimeout).addCallback() do(data: pointer):
       d.pendingRequests.del(nonce)
 
 proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
@@ -495,7 +502,7 @@ proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
   result = newFuture[Option[Message]]("waitMessage")
   let res = result
   let key = (fromNode.id, reqId)
-  sleepAsync(responseTimeout).addCallback() do(data: pointer):
+  sleepAsync(d.responseTimeout).addCallback() do(data: pointer):
     d.awaitedMessages.del(key)
     if not res.finished:
       res.complete(none(Message))
@@ -914,13 +921,32 @@ func init*(
     T: type DiscoveryConfig,
     tableIpLimit: uint,
     bucketIpLimit: uint,
-    bitsPerHop: int): T =
+    bitsPerHop: int,
+    handshakeTimeout: Duration,
+    responseTimeout: Duration
+    ): T =
 
   DiscoveryConfig(
     tableIpLimits: TableIpLimits(
       tableIpLimit: tableIpLimit,
       bucketIpLimit: bucketIpLimit),
-    bitsPerHop: bitsPerHop
+    bitsPerHop: bitsPerHop,
+    handshakeTimeout: handshakeTimeout,
+    responseTimeout: responseTimeout
+  )
+
+func init*(
+    T: type DiscoveryConfig,
+    tableIpLimit: uint,
+    bucketIpLimit: uint,
+    bitsPerHop: int): T =
+
+  DiscoveryConfig.init(
+    tableIpLimit,
+    bucketIpLimit,
+    bitsPerHop,
+    defaultHandshakeTimeout,
+    defaultResponseTimeout
   )
 
 proc newProtocol*(
@@ -984,6 +1010,8 @@ proc newProtocol*(
     enrAutoUpdate: enrAutoUpdate,
     routingTable: RoutingTable.init(
       node, config.bitsPerHop, config.tableIpLimits, rng),
+    handshakeTimeout: config.handshakeTimeout,
+    responseTimeout: config.responseTimeout,
     rng: rng)
 
 template listeningAddress*(p: Protocol): Address =

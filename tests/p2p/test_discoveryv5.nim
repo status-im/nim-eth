@@ -614,7 +614,7 @@ suite "Discovery v5 Tests":
     check receiveNode.codec.handshakes.len == 5
     # TODO: Could get rid of the sleep by storing the timeout future of the
     # handshake
-    await sleepAsync(handshakeTimeout)
+    await sleepAsync(defaultHandshakeTimeout)
     # Checking handshake cleanup
     check receiveNode.codec.handshakes.len == 0
 
@@ -644,7 +644,7 @@ suite "Discovery v5 Tests":
     check receiveNode.codec.handshakes.len == 5
     # TODO: Could get rid of the sleep by storing the timeout future of the
     # handshake
-    await sleepAsync(handshakeTimeout)
+    await sleepAsync(defaultHandshakeTimeout)
     # Checking handshake cleanup
     check receiveNode.codec.handshakes.len == 0
 
