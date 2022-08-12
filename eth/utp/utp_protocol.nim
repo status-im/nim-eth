@@ -75,19 +75,21 @@ proc initSendCallback(t: DatagramTransport): SendCallback[TransportAddress] =
   )
 
 proc new*(
-  T: type UtpProtocol,
-  acceptConnectionCb: AcceptConnectionCallback[TransportAddress],
-  address: TransportAddress,
-  socketConfig: SocketConfig = SocketConfig.init(),
-  allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
-  sendCallbackBuilder: SendCallbackBuilder = nil,
-  rng = newRng()): UtpProtocol {.raises: [Defect, CatchableError].} =
+    T: type UtpProtocol,
+    acceptConnectionCb: AcceptConnectionCallback[TransportAddress],
+    address: TransportAddress,
+    udata: pointer = nil,
+    socketConfig: SocketConfig = SocketConfig.init(),
+    allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
+    sendCallbackBuilder: SendCallbackBuilder = nil,
+    rng = newRng()): UtpProtocol {.raises: [Defect, CatchableError].} =
 
   doAssert(not(isNil(acceptConnectionCb)))
 
   let router = UtpRouter[TransportAddress].new(
     acceptConnectionCb,
     allowConnectionCb,
+    udata,
     socketConfig,
     rng
   )
@@ -100,6 +102,26 @@ proc new*(
     router.sendCb = sendCallbackBuilder(ta)
 
   UtpProtocol(transport: ta, utpRouter: router)
+
+proc new*(
+    T: type UtpProtocol,
+    acceptConnectionCb: AcceptConnectionCallback[TransportAddress],
+    address: TransportAddress,
+    udata: ref,
+    socketConfig: SocketConfig = SocketConfig.init(),
+    allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
+    sendCallbackBuilder: SendCallbackBuilder = nil,
+    rng = newRng()): UtpProtocol {.raises: [Defect, CatchableError].} =
+  GC_ref(udata)
+  UtpProtocol.new(
+    acceptConnectionCb,
+    address,
+    cast[pointer](udata),
+    socketConfig,
+    allowConnectionCb,
+    sendCallbackBuilder,
+    rng
+  )
 
 proc shutdownWait*(p: UtpProtocol): Future[void] {.async.} =
   ## closes all managed utp sockets and then underlying transport
