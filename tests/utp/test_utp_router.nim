@@ -87,7 +87,7 @@ procSuite "Utp router unit tests":
 
   asyncTest "Router should create new incoming socket when receiving not known syn packet":
     let q = newAsyncQueue[UtpSocket[int]]()
-    let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(), rng)
+    let router = UtpRouter[int].new(registerIncomingSocketCallback(q), nil, nil, SocketConfig.init(), rng)
     router.sendCb = testSend
     let encodedSyn = encodePacket(synPacket(10, 10, 10))
 

@@ -56,6 +56,7 @@ type
    closed: bool
    sendCb*: SendCallback[A]
    allowConnection*: AllowConnectionCallback[A]
+   udata: pointer
    rng*: ref HmacDrbgContext
 
 const
@@ -114,6 +115,7 @@ proc new*[A](
     T: type UtpRouter[A],
     acceptConnectionCb: AcceptConnectionCallback[A],
     allowConnectionCb: AllowConnectionCallback[A],
+    udata: pointer,
     socketConfig: SocketConfig = SocketConfig.init(),
     rng = newRng()): UtpRouter[A] =
   doAssert(not(isNil(acceptConnectionCb)))
@@ -122,6 +124,7 @@ proc new*[A](
     acceptConnection: acceptConnectionCb,
     allowConnection: allowConnectionCb,
     socketConfig: socketConfig,
+    udata: udata,
     rng: rng
   )
 
@@ -130,7 +133,30 @@ proc new*[A](
     acceptConnectionCb: AcceptConnectionCallback[A],
     socketConfig: SocketConfig = SocketConfig.init(),
     rng = newRng()): UtpRouter[A] =
-  UtpRouter[A].new(acceptConnectionCb, nil, socketConfig, rng)
+  UtpRouter[A].new(acceptConnectionCb, nil, nil, socketConfig, rng)
+
+proc new*[A](
+    T: type UtpRouter[A],
+    acceptConnectionCb: AcceptConnectionCallback[A],
+    allowConnectionCb: AllowConnectionCallback[A],
+    udata: ref,
+    socketConfig: SocketConfig = SocketConfig.init(),
+    rng = newRng()): UtpRouter[A] =
+  doAssert(not(isNil(acceptConnectionCb)))
+  GC_ref(udata)
+  UtpRouter[A].new(acceptConnectionCb, allowConnectionCb, cast[pointer](udata), socketConfig, rng)
+
+proc new*[A](
+    T: type UtpRouter[A],
+    acceptConnectionCb: AcceptConnectionCallback[A],
+    udata: ref,
+    socketConfig: SocketConfig = SocketConfig.init(),
+    rng = newRng()): UtpRouter[A] =
+  UtpRouter[A].new(acceptConnectionCb, nil, udata, socketConfig, rng)
+
+proc getUserData*[A, T](router: UtpRouter[A]): T =
+  ## Obtain user data stored in ``router`` object.
+  cast[T](router.udata)
 
 # There are different possibilities on how the connection got established, need
 # to check every case.

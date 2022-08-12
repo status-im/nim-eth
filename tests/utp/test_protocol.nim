@@ -11,7 +11,7 @@ import
   chronos,
   testutils/unittests,
   ./test_utils,
-  ../../eth/utp/utp_router,
+  ../../eth/utp/utp_router as rt,
   ../../eth/utp/utp_protocol,
   ../../eth/keys
 
@@ -147,10 +147,43 @@ procSuite "Utp protocol over udp tests":
     await utpProt1.shutdownWait()
     await utpProt2.shutdownWait()
 
+
+  proc cbUserData(server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] =
+    let q = rt.getUserData[TransportAddress, AsyncQueue[UtpSocket[TransportAddress]]](server)
+    q.addLast(client)
+
+  asyncTest "Provide user data pointer and use it in callback":
+    let incomingConnections = newAsyncQueue[UtpSocket[TransportAddress]]()
+    let address = initTAddress("127.0.0.1", 9079)
+    let utpProt1 = UtpProtocol.new(cbUserData, address, incomingConnections)
+
+    let address1 = initTAddress("127.0.0.1", 9080)
+    let utpProt2 = UtpProtocol.new(cbUserData, address1, incomingConnections)
+
+    let connResult = await utpProt1.connectTo(address1)
+
+    check:
+      connResult.isOk()
+
+    let clientSocket = connResult.get()
+    # this future will be completed when we called accepted connection callback
+    let serverSocket = await incomingConnections.get()
+
+    check:
+      clientSocket.isConnected()
+      # after successful connection outgoing buffer should be empty as syn packet
+      # should be correctly acked
+      clientSocket.numPacketsInOutGoingBuffer() == 0
+
+      not serverSocket.isConnected()
+
+    await utpProt1.shutdownWait()
+    await utpProt2.shutdownWait()
+
   asyncTest "Fail to connect to offline remote host":
     let server1Called = newAsyncEvent()
     let address = initTAddress("127.0.0.1", 9079)
-    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address , SocketConfig.init(milliseconds(200)))
+    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address , nil, SocketConfig.init(milliseconds(200)))
 
     let address1 = initTAddress("127.0.0.1", 9080)
 
@@ -174,7 +207,7 @@ procSuite "Utp protocol over udp tests":
   asyncTest "Success connect to remote host which initialy was offline":
     let server1Called = newAsyncEvent()
     let address = initTAddress("127.0.0.1", 9079)
-    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address, SocketConfig.init(milliseconds(500)))
+    let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address, nil, SocketConfig.init(milliseconds(500)))
 
     let address1 = initTAddress("127.0.0.1", 9080)
 
@@ -387,17 +420,18 @@ procSuite "Utp protocol over udp tests":
     var server1Called = newAsyncEvent()
     let address1 = initTAddress("127.0.0.1", 9079)
     let utpProt1 =
-      UtpProtocol.new(setAcceptedCallback(server1Called), address1, SocketConfig.init(lowSynTimeout))
+      UtpProtocol.new(setAcceptedCallback(server1Called), address1, nil, SocketConfig.init(lowSynTimeout))
 
     let address2 = initTAddress("127.0.0.1", 9080)
     let utpProt2 =
-      UtpProtocol.new(registerIncomingSocketCallback(serverSockets), address2, SocketConfig.init(lowSynTimeout))
+      UtpProtocol.new(registerIncomingSocketCallback(serverSockets), address2, nil, SocketConfig.init(lowSynTimeout))
 
     let address3 = initTAddress("127.0.0.1", 9081)
     let utpProt3 =
       UtpProtocol.new(
         registerIncomingSocketCallback(serverSockets),
         address3,
+        nil,
         SocketConfig.init(),
         allowOneIdCallback(allowedId)
       )

@@ -89,6 +89,7 @@ proc new*(
     p: protocol.Protocol,
     subProtocolName: seq[byte],
     acceptConnectionCb: AcceptConnectionCallback[NodeAddress],
+    udata: pointer = nil,
     allowConnectionCb: AllowConnectionCallback[NodeAddress] = nil,
     socketConfig: SocketConfig = SocketConfig.init()): UtpDiscv5Protocol =
   doAssert(not(isNil(acceptConnectionCb)))
@@ -96,6 +97,7 @@ proc new*(
   let router = UtpRouter[NodeAddress].new(
     acceptConnectionCb,
     allowConnectionCb,
+    udata,
     socketConfig,
     p.rng
   )
@@ -111,6 +113,24 @@ proc new*(
     "Only one protocol should have this id"
   )
   prot
+
+proc new*(
+    T: type UtpDiscv5Protocol,
+    p: protocol.Protocol,
+    subProtocolName: seq[byte],
+    acceptConnectionCb: AcceptConnectionCallback[NodeAddress],
+    udata: ref,
+    allowConnectionCb: AllowConnectionCallback[NodeAddress] = nil,
+    socketConfig: SocketConfig = SocketConfig.init()): UtpDiscv5Protocol =
+  GC_ref(udata)
+  UtpDiscv5Protocol.new(
+    p,
+    subProtocolName,
+    acceptConnectionCb,
+    cast[pointer](udata),
+    allowConnectionCb,
+    socketConfig
+  )
 
 proc connectTo*(r: UtpDiscv5Protocol, address: NodeAddress):
     Future[ConnectionResult[NodeAddress]] =
