@@ -201,6 +201,9 @@ const
   Eip2930Receipt* = TxEip2930
   Eip1559Receipt* = TxEip1559
 
+  BLANK_ROOT_HASH* = "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
+  EMPTY_UNCLE_HASH* = "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
+
 when BlockNumber is int64:
   ## The goal of these templates is to make it easier to switch
   ## the block number type to a different representation
