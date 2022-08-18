@@ -42,7 +42,7 @@ type
 
   SqKeyspaceRef* = ref SqKeyspace
 
-  CustomFunction* = 
+  CustomFunction* =
     proc (
       a: openArray[byte],
       b: openArray[byte]
@@ -57,6 +57,9 @@ template dispose(db: RawStmtPtr) =
 template dispose*(db: SqliteStmt) =
   discard sqlite3_finalize(RawStmtPtr db)
 
+func isInsideTransaction*(db: SqStoreRef): bool =
+  sqlite3_get_autocommit(db.env) == 0
+ 
 proc release[T](x: var AutoDisposed[T]): T =
   result = x.val
   x.val = nil
@@ -605,7 +608,7 @@ proc customScalarBlobFunction(ctx: ptr sqlite3_context, n: cint, v: ptr ptr sqli
   let blob2 = cast[ptr UncheckedArray[byte]](sqlite3_value_blob(ptrs[][1]))
   let blob1Len = sqlite3_value_bytes(ptrs[][0])
   let blob2Len = sqlite3_value_bytes(ptrs[][1])
-  # sqlite3_user_data retrieves data which was pointed by 5th param to 
+  # sqlite3_user_data retrieves data which was pointed by 5th param to
   # sqlite3_create_function functions, which in our case is custom function
   # provided by user
   let usrFun = cast[CustomFunction](sqlite3_user_data(ctx))
@@ -632,7 +635,7 @@ proc customScalarBlobFunction(ctx: ptr sqlite3_context, n: cint, v: ptr ptr sqli
     raiseAssert(e.msg)
 
 proc registerCustomScalarFunction*(db: SqStoreRef, name: string, fun: CustomFunction): KvResult[void] =
-  ## Register custom function inside sqlite engine. Registered function can 
+  ## Register custom function inside sqlite engine. Registered function can
   ## be used in further queries by its name. Function should be side-effect
   ## free and depends only on provided arguments.
   ## Name of the function should be valid utf8 string.
@@ -651,7 +654,7 @@ proc registerCustomScalarFunction*(db: SqStoreRef, name: string, fun: CustomFunc
     nil,
     nil
   )
-  
+
   if res != SQLITE_OK:
     return err($sqlite3_errstr(res))
   else:
