@@ -7,7 +7,7 @@ from stew/objects
   import checkedEnumAssign
 
 export
-  stint, read, append, KeccakHash, rlp, options
+  stint, read, append, KeccakHash, rlp, options, hash.`$`
 
 type
   Hash256* = MDigest[256]
@@ -626,8 +626,8 @@ proc rlpHash*[T](v: T): Hash256 =
 
 func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
 
-proc notImplemented =
-  debug "Method not implemented"
+proc notImplemented(name: string) =
+  debug "Method not implemented", meth = name
 
 template hasData*(b: Blob): bool = b.len > 0
 template hasData*(r: EthResourceRefs): bool = r != nil
@@ -638,11 +638,11 @@ template deref*(r: EthResourceRefs): auto = r[]
 
 method genesisHash*(db: AbstractChainDB): KeccakHash
     {.base, gcsafe, raises: [Defect].} =
-  notImplemented()
+  notImplemented("genesisHash")
 
 method getBlockHeader*(db: AbstractChainDB, b: HashOrNum,
     output: var BlockHeader): bool {.base, gcsafe, raises: [RlpError, Defect].} =
-  notImplemented()
+  notImplemented("getBlockHeader")
 
 proc getBlockHeader*(db: AbstractChainDB, hash: KeccakHash): BlockHeaderRef {.gcsafe.} =
   new result
@@ -660,56 +660,56 @@ proc getBlockHeader*(db: AbstractChainDB, b: BlockNumber): BlockHeaderRef {.gcsa
 # `CanonicalHeadNotFound`. It would probably be better to use Result.
 method getBestBlockHeader*(self: AbstractChainDB): BlockHeader
     {.base, gcsafe, raises: [RlpError, CatchableError, Defect].} =
-  notImplemented()
+  notImplemented("getBestBlockHeader")
 
 method getSuccessorHeader*(db: AbstractChainDB, h: BlockHeader,
     output: var BlockHeader, skip = 0'u): bool
     {.base, gcsafe, raises: [RlpError, Defect].} =
-  notImplemented()
+  notImplemented("getSuccessorHeader")
 
 method getAncestorHeader*(db: AbstractChainDB, h: BlockHeader,
     output: var BlockHeader, skip = 0'u): bool
     {.base, gcsafe, raises: [RlpError, Defect].} =
-  notImplemented()
+  notImplemented("getAncestorHeader")
 
 method getBlockBody*(db: AbstractChainDB, blockHash: KeccakHash): BlockBodyRef
     {.base, gcsafe, raises: [Defect].} =
-  notImplemented()
+  notImplemented("getBlockBody")
 
 method getReceipt*(db: AbstractChainDB, hash: KeccakHash): ReceiptRef {.base, gcsafe.} =
-  notImplemented()
+  notImplemented("getReceipt")
 
 method getTrieDB*(db: AbstractChainDB): TrieDatabaseRef
     {.base, gcsafe, raises: [Defect].} =
-  notImplemented()
+  notImplemented("getTrieDB")
 
 method getCodeByHash*(db: AbstractChainDB, hash: KeccakHash): Blob {.base, gcsafe.} =
-  notImplemented()
+  notImplemented("getCodeByHash")
 
 method getSetting*(db: AbstractChainDB, key: string): seq[byte] {.base, gcsafe.} =
-  notImplemented()
+  notImplemented("getSetting")
 
 method setSetting*(db: AbstractChainDB, key: string, val: openArray[byte]) {.base, gcsafe.} =
-  notImplemented()
+  notImplemented("setSetting")
 
 method getHeaderProof*(db: AbstractChainDB, req: ProofRequest): Blob {.base, gcsafe.} =
-  notImplemented()
+  notImplemented("getHeaderProof")
 
 method getProof*(db: AbstractChainDB, req: ProofRequest): Blob {.base, gcsafe.} =
-  notImplemented()
+  notImplemented("getProof")
 
 method getHelperTrieProof*(db: AbstractChainDB, req: HelperTrieProofRequest): Blob {.base, gcsafe.} =
-  notImplemented()
+  notImplemented("getHelperTrieProof")
 
 method getTransactionStatus*(db: AbstractChainDB, txHash: KeccakHash): TransactionStatusMsg {.base, gcsafe.} =
-  notImplemented()
+  notImplemented("getTransactionStatus")
 
 method addTransactions*(db: AbstractChainDB, transactions: openArray[Transaction]) {.base, gcsafe.} =
-  notImplemented()
+  notImplemented("addTransactions")
 
 method persistBlocks*(db: AbstractChainDB, headers: openArray[BlockHeader], bodies: openArray[BlockBody]): ValidationResult {.base, gcsafe.} =
-  notImplemented()
+  notImplemented("persistBlocks")
 
 method getForkId*(db: AbstractChainDB, n: BlockNumber): ForkID {.base, gcsafe.} =
   # EIP 2364/2124
-  notImplemented()
+  notImplemented("getForkId")
