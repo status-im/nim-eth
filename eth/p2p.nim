@@ -176,3 +176,21 @@ proc getPeer*(node: EthereumNode, peerId: NodeId, Protocol: type): Option[Peer] 
   for peer in node.peers(Protocol):
     if peer.remote.id == peerId:
       return some(peer)
+
+proc connectToNode*(node: EthereumNode, n: Node) {.async.} =
+  await node.peerPool.connectToNode(n)
+
+proc connectToNode*(node: EthereumNode, n: ENode) {.async.} =
+  await node.peerPool.connectToNode(n)
+
+func numPeers*(node: EthereumNode): int =
+  node.peerPool.numPeers
+
+func hasPeer*(node: EthereumNode, n: ENode): bool =
+  n in node.peerPool
+
+func hasPeer*(node: EthereumNode, n: Node): bool =
+  n in node.peerPool
+
+func hasPeer*(node: EthereumNode, n: Peer): bool =
+  n in node.peerPool
