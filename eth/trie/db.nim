@@ -2,7 +2,6 @@
 
 import
   std/[tables, hashes, sets],
-  nimcrypto/[hash, keccak],
   "."/[trie_defs, db_tracing]
 
 type
@@ -53,9 +52,6 @@ proc put*(db: TrieDatabaseRef, key, val: openArray[byte]) {.gcsafe.}
 proc get*(db: TrieDatabaseRef, key: openArray[byte]): seq[byte] {.gcsafe.}
 proc del*(db: TrieDatabaseRef, key: openArray[byte]) {.gcsafe.}
 proc beginTransaction*(db: TrieDatabaseRef): DbTransaction {.gcsafe.}
-
-proc keccak*(r: openArray[byte]): KeccakHash =
-  keccak256.digest r
 
 proc get*(db: MemoryLayer, key: openArray[byte]): seq[byte] =
   result = db.records.getOrDefault(@key).value

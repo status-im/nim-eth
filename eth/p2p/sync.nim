@@ -27,7 +27,7 @@ proc run(s: FullNodeSyncer) {.async.} =
 
   # Ensure we have the state for our current head.
   head = await self.wait(self.chaindb.coro_get_canonical_head())
-  if head.state_root != BLANK_ROOT_HASH and head.state_root not in self.base_db:
+  if head.state_root != EMPTY_ROOT_HASH and head.state_root not in self.base_db:
       self.logger.info(
           "Missing state for current head (#%d), downloading it", head.block_number)
       downloader = StateDownloader(

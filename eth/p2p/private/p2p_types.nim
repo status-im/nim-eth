@@ -10,8 +10,11 @@ import
   std/[deques, tables],
   chronos,
   stew/results,
-  ".."/../[rlp, keys], ".."/../common/eth_types,
+  ../../common/chaindb,
+  ".."/../[rlp, keys],
   ".."/[enode, kademlia, discovery, rlpxcrypt]
+
+export chaindb
 
 const
   useSnappy* = defined(useSnappy)

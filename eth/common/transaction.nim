@@ -1,6 +1,7 @@
 import
-  nimcrypto/keccak,
-  ".."/[common, rlp, keys]
+  ../common/eth_types_rlp
+
+export eth_types_rlp
 
 const
   EIP155_CHAIN_ID_OFFSET* = 35'i64
@@ -74,4 +75,4 @@ func rlpEncode*(tx: Transaction): auto =
 
 func txHashNoSignature*(tx: Transaction): Hash256 =
   # Hash transaction without signature
-  keccak256.digest(rlpEncode(tx))
+  keccakHash(rlpEncode(tx))

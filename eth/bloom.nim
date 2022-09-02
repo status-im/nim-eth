@@ -1,4 +1,4 @@
-import stint, nimcrypto/[keccak, hash]
+import stint, ./common/eth_hash
 
 type UInt2048 = StUint[2048]
 
@@ -27,8 +27,8 @@ proc init*(_: type BloomFilter, h: MDigest[256]): BloomFilter =
   result.incl(h)
 
 # TODO: The following 2 procs should be one genric, but it doesn't compile. Nim bug?
-proc incl*(f: var BloomFilter, v: string) = f.incl(keccak256.digest(v))
-proc incl*(f: var BloomFilter, v: openArray[byte]) = f.incl(keccak256.digest(v))
+proc incl*(f: var BloomFilter, v: string) = f.incl(keccakHash(v))
+proc incl*(f: var BloomFilter, v: openArray[byte]) = f.incl(keccakHash(v))
 
 proc contains*(f: BloomFilter, h: MDigest[256]): bool =
   for bits in bloomBits(h):
@@ -36,4 +36,4 @@ proc contains*(f: BloomFilter, h: MDigest[256]): bool =
   return true
 
 template contains*[T](f: BloomFilter, v: openArray[T]): bool =
-  f.contains(keccak256.digest(v))
+  f.contains(keccakHash(v))

@@ -18,7 +18,7 @@ import
   std/strformat,
   secp256k1, bearssl/hash as bhash, bearssl/rand,
   stew/[byteutils, objects, results],
-  nimcrypto/[hash, keccak]
+  ./common/eth_hash
 
 from nimcrypto/utils import burnMem
 
@@ -124,16 +124,16 @@ func toRaw*(sig: SignatureNR): array[RawSignatureNRSize, byte] {.borrow.}
 
 func toAddress*(pubkey: PublicKey, with0x = true): string =
   ## Convert public key to hexadecimal string address.
-  var hash = keccak256.digest(pubkey.toRaw())
+  var hash = keccakHash(pubkey.toRaw())
   result = if with0x: "0x" else: ""
   result.add(toHex(toOpenArray(hash.data, 12, len(hash.data) - 1)))
 
 func toChecksumAddress*(pubkey: PublicKey, with0x = true): string =
   ## Convert public key to checksumable mixed-case address (EIP-55).
   result = if with0x: "0x" else: ""
-  var hash1 = keccak256.digest(pubkey.toRaw())
+  var hash1 = keccakHash(pubkey.toRaw())
   var hhash1 = toHex(toOpenArray(hash1.data, 12, len(hash1.data) - 1))
-  var hash2 = keccak256.digest(hhash1)
+  var hash2 = keccakHash(hhash1)
   var hhash2 = toHex(hash2.data)
   for i in 0..<len(hhash1):
     if hhash2[i] >= '0' and hhash2[i] <= '7':
@@ -161,7 +161,7 @@ func validateChecksumAddress*(a: string): bool =
       address &= chr(ord(ch) - ord('A') + ord('a'))
     else:
       return false
-  var hash = keccak256.digest(address)
+  var hash = keccakHash(address)
   var hexhash = toHex(hash.data)
   for i in 0..<len(address):
     if hexhash[i] >= '0' and hexhash[i] <= '7':
@@ -176,7 +176,7 @@ func validateChecksumAddress*(a: string): bool =
 
 func toCanonicalAddress*(pubkey: PublicKey): array[20, byte] =
   ## Convert public key to canonical address.
-  var hash = keccak256.digest(pubkey.toRaw())
+  var hash = keccakHash(pubkey.toRaw())
   copyMem(addr result[0], addr hash.data[12], 20)
 
 func `$`*(pubkey: PublicKey): string =
@@ -206,28 +206,28 @@ func sign*(seckey: PrivateKey, msg: SkMessage): Signature =
   Signature(signRecoverable(SkSecretKey(seckey), msg))
 
 func sign*(seckey: PrivateKey, msg: openArray[byte]): Signature =
-  let hash = keccak256.digest(msg)
+  let hash = keccakHash(msg)
   sign(seckey, SkMessage(hash.data))
 
 func signNR*(seckey: PrivateKey, msg: SkMessage): SignatureNR =
   SignatureNR(sign(SkSecretKey(seckey), msg))
 
 func signNR*(seckey: PrivateKey, msg: openArray[byte]): SignatureNR =
-  let hash = keccak256.digest(msg)
+  let hash = keccakHash(msg)
   signNR(seckey, SkMessage(hash.data))
 
 func recover*(sig: Signature, msg: SkMessage): SkResult[PublicKey] =
   recover(SkRecoverableSignature(sig), msg).mapConvert(PublicKey)
 
 func recover*(sig: Signature, msg: openArray[byte]): SkResult[PublicKey] =
-  let hash = keccak256.digest(msg)
+  let hash = keccakHash(msg)
   recover(sig, SkMessage(hash.data))
 
 func verify*(sig: SignatureNR, msg: SkMessage, key: PublicKey): bool =
   verify(SkSignature(sig), msg, SkPublicKey(key))
 
 func verify*(sig: SignatureNR, msg: openArray[byte], key: PublicKey): bool =
-  let hash = keccak256.digest(msg)
+  let hash = keccakHash(msg)
   verify(sig, SkMessage(hash.data), key)
 
 func ecdhRaw*(seckey: PrivateKey, pubkey: PublicKey): SharedSecret =

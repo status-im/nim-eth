@@ -1,6 +1,9 @@
 import
-  ../trie/[trie_defs, db, hexary], ../rlp,
-  ./eth_types
+  ../trie/[trie_defs, db, hexary],
+  ../rlp,
+  ./chaindb
+
+export chaindb
 
 proc getAccount*(db: TrieDatabaseRef,
                  rootHash: KeccakHash,
