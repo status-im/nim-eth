@@ -10,7 +10,7 @@
 import
   std/[tables, algorithm, random],
   chronos, chronos/timer, chronicles,
-  ./keys, ./common/eth_types, ./p2p/private/p2p_types,
+  ./keys, ./common/chaindb, ./p2p/private/p2p_types,
   ./p2p/[kademlia, discovery, enode, peer_pool, rlpx]
 
 export

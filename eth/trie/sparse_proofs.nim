@@ -29,9 +29,9 @@ proc verifyProofAux*(proof: seq[seq[byte]], root, key, value: openArray[byte]): 
     if node.len != 32: return false
     if path[i]: # right
       # reuse curHash without more alloc
-      curHash.data.keccakHash(node, curHash.data)
+      curHash = keccakHash(node, curHash.data)
     else:
-      curHash.data.keccakHash(curHash.data, node)
+      curHash = keccakHash(curHash.data, node)
 
   result = curHash.data == root
 

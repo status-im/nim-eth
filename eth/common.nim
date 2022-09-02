@@ -1,2 +1,2 @@
-import ./common/[eth_types, utils]
-export eth_types, utils
+import ./common/[eth_types_rlp, utils]
+export eth_types_rlp, utils

@@ -13,7 +13,7 @@
 {.push raises: [Defect].}
 
 import
-  nimcrypto, stew/results
+  nimcrypto/[bcmode, keccak, rijndael, utils], stew/results
 from auth import ConnectionSecret
 
 export results

@@ -21,9 +21,6 @@ type
 template len(key: TrieNodeKey): int =
   key.usedBytes.int
 
-proc keccak*(r: openArray[byte]): KeccakHash =
-  keccak256.digest r
-
 template asDbKey(k: TrieNodeKey): untyped =
   doAssert k.usedBytes == 32
   k.hash.data
@@ -350,11 +347,11 @@ proc getBranch*(self: HexaryTrie; key: openArray[byte]): seq[seq[byte]] =
   getBranchAux(self.db, node, initNibbleRange(key), result)
 
 proc dbDel(t: var HexaryTrie, data: openArray[byte]) =
-  if data.len >= 32: t.prune(data.keccak.data)
+  if data.len >= 32: t.prune(data.keccakHash.data)
 
 proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey
     {.raises: [Defect].} =
-  result.hash = data.keccak
+  result.hash = data.keccakHash
   result.usedBytes = 32
   put(db, result.asDbKey, data)
 
@@ -549,7 +546,7 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
 proc mergeAt(self: var HexaryTrie, rlp: Rlp,
              key: NibblesSeq, value: openArray[byte],
              isInline = false): seq[byte] =
-  self.mergeAt(rlp, rlp.rawData.keccak, key, value, isInline)
+  self.mergeAt(rlp, rlp.rawData.keccakHash, key, value, isInline)
 
 proc mergeAtAux(self: var HexaryTrie, output: var RlpWriter, orig: Rlp,
                 key: NibblesSeq, value: openArray[byte]) =
@@ -662,13 +659,13 @@ proc put*(self: var HexaryTrie; key, value: openArray[byte]) =
   self.root = self.db.dbPut(newRootBytes)
 
 proc put*(self: var SecureHexaryTrie; key, value: openArray[byte]) =
-  put(HexaryTrie(self), key.keccak.data, value)
+  put(HexaryTrie(self), key.keccakHash.data, value)
 
 proc get*(self: SecureHexaryTrie; key: openArray[byte]): seq[byte] =
-  return get(HexaryTrie(self), key.keccak.data)
+  return get(HexaryTrie(self), key.keccakHash.data)
 
 proc del*(self: var SecureHexaryTrie; key: openArray[byte]) =
-  del(HexaryTrie(self), key.keccak.data)
+  del(HexaryTrie(self), key.keccakHash.data)
 
 proc rootHash*(self: SecureHexaryTrie): KeccakHash {.borrow.}
 proc rootHashHex*(self: SecureHexaryTrie): string {.borrow.}
@@ -686,7 +683,7 @@ proc isValidBranch*(branch: seq[seq[byte]], rootHash: KeccakHash, key, value: se
   var db = newMemoryDB()
   for node in branch:
     doAssert(node.len != 0)
-    let nodeHash = hexary.keccak(node)
+    let nodeHash = keccakHash(node)
     db.put(nodeHash.data, node)
 
   var trie = initHexaryTrie(db, rootHash)
