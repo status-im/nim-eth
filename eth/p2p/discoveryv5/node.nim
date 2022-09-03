@@ -9,7 +9,7 @@
 
 import
   std/hashes,
-  nimcrypto, stint, chronos, stew/shims/net, chronicles,
+  nimcrypto/[keccak], stint, chronos, stew/shims/net, chronicles,
   ../../keys, ../../net/utils,
   ./enr
 
