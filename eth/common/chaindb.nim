@@ -55,7 +55,7 @@ method getAncestorHeader*(db: AbstractChainDB, h: BlockHeader,
   notImplemented("getAncestorHeader")
 
 method getBlockBody*(db: AbstractChainDB, blockHash: KeccakHash): BlockBodyRef
-    {.base, gcsafe, raises: [Defect].} =
+    {.base, gcsafe, raises: [RlpError, Defect].} =
   notImplemented("getBlockBody")
 
 method getReceipt*(db: AbstractChainDB, hash: KeccakHash): ReceiptRef {.base, gcsafe.} =
@@ -95,3 +95,6 @@ method persistBlocks*(db: AbstractChainDB, headers: openArray[BlockHeader], bodi
 method getForkId*(db: AbstractChainDB, n: BlockNumber): ForkID {.base, gcsafe.} =
   # EIP 2364/2124
   notImplemented("getForkId")
+
+method getTotalDifficulty*(db: AbstractChainDB): DifficultyInt {.base, gcsafe, raises: [RlpError, Defect].} =
+  notImplemented("getTotalDifficulty")
