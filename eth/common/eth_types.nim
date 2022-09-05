@@ -9,6 +9,9 @@ when (NimMajor, NimMinor) < (1, 4):
 else:
   {.push raises: [].}
 
+## Core ethereum types and smalll helpers - keep focused as it gets imported
+## from many places
+
 import
   std/[options, strutils, times],
   stew/[byteutils, endians2], stint,

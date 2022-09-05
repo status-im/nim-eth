@@ -88,8 +88,6 @@ import
   "."/[messages, encoding, node, routing_table, enr, random2, sessions, ip_vote,
     nodes_verification]
 
-import nimcrypto except toHex
-
 export
   options, results, node, enr, encoding.maxDiscv5PacketSize
 

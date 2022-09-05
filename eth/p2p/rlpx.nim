@@ -9,7 +9,7 @@
 
 import
   std/[tables, algorithm, deques, hashes, options, typetraits],
-  stew/shims/macros, chronicles, nimcrypto, chronos,
+  stew/shims/macros, chronicles, nimcrypto/utils, chronos,
   ".."/[rlp, common, keys, async_utils],
   ./private/p2p_types, "."/[kademlia, auth, rlpxcrypt, enode, p2p_protocol_dsl]
 

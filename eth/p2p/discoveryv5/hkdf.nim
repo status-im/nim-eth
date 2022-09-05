@@ -1,4 +1,7 @@
-import nimcrypto
+import
+  nimcrypto/[hmac, hash]
+
+export hmac, hash
 
 proc hkdf*(HashType: typedesc, ikm, salt, info: openArray[byte],
     output: var openArray[byte]) =
