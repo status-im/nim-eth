@@ -39,14 +39,6 @@ type
     bindIp: IpAddress
     bindPort: Port
 
-  CommandId = enum
-    cmdPing = 1
-    cmdPong = 2
-    cmdFindNode = 3
-    cmdNeighbours = 4
-    cmdENRRequest = 5
-    cmdENRResponse = 6
-
   DiscProtocolError* = object of CatchableError
 
   DiscResult*[T] = Result[T, cstring]
