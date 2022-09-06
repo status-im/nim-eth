@@ -146,13 +146,13 @@ proc authMessagePreEIP8(h: var Handshake,
   header.flag = flag
   if encrypt:
     if len(output) < AuthMessageV4Length:
-      return err(BufferOverrun)
+      return err(AuthError.BufferOverrun)
     if eciesEncrypt(rng, buffer, output, h.remoteHPubkey).isErr:
-      return err(EciesError)
+      return err(AuthError.EciesError)
     outlen = AuthMessageV4Length
   else:
     if len(output) < PlainAuthMessageV4Length:
-      return err(BufferOverrun)
+      return err(AuthError.BufferOverrun)
     copyMem(addr output[0], addr buffer[0], PlainAuthMessageV4Length)
     outlen = PlainAuthMessageV4Length
 
@@ -201,7 +201,7 @@ proc authMessageEIP8(h: var Handshake,
 
   if encrypt:
     if len(output) < fullsize:
-      return err(BufferOverrun)
+      return err(AuthError.BufferOverrun)
 
     copyMem(addr buffer[0], addr payload[0], len(payload))
 
@@ -210,12 +210,12 @@ proc authMessageEIP8(h: var Handshake,
     if eciesEncrypt(rng, toa(buffer, 0, len(payload) + padsize),
                     toa(output, 2, wosize), pubkey,
                     toa(output, 0, 2)).isErr:
-      return err(EciesError)
+      return err(AuthError.EciesError)
     outlen = fullsize
   else:
     let plainsize = len(payload) + padsize
     if len(output) < plainsize:
-      return err(BufferOverrun)
+      return err(AuthError.BufferOverrun)
     copyMem(addr output[0], addr buffer[0], plainsize)
     outlen = plainsize
 
@@ -236,13 +236,13 @@ proc ackMessagePreEIP8(h: var Handshake,
   header.flag = flag
   if encrypt:
     if len(output) < AckMessageV4Length:
-      return err(BufferOverrun)
+      return err(AuthError.BufferOverrun)
     if eciesEncrypt(rng, buffer, output, h.remoteHPubkey).isErr:
-      return err(EciesError)
+      return err(AuthError.EciesError)
     outlen = AckMessageV4Length
   else:
     if len(output) < PlainAckMessageV4Length:
-      return err(BufferOverrun)
+      return err(AuthError.BufferOverrun)
     copyMem(addr output[0], addr buffer[0], PlainAckMessageV4Length)
     outlen = PlainAckMessageV4Length
 
@@ -279,17 +279,17 @@ proc ackMessageEIP8(h: var Handshake,
   copyMem(addr buffer[0], addr payload[0], len(payload))
   if encrypt:
     if len(output) < fullsize:
-      return err(BufferOverrun)
+      return err(AuthError.BufferOverrun)
     output[0..<2] = uint16(wosize).toBytesBE()
     if eciesEncrypt(rng, toa(buffer, 0, len(payload) + int(padsize[0])),
                     toa(output, 2, wosize), h.remoteHPubkey,
                     toa(output, 0, 2)).isErr:
-      return err(EciesError)
+      return err(AuthError.EciesError)
     outlen = fullsize
   else:
     let plainsize = len(payload) + int(padsize[0])
     if len(output) < plainsize:
-      return err(BufferOverrun)
+      return err(AuthError.BufferOverrun)
     copyMem(addr output[0], addr buffer[0], plainsize)
     outlen = plainsize
 
@@ -363,23 +363,23 @@ proc decodeAuthMessageEIP8(h: var Handshake, m: openArray[byte]): AuthResult[voi
   let size = uint16.fromBytesBE(m)
   h.expectedLength = int(size) + 2
   if h.expectedLength > len(m):
-    return err(IncompleteError)
+    return err(AuthError.IncompleteError)
   var buffer = newSeq[byte](eciesDecryptedLength(int(size)))
   if eciesDecrypt(toa(m, 2, int(size)), buffer, h.host.seckey,
                   toa(m, 0, 2)).isErr:
-    return err(EciesError)
+    return err(AuthError.EciesError)
   try:
     var reader = rlpFromBytes(buffer)
     if not reader.isList() or reader.listLen() < 4:
-      return err(InvalidAuth)
+      return err(AuthError.InvalidAuth)
     if reader.listElem(0).blobLen != RawSignatureSize:
-      return err(InvalidAuth)
+      return err(AuthError.InvalidAuth)
     if reader.listElem(1).blobLen != RawPublicKeySize:
-      return err(InvalidAuth)
+      return err(AuthError.InvalidAuth)
     if reader.listElem(2).blobLen != KeyLength:
-      return err(InvalidAuth)
+      return err(AuthError.InvalidAuth)
     if reader.listElem(3).blobLen != 1:
-      return err(InvalidAuth)
+      return err(AuthError.InvalidAuth)
     let
       signatureBr = reader.listElem(0).toBytes()
       pubkeyBr = reader.listElem(1).toBytes()
@@ -403,7 +403,7 @@ proc decodeAuthMessageEIP8(h: var Handshake, m: openArray[byte]): AuthResult[voi
     h.version = versionBr[0]
     ok()
   except CatchableError:
-    err(RlpError)
+    err(AuthError.RlpError)
 
 proc decodeAckMessageEIP8*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AckMessage.
@@ -411,21 +411,21 @@ proc decodeAckMessageEIP8*(h: var Handshake, m: openArray[byte]): AuthResult[voi
 
   h.expectedLength = 2 + int(size)
   if h.expectedLength > len(m):
-    return err(IncompleteError)
+    return err(AuthError.IncompleteError)
   var buffer = newSeq[byte](eciesDecryptedLength(int(size)))
   if eciesDecrypt(toa(m, 2, int(size)), buffer, h.host.seckey,
                   toa(m, 0, 2)).isErr:
-    return err(EciesError)
+    return err(AuthError.EciesError)
   try:
     var reader = rlpFromBytes(buffer)
     if not reader.isList() or reader.listLen() < 3:
-      return err(InvalidAck)
+      return err(AuthError.InvalidAck)
     if reader.listElem(0).blobLen != RawPublicKeySize:
-      return err(InvalidAck)
+      return err(AuthError.InvalidAck)
     if reader.listElem(1).blobLen != KeyLength:
-      return err(InvalidAck)
+      return err(AuthError.InvalidAck)
     if reader.listElem(2).blobLen != 1:
-      return err(InvalidAck)
+      return err(AuthError.InvalidAck)
     let
       pubkeyBr = reader.listElem(0).toBytes()
       nonceBr = reader.listElem(1).toBytes()
@@ -437,7 +437,7 @@ proc decodeAckMessageEIP8*(h: var Handshake, m: openArray[byte]): AuthResult[voi
 
     ok()
   except CatchableError:
-    err(RlpError)
+    err(AuthError.RlpError)
 
 proc decodeAckMessageV4(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes V4 AckMessage.
@@ -446,7 +446,7 @@ proc decodeAckMessageV4(h: var Handshake, m: openArray[byte]): AuthResult[void] 
   doAssert(Initiator in h.flags)
 
   if eciesDecrypt(m, buffer, h.host.seckey).isErr:
-    return err(EciesError)
+    return err(AuthError.EciesError)
   var header = cast[ptr AckMessageV4](addr buffer[0])
 
   h.remoteEPubkey = ? PublicKey.fromRaw(header.pubkey).mapErrTo(InvalidPubKey)
@@ -457,7 +457,7 @@ proc decodeAckMessageV4(h: var Handshake, m: openArray[byte]): AuthResult[void] 
 proc decodeAuthMessage*(h: var Handshake, input: openArray[byte]): AuthResult[void] =
   ## Decodes AuthMessage from `input`.
   if len(input) < AuthMessageV4Length:
-    return err(IncompleteError)
+    return err(AuthError.IncompleteError)
 
   if len(input) == AuthMessageV4Length:
     let res = h.decodeAuthMessageV4(input)
@@ -471,7 +471,7 @@ proc decodeAuthMessage*(h: var Handshake, input: openArray[byte]): AuthResult[vo
 proc decodeAckMessage*(h: var Handshake, input: openArray[byte]): AuthResult[void] =
   ## Decodes AckMessage from `input`.
   if len(input) < AckMessageV4Length:
-    return err(IncompleteError)
+    return err(AuthError.IncompleteError)
   if len(input) == AckMessageV4Length:
     let res = h.decodeAckMessageV4(input)
     if res.isOk(): return res
