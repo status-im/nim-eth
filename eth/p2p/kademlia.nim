@@ -64,6 +64,8 @@ const
   ID_SIZE = 256
   BOND_EXPIRATION = initDuration(hours = 12)
 
+proc len(r: RoutingTable): int
+
 proc toNodeId*(pk: PublicKey): NodeId =
   readUintBE[256](keccak256.digest(pk.toRaw()).data)
 
@@ -125,24 +127,46 @@ proc cmp(x, y: (TimeKey, int64)): int =
 
 proc removeTooOldPingPongTime(k: KademliaProtocol) =
   const
-    MaxEntries = 128
-    MaxRC = 5
+    MinEntries = 128
+    MaxRC = MinEntries div 8
 
-  if k.pingPongTime.len < MaxEntries:
+  # instead of using fixed limit, we use dynamic limit
+  # with minimum entries = 128.
+  # remove 25% of too old entries if we need more space.
+  # the reason maxEntries is twice routing table because we
+  # store ping and pong time.
+  let
+    maxEntries = max(k.routing.len * 2, MinEntries)
+    maxRemove = maxEntries div 4
+
+  if k.pingPongTime.len < maxEntries:
     return
 
-  k.pingPongTime.sort(cmp, order = SortOrder.Descending)
+  # it is safe to remove this table sort?
+  # because we already using ordered table to store time from
+  # older value to newer value
+  when false:
+    k.pingPongTime.sort(cmp, order = SortOrder.Descending)
+
   var
-    num = 0
-    rc: array[MaxRC, TimeKey]
+    rci = 0
+    numRemoved = 0
+    rc: array[MaxRC, TimeKey] # 784 bytes(MinEntries/8*sizeof(TimeKey))
 
-  for v in keys(k.pingPongTime):
-    if num < MaxRC:
-      rc[num] = v
-      inc num
+  # using fixed size temp on stack possibly
+  # requires multiple iteration to remove
+  # old entries
+  while numRemoved < maxRemove:
+    for v in keys(k.pingPongTime):
+      rc[rci] = v
+      inc rci
+      inc numRemoved
+      if rci >= MaxRC or numRemoved >= maxRemove: break
 
-  for i in 0..<num:
-    k.pingPongTime.del(rc[i])
+    for i in 0..<rci:
+      k.pingPongTime.del(rc[i])
+
+    rci = 0
 
 proc updateLastPingReceived(k: KademliaProtocol, n: Node, t: Time) =
   k.removeTooOldPingPongTime()
