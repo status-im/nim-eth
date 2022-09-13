@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  std/[tables, hashes, times, algorithm, sets, sequtils, random],
+  std/[tables, hashes, times, algorithm, sets, sequtils],
   chronos, chronicles, stint, nimcrypto/keccak,
   ../keys,
   ./enode
@@ -177,7 +177,6 @@ proc computeSharedPrefixBits(nodes: openArray[Node]): int =
 proc init(r: var RoutingTable, thisNode: Node) =
   r.thisNode = thisNode
   r.buckets = @[newKBucket(0.u256, high(UInt256))]
-  randomize() # for later `randomNodes` selection
 
 proc splitBucket(r: var RoutingTable, index: int) =
   let bucket = r.buckets[index]
