@@ -10,7 +10,7 @@
 import
   std/[tables, hashes, times, algorithm, sets, sequtils],
   chronos, chronicles, stint, nimcrypto/keccak,
-  ../keys,
+  ../keys, ./discoveryv5/random2,
   ./enode
 
 export sets # TODO: This should not be needed, but compilation fails otherwise
@@ -548,9 +548,9 @@ proc randomNodes*(k: KademliaProtocol, count: int): seq[Node] =
   # insignificant compared to the time it takes for the network roundtrips when connecting
   # to nodes.
   while len(seen) < count:
-    let bucket = k.routing.buckets.sample()
+    let bucket = k.rng[].sample(k.routing.buckets)
     if bucket.nodes.len != 0:
-      let node = bucket.nodes.sample()
+      let node = k.rng[].sample(bucket.nodes)
       if node notin seen:
         result.add(node)
         seen.incl(node)
