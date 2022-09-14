@@ -94,14 +94,14 @@ proc getNextNode(nodeRlp: Rlp, key: NibblesSeq): Result[NextNodeResult, string] 
       return err("invalid reference")
 
     if nextRef.isList:
-      let rawBytes = ?nextRef.getRawRlpBytes()
+      let rawBytes = ? nextRef.getRawRlpBytes()
       if len(rawBytes) > 32:
-        return err("Embededed node longer that 32 bytes")
+        return err("Embedded node longer than 32 bytes")
       else:
         currNode = nextRef
         restKey = restKey.slice(keyLen)
     else:
-      let nodeBytes = ?nextRef.blobBytes()
+      let nodeBytes = ? nextRef.blobBytes()
       if len(nodeBytes) == 32:
         return ok(
           NextNodeResult(
@@ -113,16 +113,16 @@ proc getNextNode(nodeRlp: Rlp, key: NibblesSeq): Result[NextNodeResult, string] 
       elif len(nodeBytes) == 0:
         return ok(NextNodeResult(kind: EmptyValue))
       else:
-        return err("referernce rlp blob should have 0 or 32 bytes")
+        return err("reference rlp blob should have 0 or 32 bytes")
 
   while true:
-    let listLen = ?currNode.getListLen()
+    let listLen = ? currNode.getListLen()
 
     case listLen
     of 2:
       let
-        firstElem = ?currNode.getListElem(0)
-        blobBytes = ?firstElem.blobBytes()
+        firstElem = ? currNode.getListElem(0)
+        blobBytes = ? firstElem.blobBytes()
 
       let (isLeaf, k) = hexPrefixDecode blobBytes
 
@@ -130,16 +130,16 @@ proc getNextNode(nodeRlp: Rlp, key: NibblesSeq): Result[NextNodeResult, string] 
       if len(restKey) < len(k) or k != restKey.slice(0, len(k)):
         return ok(NextNodeResult(kind: EmptyValue))
 
-      let nextRef = ?currNode.getListElem(1)
+      let nextRef = ? currNode.getListElem(1)
 
       if isLeaf:
-        let blobBytes = ?nextRef.blobBytes()
+        let blobBytes = ? nextRef.blobBytes()
         return ok(NextNodeResult(kind: ValueNode, value: blobBytes))
 
       handleNextRef(nextRef, len(k))
     of 17:
       if len(restKey) == 0:
-        let value = ?currNode.getListElem(16)
+        let value = ? currNode.getListElem(16)
 
         if not value.hasData():
           return err("expected branch terminator")
@@ -150,10 +150,10 @@ proc getNextNode(nodeRlp: Rlp, key: NibblesSeq): Result[NextNodeResult, string] 
         if value.isEmpty():
           return ok(NextNodeResult(kind: EmptyValue))
         else:
-          let bytes = ?value.blobBytes()
+          let bytes = ? value.blobBytes()
           return ok(NextNodeResult(kind: ValueNode, value: bytes))
       else:
-        let nextRef = ?currNode.getListElem(restKey[0].int)
+        let nextRef = ? currNode.getListElem(restKey[0].int)
 
         handleNextRef(nextRef, 1)
     else:
@@ -173,7 +173,7 @@ proc verifyProof(
     if len(node) == 0:
       return err("missing expected node")
 
-    let next = ?getNextNode(rlpFromBytes(node), currentKey)
+    let next = ? getNextNode(rlpFromBytes(node), currentKey)
 
     case next.kind
     of EmptyValue:
@@ -196,7 +196,17 @@ proc verifyMptProof*(
   ## - proof is invalid
   ## - proof is valid
   ## In case of valid proof, value is extracted from the leaf node and compared
-  ## agains provided value
+  ## against provided value
+  ##
+  ## Main difference between this function and hexary.isValidBranch() is that
+  ## this function is meant for dealing with input from untrusted sources so:
+  ## - it should not have hidden assertion
+  ## - it should not have surprising exceptions
+  ## - it parses mpt nodes more strictly
+  ##
+  ## hexary.isValidBranch() is implemented via hexary trie `get` method which
+  ## may contain some checks important for integrity of the trie therefore is
+  ## is not really safe when receiving input from untrusted source.
 
   if len(branch) == 0:
     return invalidProof("empty branch")
@@ -225,4 +235,4 @@ proc verifyMptProof*(
   if proofValue == value:
     return validProof(proofValue)
   else:
-    return invalidProof("proof does not contrain expected value")
+    return invalidProof("proof does not contain expected value")
