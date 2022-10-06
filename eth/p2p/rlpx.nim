@@ -148,8 +148,10 @@ proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
 
 proc linkSendFailureToReqFuture[S, R](sendFut: Future[S], resFut: Future[R]) =
   sendFut.addCallback() do (arg: pointer):
-    if not sendFut.error.isNil:
-      resFut.fail(sendFut.error)
+    # Avoiding potentially double future completions
+    if not resFut.finished:
+      if sendFut.failed:
+        resFut.fail(sendFut.error)
 
 proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
   result = ""
