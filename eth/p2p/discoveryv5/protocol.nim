@@ -84,7 +84,7 @@ import
   std/[tables, sets, options, math, sequtils, algorithm],
   stew/shims/net as stewNet, json_serialization/std/net,
   stew/[endians2, results], chronicles, chronos, stint, metrics,
-  ".."/../[rlp, keys, async_utils],
+  ".."/../[rlp, keys],
   "."/[messages, encoding, node, routing_table, enr, random2, sessions, ip_vote,
     nodes_verification]
 
@@ -836,7 +836,7 @@ proc revalidateLoop(d: Protocol) {.async.} =
       await sleepAsync(milliseconds(d.rng[].rand(revalidateMax)))
       let n = d.routingTable.nodeToRevalidate()
       if not n.isNil:
-        traceAsyncErrors d.revalidateNode(n)
+        asyncSpawn d.revalidateNode(n)
   except CancelledError:
     trace "revalidateLoop canceled"
 
