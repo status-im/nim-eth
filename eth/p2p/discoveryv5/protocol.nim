@@ -258,13 +258,15 @@ proc send*(d: Protocol, a: Address, data: seq[byte]) =
       # closed, or could be `TransportOsError` in case of a socket error.
       # In the latter case this would probably mostly occur if the network
       # interface underneath gets disconnected or similar.
+      # It could also be an "Operation not permitted" error, which would
+      # indicate a firewall restriction kicking in.
       # TODO: Should this kind of error be propagated upwards? Probably, but
       # it should not stop the process as that would reset the discovery
       # progress in case there is even a small window of no connection.
       # One case that needs this error available upwards is when revalidating
       # nodes. Else the revalidation might end up clearing the routing tabl
       # because of ping failures due to own network connection failure.
-      warn "Discovery send failed", msg = f.readError.msg
+      warn "Discovery send failed", msg = f.readError.msg, address = a
 
 proc send(d: Protocol, n: Node, data: seq[byte]) =
   doAssert(n.address.isSome())
