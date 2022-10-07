@@ -8,8 +8,8 @@ The implemented specification is Protocol version v5.1.
 This implementation does not support "Topic Advertisement" yet as this part of
 the specification is not complete.
 
-The implementation relies on other modules in the `eth` package, namely: `keys`,
-`rlp` and `async_utils`.
+The implementation depends on other modules in the `eth` package, namely: `keys`
+and `rlp`.
 
 ## How to use
 
@@ -53,7 +53,7 @@ Now within the application, manual queries or lookups can be done, for which
 the discovered nodes can be used. Nodes discovered during this process will be
 attempted to be added to the routing table. One can use the `query`, `queryRandom`
 or `lookup` calls for this. `randomNodes` can also be used to find nodes,
-but this will only look into the current routing table and not actively 
+but this will only look into the current routing table and not actively
 search for nodes on the network.
 
 Or, one can decide not to run `d.start()` and do this manually within its
