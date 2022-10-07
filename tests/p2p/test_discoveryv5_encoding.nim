@@ -5,7 +5,7 @@ import
   unittest2,
   stint, stew/byteutils, stew/shims/net,
   ../../eth/keys,
-  ../../eth/p2p/discoveryv5/[messages, encoding, enr, node, sessions]
+  ../../eth/p2p/discoveryv5/[messages_encoding, encoding, enr, node, sessions]
 
 let rng = newRng()
 
