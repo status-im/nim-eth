@@ -1,6 +1,6 @@
 import
   testutils/fuzzing,
-  ../../../eth/rlp, ../../../eth/p2p/discoveryv5/[encoding, messages]
+  ../../../eth/p2p/discoveryv5/messages_encoding
 
 test:
   block:

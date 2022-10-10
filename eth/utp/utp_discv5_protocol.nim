@@ -9,7 +9,7 @@
 import
   std/[hashes, sugar],
   chronos, chronicles,
-  ../p2p/discoveryv5/[protocol, messages, encoding],
+  ../p2p/discoveryv5/[protocol, messages_encoding, encoding],
   ./utp_router,
   ../keys
 
