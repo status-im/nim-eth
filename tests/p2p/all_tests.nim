@@ -6,5 +6,4 @@ import
   ./test_ecies,
   ./test_enode,
   ./test_rlpx_thunk,
-  ./test_protocol_handlers,
-  ./les/test_flow_control
+  ./test_protocol_handlers

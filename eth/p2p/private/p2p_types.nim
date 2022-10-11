@@ -10,11 +10,8 @@ import
   std/[deques, tables],
   chronos,
   stew/results,
-  ../../common/chaindb,
   ".."/../[rlp, keys],
   ".."/[enode, kademlia, discovery, rlpxcrypt]
-
-export chaindb
 
 const
   useSnappy* = defined(useSnappy)
@@ -24,7 +21,6 @@ type
 
   EthereumNode* = ref object
     networkId*: NetworkId
-    chain*: AbstractChainDB
     clientId*: string
     connectionState*: ConnectionState
     keys*: KeyPair

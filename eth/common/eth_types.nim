@@ -143,17 +143,6 @@ type
     txs*:    seq[Transaction]
     uncles*: seq[BlockHeader]
 
-  CollationHeader* = object
-    shard*:         uint
-    expectedPeriod*: uint
-    periodStartPrevHash*: Hash256
-    parentHash*:    Hash256
-    txRoot*:        Hash256
-    coinbase*:      EthAddress
-    stateRoot*:     Hash256
-    receiptRoot*:   Hash256
-    blockNumber*:   BlockNumber
-
   # TODO: Make BlockNumber a uint64 and deprecate either this or BlockHashOrNumber
   HashOrNum* = object
     case isHash*: bool
@@ -168,33 +157,6 @@ type
       hash*: Hash256
     else:
       number*: uint64
-
-  BlocksRequest* = object
-    startBlock*: HashOrNum
-    maxResults*, skip*: uint
-    reverse*: bool
-
-  ProofRequest* = object
-    blockHash*: KeccakHash
-    accountKey*: Blob
-    key*: Blob
-    fromLevel*: uint
-
-  HeaderProofRequest* = object
-    chtNumber*: uint
-    blockNumber*: uint
-    fromLevel*: uint
-
-  ContractCodeRequest* = object
-    blockHash*: KeccakHash
-    key*: EthAddress
-
-  HelperTrieProofRequest* = object
-    subType*: uint
-    sectionIdx*: uint
-    key*: Blob
-    fromLevel*: uint
-    auxReq*: uint
 
   BlockHeaderRef* = ref BlockHeader
   BlockBodyRef* = ref BlockBody

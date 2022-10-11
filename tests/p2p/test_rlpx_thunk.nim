@@ -2,10 +2,11 @@
 
 import
   std/[json, os],
-  unittest2,
+  unittest2, stint,
   chronos, stew/byteutils,
-  ../../eth/p2p, ../../eth/p2p/rlpx_protocols/eth_protocol,
-  ./p2p_test_helper
+  ../../eth/[p2p, common],
+  ./p2p_test_helper,
+  ./eth_protocol
 
 let rng = newRng()
 

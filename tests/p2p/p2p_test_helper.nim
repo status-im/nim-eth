@@ -16,7 +16,7 @@ proc setupTestNode*(
   # Don't create new RNG every time in production code!
   let keys1 = KeyPair.random(rng[])
   var node = newEthereumNode(
-    keys1, localAddress(nextPort), NetworkId(1), nil,
+    keys1, localAddress(nextPort), NetworkId(1),
     addAllCapabilities = false,
     bindUdpPort = Port(nextPort), bindTcpPort = Port(nextPort),
     rng = rng)

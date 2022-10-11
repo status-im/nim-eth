@@ -10,7 +10,7 @@
 import
   std/[tables, algorithm, random],
   chronos, chronos/timer, chronicles,
-  ./keys, ./common/chaindb, ./p2p/private/p2p_types,
+  ./keys, ./p2p/private/p2p_types,
   ./p2p/[kademlia, discovery, enode, peer_pool, rlpx]
 
 export
@@ -33,7 +33,6 @@ proc newEthereumNode*(
     keys: KeyPair,
     address: Address,
     networkId: NetworkId,
-    chain: AbstractChainDB,
     clientId = "nim-eth-p2p/0.2.0", # TODO: read this value from nimble somehow
     addAllCapabilities = true,
     useCompression: bool = false,
