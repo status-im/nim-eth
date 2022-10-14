@@ -39,6 +39,10 @@ declarePublicGauge connected_peers, "number of peers in the pool"
 logScope:
   topics = "rlpx"
 
+template silenceUnusedWarning(x: untyped, level: static[LogLevel]) =
+  when chronicles.enabledLogLevel >= level:
+    discard x
+
 type
   ResponderWithId*[MsgType] = object
     peer*: Peer
@@ -131,6 +135,8 @@ proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
           doAssert false, "trying to resolve a timed out request with a value"
       except CatchableError as e:
         debug "Exception in requestResolver()", exc = e.name, err = e.msg
+        silenceUnusedWarning(e, LogLevel.DEBUG)
+
     else:
       try:
         if not f.read.isSome:
@@ -141,10 +147,12 @@ proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
       except TransportOsError as e:
         # E.g. broken pipe
         trace "TransportOsError during request", err = e.msg
+        silenceUnusedWarning(e, LogLevel.TRACE)
       except TransportError:
         trace "Transport got closed during request"
       except CatchableError as e:
         debug "Exception in requestResolver()", exc = e.name, err = e.msg
+        silenceUnusedWarning(e, LogLevel.DEBUG)
 
 proc linkSendFailureToReqFuture[S, R](sendFut: Future[S], resFut: Future[R]) =
   sendFut.addCallback() do (arg: pointer):
@@ -777,6 +785,7 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     except CatchableError as e:
       warn "Error while handling RLPx message", peer,
         msg = peer.getMsgName(msgId), err = e.msg
+      silenceUnusedWarning(e, LogLevel.WARN)
 
     # TODO: Hmm, this can be safely moved into the message handler thunk.
     # The documentation will need to be updated, explaning the fact that
@@ -794,6 +803,7 @@ proc dispatchMessages*(peer: Peer) {.async.} =
         debug "nextMsg resolver failed, ending dispatchMessages loop", peer,
                err = e.msg
         await peer.disconnect(BreachOfProtocol, true)
+        silenceUnusedWarning(e, LogLevel.DEBUG)
         return
       peer.awaitedMessages[msgId] = nil
 
@@ -1303,9 +1313,11 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     debug "Rlp error in rlpxConnect"
   except TransportOsError as e:
     trace "TransportOsError", err = e.msg
+    silenceUnusedWarning(e, LogLevel.TRACE)
   except CatchableError as e:
     error "Unexpected exception in rlpxConnect", remote, exc = e.name,
       err = e.msg
+    silenceUnusedWarning(e, LogLevel.ERROR)
 
   if not ok:
     if not isNil(peer.transport):
@@ -1420,8 +1432,10 @@ proc rlpxAccept*(node: EthereumNode,
     debug "Rlp error in rlpxAccept"
   except TransportOsError as e:
     trace "TransportOsError", err = e.msg
+    silenceUnusedWarning(e, LogLevel.TRACE)
   except CatchableError as e:
     error "Unexpected exception in rlpxAccept", exc = e.name, err = e.msg
+    silenceUnusedWarning(e, LogLevel.ERROR)
 
   if not ok:
     if not isNil(peer.transport):
