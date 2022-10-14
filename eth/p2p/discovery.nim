@@ -132,7 +132,8 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
   const MAX_NEIGHBOURS_PER_PACKET = 12 # TODO: Implement a smarter way to compute it
   type Neighbour = tuple[ip: IpAddress, udpPort, tcpPort: Port, pk: PublicKey]
   var nodes = newSeqOfCap[Neighbour](MAX_NEIGHBOURS_PER_PACKET)
-  shallow(nodes)
+  when not defined(nimSeqsV2):
+    shallow(nodes)
 
   template flush() =
     block:
