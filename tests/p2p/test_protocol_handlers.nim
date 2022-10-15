@@ -90,5 +90,7 @@ suite "Testing protocol handlers":
   test "Override network state":
     let rng = newRng()
     var node = setupTestNode(rng, hah)
-    node.addCapability(hah, network())
-    node.replaceNetworkState(hah, network())
+    node.addCapability(hah, network(count: 3))
+    check node.protocolState(hah).count == 3
+    node.replaceNetworkState(hah, network(count: 7))
+    check node.protocolState(hah).count == 7
