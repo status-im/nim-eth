@@ -512,7 +512,7 @@ proc nodeToRevalidate*(r: RoutingTable): Node =
       return b.nodes[^1]
 
 proc randomNodes*(r: RoutingTable, maxAmount: int,
-    pred: proc(x: Node): bool {.gcsafe, noSideEffect.} = nil): seq[Node] =
+    pred: proc(x: Node): bool {.gcsafe, noSideEffect, raises:[Defect].} = nil): seq[Node] =
   ## Get a `maxAmount` of random nodes from the routing table with the `pred`
   ## predicate function applied as filter on the nodes selected.
   var maxAmount = maxAmount

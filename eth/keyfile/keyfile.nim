@@ -93,7 +93,10 @@ type
   KfResult*[T] = Result[T, KeyFileError]
 
 proc mapErrTo[T, E](r: Result[T, E], v: static KeyFileError): KfResult[T] =
-  r.mapErr(proc (e: E): KeyFileError = v)
+  if r.isOk:
+    ok(r.value)
+  else:
+    err(v)
 
 const
   SupportedHashes = [
