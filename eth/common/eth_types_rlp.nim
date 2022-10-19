@@ -336,3 +336,8 @@ proc rlpHash*[T](v: T): Hash256 =
 
 func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
 
+proc append*(rlpWriter: var RlpWriter, id: NetworkId) =
+  rlpWriter.append(id.uint)
+
+proc read*(rlp: var Rlp, T: type NetworkId): T =
+  rlp.read(uint).NetworkId

@@ -51,6 +51,8 @@ type
   # they are separate entity
   ChainId* = distinct uint64
 
+  NetworkId* = distinct uint
+
   Account* = object
     nonce*:       AccountNonce
     balance*:     UInt256
@@ -284,3 +286,9 @@ template hasData*(r: EthResourceRefs): bool = r != nil
 template deref*(b: Blob): auto = b
 template deref*(o: Option): auto = o.get
 template deref*(r: EthResourceRefs): auto = r[]
+
+func `==`*(a, b: NetworkId): bool =
+  a.uint == b.uint
+
+func `$`*(x: NetworkId): string =
+  `$`(uint(x))
