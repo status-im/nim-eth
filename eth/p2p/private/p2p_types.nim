@@ -1,6 +1,5 @@
-
 # nim-eth
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,15 +9,15 @@ import
   std/[deques, tables],
   chronos,
   stew/results,
-  ".."/../[rlp, keys],
+  ".."/../[rlp, keys], ../../common/eth_types,
   ".."/[enode, kademlia, discovery, rlpxcrypt]
+
+export eth_types.NetworkId
 
 const
   useSnappy* = defined(useSnappy)
 
 type
-  NetworkId* = distinct uint
-
   EthereumNode* = ref object
     networkId*: NetworkId
     clientId*: string
@@ -188,15 +187,3 @@ proc `$`*(peer: Peer): string = $peer.remote
 
 proc toENode*(v: EthereumNode): ENode =
   ENode(pubkey: v.keys.pubkey, address: v.address)
-
-proc append*(rlpWriter: var RlpWriter, id: NetworkId) {.inline.} =
-  rlpWriter.append(id.uint)
-
-proc read*(rlp: var Rlp, T: type NetworkId): T {.inline.} =
-  rlp.read(uint).NetworkId
-
-func `==`*(a, b: NetworkId): bool {.inline.} =
-  a.uint == b.uint
-
-func `$`*(x: NetworkId): string {.inline.} =
-  `$`(uint(x))

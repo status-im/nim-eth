@@ -525,7 +525,7 @@ proc getRlpxHeaderData(header: RlpxHeader): (int,int,int) =
         capabilityId = result[0],
         contextId = result[1],
         datagramSize = datagramSize()
-    #]#
+    ]#
   except:
     error "RLPx message header-data options, parse error",
       capabilityId = result[0],
@@ -659,7 +659,7 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
         trace "RLPx next chunked datagram fragment",
           peer, msgId = result[0], ctxId, msgSize, moreData, totalMsgSize,
           dcrBytesCount, payloadSoFar = decryptedBytes.len
-        #]#
+        ]#
 
       # End While
 

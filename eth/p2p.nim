@@ -1,5 +1,5 @@
 # nim-eth
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -46,7 +46,7 @@ template addCapability*(node: var EthereumNode,
       name(ParamType), name(Protocol.NetworkState)]
     {. error: errMsg .}
 
-  addCapability(node, Protocol.protocolInfo, 
+  addCapability(node, Protocol.protocolInfo,
     cast[RootRef](networkState))
 
 proc replaceNetworkState*(node: var EthereumNode,
@@ -66,14 +66,14 @@ template replaceNetworkState*(node: var EthereumNode,
       name(ParamType), name(Protocol.NetworkState)]
     {. error: errMsg .}
 
-  replaceNetworkState(node, Protocol.protocolInfo, 
+  replaceNetworkState(node, Protocol.protocolInfo,
     cast[RootRef](networkState))
 
 proc newEthereumNode*(
     keys: KeyPair,
     address: Address,
     networkId: NetworkId,
-    clientId = "nim-eth-p2p/0.2.0", # TODO: read this value from nimble somehow
+    clientId = "nim-eth-p2p",
     addAllCapabilities = true,
     useCompression: bool = false,
     minPeers = 10,
