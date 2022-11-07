@@ -16,7 +16,8 @@ import
   ../../eth/utp/utp_discv5_protocol,
   ../../eth/keys,
   ../../eth/utp/utp_router as rt,
-  ../p2p/discv5_test_helper
+  ../p2p/discv5_test_helper,
+  ../stubloglevel
 
 procSuite "Utp protocol over discovery v5 tests":
   let rng = newRng()

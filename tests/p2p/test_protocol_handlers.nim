@@ -13,6 +13,7 @@ import
   std/tables,
   chronos, testutils/unittests,
   ../../eth/p2p,
+  ../stubloglevel,
   ./p2p_test_helper
 
 type

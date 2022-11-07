@@ -5,6 +5,7 @@ import
   unittest2, stint,
   chronos, stew/byteutils,
   ../../eth/[p2p, common],
+  ../stubloglevel,
   ./p2p_test_helper,
   ./eth_protocol
 

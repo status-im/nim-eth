@@ -12,11 +12,8 @@ import
   ../../eth/utp/packets,
   ../../eth/keys
 
-suite "Utp packets encoding/decoding":
-
-  let rng = newRng()
-
-  test "Encode/decode syn packet":
+suite "uTP Packet Encoding":
+  test "Encode/decode SYN packet":
     let synPacket = synPacket(5, 10, 20)
     let encoded = encodePacket(synPacket)
     let decoded = decodePacket(encoded)
@@ -30,7 +27,7 @@ suite "Utp packets encoding/decoding":
     check:
       synPacketDec == synPacket
 
-  test "Encode/decode fin packet":
+  test "Encode/decode FIN packet":
     let finPacket = finPacket(5, 10, 20, 30, 40)
     let encoded = encodePacket(finPacket)
     let decoded = decodePacket(encoded)
@@ -44,7 +41,7 @@ suite "Utp packets encoding/decoding":
     check:
       finPacketDec == finPacket
 
-  test "Encode/decode reset packet":
+  test "Encode/decode RESET packet":
     let resetPacket = resetPacket(5, 10, 20)
     let encoded = encodePacket(resetPacket)
     let decoded = decodePacket(encoded)
@@ -58,7 +55,7 @@ suite "Utp packets encoding/decoding":
     check:
       resetPacketDec == resetPacket
 
-  test "Encode/decode ack packet without extensions":
+  test "Encode/decode ACK packet: without extensions":
     let ackPacket = ackPacket(5, 10, 20, 30, 40)
     let encoded = encodePacket(ackPacket)
     let decoded = decodePacket(encoded)
@@ -72,7 +69,7 @@ suite "Utp packets encoding/decoding":
     check:
       ackPacketDec == ackPacket
 
-  test "Encode/decode ack packet with extensions":
+  test "Encode/decode ACK packet: with extensions":
     let bitMask: array[4, byte] = [1'u8, 2, 3, 4]
     let ackPacket = ackPacket(5, 10, 20, 30, 40, some(bitMask))
     let encoded = encodePacket(ackPacket)
@@ -117,7 +114,6 @@ suite "Utp packets encoding/decoding":
       err3.isErr()
       err3.error() == "Packet too short for selective ack extension"
 
-
     var encoded4 = encodePacket(ackPacket)
     # change change extension field to something other than 0 or 1
     encoded4[1] = 2
@@ -126,11 +122,11 @@ suite "Utp packets encoding/decoding":
       err4.isErr()
       err4.error() == "Invalid extension type"
 
-  test "Decode state packet":
+  test "Decode STATE packet":
     # Packet obtained by interaction with c reference implementation
     let pack: array[20, uint8] = [
-            0x21'u8, 0x0, 0x15, 0x72, 0x00, 0xBA, 0x4D, 0x71, 0x0, 0x0, 0x0, 0x0, 0x0, 0x10, 0x0,
-            0x0, 0x41, 0xA7, 0x00, 0x01]
+            0x21'u8, 0x0, 0x15, 0x72, 0x00, 0xBA, 0x4D, 0x71, 0x0, 0x0,
+            0x0, 0x0, 0x0, 0x10, 0x0, 0x0, 0x41, 0xA7, 0x00, 0x01]
     let decoded = decodePacket(pack)
 
     check:

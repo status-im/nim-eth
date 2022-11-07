@@ -24,25 +24,28 @@ let styleCheckStyle =
   else:
     "error"
 
-let commonParams = " --verbosity:0 --hints:off --skipUserCfg:on " &
-  "--warning[ObservableStores]:off --styleCheck:usages --styleCheck:" &
-  styleCheckStyle & " " & getEnv("NIMFLAGS") & " "
+let commonParams =
+  " --skipUserCfg:on" &
+  " --verbosity:0 --hints:off" &
+  " --warning[ObservableStores]:off " &
+  " --styleCheck:usages --styleCheck:" & styleCheckStyle &
+  " " & getEnv("NIMFLAGS") &
+  " -d:chronosStrictException" &
+  " -d:chronicles_log_level=TRACE"
 
-proc runTest(path: string, release: bool = true, chronosStrict = true) =
+proc runTest(path: string, release: bool = true) =
   echo "\nBuilding and running: ", path
-  let releaseMode = if release: "-d:release" else: ""
-  let chronosMode =
-    if chronosStrict: "-d:chronosStrictException" else: ""
-  exec "nim c -r " & releaseMode & " " & chronosMode &
-    " -d:chronicles_log_level=ERROR " & commonParams & path
+  let releaseMode = if release: " -d:release" else: ""
+
+  exec "nim c -r" &
+    releaseMode & commonParams & " " & path
   rmFile path
 
 proc buildBinary(path: string) =
   echo "\nBuilding: ", path
-  exec "nim c -d:release -d:chronosStrictException " &
-    "-d:chronicles_log_level=TRACE --threads:on " & commonParams &
-    "--warning[CaseTransition]:off --warning[ObservableStores]:off " &
-    path
+  exec "nim c -d:release" & commonParams &
+    " --warning[CaseTransition]:off" &
+    " " & path
 
 task test_keyfile, "Run keyfile tests":
   runTest("tests/keyfile/all_tests")
