@@ -482,10 +482,10 @@ proc len*(r: RoutingTable): int =
 proc moveRight[T](arr: var openArray[T], a, b: int) =
   ## In `arr` move elements in range [a, b] right by 1.
   var t: T
-  t = system.move(arr[b + 1])
+  shallowCopy(t, arr[b + 1])
   for i in countdown(b, a):
-    arr[i + 1] = system.move(arr[i])
-  arr[a] = system.move(t)
+    shallowCopy(arr[i + 1], arr[i])
+  shallowCopy(arr[a], t)
 
 proc setJustSeen*(r: RoutingTable, n: Node) =
   ## Move `n` to the head (most recently seen) of its bucket.
@@ -512,7 +512,7 @@ proc nodeToRevalidate*(r: RoutingTable): Node =
       return b.nodes[^1]
 
 proc randomNodes*(r: RoutingTable, maxAmount: int,
-    pred: proc(x: Node): bool {.gcsafe, noSideEffect, raises:[Defect].} = nil): seq[Node] =
+    pred: proc(x: Node): bool {.gcsafe, noSideEffect.} = nil): seq[Node] =
   ## Get a `maxAmount` of random nodes from the routing table with the `pred`
   ## predicate function applied as filter on the nodes selected.
   var maxAmount = maxAmount
