@@ -6,7 +6,7 @@ import
 # real eth protocol implementation is in nimbus-eth1 repo
 
 type
-  PeerState = ref object of RootRef
+  PeerState = ref object
     initialized*: bool
 
 p2pProtocol eth(version = 63,

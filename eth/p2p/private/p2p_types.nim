@@ -93,10 +93,7 @@ type
   ## Quasy-private types. Use at your own risk.
   ##
 
-  ProtocolManager* = ref object
-    protocols*: seq[ProtocolInfo]
-
-  ProtocolInfo* = ref object
+  ProtocolInfoObj* = object
     name*: string
     version*: int
     messages*: seq[MessageInfo]
@@ -109,7 +106,9 @@ type
     handshake*: HandshakeStep
     disconnectHandler*: DisconnectionHandler
 
-  MessageInfo* = ref object
+  ProtocolInfo* = ptr ProtocolInfoObj
+
+  MessageInfo* = object
     id*: int
     name*: string
 
@@ -133,7 +132,7 @@ type
     # `messages` holds a mapping from valid message IDs to their handler procs.
     #
     protocolOffsets*: seq[int]
-    messages*: seq[MessageInfo]
+    messages*: seq[ptr MessageInfo]
     activeProtocols*: seq[ProtocolInfo]
 
   ##

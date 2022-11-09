@@ -1,7 +1,7 @@
 {.push raises: [Defect].}
 
 import
-  std/[options, sequtils, macrocache],
+  std/[options, sequtils],
   stew/shims/macros, chronos, faststreams/outputs
 
 type
@@ -76,7 +76,7 @@ type
 
     # Cached properties
     nameIdent*: NimNode
-    protocolInfo*: NimNode
+    protocolInfoVar*: NimNode
 
     # All messages
     messages*: seq[Message]
@@ -145,9 +145,6 @@ let
 
   PROTO                 {.compileTime.} = ident "PROTO"
   MSG                   {.compileTime.} = ident "MSG"
-
-const
-  protocolCounter = CacheCounter"protocolCounter"
 
 template Opt(T): auto = newTree(nnkBracketExpr, Option, T)
 template Fut(T): auto = newTree(nnkBracketExpr, Future, T)
@@ -256,7 +253,7 @@ proc refreshParam(n: NimNode): NimNode =
   result = copyNimTree(n)
   if n.kind == nnkIdentDefs:
     for i in 0..<n.len-2:
-      if n[i].kind == nnkSym:
+      if n[i].kind == nnkSym: 
         result[i] = genSym(symKind(n[i]), $n[i])
 
 iterator typedInputParams(procDef: NimNode, skip = 0): (NimNode, NimNode) =
@@ -314,7 +311,7 @@ proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
     PeerStateType: verifyStateType peerState,
     NetworkStateType: verifyStateType networkState,
     nameIdent: ident(name),
-    protocolInfo: newCall(ident("protocolInfo"), ident(name)),
+    protocolInfoVar: ident(name & "Protocol"),
     outSendProcs: newStmtList(),
     outRecvProcs: newStmtList(),
     outProcRegistrations: newStmtList())
@@ -346,7 +343,7 @@ proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
   var
     getState = ident"getState"
     getNetworkState = ident"getNetworkState"
-    protocolInfo = p.protocolInfo
+    protocolInfoVar = p.protocolInfoVar
     protocolNameIdent = p.nameIdent
     PeerType = p.backend.PeerType
     PeerStateType = p.PeerStateType
@@ -373,12 +370,12 @@ proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
   if PeerStateType != nil:
     prelude.add quote do:
       template state(`peerVar`: `PeerType`): `PeerStateType` =
-        `PeerStateType`(`getState`(`peerVar`, `protocolInfo`))
+        cast[`PeerStateType`](`getState`(`peerVar`, `protocolInfoVar`))
 
   if NetworkStateType != nil:
     prelude.add quote do:
       template networkState(`peerVar`: `PeerType`): `NetworkStateType` =
-        `NetworkStateType`(`getNetworkState`(`peerVar`.network, `protocolInfo`))
+        cast[`NetworkStateType`](`getNetworkState`(`peerVar`.network, `protocolInfoVar`))
 
 proc addPreludeDefs*(userHandlerProc: NimNode, definitions: NimNode) =
   userHandlerProc.body[0].add definitions
@@ -702,7 +699,7 @@ proc useStandardBody*(sendProc: SendProc,
                 newStmtList()
               else:
                 logSentMsgFields(recipient,
-                                 msg.protocol.protocolInfo,
+                                 msg.protocol.protocolInfoVar,
                                  $msg.ident,
                                  sendProc.msgParams)
 
@@ -898,23 +895,15 @@ proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode) =
 
 proc genTypeSection*(p: P2PProtocol): NimNode =
   var
-    protocolIdx = protocolCounter.value
     protocolName = p.nameIdent
     peerState = p.PeerStateType
     networkState= p.NetworkStateType
 
-  protocolCounter.inc
   result = newStmtList()
   result.add quote do:
     # Create a type acting as a pseudo-object representing the protocol
     # (e.g. p2p)
     type `protocolName`* = object
-
-    # The protocol run-time index is available as a pseudo-field
-    # (e.g. `p2p.index`)
-    template index*(`PROTO`: type `protocolName`): auto = `protocolIdx`
-    template protocolInfo*(`PROTO`: type `protocolName`): auto =
-      getProtocol(`protocolIdx`)
 
   if peerState != nil:
     result.add quote do:
@@ -960,29 +949,33 @@ proc genCode*(p: P2PProtocol): NimNode =
   result.add p.genTypeSection()
 
   let
+    protocolInfoVar = p.protocolInfoVar
+    protocolInfoVarObj = ident($protocolInfoVar & "Obj")
+    protocolName = p.nameIdent
     protocolInit = p.backend.implementProtocolInit(p)
-    protocolReg  = ident($p.nameIdent & "Registration")
-    regBody      = newStmtList()
+
+  result.add quote do:
+    # One global variable per protocol holds the protocol run-time data
+    var `protocolInfoVarObj` = `protocolInit`
+    var `protocolInfoVar` = addr `protocolInfoVarObj`
+
+    # The protocol run-time data is available as a pseudo-field
+    # (e.g. `p2p.protocolInfo`)
+    template protocolInfo*(`PROTO`: type `protocolName`): auto = `protocolInfoVar`
 
   result.add p.outSendProcs,
-             p.outRecvProcs
+             p.outRecvProcs,
+             p.outProcRegistrations
 
   if p.onPeerConnected != nil: result.add p.onPeerConnected
   if p.onPeerDisconnected != nil: result.add p.onPeerDisconnected
 
-  regBody.add newCall(p.backend.setEventHandlers,
-                      protocolVar,
-                      nameOrNil p.onPeerConnected,
-                      nameOrNil p.onPeerDisconnected)
+  result.add newCall(p.backend.setEventHandlers,
+                     protocolInfoVar,
+                     nameOrNil p.onPeerConnected,
+                     nameOrNil p.onPeerDisconnected)
 
-  regBody.add p.outProcRegistrations
-  regBody.add newCall(p.backend.registerProtocol, protocolVar)
-
-  result.add quote do:
-    proc `protocolReg`() {.raises: [RlpError, Defect].} =
-      let `protocolVar` = `protocolInit`
-      `regBody`
-    `protocolReg`()
+  result.add newCall(p.backend.registerProtocol, protocolInfoVar)
 
 macro emitForSingleBackend(
     name: static[string],

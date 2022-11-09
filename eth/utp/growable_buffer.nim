@@ -21,9 +21,6 @@ type
     items: seq[Option[A]]
     mask: uint32
 
-when not defined(nimHasEffectsOfs):
-  template effectsOf(f: untyped) {.pragma.}
-
 # provided size will always be adjusted to next power of two
 proc init*[A](T: type GrowableCircularBuffer[A], size: uint32 = 16): T =
   let powOfTwoSize = nextPowerOfTwo(int(size))
@@ -47,13 +44,11 @@ proc delete*[A](buff: var GrowableCircularBuffer[A], i: uint32) =
 proc hasKey*[A](buff: GrowableCircularBuffer[A], i: uint32): bool =
   buff.get(i).isSome()
 
-proc exists*[A](buff: GrowableCircularBuffer[A], i: uint32,
-                check: proc (x: A): bool): bool {.gcsafe, effectsOf: check.} =
+proc exists*[A](buff: GrowableCircularBuffer[A], i: uint32, check: proc (x: A): bool): bool =
   let maybeElem = buff.get(i)
   if (maybeElem.isSome()):
     let elem = maybeElem.unsafeGet()
-    {.gcsafe.}:
-      check(elem)
+    check(elem)
   else:
     false
 
