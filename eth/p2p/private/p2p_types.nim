@@ -167,19 +167,23 @@ type
     Disconnecting,
     Disconnected
 
+  # Disconnect message reasons as specified:
+  # https://github.com/ethereum/devp2p/blob/master/rlpx.md#disconnect-0x01
+  # Receiving values that are too large or that are in the enum hole will
+  # trigger `RlpTypeMismatch` error on deserialization.
   DisconnectionReason* = enum
-    DisconnectRequested,
-    TcpError,
-    BreachOfProtocol,
-    UselessPeer,
-    TooManyPeers,
-    AlreadyConnected,
-    IncompatibleProtocolVersion,
-    NullNodeIdentityReceived,
-    ClientQuitting,
-    UnexpectedIdentity,
-    SelfConnection,
-    MessageTimeout,
+    DisconnectRequested = 0x00,
+    TcpError = 0x01,
+    BreachOfProtocol = 0x02,
+    UselessPeer = 0x03,
+    TooManyPeers = 0x04,
+    AlreadyConnected = 0x05,
+    IncompatibleProtocolVersion = 0x06,
+    NullNodeIdentityReceived = 0x07,
+    ClientQuitting = 0x08,
+    UnexpectedIdentity = 0x09,
+    SelfConnection = 0x0A,
+    MessageTimeout = 0x0B,
     SubprotocolReason = 0x10
 
 proc `$`*(peer: Peer): string = $peer.remote
