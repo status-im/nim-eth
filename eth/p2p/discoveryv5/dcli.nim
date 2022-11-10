@@ -99,14 +99,14 @@ func defaultListenAddress*(conf: DiscoveryConf): ValidIpAddress =
 func defaultAdminListenAddress*(conf: DiscoveryConf): ValidIpAddress =
   (static ValidIpAddress.init("127.0.0.1"))
 
-proc parseCmdArg*(T: type enr.Record, p: TaintedString): T =
+proc parseCmdArg*(T: type enr.Record, p: string): T =
   if not fromURI(result, p):
     raise newException(ConfigurationError, "Invalid ENR")
 
-proc completeCmdArg*(T: type enr.Record, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type Node, p: TaintedString): T =
+proc parseCmdArg*(T: type Node, p: string): T =
   var record: enr.Record
   if not fromURI(record, p):
     raise newException(ConfigurationError, "Invalid ENR")
@@ -120,16 +120,16 @@ proc parseCmdArg*(T: type Node, p: TaintedString): T =
 
   n[]
 
-proc completeCmdArg*(T: type Node, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type Node, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T =
+proc parseCmdArg*(T: type PrivateKey, p: string): T =
   try:
     result = PrivateKey.fromHex(string(p)).tryGet()
   except CatchableError:
     raise newException(ConfigurationError, "Invalid private key")
 
-proc completeCmdArg*(T: type PrivateKey, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
 
 proc discover(d: discv5_protocol.Protocol) {.async.} =

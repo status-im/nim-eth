@@ -597,7 +597,7 @@ proc recvPong*(k: KademliaProtocol, n: Node, token: seq[byte]) =
     future.complete(true)
   k.updateLastPongReceived(n, getTime())
 
-proc recvPing*(k: KademliaProtocol, n: Node, msgHash: any)
+proc recvPing*(k: KademliaProtocol, n: Node, msgHash: auto)
     {.raises: [ValueError, Defect].} =
   trace "<<< ping from ", n
   k.wire.sendPong(n, msgHash)

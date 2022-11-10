@@ -13,7 +13,7 @@
 import
   std/[os, tables, times, random, sequtils, options],
   chronos, chronicles,
-  ".."/[rlp, keys, common],
+  ".."/[keys, common],
   ./private/p2p_types, "."/[discovery, kademlia, rlpx, enode]
 
 const

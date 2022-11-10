@@ -8,7 +8,6 @@
 import
   std/[deques, tables],
   chronos,
-  stew/results,
   ".."/../[rlp, keys], ../../common/eth_types,
   ".."/[enode, kademlia, discovery, rlpxcrypt]
 

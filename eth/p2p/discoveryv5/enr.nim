@@ -300,7 +300,7 @@ proc update*(record: var Record, pk: PrivateKey,
       updated = true
 
   if updated:
-    if r.seqNum == high(r.seqNum): # highly unlikely
+    if r.seqNum == high(type r.seqNum): # highly unlikely
       return err("Maximum sequence number reached")
     r.seqNum.inc()
     r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
