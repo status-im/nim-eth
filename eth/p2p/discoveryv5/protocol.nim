@@ -173,6 +173,9 @@ const
     responseTimeout: defaultResponseTimeout
   )
 
+chronicles.formatIt(Option[Port]): $it
+chronicles.formatIt(Option[ValidIpAddress]): $it
+
 proc addNode*(d: Protocol, node: Node): bool =
   ## Add `Node` to discovery routing table.
   ##
@@ -967,7 +970,7 @@ proc newProtocol*(
   # Anyhow, nim-beacon-chain would also require some changes to support port
   # remapping through NAT and this API is also subject to change once we
   # introduce support for ipv4 + ipv6 binding/listening.
-  let extraFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
+  let customEnrFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
   # TODO:
   # - Defect as is now or return a result for enr errors?
   # - In case incorrect key, allow for new enr based on new key (new node id)?
@@ -975,18 +978,14 @@ proc newProtocol*(
   if previousRecord.isSome():
     record = previousRecord.get()
     record.update(privKey, enrIp, enrTcpPort, enrUdpPort,
-      extraFields).expect("Record within size limits and correct key")
+      customEnrFields).expect("Record within size limits and correct key")
   else:
     record = enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort,
-      extraFields).expect("Record within size limits")
+      customEnrFields).expect("Record within size limits")
 
-  debug "Initializing discovery v5",
-    enrIp, enrTcpPort, enrUdpPort, enrAutoUpdate,
-    bootstrapEnrs = bootstrapRecords, localEnrFields,
-    bindPort, bindIp
-
-  info "ENR initialized", ip = enrIp, tcp = enrTcpPort, udp = enrUdpPort,
-    seqNum = record.seqNum, uri = toURI(record)
+  info "Discovery ENR initialized", enrAutoUpdate, seqNum = record.seqNum,
+    ip = enrIp, tcpPort = enrTcpPort, udpPort = enrUdpPort,
+    customEnrFields, uri = toURI(record)
   if enrIp.isNone():
     if enrAutoUpdate:
       notice "No external IP provided for the ENR, this node will not be " &

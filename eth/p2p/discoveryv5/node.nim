@@ -104,7 +104,6 @@ func shortLog*(id: NodeId): string =
     result.add("*")
     for i in (len(sid) - 6)..sid.high:
       result.add(sid[i])
-chronicles.formatIt(NodeId): shortLog(it)
 
 func hash*(a: Address): hashes.Hash =
   let res = a.ip.hash !& a.port.hash
@@ -121,7 +120,6 @@ func shortLog*(n: Node): string =
     shortLog(n.id) & ":unaddressable"
   else:
     shortLog(n.id) & ":" & $n.address.get()
-chronicles.formatIt(Node): shortLog(it)
 
 func shortLog*(nodes: seq[Node]): string =
   result = "["
@@ -135,4 +133,8 @@ func shortLog*(nodes: seq[Node]): string =
     result.add(shortLog(n))
 
   result.add("]")
+
+chronicles.formatIt(NodeId): shortLog(it)
+chronicles.formatIt(Address): $it
+chronicles.formatIt(Node): shortLog(it)
 chronicles.formatIt(seq[Node]): shortLog(it)
