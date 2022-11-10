@@ -15,7 +15,8 @@ import
   ../../eth/utp/utp_router,
   ../../eth/utp/utp_socket,
   ../../eth/utp/packets,
-  ../../eth/keys
+  ../../eth/keys,
+  ../stubloglevel
 
 procSuite "Utp socket selective acks unit test":
   let rng = newRng()

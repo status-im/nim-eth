@@ -13,7 +13,8 @@ import
   ../../eth/utp/utp_router,
   ../../eth/utp/utp_protocol,
   ../../eth/keys,
-  ../../eth/p2p/discoveryv5/random2
+  ../../eth/p2p/discoveryv5/random2,
+  ../stubloglevel
 
 proc connectTillSuccess(p: UtpProtocol, to: TransportAddress, maxTries: int = 20): Future[UtpSocket[TransportAddress]] {.async.} =
   var i = 0
