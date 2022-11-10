@@ -378,8 +378,8 @@ template compressMsg(peer: Peer, data: seq[byte]): seq[byte] =
     data
 
 proc sendMsg*(peer: Peer, data: seq[byte]) {.gcsafe, async.} =
+  var cipherText = encryptMsg(peer.compressMsg(data), peer.secretsState)
   try:
-    var cipherText = encryptMsg(peer.compressMsg(data), peer.secretsState)
     var res = await peer.transport.write(cipherText)
     if res != len(cipherText):
       # This is ECONNRESET or EPIPE case when remote peer disconnected.
