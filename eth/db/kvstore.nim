@@ -19,7 +19,7 @@ export results
 type
   MemStoreRef* = ref object of RootObj
     records: Table[seq[byte], seq[byte]]
-      # TODO interaction with this table would benefit from heterogenous lookup
+      # TODO interaction with this table would benefit from heterogeneous lookup
       #      (see `@key` below)
       #      https://github.com/nim-lang/Nim/issues/7457
 
@@ -51,7 +51,7 @@ template put*(dbParam: KvStoreRef, key, val: openArray[byte]): KvResult[void] =
   db.putProc(db.obj, key, val)
 
 template get*(dbParam: KvStoreRef, key: openArray[byte], onData: untyped): KvResult[bool] =
-  ## Retrive value at ``key`` and call ``onData`` with the value. The data is
+  ## Retrieve value at ``key`` and call ``onData`` with the value. The data is
   ## valid for the duration of the callback.
   ## ``onData``: ``proc(data: openArray[byte])``
   ## returns true if found and false otherwise.

@@ -95,7 +95,7 @@ const data = [
       e7c301a0c05559f4c25db65e36820b4b909a226171a60ac6cb7beea09376d6d8""")
 ]
 
-# Thies test vectors was copied from EIP8 specfication
+# These test vectors were copied from EIP8 specification
 # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-8.md
 const eip8data = [
   ("initiator_private_key",

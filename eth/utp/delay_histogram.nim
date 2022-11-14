@@ -19,7 +19,7 @@ type
   DelayHistogram* = object
     delayBase*: uint32
     currentDelayHistory: array[currentDelaySize, uint32]
-    currentDelyIdx: int
+    currentDelayIdx: int
     delayBaseHistory: array[delayBaseHistory, uint32]
     delayBaseIdx: int
     delayBaseTime: Moment
@@ -49,8 +49,8 @@ proc addSample*(h: var DelayHistogram, sample: uint32, currentTime: Moment) =
 
   let delay = sample - h.delayBase
 
-  h.currentDelayHistory[h.currentDelyIdx] = delay
-  h.currentDelyIdx = (h.currentDelyIdx + 1) mod currentDelaySize
+  h.currentDelayHistory[h.currentDelayIdx] = delay
+  h.currentDelayIdx = (h.currentDelayIdx + 1) mod currentDelaySize
 
   if (currentTime - h.delayBaseTime > delayBaseUpdateInterval):
     h.delayBaseTime = currentTime
@@ -64,7 +64,7 @@ proc addSample*(h: var DelayHistogram, sample: uint32, currentTime: Moment) =
 
 proc getValue*(h: DelayHistogram): Duration =
   var value = uint32.high
-  # this will return zero if not all samples are colected
+  # this will return zero if not all samples are collected
   for sample in h.currentDelayHistory:
       value = min(sample, value)
 

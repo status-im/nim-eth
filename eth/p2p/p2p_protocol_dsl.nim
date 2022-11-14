@@ -54,7 +54,7 @@ type
       ## Cached ident for the timeout parameter
 
     extraDefs*: NimNode
-      ## The reponse procs have extra templates that must become
+      ## The response procs have extra templates that must become
       ## part of the generated code
 
   P2PProtocol* = ref object
@@ -253,7 +253,7 @@ proc refreshParam(n: NimNode): NimNode =
   result = copyNimTree(n)
   if n.kind == nnkIdentDefs:
     for i in 0..<n.len-2:
-      if n[i].kind == nnkSym: 
+      if n[i].kind == nnkSym:
         result[i] = genSym(symKind(n[i]), $n[i])
 
 iterator typedInputParams(procDef: NimNode, skip = 0): (NimNode, NimNode) =
@@ -414,7 +414,7 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
             procDef: NimNode, response: Message = nil): Message =
 
   if procDef[0].kind == nnkPostfix:
-    error("p2pProcotol procs are public by default. " &
+    error("p2pProtocol procs are public by default. " &
           "Please remove the postfix `*`.", procDef)
 
   var
@@ -588,7 +588,7 @@ proc createSendProc*(msg: Message,
       # A response proc must be called with a response object that originates
       # from a certain request. Here we change the Peer parameter at position
       # 1 to the correct strongly-typed ResponderType. The incoming procs still
-      # gets the normal Peer paramter.
+      # gets the normal Peer parameter.
       let
         ResponderType = msg.ResponderType
         sendProcName = msg.ident
@@ -687,7 +687,7 @@ proc useStandardBody*(sendProc: SendProc,
     preSerialization = if preSerializationStep.isNil: newStmtList()
                        else: preSerializationStep(outputStream)
 
-    serilization = writeParamsAsRecord(sendProc.msgParams,
+    serialization = writeParamsAsRecord(sendProc.msgParams,
                                        outputStream, Format, msgRecName)
 
     postSerialization = if postSerializationStep.isNil: newStmtList()
@@ -708,7 +708,7 @@ proc useStandardBody*(sendProc: SendProc,
 
     var `outputStream` = memoryOutput()
     `preSerialization`
-    `serilization`
+    `serialization`
     `postSerialization`
     `tracing`
     let `msgBytes` = getOutput(`outputStream`)
@@ -846,7 +846,7 @@ proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode) =
       elif eqIdent(n[0], "requestResponse"):
         # `requestResponse` can be given a block of 2 or more procs.
         # The last one is considered to be a response message, while
-        # all preceeding ones are requests triggering the response.
+        # all preceding ones are requests triggering the response.
         # The system makes sure to automatically insert a hidden `reqId`
         # parameter used to discriminate the individual messages.
         let procs = expectBlockWithProcs(n)
@@ -982,7 +982,7 @@ macro emitForSingleBackend(
     version: static[int],
     backend: static[BackendFactory],
     body: untyped,
-    # TODO Nim can't handle a proper duration paramter here
+    # TODO Nim can't handle a proper duration parameter here
     timeouts: static[int64] = defaultReqTimeout.milliseconds,
     useRequestIds: static[bool] = true,
     rlpxName: static[string] = "",

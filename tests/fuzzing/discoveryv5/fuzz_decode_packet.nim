@@ -13,12 +13,12 @@ init:
 
     enrRecA = enr.Record.init(1, privKeyA,
       some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
-      some(Port(9000))).expect("Properly intialized private key")
+      some(Port(9000))).expect("Properly initialized private key")
     nodeA = newNode(enrRecA).expect("Properly initialized record")
 
     enrRecB = enr.Record.init(1, privKeyB,
       some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
-      some(Port(9000))).expect("Properly intialized private key")
+      some(Port(9000))).expect("Properly initialized private key")
     nodeB = newNode(enrRecB).expect("Properly initialized record")
 
   var codecB = Codec(localNode: nodeB, privKey: privKeyB,
@@ -34,4 +34,4 @@ test:
 
   let decoded = decodePacket(codecB, nodeA.address.get(), @iv & maskedHeader)
   if decoded.isErr():
-    debug "Error occured", error = decoded.error
+    debug "Error occurred", error = decoded.error

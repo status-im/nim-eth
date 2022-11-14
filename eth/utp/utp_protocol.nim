@@ -16,7 +16,7 @@ logScope:
   topics = "utp"
 
 type
-  # For now utp protocol is tied to udp transport, but ultimatly we would like to
+  # For now utp protocol is tied to udp transport, but ultimately we would like to
   # abstract underlying transport to be able to run utp over udp, discoveryv5 or
   # maybe some test transport
   UtpProtocol* = ref object
@@ -26,9 +26,9 @@ type
   SendCallbackBuilder* = proc (d: DatagramTransport): SendCallback[TransportAddress] {.gcsafe, raises: [Defect].}
 
 # This should probably be defined in TransportAddress module, as hash function should
-# be consitent with equality function
+# be consistent with equality function
 # in nim zero arrays always have hash equal to 0, irrespectively of array size, to
-# avoid clashes betweend different types of addresses, each type have mixed different
+# avoid clashes between different types of addresses, each type have mixed different
 # magic number
 proc hash(x: TransportAddress): Hash =
   var h: Hash = 0

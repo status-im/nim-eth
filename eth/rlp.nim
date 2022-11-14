@@ -399,7 +399,7 @@ proc toNodes*(self: var Rlp): RlpNode =
     result.bytes = self.toBytes()
     self.position = self.currentElemEnd()
 
-# We define a single `read` template with a pretty low specifity
+# We define a single `read` template with a pretty low specificity
 # score in order to facilitate easier overloading with user types:
 template read*(rlp: var Rlp, T: type): auto =
   readImpl(rlp, T)

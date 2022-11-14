@@ -603,7 +603,7 @@ suite "Discovery v5 Tests":
         privKey = PrivateKey.random(rng[])
         enrRec = enr.Record.init(1, privKey,
           some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
-          some(Port(9000))).expect("Properly intialized private key")
+          some(Port(9000))).expect("Properly initialized private key")
         sendNode = newNode(enrRec).expect("Properly initialized record")
       var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 
@@ -632,7 +632,7 @@ suite "Discovery v5 Tests":
       privKey = PrivateKey.random(rng[])
       enrRec = enr.Record.init(1, privKey,
         some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
-        some(Port(9000))).expect("Properly intialized private key")
+        some(Port(9000))).expect("Properly initialized private key")
       sendNode = newNode(enrRec).expect("Properly initialized record")
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
     for i in 0 ..< 5:
@@ -663,7 +663,7 @@ suite "Discovery v5 Tests":
       privKey = PrivateKey.random(rng[])
       enrRec = enr.Record.init(1, privKey,
         some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
-        some(Port(9000))).expect("Properly intialized private key")
+        some(Port(9000))).expect("Properly initialized private key")
       sendNode = newNode(enrRec).expect("Properly initialized record")
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 

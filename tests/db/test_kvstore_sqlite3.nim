@@ -259,7 +259,7 @@ procSuite "SqStoreRef":
 
     var sums: seq[seq[byte]] = @[]
 
-    # Use custom function, which interprest blobs as uint32 numbers and sums
+    # Use custom function, which interprets blobs as uint32 numbers and sums
     # them together
     let sumKeyVal = db.prepareStmt(
       "SELECT sum32(key, value) FROM kvstore;",
@@ -274,10 +274,10 @@ procSuite "SqStoreRef":
 
     discard sumKeyVal.exec do (res: seq[byte]):
       sums.add(res)
-    
+
     check:
       len(sums) == 1
-    
+
     let sum = uint32.fromBytesBE(sums[0])
 
     check:

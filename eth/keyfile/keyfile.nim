@@ -313,7 +313,7 @@ proc createKeyFileJson*(seckey: PrivateKey,
   ## ``version`` - version of keyfile format (default is 3)
   ## ``cryptkind`` - algorithm for private key encryption
   ## (default is AES128-CTR)
-  ## ``kdfkind`` - algorithm for key deriviation function (default is PBKDF2)
+  ## ``kdfkind`` - algorithm for key derivation function (default is PBKDF2)
   ## ``workfactor`` - Key deriviation function work factor, 0 is to use
   ## default workfactor.
   var iv: array[aes128.sizeBlock, byte]

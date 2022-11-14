@@ -89,7 +89,7 @@ suite "Routing Table Tests":
     # Adding another should fail as both buckets will be full and not be
     # allowed to split another time.
     check table.addNode(node.nodeAtDistance(rng[], 256)) == ReplacementAdded
-    # And also when targetting one of the two specific buckets.
+    # And also when targeting one of the two specific buckets.
     check table.addNode(firstNode.nodeAtDistance(rng[], 255)) == ReplacementAdded
     check table.addNode(firstNode.nodeAtDistance(rng[], 254)) == ReplacementAdded
     # This add should be allowed as it is on the branch where the own node's id
@@ -535,7 +535,7 @@ suite "Routing Table Tests":
     let neighbours = table.neighbours(local.id)
     check len(neighbours) == numNodes
 
-    #  check that neighbours are sorted by provdied custom distance funciton
+    # check that neighbours are sorted by provided custom distance function
     for i in 0..numNodes-2:
       let prevDist = customDistance(local.id, neighbours[i].id)
       let nextDist = customDistance(local.id, neighbours[i + 1].id)

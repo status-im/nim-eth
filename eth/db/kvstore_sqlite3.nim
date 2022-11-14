@@ -59,7 +59,7 @@ template dispose*(db: SqliteStmt) =
 
 func isInsideTransaction*(db: SqStoreRef): bool =
   sqlite3_get_autocommit(db.env) == 0
- 
+
 proc release[T](x: var AutoDisposed[T]): T =
   result = x.val
   x.val = nil
@@ -132,7 +132,7 @@ proc exec*[P](s: SqliteStmt[P, void], params: P): KvResult[void] =
     else:
       ok()
 
-  # release implict transaction
+  # release implicit transaction
   discard sqlite3_reset(s) # same return information as step
   discard sqlite3_clear_bindings(s) # no errors possible
 
@@ -620,12 +620,12 @@ proc customScalarBlobFunction(ctx: ptr sqlite3_context, n: cint, v: ptr ptr sqli
   try:
     if s.isOk():
       let bytes = s.unsafeGet()
-      # try is necessessary as otherwise nim marks SQLITE_TRANSIENT as throwning
+      # try is necessary as otherwise nim marks SQLITE_TRANSIENT as throwing
       # unlisted exception.
       # Using SQLITE_TRANSIENT destructor type, as it inform sqlite that data
       # under provided pointer may be deleted at any moment, which is the case
       # for seq[byte] as it is managed by nim gc. With this flag sqlite copy bytes
-      # under pointer and then realeases them itself.
+      # under pointer and then releases them itself.
       sqlite3_result_blob(ctx, unsafeAddr bytes[0], bytes.len.cint, SQLITE_TRANSIENT)
     else:
       let errMsg = s.error

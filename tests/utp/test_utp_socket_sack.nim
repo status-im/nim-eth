@@ -131,7 +131,7 @@ procSuite "Utp socket selective acks unit test":
         len(bitMask) == 4
 
   type TestCase = object
-    # number of packet to generate by writitng side
+    # number of packet to generate by writing side
     numOfPackets: int
     # indexes of packets which should be delivered to remote
     packetsDelivered: seq[int]
@@ -324,6 +324,6 @@ procSuite "Utp socket selective acks unit test":
       else:
         check:
           # due to ledbat congestion control we cannot assert on precise end buffer size,
-          # but due to packet loss we are sure it shoul be smaller that at the beginning
-          # becouse of 0.5 muliplayer
+          # but due to packet loss we are sure it should be smaller that at the beginning
+          # because of 0.5 multiplayer
           endBufferSize < initialBufferSize

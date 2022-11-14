@@ -14,7 +14,7 @@ import
   ./private/p2p_types, "."/[kademlia, auth, rlpxcrypt, enode, p2p_protocol_dsl]
 
 const
-  # Insane kludge for suppporting chunked messages when syncing against clients
+  # Insane kludge for supporting chunked messages when syncing against clients
   # like Nethermind.
   #
   # The original specs which are now obsoleted can be found here:
@@ -556,7 +556,7 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
   # JACEK:
   #  or pass it in, allowing the caller to choose - they'll likely be in a
   #  better position to decide if buffer should be reused or not. this will
-  #  also be useuful for chunked messages where part of the buffer may have
+  #  also be useful for chunked messages where part of the buffer may have
   #  been processed and needs filling in
   var encryptedBytes = newSeq[byte](remainingBytes)
   await peer.transport.readExactly(addr encryptedBytes[0], len(encryptedBytes))
@@ -776,7 +776,7 @@ proc dispatchMessages*(peer: Peer) {.async.} =
         msg = peer.getMsgName(msgId), err = e.msg
 
     # TODO: Hmm, this can be safely moved into the message handler thunk.
-    # The documentation will need to be updated, explaning the fact that
+    # The documentation will need to be updated, explaining the fact that
     # nextMsg will be resolved only if the message handler has executed
     # successfully.
     if msgId >= 0 and msgId < peer.awaitedMessages.len and
@@ -1146,9 +1146,9 @@ proc postHelloSteps(peer: Peer, h: DevP2P.hello) {.async.} =
     if protocol.handshake != nil:
       subProtocolsHandshakes.add((protocol.handshake)(peer))
 
-  # The `dispatchMesssages` loop must be started after this.
+  # The `dispatchMessages` loop must be started after this.
   # Otherwise, we risk that some of the handshake packets sent by
-  # the other peer may arrrive too early and be processed before
+  # the other peer may arrive too early and be processed before
   # the handshake code got a change to wait for them.
   #
   var messageProcessingLoop = peer.dispatchMessages()

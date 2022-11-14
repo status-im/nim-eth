@@ -103,7 +103,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
     return (utpProt1, clientSocket, utpProt2, serverSocket)
 
   type TestCase = object
-    # in miliseconds
+    # in milliseconds
     maxDelay: int
     dropRate: int
     bytesToTransfer: int
@@ -137,7 +137,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
 
       let smallBytes = 10
       let smallBytesToTransfer = rng[].generateBytes(smallBytes)
-      # first transfer and read to make server socket connecteced
+      # first transfer and read to make server socket connected
       let write1 = await clientSocket.write(smallBytesToTransfer)
       let read1 = await serverSocket.read(smallBytes)
 
@@ -193,7 +193,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
 
       let smallBytes = 10
       let smallBytesToTransfer = rng[].generateBytes(smallBytes)
-      # first transfer and read to make server socket connecteced
+      # first transfer and read to make server socket connected
       let write1 = await clientSocket.write(smallBytesToTransfer)
       let read1 = await serverSocket.read(smallBytes)
 

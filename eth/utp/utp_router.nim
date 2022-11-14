@@ -29,7 +29,7 @@ declareCounter utp_allowed_incoming,
 declareCounter utp_declined_incoming,
   "Total number of declined incoming connections"
 declareCounter utp_success_outgoing,
-  "Total number of succesful outgoing connections"
+  "Total number of successful outgoing connections"
 declareCounter utp_failed_outgoing,
   "Total number of failed outgoing connections"
 
@@ -104,7 +104,7 @@ proc registerUtpSocket[A](p: UtpRouter, s: UtpSocket[A]) =
 
 proc registerIfAbsent[A](p: UtpRouter, s: UtpSocket[A]): bool =
   ## Registers socket only if it's not already existing in the active sockets
-  ## table. Returns true if socket has been succesfuly registered.
+  ## table. Returns true if socket has been successfully registered.
   if p.sockets.hasKey(s.socketKey):
     false
   else:
@@ -165,7 +165,7 @@ proc getSocketOnReset[A](
   # id is our recv id
   let recvKey = UtpSocketKey[A].init(sender, id)
 
-  # id is our send id, and we did nitiate the connection, our recv id is id - 1
+  # id is our send id, and we did initiate the connection, our recv id is id - 1
   let sendInitKey = UtpSocketKey[A].init(sender, id - 1)
 
   # id is our send id, and we did not initiate the connection, so our recv id is id + 1
@@ -194,11 +194,11 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
     if maybeSocket.isSome():
       debug "Received RST packet on known connection, closing socket"
       let socket = maybeSocket.unsafeGet()
-      # reference implementation acutally changes the socket state to reset state unless
+      # reference implementation actually changes the socket state to reset state unless
       # user explicitly closed socket before. The only difference between reset and destroy
-      # state is that socket in destroy state is ultimatly deleted from active connection
+      # state is that socket in destroy state is ultimately deleted from active connection
       # list but socket in reset state lingers there until user of library closes it
-      # explictly.
+      # explicitly.
       socket.destroy()
     else:
       debug "Received RST packet for unknown connection, ignoring"
@@ -335,7 +335,7 @@ proc connectTo*[A](
     return connFut
 
 # Connect to provided address with provided connection id, if socket with this id
-# and address already exsits return error
+# and address already exists return error
 proc connectTo*[A](
     r: UtpRouter[A], address: A, connectionId: uint16):
     Future[ConnectionResult[A]] =
