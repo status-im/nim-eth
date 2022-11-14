@@ -28,7 +28,6 @@ type
 
   Record* = object
     seqNum*: uint64
-    # signature: seq[byte]
     raw*: seq[byte] # RLP encoded record
     pairs: seq[FieldPair] # sorted list of all key/value pairs
 
@@ -78,25 +77,27 @@ template toField[T](v: T): Field =
   else:
     {.error: "Unsupported field type".}
 
-proc `==`(a, b: Field): bool =
+func `==`(a, b: Field): bool =
   if a.kind == b.kind:
     case a.kind
     of kString:
-      return a.str == b.str
+      a.str == b.str
     of kNum:
-      return a.num == b.num
+      a.num == b.num
     of kBytes:
-      return a.bytes == b.bytes
+      a.bytes == b.bytes
     of kList:
-      return a.listRaw == b.listRaw
+      a.listRaw == b.listRaw
   else:
-    return false
+    false
 
-proc cmp(a, b: FieldPair): int = cmp(a[0], b[0])
+func cmp(a, b: FieldPair): int = cmp(a[0], b[0])
 
-proc makeEnrRaw(seqNum: uint64, pk: PrivateKey,
+func makeEnrRaw(
+    seqNum: uint64, pk: PrivateKey,
     pairs: openArray[FieldPair]): EnrResult[seq[byte]] =
-  proc append(w: var RlpWriter, seqNum: uint64,
+  func append(
+      w: var RlpWriter, seqNum: uint64,
       pairs: openArray[FieldPair]): seq[byte] =
     w.append(seqNum)
     for (k, v) in pairs:
@@ -124,7 +125,8 @@ proc makeEnrRaw(seqNum: uint64, pk: PrivateKey,
   else:
     ok(raw)
 
-proc makeEnrAux(seqNum: uint64, pk: PrivateKey,
+func makeEnrAux(
+    seqNum: uint64, pk: PrivateKey,
     pairs: openArray[FieldPair]): EnrResult[Record] =
   var record: Record
   record.pairs = @pairs
@@ -144,7 +146,8 @@ proc makeEnrAux(seqNum: uint64, pk: PrivateKey,
   record.raw = ? makeEnrRaw(seqNum, pk, record.pairs)
   ok(record)
 
-macro initRecord*(seqNum: uint64, pk: PrivateKey,
+macro initRecord*(
+    seqNum: uint64, pk: PrivateKey,
     pairs: untyped{nkTableConstr}): untyped =
   ## Initialize a `Record` with given sequence number, private key and k:v
   ## pairs.
@@ -160,7 +163,9 @@ macro initRecord*(seqNum: uint64, pk: PrivateKey,
 template toFieldPair*(key: string, value: auto): FieldPair =
   (key, toField(value))
 
-proc addAddress(fields: var seq[FieldPair], ip: Option[ValidIpAddress],
+func addAddress(
+    fields: var seq[FieldPair],
+    ip: Option[ValidIpAddress],
     tcpPort, udpPort: Option[Port]) =
   ## Add address information in new fields. Incomplete address
   ## information is allowed (example: Port but not IP) as that information
@@ -182,12 +187,13 @@ proc addAddress(fields: var seq[FieldPair], ip: Option[ValidIpAddress],
     if udpPort.isSome():
       fields.add(("udp", udpPort.get().uint16.toField))
 
-proc init*(T: type Record, seqNum: uint64,
-                           pk: PrivateKey,
-                           ip: Option[ValidIpAddress],
-                           tcpPort, udpPort: Option[Port],
-                           extraFields: openArray[FieldPair] = []):
-                           EnrResult[T] =
+func init*(
+    T: type Record,
+    seqNum: uint64, pk: PrivateKey,
+    ip: Option[ValidIpAddress],
+    tcpPort, udpPort: Option[Port],
+    extraFields: openArray[FieldPair] = []):
+    EnrResult[T] =
   ## Initialize a `Record` with given sequence number, private key, optional
   ## ip address, tcp port, udp port, and optional custom k:v pairs.
   ##
@@ -199,7 +205,7 @@ proc init*(T: type Record, seqNum: uint64,
   fields.add extraFields
   makeEnrAux(seqNum, pk, fields)
 
-proc getField(r: Record, name: string, field: var Field): bool =
+func getField(r: Record, name: string, field: var Field): bool =
   # It might be more correct to do binary search,
   # as the fields are sorted, but it's unlikely to
   # make any difference in reality.
@@ -207,14 +213,15 @@ proc getField(r: Record, name: string, field: var Field): bool =
     if k == name:
       field = v
       return true
+  false
 
-proc requireKind(f: Field, kind: FieldKind): EnrResult[void] =
+func requireKind(f: Field, kind: FieldKind): EnrResult[void] =
   if f.kind != kind:
     err("Wrong field kind")
   else:
     ok()
 
-proc get*(r: Record, key: string, T: type): EnrResult[T] =
+func get*(r: Record, key: string, T: type): EnrResult[T] =
   ## Get the value from the provided key.
   var f: Field
   if r.getField(key, f):
@@ -250,7 +257,7 @@ proc get*(r: Record, key: string, T: type): EnrResult[T] =
   else:
     err("Key not found in ENR")
 
-proc get*(r: Record, T: type PublicKey): Option[T] =
+func get*(r: Record, T: type PublicKey): Option[T] =
   ## Get the `PublicKey` from provided `Record`. Return `none` when there is
   ## no `PublicKey` in the record.
   var pubkeyField: Field
@@ -258,16 +265,19 @@ proc get*(r: Record, T: type PublicKey): Option[T] =
     let pk = PublicKey.fromRaw(pubkeyField.bytes)
     if pk.isOk:
       return some pk[]
+  none(T)
 
-proc find(r: Record, key: string): Option[int] =
+func find(r: Record, key: string): Option[int] =
   ## Search for key in record key:value pairs.
   ##
   ## Returns some(index of key) if key is found in record. Else return none.
   for i, (k, v) in r.pairs:
     if k == key:
       return some(i)
+  none(int)
 
-proc update*(record: var Record, pk: PrivateKey,
+func update*(
+    record: var Record, pk: PrivateKey,
     fieldPairs: openArray[FieldPair]): EnrResult[void] =
   ## Update a `Record` k:v pairs.
   ##
@@ -308,11 +318,13 @@ proc update*(record: var Record, pk: PrivateKey,
 
   ok()
 
-proc update*(r: var Record, pk: PrivateKey,
-                            ip: Option[ValidIpAddress],
-                            tcpPort, udpPort: Option[Port] = none[Port](),
-                            extraFields: openArray[FieldPair] = []):
-                            EnrResult[void] =
+func update*(
+    r: var Record,
+    pk: PrivateKey,
+    ip: Option[ValidIpAddress],
+    tcpPort, udpPort: Option[Port] = none[Port](),
+    extraFields: openArray[FieldPair] = []):
+    EnrResult[void] =
   ## Update a `Record` with given ip address, tcp port, udp port and optional
   ## custom k:v pairs.
   ##
@@ -329,7 +341,7 @@ proc update*(r: var Record, pk: PrivateKey,
   fields.add extraFields
   r.update(pk, fields)
 
-proc tryGet*(r: Record, key: string, T: type): Option[T] =
+func tryGet*(r: Record, key: string, T: type): Option[T] =
   ## Get the value from the provided key.
   ## Return `none` if the key does not exist or if the value is invalid
   ## according to type `T`.
@@ -339,7 +351,7 @@ proc tryGet*(r: Record, key: string, T: type): Option[T] =
   else:
     none(T)
 
-proc toTypedRecord*(r: Record): EnrResult[TypedRecord] =
+func toTypedRecord*(r: Record): EnrResult[TypedRecord] =
   let id = r.tryGet("id", string)
   if id.isSome:
     var tr: TypedRecord
@@ -360,24 +372,29 @@ proc toTypedRecord*(r: Record): EnrResult[TypedRecord] =
   else:
     err("Record without id field")
 
-proc contains*(r: Record, fp: (string, seq[byte])): bool =
+func contains*(r: Record, fp: (string, seq[byte])): bool =
   # TODO: use FieldPair for this, but that is a bit cumbersome. Perhaps the
   # `get` call can be improved to make this easier.
   let field = r.tryGet(fp[0], seq[byte])
   if field.isSome():
     if field.get() == fp[1]:
       return true
+  false
 
-proc verifySignatureV4(r: Record, sigData: openArray[byte], content: seq[byte]):
-    bool =
+func verifySignatureV4(
+    r: Record, sigData: openArray[byte], content: seq[byte]): bool =
   let publicKey = r.get(PublicKey)
-  if publicKey.isSome:
-    let sig = SignatureNR.fromRaw(sigData)
-    if sig.isOk:
-      var h = keccak256.digest(content)
-      return verify(sig[], SkMessage(h.data), publicKey.get)
+  if publicKey.isNone():
+    return false
 
-proc verifySignature(r: Record): bool {.raises: [RlpError, Defect].} =
+  let sig = SignatureNR.fromRaw(sigData)
+  if sig.isOk():
+    var h = keccak256.digest(content)
+    verify(sig[], SkMessage(h.data), publicKey.get)
+  else:
+    false
+
+func verifySignature(r: Record): bool {.raises: [RlpError, Defect].} =
   var rlp = rlpFromBytes(r.raw)
   let sz = rlp.listLen
   if not rlp.enterList:
@@ -395,12 +412,15 @@ proc verifySignature(r: Record): bool {.raises: [RlpError, Defect].} =
   if r.getField("id", id) and id.kind == kString:
     case id.str
     of "v4":
-      result = verifySignatureV4(r, sigData, content)
+      verifySignatureV4(r, sigData, content)
     else:
       # Unknown Identity Scheme
-      discard
+      false
+  else:
+    # No Identity Scheme provided
+    false
 
-proc fromBytesAux(r: var Record): bool {.raises: [RlpError, Defect].} =
+func fromBytesAux(r: var Record): bool {.raises: [RlpError, Defect].} =
   if r.raw.len > maxEnrSize:
     return false
 
@@ -447,39 +467,41 @@ proc fromBytesAux(r: var Record): bool {.raises: [RlpError, Defect].} =
 
   verifySignature(r)
 
-proc fromBytes*(r: var Record, s: openArray[byte]): bool =
+func fromBytes*(r: var Record, s: openArray[byte]): bool =
   ## Loads ENR from rlp-encoded bytes, and validates the signature.
   r.raw = @s
   try:
-    result = fromBytesAux(r)
+    fromBytesAux(r)
   except RlpError:
-    discard
+    false
 
-proc fromBase64*(r: var Record, s: string): bool =
+func fromBase64*(r: var Record, s: string): bool =
   ## Loads ENR from base64-encoded rlp-encoded bytes, and validates the
   ## signature.
   try:
     r.raw = Base64Url.decode(s)
-    result = fromBytesAux(r)
+    fromBytesAux(r)
   except RlpError, Base64Error:
-    discard
+    false
 
-proc fromURI*(r: var Record, s: string): bool =
+func fromURI*(r: var Record, s: string): bool =
   ## Loads ENR from its text encoding: base64-encoded rlp-encoded bytes,
   ## prefixed with "enr:". Validates the signature.
   const prefix = "enr:"
   if s.startsWith(prefix):
-    result = r.fromBase64(s[prefix.len .. ^1])
+    r.fromBase64(s[prefix.len .. ^1])
+  else:
+    false
 
 template fromURI*(r: var Record, url: EnrUri): bool =
   fromURI(r, string(url))
 
-proc toBase64*(r: Record): string =
-  result = Base64Url.encode(r.raw)
+func toBase64*(r: Record): string =
+  Base64Url.encode(r.raw)
 
-proc toURI*(r: Record): string = "enr:" & r.toBase64
+func toURI*(r: Record): string = "enr:" & r.toBase64
 
-proc `$`(f: Field): string =
+func `$`(f: Field): string =
   case f.kind
   of kNum:
     $f.num
@@ -493,42 +515,48 @@ proc `$`(f: Field): string =
 func `$`*(fp: FieldPair): string =
   fp[0] & ":" & $fp[1]
 
-proc `$`*(r: Record): string =
-  result = "("
-  result &= $r.seqNum
+func `$`*(r: Record): string =
+  var res = "("
+  res &= $r.seqNum
   for (k, v) in r.pairs:
-    result &= ", "
-    result &= k
-    result &= ": "
+    res &= ", "
+    res &= k
+    res &= ": "
     # For IP addresses we print something prettier than the default kinds
     # Note: Could disallow for invalid IPs in ENR also.
     if k == "ip":
       let ip = r.tryGet("ip", array[4, byte])
       if ip.isSome():
-        result &= $ipv4(ip.get())
+        res &= $ipv4(ip.get())
       else:
-        result &= "(Invalid) " & $v
+        res &= "(Invalid) " & $v
     elif k == "ip6":
       let ip = r.tryGet("ip6", array[16, byte])
       if ip.isSome():
-        result &= $ipv6(ip.get())
+        res &= $ipv6(ip.get())
       else:
-        result &= "(Invalid) " & $v
+        res &= "(Invalid) " & $v
     else:
-      result &= $v
-  result &= ')'
+      res &= $v
+  res &= ')'
 
-proc `==`*(a, b: Record): bool = a.raw == b.raw
+  res
 
-proc read*(rlp: var Rlp, T: typedesc[Record]):
+func `==`*(a, b: Record): bool = a.raw == b.raw
+
+func read*(
+    rlp: var Rlp, T: type Record):
     T {.raises: [RlpError, ValueError, Defect].} =
-  if not rlp.hasData() or not result.fromBytes(rlp.rawData):
+  var res: T
+  if not rlp.hasData() or not res.fromBytes(rlp.rawData):
     # TODO: This could also just be an invalid signature, would be cleaner to
     # split of RLP deserialisation errors from this.
     raise newException(ValueError, "Could not deserialize")
   rlp.skipElem()
 
-proc append*(rlpWriter: var RlpWriter, value: Record) =
+  res
+
+func append*(rlpWriter: var RlpWriter, value: Record) =
   rlpWriter.appendRawBytes(value.raw)
 
 chronicles.formatIt(seq[FieldPair]): $it

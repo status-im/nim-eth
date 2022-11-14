@@ -44,7 +44,7 @@ suite "ENR":
     var r: Record
     check not fromBytes(r, [])
 
-  test "Base64 deserialsation without data":
+  test "Base64 deserialisation without data":
     var r: Record
     let sigValid = r.fromURI("enr:")
     check(not sigValid)
