@@ -13,7 +13,8 @@ import
   ./test_utils,
   ../../eth/utp/utp_router as rt,
   ../../eth/utp/utp_protocol,
-  ../../eth/keys
+  ../../eth/keys,
+  ../stubloglevel
 
 proc setAcceptedCallback(event: AsyncEvent): AcceptConnectionCallback[TransportAddress] =
   return (

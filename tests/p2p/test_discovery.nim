@@ -12,7 +12,8 @@
 import
   std/sequtils,
   chronos, stew/byteutils, nimcrypto, testutils/unittests,
-  ../../eth/keys, ../../eth/p2p/[discovery, kademlia, enode]
+  ../../eth/keys, ../../eth/p2p/[discovery, kademlia, enode],
+  ../stubloglevel
 
 proc localAddress(port: int): Address =
   let port = Port(port)

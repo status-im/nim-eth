@@ -137,16 +137,13 @@ proc encrypt*(c: var SecretState, header: openArray[byte],
   ok()
 
 proc encryptMsg*(msg: openArray[byte], secrets: var SecretState): seq[byte] =
+  doAssert(uint32(msg.len) <= maxUInt24, "RLPx message size exceeds limit")
+
   var header: RlpxHeader
-
-  if uint32(msg.len) > maxUInt24:
-    raise newException(OverflowError, "RLPx message size exceeds limit")
-
   # write the frame size in the first 3 bytes of the header
   header[0] = byte((msg.len shr 16) and 0xFF)
   header[1] = byte((msg.len shr 8) and 0xFF)
   header[2] = byte(msg.len and 0xFF)
-
   # This is the  [capability-id, context-id] in header-data
   # While not really used, this is checked in the Parity client.
   # Same as rlp.encode((0, 0))
@@ -154,11 +151,10 @@ proc encryptMsg*(msg: openArray[byte], secrets: var SecretState): seq[byte] =
   header[4] = 0x80
   header[5] = 0x80
 
-  # XXX:
-  # This would be safer if we use a thread-local sequ for the temporary buffer
-  result = newSeq[byte](encryptedLength(msg.len))
-  let s = encrypt(secrets, header, msg, result)
-  s.expect("always succeeds because we call with correct buffer")
+  var res = newSeq[byte](encryptedLength(msg.len))
+  encrypt(secrets, header, msg, res).expect(
+    "always succeeds because we call with correct buffer")
+  res
 
 proc getBodySize*(a: RlpxHeader): int =
   (int(a[0]) shl 16) or (int(a[1]) shl 8) or int(a[2])

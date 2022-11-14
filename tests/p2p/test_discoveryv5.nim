@@ -8,6 +8,7 @@ import
   ../../eth/p2p/discoveryv5/[enr, node, routing_table, encoding, sessions,
     messages, nodes_verification],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol,
+  ../stubloglevel,
   ./discv5_test_helper
 
 suite "Discovery v5 Tests":

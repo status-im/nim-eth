@@ -8,6 +8,8 @@ import
   ./rlp/[writer, object_serialization],
   ./rlp/priv/defs
 
+from stew/objects import checkedEnumAssign
+
 export
   writer, object_serialization
 
@@ -293,11 +295,14 @@ proc readImpl(rlp: var Rlp, T: type Integer): Integer =
 
 proc readImpl(rlp: var Rlp, T: type[enum]): T =
   let value = rlp.toInt(int)
-  if value < ord(T.low) or value > ord(T.high):
+
+  var res: T
+  if not checkedEnumAssign(res, value):
     raise newException(RlpTypeMismatch,
-                    "Enum expected, but the source RLP is not in valid range.")
-  result = type(result)(value)
+      "Enum value expected, but the source RLP is not in valid range.")
   rlp.skipElem
+
+  res
 
 proc readImpl(rlp: var Rlp, T: type bool): T =
   result = rlp.toInt(int) != 0

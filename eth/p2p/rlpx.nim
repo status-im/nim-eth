@@ -378,8 +378,8 @@ template compressMsg(peer: Peer, data: seq[byte]): seq[byte] =
     data
 
 proc sendMsg*(peer: Peer, data: seq[byte]) {.gcsafe, async.} =
+  var cipherText = encryptMsg(peer.compressMsg(data), peer.secretsState)
   try:
-    var cipherText = encryptMsg(peer.compressMsg(data), peer.secretsState)
     var res = await peer.transport.write(cipherText)
     if res != len(cipherText):
       # This is ECONNRESET or EPIPE case when remote peer disconnected.
@@ -708,14 +708,11 @@ proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
                                       "Invalid RLPx message body")
 
     elif nextMsgId == 1: # p2p.disconnect
-      if nextMsgData.isList():
-        let reason = DisconnectionReason nextMsgData.listElem(0).toInt(uint32)
-        await peer.disconnect(reason)
-        trace "disconnect message received in waitSingleMsg", reason, peer
-        raisePeerDisconnected("Unexpected disconnect", reason)
-      else:
-        raise newException(RlpTypeMismatch,
-          "List expected, but the source RLP is not a list.")
+      let reasonList = rlp.read(nextMsgData, DisconnectionReasonList)
+      let reason = reasonList.value
+      await peer.disconnect(reason)
+      trace "disconnect message received in waitSingleMsg", reason, peer
+      raisePeerDisconnected("Unexpected disconnect", reason)
     else:
       warn "Dropped RLPX message",
            msg = peer.dispatcher.messages[nextMsgId].name

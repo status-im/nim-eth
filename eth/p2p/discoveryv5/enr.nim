@@ -13,6 +13,7 @@
 import
   std/[strutils, macros, algorithm, options],
   nimcrypto/[keccak, utils], stew/shims/net, stew/[base64, results],
+  chronicles,
   ".."/../[rlp, keys]
 
 export options, results, keys
@@ -299,7 +300,7 @@ proc update*(record: var Record, pk: PrivateKey,
       updated = true
 
   if updated:
-    if r.seqNum == high(r.seqNum): # highly unlikely
+    if r.seqNum == high(type r.seqNum): # highly unlikely
       return err("Maximum sequence number reached")
     r.seqNum.inc()
     r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
@@ -489,6 +490,9 @@ proc `$`(f: Field): string =
   of kList:
     "(Raw RLP list) " & "0x" & f.listRaw.toHex
 
+func `$`*(fp: FieldPair): string =
+  fp[0] & ":" & $fp[1]
+
 proc `$`*(r: Record): string =
   result = "("
   result &= $r.seqNum
@@ -526,3 +530,5 @@ proc read*(rlp: var Rlp, T: typedesc[Record]):
 
 proc append*(rlpWriter: var RlpWriter, value: Record) =
   rlpWriter.appendRawBytes(value.raw)
+
+chronicles.formatIt(seq[FieldPair]): $it

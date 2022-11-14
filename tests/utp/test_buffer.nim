@@ -11,7 +11,6 @@ import
   unittest2,
   ../../eth/utp/growable_buffer
 
-
 type TestObj = object
   foo: string
 
@@ -24,13 +23,13 @@ suite "Utp ring buffer":
 
   test "Buffer should be initialised to next power of two":
     var elemsCounter = 0
-    let buff = GrowableCircularBuffer[int].init(size = 17) 
+    let buff = GrowableCircularBuffer[int].init(size = 17)
     check:
       buff.len() == 32
 
     for i in buff.items:
-      inc elemsCounter  
-    
+      inc elemsCounter
+
     check:
       elemsCounter == 32
 
@@ -166,7 +165,7 @@ suite "Utp ring buffer":
       buff.get(2) == some(2)
       buff.get(3) == some(3)
       buff.len() == 8
-    
+
     var elemsCounter = 0
     for elem in buff.items:
       inc elemsCounter

@@ -203,16 +203,48 @@ suite "test api usage":
   test "invalid enum":
     type
       MyEnum = enum
-        foo,
-        bar
+        foo = 0x00,
+        bar = 0x01
 
     var writer = initRlpWriter()
-    writer.append(2)
-    writer.append(-1)
+    writer.append(1) # valid
+    writer.append(2) # invalid
+    writer.append(-1) # invalid
     let bytes = writer.finish()
     var rlp = rlpFromBytes(bytes)
+
+    check rlp.read(MyEnum) == bar
+
     expect RlpTypeMismatch:
       discard rlp.read(MyEnum)
     rlp.skipElem()
+
     expect RlpTypeMismatch:
       discard rlp.read(MyEnum)
+
+  test "invalid enum - enum with hole":
+    type
+      MyEnum = enum
+        foo = 0x00,
+        bar = 0x01,
+        baz = 0x0100
+
+    var writer = initRlpWriter()
+    writer.append(1) # valid
+    writer.append(2) # invalid - enum hole value
+    writer.append(256) # valid
+    writer.append(257) # invalid - too large
+    let bytes = writer.finish()
+    var rlp = rlpFromBytes(bytes)
+
+    check rlp.read(MyEnum) == bar
+
+    expect RlpTypeMismatch:
+      discard rlp.read(MyEnum)
+    rlp.skipElem()
+
+    check rlp.read(MyEnum) == baz
+
+    expect RlpTypeMismatch:
+      discard rlp.read(MyEnum)
+    rlp.skipElem()
