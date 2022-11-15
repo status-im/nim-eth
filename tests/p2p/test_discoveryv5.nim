@@ -582,6 +582,9 @@ suite "Discovery v5 Tests":
       check test.len == 1
 
   test "Calculate lookup distances":
+    let rng = newRng()
+    let node = generateNode(PrivateKey.random(rng[]))
+
     # Log distance between zeros is zero
     let dist = lookupDistances(u256(0), u256(0))
     check dist == @[0'u16, 1, 2]
@@ -589,6 +592,22 @@ suite "Discovery v5 Tests":
     # Log distance between zero and one is one
     let dist1 = lookupDistances(u256(0), u256(1))
     check dist1 == @[1'u16, 2, 3]
+
+    # Ensure that distances are in expected order
+    let dist2 = lookupDistances(node.id, idAtDistance(node.id, 128))
+    check dist2 == @[128'u16, 129, 127]
+
+    # Test target distance of 256
+    let dist3 = lookupDistances(node.id, idAtDistance(node.id, 256))
+    check dist3 == @[256'u16, 255, 254]
+
+    # Test target distance of 255
+    let dist4 = lookupDistances(node.id, idAtDistance(node.id, 255))
+    check dist4 == @[255'u16, 256, 254]
+
+    # Test target distance of 254
+    let dist5 = lookupDistances(node.id, idAtDistance(node.id, 254))
+    check dist5 == @[254'u16, 255, 253]
 
   asyncTest "Handshake cleanup: different ids":
     # Node to test the handshakes on.
