@@ -81,7 +81,7 @@ proc applyCongestionControl*(
 
   var newSlowStart = currentSlowStart
   var newMaxWindowSize = currentMaxWindowSize
-  var newslowStartThreshold = currentslowStartThreshold
+  var newSlowStartThreshold = currentslowStartThreshold
 
   if currentSlowStart:
     let slowStartCwnd = currentMaxWindowSize + uint32(windowFactor * float64(currentPacketSize))
@@ -91,7 +91,7 @@ proc applyCongestionControl*(
     elif float64(ourDelay.microseconds()) > float64(target.microseconds()) * 0.9:
       # we are just a little under target delay, discontinue slows start
       newSlowStart = false
-      newslowStartThreshold = currentMaxWindowSize
+      newSlowStartThreshold = currentMaxWindowSize
     else:
       newMaxWindowSize = max(slowStartCwnd, ledbatCwnd)
   else:
@@ -99,4 +99,4 @@ proc applyCongestionControl*(
 
   newMaxWindowSize = clamp(newMaxWindowSize, minWindowSize, maxSndBufferSize)
 
-  (newMaxWindowSize, newslowStartThreshold, newSlowStart)
+  (newMaxWindowSize, newSlowStartThreshold, newSlowStart)

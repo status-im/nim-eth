@@ -1238,7 +1238,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
     socket.ourHistogram.shift(diff)
 
   let currentPacketSize = socket.getPacketSize()
-  let (newMaxWindow, newslowStartThreshold, newSlowStart) =
+  let (newMaxWindow, newSlowStartThreshold, newSlowStart) =
     applyCongestionControl(
       socket.maxWindow,
       socket.slowStart,
@@ -1256,12 +1256,12 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
   socket.maxWindow = newMaxWindow
   socket.maxRemoteWindow = p.header.wndSize
   socket.slowStart = newSlowStart
-  socket.slowStartThreshold = newslowStartThreshold
+  socket.slowStartThreshold = newSlowStartThreshold
 
   debug "Applied ledbat congestion controller",
     maxWindow = newMaxWindow,
     remoteWindow = p.header.wndSize,
-    slowStartThreshold = newslowStartThreshold,
+    slowStartThreshold = newSlowStartThreshold,
     slowstart = newSlowStart
 
   if (socket.zeroWindowTimer.isNone() and socket.maxRemoteWindow <= currentPacketSize):
