@@ -623,7 +623,7 @@ proc lookupDistances*(target, dest: NodeId): seq[uint16] =
   result.add(td)
   var i = 1
   while result.len < lookupRequestLimit:
-    if tdAsInt + i < 256:
+    if tdAsInt + i <= 256:
       result.add(td + uint16(i))
     if tdAsInt - i > 0:
       result.add(td - uint16(i))
