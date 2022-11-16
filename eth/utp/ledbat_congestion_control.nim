@@ -24,7 +24,7 @@ const minWindowSize* = 10
 proc applyCongestionControl*(
   currentMaxWindowSize: uint32,
   currentSlowStart: bool,
-  currentslowStartThreshold: uint32,
+  currentSlowStartThreshold: uint32,
   maxSndBufferSize: uint32,
   currentPacketSize: uint32,
   actualDelay: Duration,
@@ -34,7 +34,7 @@ proc applyCongestionControl*(
   clockDrift: int32
 ): (uint32, uint32, bool) =
   if (actualDelay.isZero() or minRtt.isZero() or numOfAckedBytes == 0):
-    return (currentMaxWindowSize, currentslowStartThreshold, currentSlowStart)
+    return (currentMaxWindowSize, currentSlowStartThreshold, currentSlowStart)
 
   let ourDelay = min(minRtt, calculatedDelay)
 
@@ -81,12 +81,12 @@ proc applyCongestionControl*(
 
   var newSlowStart = currentSlowStart
   var newMaxWindowSize = currentMaxWindowSize
-  var newSlowStartThreshold = currentslowStartThreshold
+  var newSlowStartThreshold = currentSlowStartThreshold
 
   if currentSlowStart:
     let slowStartCwnd = currentMaxWindowSize + uint32(windowFactor * float64(currentPacketSize))
 
-    if (slowStartCwnd > currentslowStartThreshold):
+    if (slowStartCwnd > currentSlowStartThreshold):
       newSlowStart = false
     elif float64(ourDelay.microseconds()) > float64(target.microseconds()) * 0.9:
       # we are just a little under target delay, discontinue slows start
