@@ -1,6 +1,6 @@
 #
 #                 Ethereum P2P
-#              (c) Copyright 2018
+#              (c) Copyright 2018-2022
 #       Status Research & Development GmbH
 #
 #            Licensed under either of
@@ -8,7 +8,7 @@
 #            MIT license (LICENSE-MIT)
 #
 
-## This module implements Ethereum authentication
+## This module implements Ethereum RLPx authentication
 
 {.push raises: [Defect].}
 
@@ -22,18 +22,36 @@ export results
 
 const
   SupportedRlpxVersion* = 4'u8
+
+  # Auth message sizes
+
+  # Pre EIP8
   PlainAuthMessageV4Length* = 194
   AuthMessageV4Length* = 307
+
+  # EIP8
+  # signature + pubkey + nounce + version + rlp encoding overhead
+  # 65 + 64 + 32 + 1 + 7 = 169
   PlainAuthMessageEIP8Length = 169
-  PlainAuthMessageMaxEIP8* = PlainAuthMessageEIP8Length + 255
-  AuthMessageEIP8Length* = 282 + 2
-  AuthMessageMaxEIP8* = AuthMessageEIP8Length + 255
+  PlainAuthMessageMaxEIP8* = PlainAuthMessageEIP8Length + 255 # with padding
+  # Min. encrypted message + size prefix = 284
+  AuthMessageEIP8Length* = PlainAuthMessageEIP8Length + eciesOverheadLength + 2
+  AuthMessageMaxEIP8* = AuthMessageEIP8Length + 255 # with padding
+
+  # Ack message sizes
+
+  # Pre EIP8
   PlainAckMessageV4Length* = 97
   AckMessageV4Length* = 210
+
+  # EIP 8
+  # pubkey + nounce + version + rlp encoding overhead
+  # 64 + 32 + 1 + 5 = 102
   PlainAckMessageEIP8Length* = 102
-  PlainAckMessageMaxEIP8* = PlainAckMessageEIP8Length + 255
-  AckMessageEIP8Length* = 215 + 2
-  AckMessageMaxEIP8* = AckMessageEIP8Length + 255
+  PlainAckMessageMaxEIP8* = PlainAckMessageEIP8Length + 255 # with padding
+  # Min. encrypted message + size prefix = 217
+  AckMessageEIP8Length* = PlainAckMessageEIP8Length + eciesOverheadLength + 2
+  AckMessageMaxEIP8* = AckMessageEIP8Length + 255 # with padding
 
 type
   Nonce* = array[KeyLength, byte]
@@ -361,12 +379,18 @@ proc decodeAuthMessageV4(h: var Handshake, m: openArray[byte]): AuthResult[void]
 proc decodeAuthMessageEIP8(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AuthMessage.
   let size = uint16.fromBytesBE(m)
-  h.expectedLength = int(size) + 2
+  h.expectedLength = 2 + int(size)
+
+  # Check if the prefixed size is => than the minimum
+  if h.expectedLength < AuthMessageEIP8Length:
+    return err(AuthError.IncompleteError)
+
   if h.expectedLength > len(m):
     return err(AuthError.IncompleteError)
+
   var buffer = newSeq[byte](eciesDecryptedLength(int(size)))
-  if eciesDecrypt(toa(m, 2, int(size)), buffer, h.host.seckey,
-                  toa(m, 0, 2)).isErr:
+  if eciesDecrypt(
+      toa(m, 2, int(size)), buffer, h.host.seckey, toa(m, 0, 2)).isErr:
     return err(AuthError.EciesError)
   try:
     var reader = rlpFromBytes(buffer)
@@ -408,13 +432,18 @@ proc decodeAuthMessageEIP8(h: var Handshake, m: openArray[byte]): AuthResult[voi
 proc decodeAckMessageEIP8*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AckMessage.
   let size = uint16.fromBytesBE(m)
-
   h.expectedLength = 2 + int(size)
+
+  # Check if the prefixed size is => than the minimum
+  if h.expectedLength < AckMessageEIP8Length:
+    return err(AuthError.IncompleteError)
+
   if h.expectedLength > len(m):
     return err(AuthError.IncompleteError)
+
   var buffer = newSeq[byte](eciesDecryptedLength(int(size)))
-  if eciesDecrypt(toa(m, 2, int(size)), buffer, h.host.seckey,
-                  toa(m, 0, 2)).isErr:
+  if eciesDecrypt(
+      toa(m, 2, int(size)), buffer, h.host.seckey, toa(m, 0, 2)).isErr:
     return err(AuthError.EciesError)
   try:
     var reader = rlpFromBytes(buffer)
@@ -456,7 +485,8 @@ proc decodeAckMessageV4(h: var Handshake, m: openArray[byte]): AuthResult[void] 
 
 proc decodeAuthMessage*(h: var Handshake, input: openArray[byte]): AuthResult[void] =
   ## Decodes AuthMessage from `input`.
-  if len(input) < AuthMessageV4Length:
+  # Using the smallest min. message length of the two types
+  if len(input) < AuthMessageEIP8Length:
     return err(AuthError.IncompleteError)
 
   if len(input) == AuthMessageV4Length:
@@ -470,8 +500,10 @@ proc decodeAuthMessage*(h: var Handshake, input: openArray[byte]): AuthResult[vo
 
 proc decodeAckMessage*(h: var Handshake, input: openArray[byte]): AuthResult[void] =
   ## Decodes AckMessage from `input`.
+  # Using the smallest min. message length of the two types
   if len(input) < AckMessageV4Length:
     return err(AuthError.IncompleteError)
+
   if len(input) == AckMessageV4Length:
     let res = h.decodeAckMessageV4(input)
     if res.isOk(): return res
