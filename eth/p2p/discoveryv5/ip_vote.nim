@@ -10,7 +10,7 @@
 ##
 ## This allows the selection of a node its own public IP based on address
 ## information that is received from other nodes.
-## This can be used in conjuction with discovery v5 ping-pong request responses
+## This can be used in conjunction with discovery v5 ping-pong request responses
 ## that provide this information.
 ## To select the right address, a majority count is done. This is done over a
 ## sort of moving window as votes expire after `IpVoteTimeout`.

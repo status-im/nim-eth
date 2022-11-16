@@ -56,14 +56,14 @@ type
     # means that initial connection would timeout after 21s, which seems rather long
     initialSynTimeout*: Duration
 
-    # Number of resend re-tries of each data packet, before daclaring connection
+    # Number of resend re-tries of each data packet, before declaring connection
     # failed
     dataResendsBeforeFailure*: uint16
 
-    # Maximnal size of receive buffer in bytes
+    # Maximal size of receive buffer in bytes
     optRcvBuffer*: uint32
 
-    # Maximnal size of send buffer in bytes
+    # Maximal size of send buffer in bytes
     optSndBuffer*: uint32
 
     # If set to some(`Duration`), the incoming socket will be initialized in
@@ -153,10 +153,10 @@ type
     connectionIdSnd*: uint16
     # Sequence number for the next packet to be sent.
     seqNr: uint16
-    # All seq number up to this havve been correctly acked by us
+    # All seq number up to this have been correctly acked by us
     ackNr: uint16
 
-    # Should be completed after succesful connection to remote host or after timeout
+    # Should be completed after successful connection to remote host or after timeout
     # for the first syn packet
     connectionFuture: Future[void]
 
@@ -196,7 +196,7 @@ type
     rtt: Duration
     # calculated round trip time variance
     rttVar: Duration
-    # Round trip timeout dynamicaly updated based on acks received from remote
+    # Round trip timeout dynamically updated based on acks received from remote
     # peer
     rto: Duration
 
@@ -215,10 +215,10 @@ type
     # loop called every 500ms to check for on going timeout status
     checkTimeoutsLoop: Future[void]
 
-    # number on consecutive re-transsmisions
+    # number on consecutive re-transmissions
     retransmitCount: uint32
 
-    # Event which will complete whenever socket gets in destory state
+    # Event which will complete whenever socket gets in destroy state
     closeEvent: AsyncEvent
 
     # All callback to be called whenever socket gets in destroy state
@@ -261,8 +261,8 @@ type
     # indicator if we're in slow-start (exponential growth) phase
     slowStart: bool
 
-    # indiciator if we're in fast time out mode i.e we will resent
-    # oldest packet un-acket in case of newer packet arriving
+    # indicator if we're in fast time out mode i.e we will resend
+    # oldest packet un-acked in case of newer packet arriving
     fastTimeout: bool
 
     # Sequence number of the next packet we are allowed to fast-resend. This is
@@ -276,7 +276,7 @@ type
     duplicateAck: uint16
 
     #the slow-start threshold, in bytes
-    slowStartTreshold: uint32
+    slowStartThreshold: uint32
 
     # history of our delays
     ourHistogram: DelayHistogram
@@ -284,7 +284,7 @@ type
     # history of remote delays
     remoteHistogram: DelayHistogram
 
-    # calculator of drifiting between local and remote clocks
+    # calculator of drifting between local and remote clocks
     driftCalculator: ClockDriftCalculator
 
     # socket identifier
@@ -312,7 +312,7 @@ const
   # Default maximum size of the data packet payload. With such configuration
   # data packets will have 508 bytes (488 + 20 header).
   # 508 bytes of udp payload can translate into 576 bytes udp packet i.e
-  # 508bytes paylaod + 60bytes (max ip header) + 8bytes (udp header) = 576bytes.
+  # 508bytes payload + 60bytes (max ip header) + 8bytes (udp header) = 576bytes.
   # 576bytes is defined as minimum reassembly buffer size i.e
   # the minimum datagram size that we are guaranteed any implementation must support.
   # from RFC791: All hosts must be prepared
@@ -323,7 +323,7 @@ const
   # How often each socket check its different on going timers
   checkTimeoutsLoopInterval = milliseconds(500)
 
-  # Defualt initial timeout for first Syn packet
+  # Default initial timeout for first Syn packet
   defaultInitialSynTimeout = milliseconds(3000)
 
   # Initial timeout to receive first Data data packet after receiving initial Syn
@@ -359,13 +359,13 @@ const
 
   duplicateAcksBeforeResend = 3
 
-  # minimal time before subseqent window decays
+  # minimal time before subsequent window decays
   maxWindowDecay = milliseconds(100)
 
   # Maximal size of reorder buffer as fraction of optRcvBuffer size following
   # semantics apply bases on rcvBuffer set to 1000 bytes:
   # if there are already 1000 bytes in rcv buffer no more bytes will be accepted to reorder buffer
-  # if there are already 500 bytes in reoreder buffer, no more bytes will be accepted
+  # if there are already 500 bytes in reorder buffer, no more bytes will be accepted
   # to it, and only 500 bytes can be accepted to rcv buffer
   # this way there is always a space in rcv buffer to fit new data if the reordering
   # happens
@@ -550,7 +550,7 @@ proc checkTimeouts(socket: UtpSocket) =
         curWindowPackets = socket.curWindowPackets,
         curWindowBytes = socket.currentWindow
 
-      # TODO add handling of probe time outs. Reference implemenation has mechanism
+      # TODO add handling of probe time outs. Reference implementation has mechanism
       # of sending probes to determine mtu size. Probe timeouts do not count to standard
       # timeouts calculations
 
@@ -594,7 +594,7 @@ proc checkTimeouts(socket: UtpSocket) =
         # due to high delay window has shrunk below packet size
         # which means that we cannot send more data
         # reset it to fit at least one packet
-        debug "Reseting window size do fit a least one packet",
+        debug "Resetting window size do fit a least one packet",
           oldWindowSize = socket.maxWindow,
           newWindowSize = currentPacketSize
 
@@ -604,7 +604,7 @@ proc checkTimeouts(socket: UtpSocket) =
         socket.slowStart = true
 
       # This will have much more sense when we will add handling of selective acks
-      # as then every selecivly acked packet restes timeout timer and removes packet
+      # as then every selectively acked packet resets timeout timer and removes packet
       # from out buffer.
       markAllPacketAsLost(socket)
 
@@ -709,14 +709,14 @@ proc isClosedAndCleanedUpAllResources*(socket: UtpSocket): bool =
 
 proc destroy*(s: UtpSocket) =
   debug "Destroying socket", to = s.socketKey
-  ## Moves socket to destroy state and clean all reasources.
+  ## Moves socket to destroy state and clean all resources.
   ## Remote is not notified in any way about socket end of life
   s.state = Destroy
   s.eventLoop.cancel()
   # This procedure initiate cleanup process which goes like:
   # Cancel EventLoop -> Cancel timeoutsLoop -> Fire closeEvent
   # This is necessary due to how evenLoop look like i.e it has only one await
-  # point on `eventQueue.get` which trigger cancellation excepion only when
+  # point on `eventQueue.get` which trigger cancellation exception only when
   # someone will try run `eventQueue.put`. Without `eventQueue.put` , eventLoop
   # future shows as cancelled, but handler for CancelledError is not run
 
@@ -784,7 +784,7 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16, currentTime: Moment): AckResult
     debug "Acked packet (deleted from outgoing buffer)",
       pkSeqNr = seqNr,
       pkTransmissions = packet.transmissions,
-      pkNeedReesend = packet.needResend
+      pkNeedResend = packet.needResend
 
     # from spec: The rtt and rtt_var is only updated for packets that were sent only once.
     # This avoids problems with figuring out which packet was acked, the first or the second one.
@@ -868,7 +868,7 @@ proc isAckNrInvalid(socket: UtpSocket, packet: Packet): bool =
 
 # counts the number of bytes acked by selective ack header
 proc calculateSelectiveAckBytes*(socket: UtpSocket,  receivedPackedAckNr: uint16, ext: SelectiveAckExtension): uint32 =
-  # we add 2, as the first bit in the mask therefore represents ackNr + 2 becouse
+  # we add 2, as the first bit in the mask therefore represents ackNr + 2 because
   # ackNr + 1 (i.e next expected packet) is considered lost.
   let base = receivedPackedAckNr + 2
 
@@ -914,11 +914,11 @@ proc tryDecayWindow(socket: UtpSocket, now: Moment) =
 
     socket.maxWindow = newMaxWindow
     socket.slowStart = false
-    socket.slowStartTreshold = newMaxWindow
+    socket.slowStartThreshold = newMaxWindow
 
 # ack packets (removes them from out going buffer) based on selective ack extension header
 proc selectiveAckPackets(socket: UtpSocket,  receivedPackedAckNr: uint16, ext: SelectiveAckExtension, currentTime: Moment): void =
-  # we add 2, as the first bit in the mask therefore represents ackNr + 2 becouse
+  # we add 2, as the first bit in the mask therefore represents ackNr + 2 because
   # ackNr + 1 (i.e next expected packet) is considered lost.
   let base = receivedPackedAckNr + 2
 
@@ -1070,7 +1070,7 @@ proc sendAck(socket: UtpSocket) =
 
 proc tryfinalizeConnection(socket: UtpSocket, p: Packet) =
   # To avoid amplification attacks, server socket is in SynRecv state until
-  # it receices first data transfer
+  # it receives first data transfer
   # https://www.usenix.org/system/files/conference/woot15/woot15-paper-adamsky.pdf
   # Socket is in SynRecv state only when recv timeout is configured
   if (socket.state == SynRecv and p.header.pType == ST_DATA):
@@ -1087,7 +1087,7 @@ proc tryfinalizeConnection(socket: UtpSocket, p: Packet) =
       socket.connectionFuture.complete()
 
 # TODO at socket level we should handle only FIN/DATA/ACK packets. Refactor to make
-# it enforcable by type system
+# it enforceable by type system
 proc processPacketInternal(socket: UtpSocket, p: Packet) =
 
   debug "Process packet",
@@ -1114,7 +1114,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
     return
 
   ## Updates socket state based on received packet, and sends ack when necessary.
-  ## Shoyuld be called in main packet receiving loop
+  ## Should be called in main packet receiving loop
   let pkSeqNr = p.header.seqNr
   let pkAckNr = p.header.ackNr
 
@@ -1122,7 +1122,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
 
   # number of packets past the expected
   # ack_nr is the last acked, seq_nr is the
-  # current. Subtracring 1 makes 0 mean "this is the next expected packet"
+  # current. Subtracting 1 makes 0 mean "this is the next expected packet"
   let pastExpected = pkSeqNr - socket.ackNr - 1
 
   # acks is the number of packets that was acked, in normal case - no selective
@@ -1154,21 +1154,21 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
     p.header.pType == ST_STATE:
       inc socket.duplicateAck
 
-      debug "Recevied duplicated ack",
+      debug "Received duplicated ack",
         pkAckNr = pkAckNr,
-        duplicatAckCounter = socket.duplicateAck
+        duplicateAckCounter = socket.duplicateAck
   else:
     socket.duplicateAck = 0
   # spec says that in case of duplicate ack counter larger that duplicateAcksBeforeResend
-  # we should re-send oldest packet, on the other hand refrence implementation
+  # we should re-send oldest packet, on the other hand reference implementation
   # has code path which does it commented out with todo. Currently to be as close
-  # to refrence impl we do not resend packets in that case
+  # to reference impl we do not resend packets in that case
 
   debug "Packet state variables",
     pastExpected = pastExpected,
     acks = acks
 
-  # If packet is totally of the mark short circout the processing
+  # If packet is totally off the mark, short-circuit the processing
   if pastExpected >= reorderBufferMaxSize:
 
     # if `pastExpected` is really big number (for example: uint16.high) then most
@@ -1202,7 +1202,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
 
   # we are using uint32 not a Duration, to wrap a round in case of
   # sentTimeRemote > receipTimestamp. This can happen as local and remote
-  # clock can be not synchornized or even using different system clock.
+  # clock can be not synchronized or even using different system clock.
   # i.e this number itself does not tell anything and is only used to feedback it
   # to remote peer with each sent packet
   let remoteDelay =
@@ -1238,11 +1238,11 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
     socket.ourHistogram.shift(diff)
 
   let currentPacketSize = socket.getPacketSize()
-  let (newMaxWindow, newSlowStartTreshold, newSlowStart) =
+  let (newMaxWindow, newSlowStartThreshold, newSlowStart) =
     applyCongestionControl(
       socket.maxWindow,
       socket.slowStart,
-      socket.slowStartTreshold,
+      socket.slowStartThreshold,
       socket.socketConfig.optSndBuffer,
       currentPacketSize,
       microseconds(actualDelay),
@@ -1256,12 +1256,12 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
   socket.maxWindow = newMaxWindow
   socket.maxRemoteWindow = p.header.wndSize
   socket.slowStart = newSlowStart
-  socket.slowStartTreshold = newSlowStartTreshold
+  socket.slowStartThreshold = newSlowStartThreshold
 
   debug "Applied ledbat congestion controller",
     maxWindow = newMaxWindow,
     remoteWindow = p.header.wndSize,
-    slowStartTreshold = newSlowStartTreshold,
+    slowStartThreshold = newSlowStartThreshold,
     slowstart = newSlowStart
 
   if (socket.zeroWindowTimer.isNone() and socket.maxRemoteWindow <= currentPacketSize):
@@ -1382,14 +1382,14 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
         reorderCount = socket.reorderCount
 
       while true:
-        # We are doing this in reoreder loop, to handle the case when we already received
+        # We are doing this in reorder loop, to handle the case when we already received
         # fin but there were some gaps before eof
         # we have reached remote eof, and should not receive more packets from remote
         if ((not socket.reachedFin) and socket.gotFin and socket.eofPktNr == socket.ackNr):
           debug "Reached socket EOF"
           # In case of reaching eof, it is up to user of library what to to with
-          # it. With the current implementation, the most apropriate way would be to
-          # destory it (as with our implementation we know that remote is destroying its acked fin)
+          # it. With the current implementation, the most appropriate way would be to
+          # destroy it (as with our implementation we know that remote is destroying its acked fin)
           # as any other send will either generate timeout, or socket will be forcefully
           # closed by reset
           socket.reachedFin = true
@@ -1416,7 +1416,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
             packetSeqNr = packet.header.seqNr,
             packetAckNr = packet.header.ackNr,
             socketSeqNr = socket.seqNr,
-            socektAckNr = socket.ackNr,
+            socketAckNr = socket.ackNr,
             rcvbufferSize = socket.offset,
             reorderBufferSize = socket.inBufferBytes
 
@@ -1473,7 +1473,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
             packetSeqNr = p.header.seqNr,
             packetAckNr = p.header.ackNr,
             socketSeqNr = socket.seqNr,
-            socektAckNr = socket.ackNr,
+            socketAckNr = socket.ackNr,
             rcvbufferSize = socket.offset,
             reorderBufferSize = socket.inBufferBytes
 
@@ -1482,7 +1482,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
           socket.inBufferBytes = socket.inBufferBytes + payloadLength
           debug "added out of order packet to reorder buffer",
             reorderCount = socket.reorderCount
-          # we send ack packet, as we reoreder count is > 0, so the eack bitmask will be
+          # we send ack packet, as we reorder count is > 0, so the eack bitmask will be
           # generated
           socket.sendAck()
 
@@ -1521,14 +1521,14 @@ proc onRead(socket: UtpSocket, readReq: var ReadReq): ReadResult =
 
       debug "Read finished",
         bytesRead = len(readReq.bytesAvailable),
-        socektAtEof = socket.atEof()
+        socketAtEof = socket.atEof()
 
       readReq.reader.complete(readReq.bytesAvailable)
       return ReadFinished
     else:
       debug "Read not finished",
         bytesRead = len(readReq.bytesAvailable),
-        socektAtEof = socket.atEof()
+        socketAtEof = socket.atEof()
 
       return ReadNotFinished
   else:
@@ -1540,14 +1540,14 @@ proc onRead(socket: UtpSocket, readReq: var ReadReq): ReadResult =
     if (len(readReq.bytesAvailable) == readReq.bytesToRead):
       debug "Read finished",
         bytesRead = len(readReq.bytesAvailable),
-        socektAtEof = socket.atEof()
+        socketAtEof = socket.atEof()
 
       readReq.reader.complete(readReq.bytesAvailable)
       return ReadFinished
     else:
       debug "Read not finished",
         bytesRead = len(readReq.bytesAvailable),
-        socektAtEof = socket.atEof()
+        socketAtEof = socket.atEof()
 
       return ReadNotFinished
 
@@ -1568,7 +1568,7 @@ proc eventLoop(socket: UtpSocket) {.async.} =
             discard socket.pendingReads.popFirst()
           of ReadNotFinished:
             # there was not enough bytes in buffer to finish this read request,
-            # stop processing fruther reeads
+            # stop processing further reads
             break
           else:
             # read was cancelled or socket is already finished move on to next read
@@ -1625,7 +1625,7 @@ proc eventLoop(socket: UtpSocket) {.async.} =
         # check if the writer was not cancelled in mean time
         if (not ev.readReq.reader.finished()):
           if (socket.pendingReads.len() > 0):
-            # there is already pending unfininshed read request, schedule this one for
+            # there is already pending unfinished read request, schedule this one for
             # later
             socket.pendingReads.addLast(ev.readReq)
           else:
@@ -1645,8 +1645,8 @@ proc eventLoop(socket: UtpSocket) {.async.} =
         w.writer.complete(res)
     for r in socket.pendingReads.items():
       # complete every reader with already read bytes
-      # TODO: it maybe better to refine read api to returl Future[Result[seq[byte], E]]
-      # and return erros for not finished reads
+      # TODO: it maybe better to refine read api to return Future[Result[seq[byte], E]]
+      # and return errors for not finished reads
       if (not r.reader.finished()):
         r.reader.complete(r.bytesAvailable)
     socket.pendingWrites.clear()
@@ -1668,7 +1668,7 @@ proc readingClosed(socket: UtpSocket): bool =
   socket.atEof() or socket.state == Destroy
 
 proc close*(socket: UtpSocket) =
-  ## Gracefully closes conneciton (send FIN) if socket is in connected state
+  ## Gracefully closes connection (send FIN) if socket is in connected state
   ## does not wait for socket to close
   if socket.state != Destroy:
     case socket.state
@@ -1692,11 +1692,11 @@ proc close*(socket: UtpSocket) =
       socket.destroy()
 
 proc closeWait*(socket: UtpSocket) {.async.} =
-  ## Gracefully closes conneciton (send FIN) if socket is in connected state
+  ## Gracefully closes connection (send FIN) if socket is in connected state
   ## and waits for socket to be closed.
   ## Warning: if FIN packet for some reason will be lost, then socket will be closed
   ## due to retransmission failure which may take some time.
-  ## default is 4 retransmissions with doubling of rto between each retranssmision
+  ## default is 4 retransmissions with doubling of rto between each retransmission
   socket.close()
   await socket.closeEvent.wait()
 
@@ -1782,7 +1782,7 @@ proc read*(socket: UtpSocket): Future[seq[byte]] =
 
   return fut
 
-# Check how many packets are still in the out going buffer, usefull for tests or
+# Check how many packets are still in the out going buffer, usefully for tests or
 # debugging.
 proc numPacketsInOutGoingBuffer*(socket: UtpSocket): int =
   var num = 0
@@ -1797,10 +1797,10 @@ proc numOfBytesInFlight*(socket: UtpSocket): uint32 = socket.currentWindow
 # Check how many bytes are in incoming buffer
 proc numOfBytesInIncomingBuffer*(socket: UtpSocket): uint32 = uint32(socket.offset)
 
-# Check how many packets are still in the reorder buffer, usefull for tests or
+# Check how many packets are still in the reorder buffer, useful for tests or
 # debugging.
 # It throws assertion error when number of elements in buffer do not equal kept counter
-proc numPacketsInReordedBuffer*(socket: UtpSocket): int =
+proc numPacketsInReorderedBuffer*(socket: UtpSocket): int =
   var num = 0
   for e in socket.inBuffer.items():
     if e.isSome():
@@ -1840,9 +1840,9 @@ proc new[A](
   let currentTime = getMonoTimestamp().moment
 
   # Initial max window size. Reference implementation uses value which enables one packet
-  # to be transfered.
+  # to be transferred.
   # We use value two times higher as we do not yet have proper mtu estimation, and
-  # our impl should work over udp and discovery v5 (where proper estmation may be harder
+  # our impl should work over udp and discovery v5 (where proper estimation may be harder
   # as packets already have discoveryv5 envelope)
   let initMaxWindow = 2 * cfg.payloadSize
   T(
@@ -1880,7 +1880,7 @@ proc new[A](
     fastTimeout: false,
     fastResendSeqNr: initialSeqNr,
     lastWindowDecay: currentTime - maxWindowDecay,
-    slowStartTreshold: cfg.optSndBuffer,
+    slowStartThreshold: cfg.optSndBuffer,
     ourHistogram: DelayHistogram.init(currentTime),
     remoteHistogram: DelayHistogram.init(currentTime),
     driftCalculator: ClockDriftCalculator.init(currentTime),
@@ -1906,7 +1906,7 @@ proc newOutgoingSocket*[A](
     rcvConnectionId,
     sndConnectionId,
     initialSeqNr,
-    # Initialy ack nr is 0, as we do not know remote inital seqnr
+    # Initially ack nr is 0, as we do not know remote initial seqnr
     0,
     cfg.initialSynTimeout
   )
@@ -1926,8 +1926,8 @@ proc newIncomingSocket*[A](
       # it does not matter what timeout value we put here, as socket will be in
       # connected state without outgoing packets in buffer so any timeout hit will
       # just double rto without any penalties
-      # although we cannont use 0, as then timeout will be constantly re-set to 500ms
-      # and there will be a lot of not usefull work done
+      # although we cannot use 0, as then timeout will be constantly re-set to 500ms
+      # and there will be a lot of not useful work done
       (Connected, defaultInitialSynTimeout)
     else:
       let timeout = cfg.incomingSocketReceiveTimeout.unsafeGet()
@@ -1962,7 +1962,7 @@ proc startOutgoingSocket*(socket: UtpSocket): Future[void] =
     seqNr = packet.header.seqNr,
     connectionId = packet.header.connectionId
   # set number of transmissions to 1 as syn packet will be send just after
-  # initiliazation
+  # initialization
   let outgoingPacket = OutgoingPacket.init(encodePacket(packet), 1, false, 0)
   socket.registerOutgoingPacket(outgoingPacket)
   socket.startEventLoop()

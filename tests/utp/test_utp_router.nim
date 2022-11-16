@@ -75,7 +75,7 @@ procSuite "Utp router unit tests":
     let outgoingSocket = await connectFuture
     (outgoingSocket.get(), initialPacket)
 
-  asyncTest "Router should ingnore non utp packets":
+  asyncTest "Router should ignore non utp packets":
     let q = newAsyncQueue[UtpSocket[int]]()
     let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(), rng)
     router.sendCb = testSend
@@ -116,7 +116,7 @@ procSuite "Utp router unit tests":
     check:
       router.len() == connectionsLimit
 
-  asyncTest "Incoming connection should be closed when not receving data for period of time when configured":
+  asyncTest "Incoming connection should be closed when not receiving data for period of time when configured":
     let q = newAsyncQueue[UtpSocket[int]]()
     let router =
       UtpRouter[int].new(
@@ -213,7 +213,7 @@ procSuite "Utp router unit tests":
     check:
       socket.isConnected()
 
-  asyncTest "Router should create new incoming socket when receiving same syn packet from diffrent sender":
+  asyncTest "Router should create new incoming socket when receiving same syn packet from different sender":
     let q = newAsyncQueue[UtpSocket[int]]()
     let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(), rng)
     router.sendCb = testSend
@@ -366,7 +366,7 @@ procSuite "Utp router unit tests":
     router.sendCb =
       proc (to: int, data: seq[byte]): Future[void] =
         let f = newFuture[void]()
-        f.fail(newException(TestError, "faile"))
+        f.fail(newException(TestError, "failed"))
         return f
 
     let connectResult = await router.connectTo(testSender2)

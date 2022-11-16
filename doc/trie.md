@@ -86,7 +86,7 @@ Constructor API:
  * init(BinaryTrie, DB, rootHash[optional])
 
 Normally you would not set the rootHash when constructing an empty Binary-trie.
-Setting the rootHash occured in a scenario where you have a populated DB
+Setting the rootHash occurred in a scenario where you have a populated DB
 with existing trie structure and you know the rootHash,
 and then you want to continue/resume the trie operations.
 
@@ -123,7 +123,7 @@ What kind of lie? actually, `delete` and `deleteSubtrie` doesn't remove the
 'deleted' node from the underlying DB. It only make the node inaccessible
 from the user of the trie. The same also happened if you update the value of a key,
 the old value node is not removed from the underlying DB.
-A more subtle lie also happened when you add new entrie into the trie using `set` operation.
+A more subtle lie also happened when you add new entries into the trie using `set` operation.
 The previous hash of affected branch become obsolete and replaced by new hash,
 the old hash become inaccessible to the user.
 You may think that is a waste of storage space.
@@ -230,7 +230,7 @@ Then we can write the clean tree into a new DB instance to replace the old one.
 ## Sparse Merkle Trie
 
 Sparse Merkle Trie(SMT) is a variant of Binary Trie which uses binary encoding to
-represent path during trie travelsal. When Binary Trie uses three types of node,
+represent path during trie traversal. When Binary Trie uses three types of node,
 SMT only use one type of node without any additional special encoding to store it's key-path.
 
 Actually, it doesn't even store it's key-path anywhere like Binary Trie,
@@ -280,7 +280,7 @@ Constructor API:
  * init(SparseBinaryTrie, DB, rootHash[optional])
 
 Normally you would not set the rootHash when constructing an empty Sparse Merkle Trie.
-Setting the rootHash occured in a scenario where you have a populated DB
+Setting the rootHash occurred in a scenario where you have a populated DB
 with existing trie structure and you know the rootHash,
 and then you want to continue/resume the trie operations.
 

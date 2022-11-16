@@ -24,7 +24,7 @@ const minWindowSize* = 10
 proc applyCongestionControl*(
   currentMaxWindowSize: uint32,
   currentSlowStart: bool,
-  currentSlowStartTreshold: uint32,
+  currentSlowStartThreshold: uint32,
   maxSndBufferSize: uint32,
   currentPacketSize: uint32,
   actualDelay: Duration,
@@ -34,7 +34,7 @@ proc applyCongestionControl*(
   clockDrift: int32
 ): (uint32, uint32, bool) =
   if (actualDelay.isZero() or minRtt.isZero() or numOfAckedBytes == 0):
-    return (currentMaxWindowSize, currentSlowStartTreshold, currentSlowStart)
+    return (currentMaxWindowSize, currentSlowStartThreshold, currentSlowStart)
 
   let ourDelay = min(minRtt, calculatedDelay)
 
@@ -50,7 +50,7 @@ proc applyCongestionControl*(
   # people trying to "cheat" uTP by making their clock run slower,
   # and this definitely catches that without any risk of false positives
   # if clock_drift < -200000 start applying a penalty delay proportional
-  # to how far beoynd -200000 the clock drift is
+  # to how far beyond -200000 the clock drift is
   let clockDriftPenalty: int64 =
     if (clockDrift < -200000):
       let penalty = (-clockDrift - 200000) div 7
@@ -81,17 +81,17 @@ proc applyCongestionControl*(
 
   var newSlowStart = currentSlowStart
   var newMaxWindowSize = currentMaxWindowSize
-  var newSlowStartTreshold = currentSlowStartTreshold
+  var newSlowStartThreshold = currentSlowStartThreshold
 
   if currentSlowStart:
     let slowStartCwnd = currentMaxWindowSize + uint32(windowFactor * float64(currentPacketSize))
 
-    if (slowStartCwnd > currentSlowStartTreshold):
+    if (slowStartCwnd > currentSlowStartThreshold):
       newSlowStart = false
     elif float64(ourDelay.microseconds()) > float64(target.microseconds()) * 0.9:
-      # we are just a litte under target delay, discontinute slows start
+      # we are just a little under target delay, discontinue slows start
       newSlowStart = false
-      newSlowStartTreshold = currentMaxWindowSize
+      newSlowStartThreshold = currentMaxWindowSize
     else:
       newMaxWindowSize = max(slowStartCwnd, ledbatCwnd)
   else:
@@ -99,4 +99,4 @@ proc applyCongestionControl*(
 
   newMaxWindowSize = clamp(newMaxWindowSize, minWindowSize, maxSndBufferSize)
 
-  (newMaxWindowSize, newSlowStartTreshold, newSlowStart)
+  (newMaxWindowSize, newSlowStartThreshold, newSlowStart)

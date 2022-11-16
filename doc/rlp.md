@@ -41,7 +41,7 @@ will be advanced just past the end of the consumed object.
 
 The `toXX` and `read` family of procs may raise a `RlpTypeMismatch` in case
 of type mismatch with the stream contents under the cursor. A corrupted
-RLP stream or an attemp to read past the stream end will be signaled
+RLP stream or an attempt to read past the stream end will be signaled
 with the `MalformedRlpError` exception. If the RLP stream includes data
 that cannot be processed on the current platform (e.g. an integer value
 that is too large), the library will raise an `UnsupportedRlpError` exception.

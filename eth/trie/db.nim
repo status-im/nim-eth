@@ -86,7 +86,7 @@ proc put*(db: MemoryLayer, key, val: openArray[byte]) =
 
   if key.len != 32:
     # This is not a Trie key, but a regular system mutable key
-    # (e.g. the cannonical head hash). We don't need to ref count such keys.
+    # (e.g. the canonical head hash). We don't need to ref count such keys.
     db.records[key] = MemDBRec(refCount: 1, value: @val)
   else:
     db.records.withValue(key, v) do:

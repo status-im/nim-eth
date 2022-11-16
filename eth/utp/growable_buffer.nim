@@ -12,9 +12,9 @@ export options
 # Buffer implementation similar to the one in in reference implementation.
 # Main rationale for it, is to refer to items in buffer by their sequence number,
 # and support out of order packets.
-# Therefore it is super specific data structure, and it mostly usefull for
+# Therefore it is super specific data structure, and it mostly usefully for
 # utp implementation.
-# Another alternative would be to use standard deque from deques module, and caluclate
+# Another alternative would be to use standard deque from deques module, and calculate
 # item indexes from their sequence numbers.
 type
   GrowableCircularBuffer*[A] = object

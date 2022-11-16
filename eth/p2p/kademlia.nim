@@ -667,7 +667,7 @@ proc randomNodes*(k: KademliaProtocol, count: int): seq[Node] =
   result = newSeqOfCap[Node](count)
   var seen = initHashSet[Node]()
 
-  # This is a rather inneficient way of randomizing nodes from all buckets, but even if we
+  # This is a rather inefficient way of randomizing nodes from all buckets, but even if we
   # iterate over all nodes in the routing table, the time it takes would still be
   # insignificant compared to the time it takes for the network roundtrips when connecting
   # to nodes.

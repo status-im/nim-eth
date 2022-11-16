@@ -25,7 +25,7 @@ const
   MAC_SIZE = 256 div 8  # 32
   SIG_SIZE = 520 div 8  # 65
   HEAD_SIZE = MAC_SIZE + SIG_SIZE  # 97
-  EXPIRATION = 60  # let messages expire after N secondes
+  EXPIRATION = 60  # let messages expire after N seconds
   PROTO_VERSION = 4
 
 type

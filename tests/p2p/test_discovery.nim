@@ -135,10 +135,10 @@ procSuite "Discovery Tests":
     let neighbours1Future = bootNode.kademlia.findNode(nodesSeen, targetNodeId, peerNode)
 
     # This will raise an assertion error if `findNode` doesn't check for and ignore
-    # this second call to the same target and peer in rapid successfion.
+    # this second call to the same target and peer in rapid succession.
     let neighbours2Future = bootNode.kademlia.findNode(nodesSeen, targetNodeId, peerNode)
 
-    # Just for completness, verify the result is empty from the second call.
+    # Just for completeness, verify the result is empty from the second call.
     let neighbours2 = await neighbours2Future
     check(neighbours2.len == 0)
 

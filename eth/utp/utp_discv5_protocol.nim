@@ -67,8 +67,8 @@ proc initSendCallback(
     proc (to: NodeAddress, data: seq[byte]): Future[void] =
       let fut = newFuture[void]()
       # hidden assumption here is that nodes already have established discv5 session
-      # between each other. In our use case this should be true as openning stream
-      # is only done after succesful OFFER/ACCEPT or FINDCONTENT/CONTENT exchange
+      # between each other. In our use case this should be true as opening stream
+      # is only done after successful OFFER/ACCEPT or FINDCONTENT/CONTENT exchange
       # which forces nodes to establish session between each other.
       discard t.talkReqDirect(to, subProtocolName, data)
       fut.complete()

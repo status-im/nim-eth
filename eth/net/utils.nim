@@ -65,6 +65,6 @@ proc getRouteIpv4*(): Result[ValidIpAddress, cstring] =
     let ip = try: route.source.address()
              except ValueError as e:
                # This should not occur really.
-               error "Address convertion error", exception = e.name, msg = e.msg
+               error "Address conversion error", exception = e.name, msg = e.msg
                return err("Invalid IP address")
     ok(ValidIpAddress.init(ip))

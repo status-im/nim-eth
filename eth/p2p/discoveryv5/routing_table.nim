@@ -53,7 +53,7 @@ type
     ## time seen. First entry (head) is considered the most recently seen node
     ## and the last entry (tail) is considered the least recently seen node.
     ## Here "seen" means a successful request-response. This can also not have
-    ## occured yet.
+    ## occurred yet.
     replacementCache: seq[Node] ## Nodes that could not be added to the `nodes`
     ## seq as it is full and without stale nodes. This is practically a small
     ## LRU cache.
@@ -70,12 +70,12 @@ type
   ## is possible that a malicious node could fill (poison) the routing table or
   ## a specific bucket with ENRs with IPs it does not control. The effect of
   ## this would be that a node that actually owns the IP could have a difficult
-  ## time getting its ENR distrubuted in the DHT and as a consequence would
+  ## time getting its ENR distributed in the DHT and as a consequence would
   ## not be reached from the outside as much (or at all). However, that node can
   ## still search and find nodes to connect to. So it would practically be a
   ## similar situation as a node that is not reachable behind the NAT because
   ## port mapping is not set up properly.
-  ## There is the possiblity to set the IP limit on verified (=contacted) nodes
+  ## There is the possibility to set the IP limit on verified (=contacted) nodes
   ## only, but that would allow for lookups to be done on a higher set of nodes
   ## owned by the same identity. This is a worse alternative.
   ## Next, doing lookups only on verified nodes would slow down discovery start
@@ -321,7 +321,7 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   ## Try to add the node to the routing table.
   ##
   ## First, an attempt will be done to add the node to the bucket in its range.
-  ## If this fails, the bucket will be split if it is eligable for splitting.
+  ## If this fails, the bucket will be split if it is eligible for splitting.
   ## If so, a new attempt will be done to add the node. If not, the node will be
   ## added to the replacement cache.
   ##

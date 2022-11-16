@@ -490,7 +490,7 @@ proc replaceNode(d: Protocol, n: Node) =
     # peers in the routing table.
     debug "Message request to bootstrap node failed", enr = toURI(n.record)
 
-# TODO: This could be improved to do the clean-up immediatily in case a non
+# TODO: This could be improved to do the clean-up immediately in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
 # somewhere
 proc registerRequest(d: Protocol, n: Node, message: seq[byte],

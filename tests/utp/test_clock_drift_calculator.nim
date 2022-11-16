@@ -38,7 +38,7 @@ suite "Clock drift calculator":
     # first sample which will be treated as a base sample
     calculator.addSample(10, currentTime + seconds(3))
 
-    # second sample in the first inteval it will be treated in relation to first one
+    # second sample in the first interval it will be treated in relation to first one
     # so correct first drift should be: (50 - 10) / 2 == 20
     calculator.addSample(50, currentTime + seconds(6))
 
@@ -46,7 +46,7 @@ suite "Clock drift calculator":
       calculator.clockDrift == 2
       calculator.lastClockDrift == 20
 
-  test "Clock drift should properly calcuated when clock drifts to two sides":
+  test "Clock drift should properly calculated when clock drifts to two sides":
     let currentTime = Moment.now()
     var calculator1 = ClockDriftCalculator.init(currentTime)
     var calculator2 = ClockDriftCalculator.init(currentTime)

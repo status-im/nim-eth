@@ -63,7 +63,7 @@ type
 # 1. Microsecond precisions
 # 2. Monotonicity
 # Reference lib have a lot of checks to assume that this is monotonic on
-# every system, and warnings when monotonic clock is not avaialable.
+# every system, and warnings when monotonic clock is not available.
 proc getMonoTimestamp*(): TimeStampInfo =
   let currentMoment = Moment.now()
 
@@ -109,7 +109,7 @@ proc encodeHeaderStream(s: var OutputStream, h: PacketHeaderV1) =
 
 proc encodeExtensionStream(s: var OutputStream, e: SelectiveAckExtension) =
   try:
-    # writing 0 as there is not further extensions after selectiv ack
+    # writing 0 as there is not further extensions after selective ack
     s.write(0'u8)
     s.write(acksArrayLength)
     s.write(e.acks)
@@ -180,7 +180,7 @@ proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
 
       # As selective ack is only supported extension the byte for nextExtension
       # must be equal to 0.
-      # As for extLength, specificaiton says that it must be at least 4, and in multiples of 4
+      # As for extLength, specification says that it must be at least 4, and in multiples of 4
       # but reference implementation always uses 4 bytes bit mask which makes sense
       # as 4byte bit mask is able to ack 32 packets in the future which is more than enough
       if (nextExtension != 0 or extLength != 4):
@@ -221,7 +221,7 @@ proc synPacket*(seqNr: uint16, rcvConnectionId: uint16, bufferSize: uint32): Pac
     timestampDiff: 0'u32,
     wndSize: bufferSize,
     seqNr: seqNr,
-    # Initialy we did not receive any acks
+    # Initially we did not receive any acks
     ackNr: 0'u16
   )
 

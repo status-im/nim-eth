@@ -201,7 +201,7 @@ proc appendImpl(self: var RlpWriter, data: object) {.inline.} =
 proc appendImpl(self: var RlpWriter, data: tuple) {.inline.} =
   self.appendRecordType(data)
 
-# We define a single `append` template with a pretty low specifity
+# We define a single `append` template with a pretty low specificity
 # score in order to facilitate easier overloading with user types:
 template append*[T](w: var RlpWriter; data: T) =
   when data is float64:

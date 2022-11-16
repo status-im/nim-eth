@@ -205,7 +205,7 @@ procSuite "Utp protocol over udp tests":
 
     await utpProt1.shutdownWait()
 
-  asyncTest "Success connect to remote host which initialy was offline":
+  asyncTest "Success connect to remote host which initially was offline":
     let server1Called = newAsyncEvent()
     let address = initTAddress("127.0.0.1", 9079)
     let utpProt1 = UtpProtocol.new(setAcceptedCallback(server1Called), address, nil, SocketConfig.init(milliseconds(500)))
@@ -214,7 +214,7 @@ procSuite "Utp protocol over udp tests":
 
     let futSock = utpProt1.connectTo(address1)
 
-    # waiting 400 milisecond will trigger at least one re-send
+    # waiting 400 millisecond will trigger at least one re-send
     await sleepAsync(milliseconds(400))
 
     var server2Called = newAsyncEvent()
@@ -276,7 +276,7 @@ procSuite "Utp protocol over udp tests":
     let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
     let bytesReceivedFromServer = await transferData(s.serverSocket, s.clientSocket, bytesToTransfer)
 
-    # ultimatly all send packets will acked, and outgoing buffer will be empty
+    # ultimately all send packets will acked, and outgoing buffer will be empty
     await waitUntil(proc (): bool = s.clientSocket.numPacketsInOutGoingBuffer() == 0)
     await waitUntil(proc (): bool = s.serverSocket.numPacketsInOutGoingBuffer() == 0)
 
@@ -316,7 +316,7 @@ procSuite "Utp protocol over udp tests":
 
     let bytesReceived = await s.serverSocket.read(len(bytesToTransfer) + len(bytesToTransfer1))
 
-    # ultimatly all send packets will acked, and outgoing buffer will be empty
+    # ultimately all send packets will acked, and outgoing buffer will be empty
     await waitUntil(proc (): bool = s.clientSocket.numPacketsInOutGoingBuffer() == 0)
 
     check:
@@ -350,7 +350,7 @@ procSuite "Utp protocol over udp tests":
 
     await s.close()
 
-  asyncTest "Gracefull stop of the socket":
+  asyncTest "Gracefully stop of the socket":
     let s = await initClientServerScenario()
     check:
       s.clientSocket.isConnected()
@@ -443,7 +443,7 @@ procSuite "Utp protocol over udp tests":
     check:
       allowedSocketRes.isOk()
       notAllowedSocketRes.isErr()
-      # remote did not allow this connection, and utlimatly it did time out
+      # remote did not allow this connection, and ultimately it did time out
       notAllowedSocketRes.error().kind == ConnectionTimedOut
 
     let clientSocket = allowedSocketRes.get()
@@ -475,12 +475,12 @@ procSuite "Utp protocol over udp tests":
 
     let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
 
-    # ultimatly all send packets will acked, and outgoing buffer will be empty
+    # ultimately all send packets will acked, and outgoing buffer will be empty
     await waitUntil(proc (): bool = s.clientSocket.numPacketsInOutGoingBuffer() == 0)
 
     check:
-      # we can only assert that window has grown, becouse specific values depends on
-      # particual timings
+      # we can only assert that window has grown, because specific values depends on
+      # particular timings
       s.clientSocket.currentMaxWindowSize > startMaxWindow
       s.serverSocket.isConnected()
       s.clientSocket.numPacketsInOutGoingBuffer() == 0
@@ -507,14 +507,14 @@ procSuite "Utp protocol over udp tests":
 
     let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
 
-    # ultimatly all send packets will acked, and outgoing buffer will be empty
+    # ultimately all send packets will acked, and outgoing buffer will be empty
     await waitUntil(proc (): bool = s.clientSocket.numPacketsInOutGoingBuffer() == 0)
 
     let maximumMaxWindow = s.clientSocket.currentMaxWindowSize
 
     check:
-      # we can only assert that window has grown, becouse specific values depends on
-      # particual timings
+      # we can only assert that window has grown, because specific values depends on
+      # particular timings
       maximumMaxWindow > startMaxWindow
       s.serverSocket.isConnected()
       s.clientSocket.numPacketsInOutGoingBuffer() == 0

@@ -5,7 +5,7 @@ import std/[tables, lists, options]
 type
   LRUCache*[K, V] = object of RootObj
     list: DoublyLinkedList[(K, V)] # Head is MRU k:v and tail is LRU k:v
-    table: Table[K, DoublyLinkedNode[(K, V)]] # DoublyLinkedNode is alraedy ref
+    table: Table[K, DoublyLinkedNode[(K, V)]] # DoublyLinkedNode is already ref
     capacity: int
 
 func init*[K, V](T: type LRUCache[K, V], capacity: int): LRUCache[K, V] =

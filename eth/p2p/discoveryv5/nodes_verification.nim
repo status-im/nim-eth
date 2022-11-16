@@ -40,7 +40,7 @@ proc verifyNodesRecords(enrs: openArray[Record], fromNode: Node, nodesLimit: int
     # The discovery v5 specification specifies no limit on the amount of ENRs
     # that can be returned, but clients usually stick with the bucket size limit
     # as in original Kademlia. Because of this it is chosen not to fail
-    # immediatly, but still process maximum `findNodeResultLimit`.
+    # immediately, but still process maximum `findNodeResultLimit`.
     if count >= nodesLimit:
       debug "Too many ENRs", enrs = enrs.len(),
         limit = nodesLimit, sender = fromNode.record.toURI

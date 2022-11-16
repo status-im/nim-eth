@@ -6,7 +6,7 @@
 
 {.push raises: [Defect].}
 
-import 
+import
   chronos, stew/[results, byteutils],
   ./utp_router,
   ./utp_socket,
@@ -21,7 +21,7 @@ import
 when isMainModule:
   proc echoIncomingSocketCallBack(): AcceptConnectionCallback[TransportAddress] =
     return (
-      proc (server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] {.gcsafe, raises: [Defect].} = 
+      proc (server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] {.gcsafe, raises: [Defect].} =
         echo "received incoming connection"
         let fakeFuture = newFuture[void]()
         fakeFuture.complete()
@@ -37,7 +37,7 @@ when isMainModule:
 
   doAssert(soc.numPacketsInOutGoingBuffer() == 0)
 
-  let helloUtp = "Helllo from nim implementation"
+  let helloUtp = "Hello from nim implementation"
   let bytes = helloUtp.toBytes()
 
   discard waitFor soc.write(bytes)
