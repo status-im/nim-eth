@@ -466,3 +466,81 @@ suite "Ethereum P2P handshake test suite":
         check:
           csecInitiator.aesKey == csecResponder.aesKey
           csecInitiator.macKey == csecResponder.macKey
+
+    test "Invalid AuthMessage - Minimum input size":
+      var responder = newTestHandshake({Responder})
+
+      # 1 byte short on minimum AuthMessage size
+      var m = newSeq[byte](AuthMessageEIP8Length - 1)
+
+      let res = responder.decodeAuthMessage(m)
+      check:
+        res.isErr()
+        res.error == AuthError.IncompleteError
+
+    test "Invalid AuthMessage - Minimum size prefix":
+      var responder = newTestHandshake({Responder})
+
+      # Minimum size for EIP8 AuthMessage
+      var m = newSeq[byte](AuthMessageEIP8Length)
+      # size prefix size of 281, 1 byte short
+      m[0] = 1
+      m[1] = 25
+
+      let res = responder.decodeAuthMessage(m)
+      check:
+        res.isErr()
+        res.error == AuthError.IncompleteError
+
+    test "Invalid AuthMessage - Size prefix bigger than input":
+      var responder = newTestHandshake({Responder})
+
+      # Minimum size for EIP8 AuthMessage
+      var m = newSeq[byte](AuthMessageEIP8Length)
+      # size prefix size of 283, 1 byte too many
+      m[0] = 1
+      m[1] = 27
+
+      let res = responder.decodeAuthMessage(m)
+      check:
+        res.isErr()
+        res.error == AuthError.IncompleteError
+
+    test "Invalid AckMessage - Minimum input size":
+      var initiator = newTestHandshake({Initiator, EIP8})
+
+      # 1 byte short on minimum size
+      let m = newSeq[byte](AckMessageV4Length - 1)
+
+      let res = initiator.decodeAckMessage(m)
+      check:
+        res.isErr()
+        res.error == AuthError.IncompleteError
+
+    test "Invalid AckMessage - Minimum size prefix":
+      var initiator = newTestHandshake({Initiator, EIP8})
+
+      # Minimum size for EIP8 AckMessage
+      var m = newSeq[byte](AckMessageEIP8Length)
+      # size prefix size of 214, 1 byte short
+      m[0] = 0
+      m[1] = 214
+
+      let res = initiator.decodeAckMessage(m)
+      check:
+        res.isErr()
+        res.error == AuthError.IncompleteError
+
+    test "Invalid AckMessage - Size prefix bigger than input":
+      var initiator = newTestHandshake({Initiator, EIP8})
+
+      # Minimum size for EIP8 AckMessage
+      var m = newSeq[byte](AckMessageEIP8Length)
+      # size prefix size of 216, 1 byte too many
+      m[0] = 0
+      m[1] = 216
+
+      let res = initiator.decodeAckMessage(m)
+      check:
+        res.isErr()
+        res.error == AuthError.IncompleteError

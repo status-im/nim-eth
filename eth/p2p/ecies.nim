@@ -1,6 +1,6 @@
 #
 #                 Ethereum P2P
-#              (c) Copyright 2018
+#              (c) Copyright 2018-2022
 #       Status Research & Development GmbH
 #
 #            Licensed under either of
@@ -22,6 +22,11 @@ export results
 const
   emptyMac* = array[0, byte]([])
 
+  eciesOverheadLength* =
+    # Data overhead size for ECIES encrypted message
+    # pubkey + IV + MAC = 65 + 16 + 32 = 113
+    1 + sizeof(PublicKey) + aes128.sizeBlock + sha256.sizeDigest
+
 type
   EciesError* = enum
     BufferOverrun   = "ecies: output buffer size is too small"
@@ -42,17 +47,13 @@ type
 proc mapErrTo[T](r: SkResult[T], v: static EciesError): EciesResult[T] =
   r.mapErr(proc (e: cstring): EciesError = v)
 
-template eciesOverheadLength*(): int =
-  ## Return data overhead size for ECIES encrypted message
-  1 + sizeof(PublicKey) + aes128.sizeBlock + sha256.sizeDigest
-
 template eciesEncryptedLength*(size: int): int =
   ## Return size of encrypted message for message with size `size`.
-  size + eciesOverheadLength()
+  size + eciesOverheadLength
 
 template eciesDecryptedLength*(size: int): int =
   ## Return size of decrypted message for encrypted message with size `size`.
-  size - eciesOverheadLength()
+  size - eciesOverheadLength
 
 template eciesMacLength(size: int): int =
   ## Return size of authenticated data
@@ -175,9 +176,9 @@ proc eciesDecrypt*(input: openArray[byte],
   var header = cast[ptr EciesHeader](unsafeAddr input[0])
   if header.version != 0x04:
     return err(WrongHeader)
-  if len(input) <= eciesOverheadLength():
+  if len(input) <= eciesOverheadLength:
     return err(IncompleteError)
-  if len(input) - eciesOverheadLength() > len(output):
+  if len(input) - eciesOverheadLength > len(output):
     return err(BufferOverrun)
 
   var
@@ -192,7 +193,7 @@ proc eciesDecrypt*(input: openArray[byte],
     sha256.digest(material.toOpenArray(KeyLength div 2, material.high))
   burnMem(material)
 
-  let macsize = eciesMacLength(len(input) - eciesOverheadLength())
+  let macsize = eciesMacLength(len(input) - eciesOverheadLength)
   ctx.init(macKey.data)
   burnMem(macKey)
   ctx.update(toOpenArray(input, eciesIvPos(), eciesIvPos() + macsize - 1))
