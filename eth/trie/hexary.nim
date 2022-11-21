@@ -1,4 +1,5 @@
 import
+  std/options,
   std/tables,
   nimcrypto/[keccak, hash],
   ../rlp,
@@ -688,3 +689,101 @@ proc isValidBranch*(branch: seq[seq[byte]], rootHash: KeccakHash, key, value: se
 
   var trie = initHexaryTrie(db, rootHash)
   result = trie.get(key) == value
+
+
+
+# The code below has a lot of duplication with the code above; I needed
+# versions of get/put/del that don't just assume that all the nodes exist.
+# Maybe there's some way to eliminate the duplication without screwing
+# up performance? But for now I don't want to meddle with the existing
+# code, for fear of breaking it. --Adam, Nov. 2022
+
+template maybeKeyToLocalBytes(db: DB, k: TrieNodeKey): Option[seq[byte]] =
+  if k.len < 32:
+    some(k.getLocalBytes)
+  else:
+    db.maybeGet(k.asDbKey)
+
+proc maybeGetAux(db: DB, nodeRlp: Rlp, path: NibblesSeq): Option[seq[byte]]
+  {.gcsafe, raises: [RlpError, Defect].}
+
+proc maybeGetAuxByHash(db: DB, node: TrieNodeKey, path: NibblesSeq): Option[seq[byte]] =
+  let maybeBytes = maybeKeyToLocalBytes(db, node)
+  if maybeBytes.isNone:
+    return none[seq[byte]]()
+  else:
+    let bytes = maybeBytes.get
+    var nodeRlp = rlpFromBytes(bytes)
+    return maybeGetAux(db, nodeRlp, path)
+
+proc maybeGetLookup(db: DB, elem: Rlp): Option[Rlp] =
+  if elem.isList:
+    some(elem)
+  else:
+    let h = elem.expectHash
+    let maybeBytes = db.maybeGet(h)
+    if maybeBytes.isNone:
+      none[Rlp]()
+    else:
+      let bytes = maybeBytes.get
+      some(rlpFromBytes(bytes))
+
+proc maybeGetAux(db: DB, nodeRlp: Rlp, path: NibblesSeq): Option[seq[byte]]
+    {.gcsafe, raises: [RlpError, Defect].} =
+  # FIXME-Adam: do I need to distinguish between these two cases?
+  if not nodeRlp.hasData:
+    let zero: seq[byte] = @[]
+    return some(zero)
+    # return none[seq[byte]]()
+  if nodeRlp.isEmpty:
+    # FIXME-Adam: I am REALLY not sure this is the right thing to do. But toGenesisHeader
+    # failing is a pretty clear indication. So let's try this. I wonder whether the
+    # above case needs to do this too.
+    let zero: seq[byte] = @[]
+    return some(zero)
+    # return none[seq[byte]]()
+
+  case nodeRlp.listLen
+  of 2:
+    let (isLeaf, k) = nodeRlp.extensionNodeKey
+    let sharedNibbles = sharedPrefixLen(path, k)
+
+    if sharedNibbles == k.len:
+      let value = nodeRlp.listElem(1)
+      if sharedNibbles == path.len and isLeaf:
+        return some(value.toBytes)
+      elif not isLeaf:
+        let maybeNextLookup = maybeGetLookup(db, value)
+        if maybeNextLookup.isNone:
+          return none[seq[byte]]()
+        else:
+          return maybeGetAux(db, maybeNextLookup.get, path.slice(sharedNibbles))
+      else:
+        raise newException(RlpError, "isLeaf is true but the shared nibbles didn't exhaust the path?")
+    else:
+      let zero: seq[byte] = @[]
+      return some(zero)
+  of 17:
+    if path.len == 0:
+      return some(nodeRlp.listElem(16).toBytes)
+    var branch = nodeRlp.listElem(path[0].int)
+    if branch.isEmpty:
+      let zero: seq[byte] = @[]
+      return some(zero)
+    else:
+      let maybeNextLookup = maybeGetLookup(db, branch)
+      if maybeNextLookup.isNone:
+        return none[seq[byte]]()
+      else:
+        return maybeGetAux(db, maybeNextLookup.get, path.slice(1))
+  else:
+    raise newException(CorruptedTrieDatabase,
+                       "HexaryTrie node with an unexpected number of children")
+
+proc maybeGet*(self: HexaryTrie; key: openArray[byte]): Option[seq[byte]] =
+  return maybeGetAuxByHash(self.db, self.root, initNibbleRange(key))
+
+proc maybeGet*(self: SecureHexaryTrie; key: openArray[byte]): Option[seq[byte]] =
+  return maybeGet(HexaryTrie(self), key.keccakHash.data)
+
+proc db*(self: SecureHexaryTrie): TrieDatabaseRef = HexaryTrie(self).db
