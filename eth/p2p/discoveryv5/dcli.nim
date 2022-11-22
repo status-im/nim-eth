@@ -138,7 +138,7 @@ proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
 
 proc discover(d: discv5_protocol.Protocol, psFile: string) {.async.} =
-  echo "starting peer-discovery in Etherum - persisting peers at: ", psFile
+  info "Starting peer-discovery in Ethereum - persisting peers at: ", psFile
 
   var ethNodes: HashSet[seq[byte]]
 
