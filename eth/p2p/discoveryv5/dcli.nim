@@ -1,5 +1,5 @@
 import
-  std/[options, strutils, tables, sets, times],
+  std/[options, strutils, tables, sets],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, stew/byteutils, stew/bitops2,
   ../../keys, ../../net/nat,
@@ -144,22 +144,22 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async.} =
 
   let ps = open(psFile, fmWrite)
   defer: ps.close()
-  ps.write("pubkey,node_id,fork_digest,ip:port,attnets,count\n")
+  ps.write("pubkey,node_id,fork_digest,ip:port,attnets,attnets_number\n")
  
   while true:
-    let iTime = getTime()
+    let iTime = now(chronos.Moment)
     let discovered = await d.queryRandom()
-    let qDuration = getTime() - iTime
-    info "Lookup finished",  query_time = qDuration.inSeconds, new_nodes = discovered.len, tot_peers=len(ethNodes)
+    let qDuration = now(chronos.Moment) - iTime
+    info "Lookup finished",  query_time = qDuration.secs, new_nodes = discovered.len, tot_peers=len(ethNodes)
     
     for dNode in discovered:
       let eth2 = dNode.record.tryGet("eth2", seq[byte]) 
-      let key = dNode.record.tryGet("secp256k1", seq[byte])
+      let pubkey = dNode.record.tryGet("secp256k1", seq[byte])
       let attnets = dNode.record.tryGet("attnets", seq[byte])
-      if eth2.isNone or attnets.isNone or key.isNone: continue
+      if eth2.isNone or attnets.isNone or pubkey.isNone: continue
 
-      if key.get() in ethNodes: continue
-      ethNodes.incl(key.get())
+      if pubkey.get() in ethNodes: continue
+      ethNodes.incl(pubkey.get())
       
       let forkDigest = eth2.get()
 
@@ -168,7 +168,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async.} =
         bits.inc(countOnes(byt.uint)) 
 
       let str = "$#,$#,$#,$#,$#,$#\n"
-      let newLine = str % [key.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits] 
+      let newLine = str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits] 
 
       ps.write(newLine)
     await sleepAsync(1000) # 1 sec of delay
