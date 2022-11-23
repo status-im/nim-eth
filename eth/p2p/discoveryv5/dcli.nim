@@ -1,7 +1,7 @@
 import
-  std/[options, strutils, tables],
+  std/[options, strutils, tables, sets],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
-  chronos, metrics, metrics/chronos_httpserver, stew/byteutils,
+  chronos, metrics, metrics/chronos_httpserver, stew/byteutils, stew/bitops2,
   ../../keys, ../../net/nat,
   "."/[enr, node],
   "."/protocol as discv5_protocol
@@ -28,6 +28,11 @@ type
       defaultValue: defaultListenAddress(config)
       desc: "Listening address for the Discovery v5 traffic"
       name: "listen-address" }: ValidIpAddress
+
+    persistingFile* {.
+      defaultValue: "peerstore.csv",
+      desc: "File where the tool will keep the discovered records"
+      name: "persisting-file" .}: string
 
     bootnodes* {.
       desc: "ENR URI of node to bootstrap discovery with. Argument may be repeated"
@@ -132,11 +137,42 @@ proc parseCmdArg*(T: type PrivateKey, p: string): T =
 proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
 
-proc discover(d: discv5_protocol.Protocol) {.async.} =
+proc discover(d: discv5_protocol.Protocol, psFile: string) {.async.} =
+  info "Starting peer-discovery in Ethereum - persisting peers at: ", psFile
+
+  var ethNodes: HashSet[seq[byte]]
+
+  let ps = open(psFile, fmWrite)
+  defer: ps.close()
+  ps.write("pubkey,node_id,fork_digest,ip:port,attnets,attnets_number\n")
+ 
   while true:
+    let iTime = now(chronos.Moment)
     let discovered = await d.queryRandom()
-    info "Lookup finished", nodes = discovered.len
-    await sleepAsync(30.seconds)
+    let qDuration = now(chronos.Moment) - iTime
+    info "Lookup finished",  query_time = qDuration.secs, new_nodes = discovered.len, tot_peers=len(ethNodes)
+    
+    for dNode in discovered:
+      let eth2 = dNode.record.tryGet("eth2", seq[byte]) 
+      let pubkey = dNode.record.tryGet("secp256k1", seq[byte])
+      let attnets = dNode.record.tryGet("attnets", seq[byte])
+      if eth2.isNone or attnets.isNone or pubkey.isNone: continue
+
+      if pubkey.get() in ethNodes: continue
+      ethNodes.incl(pubkey.get())
+      
+      let forkDigest = eth2.get()
+
+      var bits = 0
+      for byt in attnets.get():
+        bits.inc(countOnes(byt.uint)) 
+
+      let str = "$#,$#,$#,$#,$#,$#\n"
+      let newLine = str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits] 
+
+      ps.write(newLine)
+    await sleepAsync(1000) # 1 sec of delay
+  
 
 proc run(config: DiscoveryConf) =
   let
@@ -188,7 +224,7 @@ proc run(config: DiscoveryConf) =
       echo "No Talk Response message returned"
   of noCommand:
     d.start()
-    waitFor(discover(d))
+    waitFor(discover(d, config.persistingFile))
 
 when isMainModule:
   let config = DiscoveryConf.load()
