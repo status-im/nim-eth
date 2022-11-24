@@ -113,6 +113,13 @@ proc append*(w: var RlpWriter, tx: Transaction) =
   of TxEip1559:
     w.appendTxEip1559(tx)
 
+proc append*(w: var RlpWriter, withdrawal: Withdrawal) =
+  w.startList(4)
+  w.append(withdrawal.index)
+  w.append(withdrawal.validatorIndex)
+  w.append(withdrawal.address)
+  w.append(withdrawal.amount)
+
 template read[T](rlp: var Rlp, val: var T)=
   val = rlp.read(type val)
 
