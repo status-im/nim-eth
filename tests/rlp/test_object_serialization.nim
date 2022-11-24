@@ -84,6 +84,5 @@ proc suite() =
         Bar.rlpFieldsCount == 2
         Foo.rlpFieldsCount == 3
         Transaction.rlpFieldsCount == 3
-        Withdrawal.rlpFieldsCount == 4
 
 suite()
