@@ -79,6 +79,19 @@ proc suite1() =
       check aa == a
       check bb == b
 
+    test "EIP 4895 roundtrip":
+      let a = Withdrawal(
+        index: 1,
+        validatorIndex: 2,
+        address: EthAddress [
+          0.byte, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+          11, 12, 13, 14, 15, 16, 17, 18, 19],
+        amount: 4.u256 * 1_000_000_000.u256)
+
+      let abytes = rlp.encode(a)
+      let aa = rlp.decode(abytes, Withdrawal)
+      check aa == a
+
 proc suite2() =
   suite "eip 2718 transaction":
     for i in 0..<10:

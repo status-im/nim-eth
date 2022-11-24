@@ -317,26 +317,31 @@ proc append*(rlpWriter: var RlpWriter, t: Time) {.inline.} =
 proc append*(w: var RlpWriter, h: BlockHeader) =
   w.startList(if h.fee.isSome: 16 else: 15)
   for k, v in fieldPairs(h):
-    when k != "fee":
+    when k notin ["fee", "withdrawalsRoot"]:
       w.append(v)
   if h.fee.isSome:
     w.append(h.fee.get())
+  if h.withdrawalsRoot.isSome:
+    w.append(h.withdrawalsRoot.get())
 
 proc read*(rlp: var Rlp, T: type BlockHeader): T =
   let len = rlp.listLen
 
-  if len notin {15, 16}:
+  if len notin {15, 16, 17}:
     raise newException(UnsupportedRlpError,
-      "BlockHeader elems should be 15 or 16 got " & $len)
+      "BlockHeader elems should be 15, 16, or 17 got " & $len)
 
   rlp.tryEnterList()
   for k, v in fieldPairs(result):
-    when k != "fee":
+    when k notin ["fee", "withdrawalsRoot"]:
       v = rlp.read(type v)
 
-  if len == 16:
+  if len >= 16:
     # EIP-1559
     result.baseFee = rlp.read(UInt256)
+  if len >= 17:
+    # EIP-4895
+    result.withdrawalsRoot = some rlp.read(Hash256)
 
 proc rlpHash*[T](v: T): Hash256 =
   keccakHash(rlp.encode(v))
