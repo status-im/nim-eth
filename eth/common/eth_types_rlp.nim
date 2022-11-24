@@ -315,7 +315,10 @@ proc append*(rlpWriter: var RlpWriter, t: Time) {.inline.} =
   rlpWriter.append(t.toUnix())
 
 proc append*(w: var RlpWriter, h: BlockHeader) =
-  w.startList(if h.fee.isSome: 16 else: 15)
+  var len = 15
+  if h.fee.isSome: inc len
+  if h.withdrawalsRoot.isSome: inc len
+  w.startList(len)
   for k, v in fieldPairs(h):
     when k notin ["fee", "withdrawalsRoot"]:
       w.append(v)
