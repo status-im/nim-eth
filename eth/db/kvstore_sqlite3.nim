@@ -581,7 +581,7 @@ proc hasTable*(db: SqStoreRef, name: string): KvResult[bool] =
 
 proc openKvStore*(
     db: SqStoreRef, name = "kvstore", withoutRowid = false,
-    readOnly = db.readOnly): KvResult[SqKeyspaceRef] =
+    readOnly = false): KvResult[SqKeyspaceRef] =
   ## Open a new Key-Value store in the SQLite database
   ##
   ## withoutRowid: Create the table without rowid - this is more efficient when
@@ -589,10 +589,7 @@ proc openKvStore*(
   ##               rows (the row being the sum of key and value) - see
   ##               https://www.sqlite.org/withoutrowid.html
   ##
-  if db.readOnly and not readOnly:
-    return err("sqlite: cannot create writable kvstore in read-only database")
-
-  let hasTable = if readOnly:
+  let hasTable = if db.readOnly or readOnly:
     ? db.hasTable(name)
   else:
     let createSql = """
