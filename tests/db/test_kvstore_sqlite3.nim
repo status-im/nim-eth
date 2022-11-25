@@ -21,7 +21,11 @@ procSuite "SqStoreRef":
     defer: db.close()
     let kv = db.openKvStore().expect("working db")
 
-    check not kv.get([byte 0, 1, 2], nil).expect("ok to query data")
+    check:
+      not kv.get([byte 0, 1, 2], nil).expect("ok to query data")
+      kv.find([byte 0, 1, 2], nil).expect("ok") == 0
+      kv.put([byte 0, 1, 2], []).isErr
+      kv.del([byte 0, 1, 2]).isOk
     defer: kv[].close()
 
   test "Prepare and execute statements":

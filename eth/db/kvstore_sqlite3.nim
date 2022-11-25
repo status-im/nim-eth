@@ -347,20 +347,22 @@ proc find*(
   var next: seq[byte] # extended lifetime of bound param
   let findStmt =
     if prefix.len == 0:
+      if db.findStmt0 == nil: return ok(0) # no such table
       db.findStmt0 # all rows
     else:
       if not nextPrefix(prefix, next):
         # For example when looking for the prefix [byte 255], there are no
         # prefixes that lexicographically are greater, thus we use the
         # query that only does the >= comparison
+        if db.findStmt1 == nil: return ok(0) # no such table
         checkErr bindParam(db.findStmt1, 1, prefix)
         db.findStmt1
       else:
+        if db.findStmt2 == nil: return ok(0) # no such table
         checkErr bindParam(db.findStmt2, 1, prefix)
         checkErr bindParam(db.findStmt2, 2, next)
         db.findStmt2
 
-  if findStmt == nil: return ok(0) # no such table
 
   var
     total = 0
@@ -374,7 +376,8 @@ proc find*(
         kl = sqlite3_column_bytes(findStmt, 0)
         vp = cast[ptr UncheckedArray[byte]](sqlite3_column_blob(findStmt, 1))
         vl = sqlite3_column_bytes(findStmt, 1)
-      onFind(kp.toOpenArray(0, kl - 1), vp.toOpenArray(0, vl - 1))
+      if onFind != nil:
+        onFind(kp.toOpenArray(0, kl - 1), vp.toOpenArray(0, vl - 1))
       total += 1
     of SQLITE_DONE:
       break
