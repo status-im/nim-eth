@@ -3,11 +3,11 @@
 {.push raises: [Defect].}
 
 import
-  std/[os, options, strformat],
+  std/[os, options, strformat, typetraits],
   sqlite3_abi,
   ./kvstore
 
-export kvstore
+export kvstore, typetraits
 
 type
   RawStmtPtr = ptr sqlite3_stmt
@@ -37,6 +37,7 @@ type
   SqKeyspace* = object of RootObj
     # A Keyspace is a single key-value table - it is generally efficient to
     # create separate keyspaces for each type of data stored
+    open: bool
     getStmt, putStmt, delStmt, containsStmt,
       findStmt0, findStmt1, findStmt2: RawStmtPtr
 
@@ -59,7 +60,7 @@ template dispose*(db: SqliteStmt) =
 
 func isInsideTransaction*(db: SqStoreRef): bool =
   sqlite3_get_autocommit(db.env) == 0
- 
+
 proc release[T](x: var AutoDisposed[T]): T =
   result = x.val
   x.val = nil
@@ -115,10 +116,11 @@ proc bindParam(s: RawStmtPtr, n: int, val: auto): cint =
 
 template bindParams(s: RawStmtPtr, params: auto) =
   when params is tuple:
-    var i = 1
-    for param in fields(params):
-      checkErr bindParam(s, i, param)
-      inc i
+    when params.type.arity > 0:
+      var i = 1
+      for param in fields(params):
+        checkErr bindParam(s, i, param)
+        inc i
   else:
     checkErr bindParam(s, 1, params)
 
@@ -208,7 +210,8 @@ proc exec*[Params, Res](s: SqliteStmt[Params, Res],
       let v = sqlite3_step(s)
       case v
       of SQLITE_ROW:
-        onData(readResult(s, Res))
+        if onData != nil:
+          onData(readResult(s, Res))
         gotResults = true
       of SQLITE_DONE:
         break
@@ -294,8 +297,9 @@ template exec*(db: SqStoreRef, stmt: string): KvResult[void] =
 proc get*(db: SqKeyspaceRef,
           key: openArray[byte],
           onData: DataProc): KvResult[bool] =
-  if db.getStmt == nil: return err("sqlite: database closed")
+  if not db.open: return err("sqlite: database closed")
   let getStmt = db.getStmt
+  if getStmt == nil: return ok(false) # no such table
   checkErr bindParam(getStmt, 1, key)
 
   let
@@ -339,6 +343,7 @@ proc find*(
     db: SqKeyspaceRef,
     prefix: openArray[byte],
     onFind: KeyValueProc): KvResult[int] =
+  if not db.open: return err("sqlite: database closed")
   var next: seq[byte] # extended lifetime of bound param
   let findStmt =
     if prefix.len == 0:
@@ -355,7 +360,7 @@ proc find*(
         checkErr bindParam(db.findStmt2, 2, next)
         db.findStmt2
 
-  if findStmt == nil: return err("sqlite: database closed")
+  if findStmt == nil: return ok(0) # no such table
 
   var
     total = 0
@@ -387,8 +392,9 @@ proc find*(
   ok(total)
 
 proc put*(db: SqKeyspaceRef, key, value: openArray[byte]): KvResult[void] =
+  if not db.open: return err("sqlite: database closed")
   let putStmt = db.putStmt
-  if putStmt == nil: return err("sqlite: database closed")
+  if putStmt == nil: return err("sqlite: cannot write to read-only database")
   checkErr bindParam(putStmt, 1, key)
   checkErr bindParam(putStmt, 2, value)
 
@@ -405,8 +411,10 @@ proc put*(db: SqKeyspaceRef, key, value: openArray[byte]): KvResult[void] =
   res
 
 proc contains*(db: SqKeyspaceRef, key: openArray[byte]): KvResult[bool] =
+  if not db.open: return err("sqlite: database closed")
   let containsStmt = db.containsStmt
-  if containsStmt == nil: return err("sqlite: database closed")
+  if containsStmt == nil: return ok(false) # no such table
+
   checkErr bindParam(containsStmt, 1, key)
 
   let
@@ -423,8 +431,9 @@ proc contains*(db: SqKeyspaceRef, key: openArray[byte]): KvResult[bool] =
   res
 
 proc del*(db: SqKeyspaceRef, key: openArray[byte]): KvResult[void] =
+  if not db.open: return err("sqlite: database closed")
   let delStmt = db.delStmt
-  if delStmt == nil: return err("sqlite: database closed")
+  if delStmt == nil: return ok() # no such table
   checkErr bindParam(delStmt, 1, key)
 
   let res =
@@ -473,14 +482,14 @@ proc checkpoint*(db: SqStoreRef, kind = SqStoreCheckpointKind.passive) =
 template prepare(env: ptr sqlite3, q: string): ptr sqlite3_stmt =
   block:
     var s: ptr sqlite3_stmt
-    checkErr sqlite3_prepare_v2(env, q, q.len.cint, addr s, nil):
+    checkErr sqlite3_prepare_v2(env, cstring(q), q.len.cint, addr s, nil):
       discard
     s
 
 template prepare(env: ptr sqlite3, q: string, cleanup: untyped): ptr sqlite3_stmt =
   block:
     var s: ptr sqlite3_stmt
-    checkErr sqlite3_prepare_v2(env, q, q.len.cint, addr s, nil)
+    checkErr sqlite3_prepare_v2(env, cstring(q), q.len.cint, addr s, nil)
     s
 
 template checkExec(s: ptr sqlite3_stmt) =
@@ -573,29 +582,36 @@ proc openKvStore*(db: SqStoreRef, name = "kvstore", withoutRowid = false): KvRes
   ##               https://www.sqlite.org/withoutrowid.html
   ##
 
-  if not db.readOnly:
+  let hasTable = if db.readOnly:
+    let
+      sql = "SELECT name FROM sqlite_master WHERE type='table' AND name='" &
+        name & "';"
+    db.exec(sql, (), proc(_: openArray[byte]) = discard).expect("working query")
+  else:
     let createSql = """
-      CREATE TABLE IF NOT EXISTS """ & name & """ (
+      CREATE TABLE IF NOT EXISTS '""" & name & """' (
          key BLOB PRIMARY KEY,
          value BLOB
       )"""
     checkExec db.env,
       if withoutRowid: createSql & " WITHOUT ROWID;" else: createSql & ";"
-
+    true
   var
     tmp: SqKeyspace
   defer:
     # We'll "move" ownership to the return value, effectively disabling "close"
     close(tmp)
-
-  tmp.getStmt = prepare(db.env, "SELECT value FROM " & name & " WHERE key = ?;")
-  tmp.putStmt =
-    prepare(db.env, "INSERT OR REPLACE INTO " & name & "(key, value) VALUES (?, ?);")
-  tmp.delStmt = prepare(db.env, "DELETE FROM " & name & " WHERE key = ?;")
-  tmp.containsStmt = prepare(db.env, "SELECT 1 FROM " & name & " WHERE key = ?;")
-  tmp.findStmt0 = prepare(db.env, "SELECT key, value FROM " & name & ";")
-  tmp.findStmt1 = prepare(db.env, "SELECT key, value FROM " & name & " WHERE key >= ?;")
-  tmp.findStmt2 = prepare(db.env, "SELECT key, value FROM " & name & " WHERE key >= ? and key < ?;")
+  tmp.open = true
+  if hasTable:
+    tmp.getStmt =
+      prepare(db.env, "SELECT value FROM '" & name & "' WHERE key = ?;")
+    tmp.putStmt =
+      prepare(db.env, "INSERT OR REPLACE INTO '" & name & "'(key, value) VALUES (?, ?);")
+    tmp.delStmt = prepare(db.env, "DELETE FROM '" & name & "' WHERE key = ?;")
+    tmp.containsStmt = prepare(db.env, "SELECT 1 FROM '" & name & "' WHERE key = ?;")
+    tmp.findStmt0 = prepare(db.env, "SELECT key, value FROM '" & name & "';")
+    tmp.findStmt1 = prepare(db.env, "SELECT key, value FROM '" & name & "' WHERE key >= ?;")
+    tmp.findStmt2 = prepare(db.env, "SELECT key, value FROM '" & name & "' WHERE key >= ? and key < ?;")
 
   var res = SqKeyspaceRef()
   res[] = tmp

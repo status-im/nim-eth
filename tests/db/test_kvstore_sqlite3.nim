@@ -16,6 +16,14 @@ procSuite "SqStoreRef":
 
     testKvStore(kvStore kv.get(), true)
 
+  test "Readonly kvstore with no table":
+    let db = SqStoreRef.init("", "test", inMemory = true, readOnly = true)[]
+    defer: db.close()
+    let kv = db.openKvStore().expect("working db")
+
+    check not kv.get([byte 0, 1, 2], nil).expect("ok to query data")
+    defer: kv[].close()
+
   test "Prepare and execute statements":
     let db = SqStoreRef.init("", "test", inMemory = true)[]
     defer: db.close()
@@ -274,10 +282,10 @@ procSuite "SqStoreRef":
 
     discard sumKeyVal.exec do (res: seq[byte]):
       sums.add(res)
-    
+
     check:
       len(sums) == 1
-    
+
     let sum = uint32.fromBytesBE(sums[0])
 
     check:
