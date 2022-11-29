@@ -1631,12 +1631,19 @@ proc eventLoop(socket: UtpSocket) {.async.} =
             let bytesWritten = socket.handleDataWrite(socketEvent.data)
             if (bytesWritten == len(socketEvent.data)):
               # all bytes were written we can finish external future
-              socketEvent.writer.complete(Result[int, WriteError].ok(bytesWritten))
+              socketEvent.writer.complete(
+                Result[int, WriteError].ok(bytesWritten)
+              )
             else:
-              let bytesLeft = socketEvent.data[bytesWritten..socketEvent.data.high]
+              let bytesLeft =
+                socketEvent.data[bytesWritten..socketEvent.data.high]
               # bytes partially written to buffer, schedule rest of data for later
               socket.pendingWrites.addLast(
-                WriteRequest(kind: Data, data: bytesLeft, writer: socketEvent.writer)
+                WriteRequest(
+                  kind: Data,
+                  data: bytesLeft,
+                  writer: socketEvent.writer
+                )
               )
       of ReadReqType:
         # check if the writer was not cancelled in mean time

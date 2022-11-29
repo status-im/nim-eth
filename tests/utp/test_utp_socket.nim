@@ -1559,14 +1559,11 @@ procSuite "Utp socket unit test":
       initalRemoteSeq: uint16,
       initialPacket: Packet,
       bytes: seq[byte]): Future[seq[byte]] {.async.} =
-
-
-
     var sentAndAckedBytes: seq[byte]
     let numBytesToSend = len(bytes)
 
     if numBytesToSend == 0:
-      return bytes
+      return sentAndAckedBytes
 
     let writeFut = socket.write(bytes)
 
@@ -1616,7 +1613,6 @@ procSuite "Utp socket unit test":
       )
       largeDataToWrite = rng[].generateBytes(dataToWrite)
 
-
     # As we are sending data larger than send buffer socket.write will not finish
     # immediately but will progreass with each packet acked by remote.
     let bytesReceivedByRemote = await sendAndDrainPacketByPacket(
@@ -1631,3 +1627,4 @@ procSuite "Utp socket unit test":
       bytesReceivedByRemote == largeDataToWrite
 
     await outgoingSocket.destroyWait()
+
