@@ -6,7 +6,7 @@ import
 
 type AssertionCallback = proc(): bool {.gcsafe, raises: [Defect].}
 
-let testBufferSize = 1024'u32
+let testBufferSize* = 1024'u32
 let defaultRcvOutgoingId = 314'u16
 
 proc waitUntil*(f: AssertionCallback): Future[void] {.async.} =

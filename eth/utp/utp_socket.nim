@@ -1554,10 +1554,10 @@ proc onRead(socket: UtpSocket, readReq: var ReadReq): ReadResult =
 proc eventLoop(socket: UtpSocket) {.async.} =
   try:
     while true:
-      let ev = await socket.eventQueue.get()
-      case ev.kind
+      let socketEvent = await socket.eventQueue.get()
+      case socketEvent.kind
       of NewPacket:
-        socket.processPacketInternal(ev.packet)
+        socket.processPacketInternal(socketEvent.packet)
 
         # we processed a packet and rcv buffer size is larger than 0,
         # check if we can finish some pending readers
@@ -1577,8 +1577,8 @@ proc eventLoop(socket: UtpSocket) {.async.} =
 
         # we processed packet, so there could more place in the send buffer
         while socket.pendingWrites.len() > 0:
-          let wr = socket.pendingWrites.popFirst()
-          case wr.kind
+          let pendingWrite = socket.pendingWrites.popFirst()
+          case pendingWrite.kind
           of Close:
             socket.handleClose()
             # close should be last packet send
@@ -1587,15 +1587,24 @@ proc eventLoop(socket: UtpSocket) {.async.} =
             # check if writing was not cancelled in the mean time. This approach
             # can create partial writes as part of the data could be written with
             # with WriteReq
-            if (not wr.writer.finished()):
-              let bytesWritten = socket.handleDataWrite(wr.data)
-              if (bytesWritten == len(wr.data)):
-                  # all bytes were written we can finish external future
-                  wr.writer.complete(Result[int, WriteError].ok(bytesWritten))
+            if (not pendingWrite.writer.finished()):
+              let bytesWritten = socket.handleDataWrite(pendingWrite.data)
+              if (bytesWritten == len(pendingWrite.data)):
+                # all bytes were written we can finish external future
+                pendingWrite.writer.complete(
+                  Result[int, WriteError].ok(bytesWritten)
+                )
               else:
-                let bytesLeft = wr.data[bytesWritten..ev.data.high]
+                let bytesLeft =
+                  pendingWrite.data[bytesWritten..pendingWrite.data.high]
                 # bytes partially written to buffer, schedule rest of data for later
-                socket.pendingWrites.addFirst(WriteRequest(kind: Data, data: bytesLeft, writer: ev.writer))
+                socket.pendingWrites.addFirst(
+                  WriteRequest(
+                    kind: Data,
+                    data: bytesLeft,
+                    writer: pendingWrite.writer
+                  )
+                )
                 # there is no more place in the buffer break from the loop
                 break
       of CheckTimeouts:
@@ -1608,28 +1617,43 @@ proc eventLoop(socket: UtpSocket) {.async.} =
           socket.handleClose()
       of WriteReq:
         # check if the writer was not cancelled in mean time
-        if (not ev.writer.finished()):
+        if (not socketEvent.writer.finished()):
           if (socket.pendingWrites.len() > 0):
             # there are still some unfinished writes, waiting to be finished schdule this batch for later
-            socket.pendingWrites.addLast(WriteRequest(kind: Data, data: ev.data, writer: ev.writer))
+            socket.pendingWrites.addLast(
+              WriteRequest(
+                kind: Data,
+                data: socketEvent.data,
+                writer: socketEvent.writer
+              )
+            )
           else:
-            let bytesWritten = socket.handleDataWrite(ev.data)
-            if (bytesWritten == len(ev.data)):
+            let bytesWritten = socket.handleDataWrite(socketEvent.data)
+            if (bytesWritten == len(socketEvent.data)):
               # all bytes were written we can finish external future
-              ev.writer.complete(Result[int, WriteError].ok(bytesWritten))
+              socketEvent.writer.complete(
+                Result[int, WriteError].ok(bytesWritten)
+              )
             else:
-              let bytesLeft = ev.data[bytesWritten..ev.data.high]
+              let bytesLeft =
+                socketEvent.data[bytesWritten..socketEvent.data.high]
               # bytes partially written to buffer, schedule rest of data for later
-              socket.pendingWrites.addLast(WriteRequest(kind: Data, data: bytesLeft, writer: ev.writer))
+              socket.pendingWrites.addLast(
+                WriteRequest(
+                  kind: Data,
+                  data: bytesLeft,
+                  writer: socketEvent.writer
+                )
+              )
       of ReadReqType:
         # check if the writer was not cancelled in mean time
-        if (not ev.readReq.reader.finished()):
+        if (not socketEvent.readReq.reader.finished()):
           if (socket.pendingReads.len() > 0):
             # there is already pending unfinished read request, schedule this one for
             # later
-            socket.pendingReads.addLast(ev.readReq)
+            socket.pendingReads.addLast(socketEvent.readReq)
           else:
-            var readReq = ev.readReq
+            var readReq = socketEvent.readReq
             let readResult = socket.onRead(readReq)
             case readResult
             of ReadNotFinished:
@@ -1641,7 +1665,9 @@ proc eventLoop(socket: UtpSocket) {.async.} =
   except CancelledError as exc:
     for w in socket.pendingWrites.items():
       if w.kind == Data and (not w.writer.finished()):
-        let res = Result[int, WriteError].err(WriteError(kind: SocketNotWriteable, currentState: socket.state))
+        let res = Result[int, WriteError].err(
+          WriteError(kind: SocketNotWriteable, currentState: socket.state)
+        )
         w.writer.complete(res)
     for r in socket.pendingReads.items():
       # complete every reader with already read bytes
