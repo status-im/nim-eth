@@ -5,6 +5,7 @@
 !LICENSE*
 
 nimcache/
+build/
 
 # Executables shall be put in an ignored build/ directory
 # Ignore dynamic, static libs and libtool archive files
