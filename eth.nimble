@@ -1,3 +1,5 @@
+mode = ScriptMode.Verbose
+
 version       = "1.0.0"
 author        = "Status Research & Development GmbH"
 description   = "Ethereum Common library"
@@ -18,71 +20,70 @@ requires "nim >= 1.6.0",
          "testutils",
          "unittest2"
 
-let commonParams =
-  " --skipUserCfg:on" &
-  " --verbosity:0 --hints:off" &
-  " --warning[ObservableStores]:off" &
+let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
+let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
+let flags = getEnv("NIMFLAGS", "") # Extra flags for the compiler
+let verbose = getEnv("V", "") notin ["", "0"]
+
+let cfg =
   " --styleCheck:usages --styleCheck:error" &
-  " " & getEnv("NIMFLAGS") &
-  " -d:chronicles_log_level=TRACE"
+  (if verbose: "" else: " --verbosity:0 --hints:off") &
+  " --skipParentCfg --skipUserCfg --nimcache:build/nimcache -f" &
+  " --warning[ObservableStores]:off -d:nimOldCaseObjects" &
+  " -d:chronosStrictException -d:chronicles_log_level=TRACE"
 
-proc runTest(path: string, release: bool = true) =
-  echo "\nBuilding and running: ", path
-  let releaseMode = if release: " -d:release" else: ""
+proc build(args, path, outdir: string) =
+  exec nimc & " " & lang & " " & cfg & " " & flags & " " & args &
+    " --outdir:build/" & outdir & " " & path
 
-  exec "nim c -r" &
-    releaseMode & commonParams & " " & path
-  rmFile path
-
-proc buildBinary(path: string) =
-  echo "\nBuilding: ", path
-  exec "nim c -d:release" & commonParams &
-    " --warning[CaseTransition]:off" &
-    " " & path
+proc run(args, path, outdir: string) =
+  build args & " -r", path, outdir
 
 task test_keyfile, "Run keyfile tests":
-  runTest("tests/keyfile/all_tests")
+  run "-d:release", "tests/keyfile/all_tests", "keyfile"
 
 task test_keys, "Run keys tests":
-  runTest("tests/keys/all_tests")
+  run "-d:release", "tests/keys/all_tests", "keys"
 
 task test_discv5, "Run discovery v5 tests":
-  runTest("tests/p2p/all_discv5_tests")
+  run "-d:release", "tests/p2p/all_discv5_tests", "p2p"
 
 task test_discv4, "Run discovery v4 tests":
-  runTest("tests/p2p/test_discovery")
+  run "-d:release", "tests/p2p/test_discovery", "p2p"
 
 task test_p2p, "Run p2p tests":
-  runTest("tests/p2p/all_tests")
+  run "-d:release", "tests/p2p/all_tests", "p2p"
 
 task test_rlp, "Run rlp tests":
   # workaround for github action CI
   # mysterious crash on windows-2019 64bit mode
   # cannot reproduce locally on windows-2019
   # running in virtualbox
-  let releaseMode = if existsEnv"PLATFORM":
-                      getEnv"PLATFORM" != "windows-amd64"
-                    else: true
+  let releaseMode =
+    if existsEnv"PLATFORM" and getEnv"PLATFORM" != "windows-amd64":
+      "-d:debug"
+    else:
+      "-d:release"
 
-  runTest("tests/rlp/all_tests", releaseMode)
+  run releaseMode, "tests/rlp/all_tests", "rlp"
 
 task test_trie, "Run trie tests":
-  runTest("tests/trie/all_tests")
+  run "-d:release", "tests/trie/all_tests", "trie"
 
 task test_db, "Run db tests":
-  runTest("tests/db/all_tests")
+  run "-d:release", "tests/db/all_tests", "db"
 
 task test_utp, "Run utp tests":
-  runTest("tests/utp/all_utp_tests")
+  run "-d:release", "tests/utp/all_utp_tests", "utp"
 
 task test_common, "Run common tests":
-  runTest("tests/common/all_tests")
+  run "-d:release", "tests/common/all_tests", "common"
 
 task test, "Run all tests":
   for filename in [
       "test_bloom",
     ]:
-    runTest("tests/" & filename)
+    run "-d:release", "tests/" & filename, ""
 
   test_keyfile_task()
   test_keys_task()
@@ -99,7 +100,7 @@ task test_discv5_full, "Run discovery v5 and its dependencies tests":
   test_discv5_task()
 
 task build_dcli, "Build dcli":
-  buildBinary("tools/dcli")
+  build "-d:release", "tools/dcli",""
 
 import os, strutils
 
@@ -112,4 +113,4 @@ task build_fuzzers, "Build fuzzer test cases":
   # https://github.com/status-im/nim-testutils/blob/master/testutils/fuzzing.nim#L100
   for file in walkDirRec("tests/fuzzing/"):
     if file.endsWith("nim"):
-      buildBinary(file)
+      build "", file, "fuzzing"
