@@ -16,6 +16,10 @@ import
 export
   p2p_types, rlpx, enode, kademlia
 
+logScope:
+  topics = "eth p2p"
+
+
 proc addCapability*(node: var EthereumNode,
                     p: ProtocolInfo,
                     networkState: RootRef = nil) =

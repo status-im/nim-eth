@@ -16,6 +16,10 @@ import
   ".."/[keys, common],
   ./private/p2p_types, "."/[discovery, kademlia, rlpx, enode]
 
+logScope:
+  topics = "eth p2p peer_pool"
+
+
 const
   lookupInterval = 5
   connectLoopSleep = chronos.milliseconds(2000)

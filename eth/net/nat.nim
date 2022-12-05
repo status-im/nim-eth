@@ -45,7 +45,7 @@ var
   externalUdpPort: Port
 
 logScope:
-  topics = "nat"
+  topics = "eth net nat"
 
 ## Also does threadvar initialisation.
 ## Must be called before redirectPorts() in each thread.

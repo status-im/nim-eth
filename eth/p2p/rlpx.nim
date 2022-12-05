@@ -37,7 +37,7 @@ export
 declarePublicGauge connected_peers, "number of peers in the pool"
 
 logScope:
-  topics = "rlpx"
+  topics = "eth p2p rlpx"
 
 type
   ResponderWithId*[MsgType] = object
