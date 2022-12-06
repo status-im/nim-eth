@@ -101,7 +101,7 @@ declareCounter discovery_enr_auto_update,
   "Amount of discovery IP:port address ENR auto updates"
 
 logScope:
-  topics = "discv5"
+  topics = "eth p2p discv5"
 
 const
   alpha = 3 ## Kademlia concurrency factor

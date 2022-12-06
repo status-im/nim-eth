@@ -18,7 +18,7 @@ export
   Node, results
 
 logScope:
-  topics = "discovery"
+  topics = "eth p2p discovery"
 
 const
   # UDP packet constants.

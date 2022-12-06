@@ -16,7 +16,7 @@ import
 export sets # TODO: This should not be needed, but compilation fails otherwise
 
 logScope:
-  topics = "kademlia"
+  topics = "eth p2p kademlia"
 
 type
   # 32 bytes NodeId | 16 bytes ip | 1 byte mode

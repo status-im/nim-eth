@@ -29,7 +29,7 @@ declareCounter discovery_session_lru_cache_misses, "Session LRU cache misses"
 declareCounter discovery_session_decrypt_failures, "Session decrypt failures"
 
 logScope:
-  topics = "discv5"
+  topics = "eth p2p discv5"
 
 # Support overriding the default discv5 protocol version and protocol id
 #  via compile time defines (e.g., '-d:discv5_protocol_id=d5waku')

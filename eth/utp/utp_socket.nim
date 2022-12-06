@@ -21,7 +21,7 @@ export
   chronicles
 
 logScope:
-  topics = "utp_socket"
+  topics = "eth utp utp_socket"
 
 type
   ConnectionState* = enum
