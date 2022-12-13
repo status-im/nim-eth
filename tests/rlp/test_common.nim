@@ -116,7 +116,7 @@ proc suite2() =
       doTest h
 
       # EIP-4844
-      h.excessDataGas = some GasInt(1337)
+      h.excessDataGas = some 1234.u256
       doTest h
 
 suite1()

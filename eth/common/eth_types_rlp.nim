@@ -350,7 +350,7 @@ proc read*(rlp: var Rlp, T: type BlockHeader): T =
     result.withdrawalsRoot = some rlp.read(Hash256)
   if len >= 18:
     # EIP-4844
-    result.excessDataGas = some rlp.read(GasInt)
+    result.excessDataGas = some rlp.read(UInt256)
 
 proc rlpHash*[T](v: T): Hash256 =
   keccakHash(rlp.encode(v))
