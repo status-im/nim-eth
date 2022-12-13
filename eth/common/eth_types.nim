@@ -121,7 +121,7 @@ type
     # `baseFee` is the get/set of `fee`
     fee*:             Option[UInt256]   # EIP-1559
     withdrawalsRoot*: Option[Hash256]   # EIP-4895
-    excessDataGas*:   Option[GasInt]    # EIP-4844
+    excessDataGas*:   Option[UInt256]   # EIP-4844
 
   BlockBody* = object
     transactions*:  seq[Transaction]
