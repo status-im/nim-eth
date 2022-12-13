@@ -321,7 +321,7 @@ proc append*(w: var RlpWriter, h: BlockHeader) =
   if h.excessDataGas.isSome: inc len
   w.startList(len)
   for k, v in fieldPairs(h):
-    when k notin ["fee", "withdrawalsRoot"]:
+    when v isnot Option:
       w.append(v)
   if h.fee.isSome:
     w.append(h.fee.get())
@@ -339,7 +339,7 @@ proc read*(rlp: var Rlp, T: type BlockHeader): T =
 
   rlp.tryEnterList()
   for k, v in fieldPairs(result):
-    when k isnot Option:
+    when v isnot Option:
       v = rlp.read(type v)
 
   if len >= 16:
