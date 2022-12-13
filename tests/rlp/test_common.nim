@@ -97,11 +97,27 @@ proc suite2() =
     for i in 0..<10:
       loadFile(i)
 
-    test "rlp roundtrip EIP1559":
+    test "rlp roundtrip EIP1559 / EIP4895 / EIP4844":
+      proc doTest(h: BlockHeader) =
+        let xy = rlp.encode(h)
+        let hh = rlp.decode(xy, BlockHeader)
+        check h == hh
+
       var h: BlockHeader
-      let xy = rlp.encode(h)
-      let hh = rlp.decode(xy, BlockHeader)
-      check h == hh
+      doTest h
+
+      # EIP-1559
+      h.fee = some 1234.u256
+      doTest h
+
+      # EIP-4895
+      h.withdrawalsRoot = some Hash256.fromHex(
+        "0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588")
+      doTest h
+
+      # EIP-4844
+      h.excessDataGas = some GasInt(1337)
+      doTest h
 
 suite1()
 suite2()

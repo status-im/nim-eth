@@ -318,6 +318,7 @@ proc append*(w: var RlpWriter, h: BlockHeader) =
   var len = 15
   if h.fee.isSome: inc len
   if h.withdrawalsRoot.isSome: inc len
+  if h.excessDataGas.isSome: inc len
   w.startList(len)
   for k, v in fieldPairs(h):
     when k notin ["fee", "withdrawalsRoot"]:
@@ -326,17 +327,19 @@ proc append*(w: var RlpWriter, h: BlockHeader) =
     w.append(h.fee.get())
   if h.withdrawalsRoot.isSome:
     w.append(h.withdrawalsRoot.get())
+  if h.excessDataGas.isSome:
+    w.append(h.excessDataGas.get())
 
 proc read*(rlp: var Rlp, T: type BlockHeader): T =
   let len = rlp.listLen
 
-  if len notin {15, 16, 17}:
+  if len notin {15, 16, 17, 18}:
     raise newException(UnsupportedRlpError,
-      "BlockHeader elems should be 15, 16, or 17 got " & $len)
+      "BlockHeader elems should be 15, 16, 17, or 18 got " & $len)
 
   rlp.tryEnterList()
   for k, v in fieldPairs(result):
-    when k notin ["fee", "withdrawalsRoot"]:
+    when k isnot Option:
       v = rlp.read(type v)
 
   if len >= 16:
@@ -345,6 +348,9 @@ proc read*(rlp: var Rlp, T: type BlockHeader): T =
   if len >= 17:
     # EIP-4895
     result.withdrawalsRoot = some rlp.read(Hash256)
+  if len >= 18:
+    # EIP-4844
+    result.excessDataGas = some rlp.read(GasInt)
 
 proc rlpHash*[T](v: T): Hash256 =
   keccakHash(rlp.encode(v))
