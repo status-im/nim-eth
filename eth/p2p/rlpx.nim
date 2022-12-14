@@ -708,7 +708,7 @@ proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
                                       "Invalid RLPx message body")
 
     elif nextMsgId == 1: # p2p.disconnect
-      let reasonList = rlp.read(nextMsgData, DisconnectionReasonList)
+      let reasonList = nextMsgData.read(DisconnectionReasonList)
       let reason = reasonList.value
       await peer.disconnect(reason)
       trace "disconnect message received in waitSingleMsg", reason, peer
