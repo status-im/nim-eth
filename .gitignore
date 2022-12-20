@@ -16,3 +16,5 @@ build/
 *.exe
 *.dll
 *.generated.nim
+nimble.develop
+nimble.paths
