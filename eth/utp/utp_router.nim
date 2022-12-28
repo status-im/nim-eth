@@ -16,7 +16,7 @@ import
 export utp_socket
 
 logScope:
-  topics = "utp_router"
+  topics = "eth utp utp_router"
 
 declareCounter utp_received_packets,
   "All correct received uTP packets"

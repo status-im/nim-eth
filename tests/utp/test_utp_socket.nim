@@ -1552,3 +1552,79 @@ procSuite "Utp socket unit test":
       len(dp2.payload) == int(maxPayloadSize)
 
     await outgoingSocket.destroyWait()
+
+  proc sendAndDrainPacketByPacket(
+      socket: UtpSocket[TransportAddress],
+      socketSendQueue: AsyncQueue[Packet],
+      initalRemoteSeq: uint16,
+      initialPacket: Packet,
+      bytes: seq[byte]): Future[seq[byte]] {.async.} =
+    var sentAndAckedBytes: seq[byte]
+    let numBytesToSend = len(bytes)
+
+    if numBytesToSend == 0:
+      return sentAndAckedBytes
+
+    let writeFut = socket.write(bytes)
+
+    while true:
+      if len(sentAndAckedBytes) == numBytesToSend:
+        check:
+          writeFut.finished()
+
+        return sentAndAckedBytes
+
+      let sentPacket = await socketSendQueue.get()
+
+      check:
+        sentPacket.header.pType == ST_DATA
+
+      let ackPacket =  ackPacket(
+        initalRemoteSeq,
+        initialPacket.header.connectionId,
+        sentPacket.header.seqNr,
+        # remote buffer always allows for only one packet
+        uint32(socket.getPacketSize()),
+        0
+      )
+
+      await socket.processPacket(ackPacket)
+
+      # remote received and acked packet add it sent and received bytes
+      sentAndAckedBytes.add(sentPacket.payload)
+
+  asyncTest "Async block large write until there is space in snd buffer":
+    # remote is initialized with buffer to small to handle whole payload
+    let
+      sndBufferSize = 5000
+      dataToWrite = 2 * sndBufferSize
+      q = newAsyncQueue[Packet]()
+      initialRemoteSeq = 10'u16
+      customConfig = SocketConfig.init(
+        # small write buffer. Big write should async block, and process write
+        # as soon as buffer is freed by processing remote acks.
+        optSndBuffer = uint32(sndBufferSize)
+      )
+      (outgoingSocket, initialPacket) = connectOutGoingSocket(
+        initialRemoteSeq,
+        q,
+        testBufferSize,
+        customConfig
+      )
+      largeDataToWrite = rng[].generateBytes(dataToWrite)
+
+    # As we are sending data larger than send buffer socket.write will not finish
+    # immediately but will progreass with each packet acked by remote.
+    let bytesReceivedByRemote = await sendAndDrainPacketByPacket(
+      outgoingSocket,
+      q,
+      initialRemoteSeq,
+      initialPacket,
+      largeDataToWrite
+    )
+
+    check:
+      bytesReceivedByRemote == largeDataToWrite
+
+    await outgoingSocket.destroyWait()
+

@@ -13,7 +13,7 @@ import
   ../keys
 
 logScope:
-  topics = "utp"
+  topics = "eth utp"
 
 type
   # For now utp protocol is tied to udp transport, but ultimately we would like to

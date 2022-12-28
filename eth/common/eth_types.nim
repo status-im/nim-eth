@@ -96,24 +96,32 @@ type
     status*: TransactionStatus
     data*: Blob
 
+  Withdrawal* = object  # EIP-4895
+    index*         : uint64
+    validatorIndex*: uint64
+    address*       : EthAddress
+    amount*        : UInt256
+
   BlockHeader* = object
-    parentHash*:    Hash256
-    ommersHash*:    Hash256
-    coinbase*:      EthAddress
-    stateRoot*:     Hash256
-    txRoot*:        Hash256
-    receiptRoot*:   Hash256
-    bloom*:         BloomFilter
-    difficulty*:    DifficultyInt
-    blockNumber*:   BlockNumber
-    gasLimit*:      GasInt
-    gasUsed*:       GasInt
-    timestamp*:     EthTime
-    extraData*:     Blob
-    mixDigest*:     Hash256
-    nonce*:         BlockNonce
+    parentHash*:      Hash256
+    ommersHash*:      Hash256
+    coinbase*:        EthAddress
+    stateRoot*:       Hash256
+    txRoot*:          Hash256
+    receiptRoot*:     Hash256
+    bloom*:           BloomFilter
+    difficulty*:      DifficultyInt
+    blockNumber*:     BlockNumber
+    gasLimit*:        GasInt
+    gasUsed*:         GasInt
+    timestamp*:       EthTime
+    extraData*:       Blob
+    mixDigest*:       Hash256
+    nonce*:           BlockNonce
     # `baseFee` is the get/set of `fee`
-    fee*:           Option[UInt256]   # EIP-1559
+    fee*:             Option[UInt256]   # EIP-1559
+    withdrawalsRoot*: Option[Hash256]   # EIP-4895
+    excessDataGas*:   Option[UInt256]   # EIP-4844
 
   BlockBody* = object
     transactions*:  seq[Transaction]
@@ -237,19 +245,19 @@ func toBlockNonce*(n: uint64): BlockNonce =
 func toUint*(n: BlockNonce): uint64 =
   uint64.fromBytesBE(n)
 
-proc newAccount*(nonce: AccountNonce = 0, balance: UInt256 = 0.u256): Account =
+func newAccount*(nonce: AccountNonce = 0, balance: UInt256 = 0.u256): Account =
   result.nonce = nonce
   result.balance = balance
   result.storageRoot = EMPTY_ROOT_HASH
   result.codeHash = EMPTY_CODE_HASH
 
-proc hasStatus*(rec: Receipt): bool {.inline.} =
+func hasStatus*(rec: Receipt): bool {.inline.} =
   rec.isHash == false
 
-proc hasStateRoot*(rec: Receipt): bool {.inline.} =
+func hasStateRoot*(rec: Receipt): bool {.inline.} =
   rec.isHash == true
 
-proc stateRoot*(rec: Receipt): Hash256 {.inline.} =
+func stateRoot*(rec: Receipt): Hash256 {.inline.} =
   doAssert(rec.hasStateRoot)
   rec.hash
 
@@ -265,14 +273,14 @@ func destination*(tx: Transaction): EthAddress =
 func init*(T: type BlockHashOrNumber, str: string): T
           {.raises: [ValueError, Defect].} =
   if str.startsWith "0x":
-    if str.len != sizeof(result.hash.data) * 2 + 2:
+    if str.len != sizeof(default(T).hash.data) * 2 + 2:
       raise newException(ValueError, "Block hash has incorrect length")
 
-    result.isHash = true
-    hexToByteArray(str, result.hash.data)
+    var res = T(isHash: true)
+    hexToByteArray(str, res.hash.data)
+    res
   else:
-    result.isHash = false
-    result.number = parseBiggestUInt str
+    T(isHash: false, number: parseBiggestUInt str)
 
 func `$`*(x: BlockHashOrNumber): string =
   if x.isHash:

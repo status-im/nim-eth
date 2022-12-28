@@ -16,7 +16,7 @@ import
 export utp_router, protocol
 
 logScope:
-  topics = "utp_discv5_protocol"
+  topics = "eth utp utp_discv5_protocol"
 
 type
   NodeAddress* = object

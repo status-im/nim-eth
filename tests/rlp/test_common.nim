@@ -79,16 +79,45 @@ proc suite1() =
       check aa == a
       check bb == b
 
+    test "EIP 4895 roundtrip":
+      let a = Withdrawal(
+        index: 1,
+        validatorIndex: 2,
+        address: EthAddress [
+          0.byte, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+          11, 12, 13, 14, 15, 16, 17, 18, 19],
+        amount: 4.u256 * 1_000_000_000.u256)
+
+      let abytes = rlp.encode(a)
+      let aa = rlp.decode(abytes, Withdrawal)
+      check aa == a
+
 proc suite2() =
   suite "eip 2718 transaction":
     for i in 0..<10:
       loadFile(i)
 
-    test "rlp roundtrip EIP1559":
+    test "rlp roundtrip EIP1559 / EIP4895 / EIP4844":
+      proc doTest(h: BlockHeader) =
+        let xy = rlp.encode(h)
+        let hh = rlp.decode(xy, BlockHeader)
+        check h == hh
+
       var h: BlockHeader
-      let xy = rlp.encode(h)
-      let hh = rlp.decode(xy, BlockHeader)
-      check h == hh
+      doTest h
+
+      # EIP-1559
+      h.fee = some 1234.u256
+      doTest h
+
+      # EIP-4895
+      h.withdrawalsRoot = some Hash256.fromHex(
+        "0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588")
+      doTest h
+
+      # EIP-4844
+      h.excessDataGas = some 1234.u256
+      doTest h
 
 suite1()
 suite2()
