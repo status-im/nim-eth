@@ -77,8 +77,8 @@ template del*(dbParam: KvStoreRef, key: openArray[byte]): KvResult[bool] =
   db.delProc(db.obj, key)
 
 template clear*(dbParam: KvStoreRef): KvResult[bool] =
-  ## Remove all values from store - do nothing if the value is not present
-  ## Returns true iff value was found and deleted
+  ## Remove all values from store
+  ## Returns true iff a value was found and deleted
   let db = dbParam
   db.clearProc(db.obj)
 

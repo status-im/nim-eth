@@ -463,7 +463,7 @@ proc clear*(db: SqKeyspaceRef): KvResult[bool] =
     else:
       ok(sqlite3_changes(db.env) > 0)
 
-  # release implict transaction
+  # release implicit transaction
   discard sqlite3_reset(clearStmt) # same return information as step
 
   res
