@@ -38,7 +38,8 @@ type
     # A Keyspace is a single key-value table - it is generally efficient to
     # create separate keyspaces for each type of data stored
     open: bool
-    getStmt, putStmt, delStmt, containsStmt,
+    env: Sqlite
+    getStmt, putStmt, delStmt, clearStmt, containsStmt,
       findStmt0, findStmt1, findStmt2: RawStmtPtr
 
   SqKeyspaceRef* = ref SqKeyspace
@@ -433,21 +434,37 @@ proc contains*(db: SqKeyspaceRef, key: openArray[byte]): KvResult[bool] =
 
   res
 
-proc del*(db: SqKeyspaceRef, key: openArray[byte]): KvResult[void] =
+proc del*(db: SqKeyspaceRef, key: openArray[byte]): KvResult[bool] =
   if not db.open: return err("sqlite: database closed")
   let delStmt = db.delStmt
-  if delStmt == nil: return ok() # no such table
+  if delStmt == nil: return ok(false) # no such table
   checkErr bindParam(delStmt, 1, key)
 
   let res =
     if (let v = sqlite3_step(delStmt); v != SQLITE_DONE):
       err($sqlite3_errstr(v))
     else:
-      ok()
+      ok(sqlite3_changes(db.env) > 0)
 
   # release implict transaction
   discard sqlite3_reset(delStmt) # same return information as step
   discard sqlite3_clear_bindings(delStmt) # no errors possible
+
+  res
+
+proc clear*(db: SqKeyspaceRef): KvResult[bool] =
+  if not db.open: return err("sqlite: database closed")
+  let clearStmt = db.clearStmt
+  if clearStmt == nil: return ok(false) # no such table
+
+  let res =
+    if (let v = sqlite3_step(clearStmt); v != SQLITE_DONE):
+      err($sqlite3_errstr(v))
+    else:
+      ok(sqlite3_changes(db.env) > 0)
+
+  # release implicit transaction
+  discard sqlite3_reset(clearStmt) # same return information as step
 
   res
 
@@ -456,6 +473,7 @@ proc close*(db: var SqKeyspace) =
   discard sqlite3_finalize(db.putStmt)
   discard sqlite3_finalize(db.getStmt)
   discard sqlite3_finalize(db.delStmt)
+  discard sqlite3_finalize(db.clearStmt)
   discard sqlite3_finalize(db.containsStmt)
   discard sqlite3_finalize(db.findStmt0)
   discard sqlite3_finalize(db.findStmt1)
@@ -604,7 +622,7 @@ proc openKvStore*(
       if withoutRowid: createSql & " WITHOUT ROWID;" else: createSql & ";"
     true
   var
-    tmp: SqKeyspace
+    tmp = SqKeyspace(env: db.env)
   defer:
     # We'll "move" ownership to the return value, effectively disabling "close"
     close(tmp)
@@ -615,6 +633,7 @@ proc openKvStore*(
     tmp.putStmt =
       prepare(db.env, "INSERT OR REPLACE INTO '" & name & "'(key, value) VALUES (?, ?);")
     tmp.delStmt = prepare(db.env, "DELETE FROM '" & name & "' WHERE key = ?;")
+    tmp.clearStmt = prepare(db.env, "DELETE FROM '" & name & "';")
     tmp.containsStmt = prepare(db.env, "SELECT 1 FROM '" & name & "' WHERE key = ?;")
     tmp.findStmt0 = prepare(db.env, "SELECT key, value FROM '" & name & "';")
     tmp.findStmt1 = prepare(db.env, "SELECT key, value FROM '" & name & "' WHERE key >= ?;")

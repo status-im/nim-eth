@@ -16,8 +16,7 @@ proc testKvStore*(db: KvStoreRef, supportsFind: bool) =
 
     not db.get(key, proc(data: openArray[byte]) = discard)[]
     not db.contains(key)[]
-
-  db.del(key)[] # does nothing
+    not db.del(key)[] # does nothing
 
   db.put(key, value)[]
 
@@ -39,12 +38,19 @@ proc testKvStore*(db: KvStoreRef, supportsFind: bool) =
     db.get(key, grab)[]
     v == value2
 
-  db.del(key)[]
   check:
+    db.del(key)[]
     not db.get(key, proc(data: openArray[byte]) = discard)[]
     not db.contains(key)[]
 
-  db.del(key)[] # does nothing
+    not db.del(key)[] # does nothing
+
+  db.put(key, value2)[] # overwrite old value
+  check:
+    db.contains(key)[]
+    db.clear()[]
+    not db.contains(key)[]
+    not db.clear()[]
 
   if supportsFind:
     check:
