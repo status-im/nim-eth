@@ -62,6 +62,7 @@ type
     clientId*: string
     discovery*: DiscoveryProtocol
     lastLookupTime*: float
+    connQueue*: AsyncQueue[Node]
     connectedNodes*: Table[Node, Peer]
     connectingNodes*: HashSet[Node]
     running*: bool
