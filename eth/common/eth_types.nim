@@ -100,7 +100,7 @@ type
     index*         : uint64
     validatorIndex*: uint64
     address*       : EthAddress
-    amount*        : UInt256
+    amount*        : uint64
 
   BlockHeader* = object
     parentHash*:      Hash256
