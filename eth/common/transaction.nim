@@ -6,6 +6,30 @@ export eth_types_rlp
 const
   EIP155_CHAIN_ID_OFFSET* = 35'i64
 
+type
+  GasPrice* = ## \
+    ## Handy definition distinct from `GasInt` which is a commodity unit while
+    ## the `GasPrice` is the commodity valuation per unit of gas, similar to a
+    ## kind of currency.
+    distinct uint64
+
+  GasPriceEx* = ## \
+    ## Similar to `GasPrice` but is allowed to be negative.
+    distinct int64
+
+proc effectiveGasTip*(tx: Transaction; baseFee: GasPrice): GasPriceEx =
+  ## The effective miner gas tip for the globally argument `baseFee`. The
+  ## result (which is a price per gas) might well be negative.
+  if tx.txType != TxEip1559:
+    (tx.gasPrice - baseFee.int64).GasPriceEx
+  else:
+    # London, EIP1559
+    min(tx.maxPriorityFee, tx.maxFee - baseFee.int64).GasPriceEx
+
+proc effectiveGasTip*(tx: Transaction; baseFee: UInt256): GasPriceEx =
+  ## Variant of `effectiveGasTip()`
+  tx.effectiveGasTip(baseFee.truncate(uint64).GasPrice)
+
 func rlpEncodeLegacy(tx: Transaction): auto =
   var w = initRlpWriter()
   w.startList(6)
