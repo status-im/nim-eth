@@ -21,7 +21,7 @@ type
     gcsafe, raises: [Defect].}
     ## The result will be empty seq if not found
 
-  DelProc = proc (db: RootRef, key: openArray[byte]) {.
+  DelProc = proc (db: RootRef, key: openArray[byte]): bool {.
     gcsafe, raises: [Defect].}
 
   ContainsProc = proc (db: RootRef, key: openArray[byte]): bool {.
@@ -172,7 +172,7 @@ proc getImpl[T](db: RootRef, key: openArray[byte]): seq[byte] =
   mixin get
   return get(T(db), key)
 
-proc delImpl[T](db: RootRef, key: openArray[byte]) =
+proc delImpl[T](db: RootRef, key: openArray[byte]): bool =
   mixin del
   del(T(db), key)
 
@@ -217,7 +217,7 @@ proc del*(db: TrieDatabaseRef, key: openArray[byte]) =
   if t != nil:
     t.modifications.del(key)
   else:
-    db.delProc(db.obj, key)
+    discard db.delProc(db.obj, key)
 
 proc contains*(db: TrieDatabaseRef, key: openArray[byte]): bool =
   # TODO: This is quite inefficient and it won't be necessary once
