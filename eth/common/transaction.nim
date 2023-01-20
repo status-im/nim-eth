@@ -1,5 +1,5 @@
 import
-  ../common/eth_types_rlp
+  ./eth_types_rlp
 
 export eth_types_rlp
 
@@ -58,7 +58,7 @@ func rlpEncodeEip155(tx: Transaction): auto =
 
 func rlpEncodeEip2930(tx: Transaction): auto =
   var w = initRlpWriter()
-  w.append(1)
+  w.append(TxEip2930)
   w.startList(8)
   w.append(tx.chainId.uint64)
   w.append(tx.nonce)
@@ -72,7 +72,7 @@ func rlpEncodeEip2930(tx: Transaction): auto =
 
 func rlpEncodeEip1559(tx: Transaction): auto =
   var w = initRlpWriter()
-  w.append(2)
+  w.append(TxEip1559)
   w.startList(9)
   w.append(tx.chainId.uint64)
   w.append(tx.nonce)
@@ -83,6 +83,23 @@ func rlpEncodeEip1559(tx: Transaction): auto =
   w.append(tx.value)
   w.append(tx.payload)
   w.append(tx.accessList)
+  w.finish()
+
+func rlpEncodeEip4844(tx: Transaction): auto =
+  var w = initRlpWriter()
+  w.append(TxEip4844)
+  w.startList(11)
+  w.append(tx.chainId.uint64)
+  w.append(tx.nonce)
+  w.append(tx.maxPriorityFee)
+  w.append(tx.maxFee)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.append(tx.maxFeePerDataGas)
+  w.append(tx.versionedHashes)
   w.finish()
 
 func rlpEncode*(tx: Transaction): auto =
@@ -96,6 +113,8 @@ func rlpEncode*(tx: Transaction): auto =
     tx.rlpEncodeEip2930
   of TxEip1559:
     tx.rlpEncodeEip1559
+  of TxEip4844:
+    tx.rlpEncodeEip4844
 
 func txHashNoSignature*(tx: Transaction): Hash256 =
   # Hash transaction without signature

@@ -153,18 +153,28 @@ type
 
   # Private types:
   MessageHandlerDecorator* = proc(msgId: int, n: NimNode): NimNode
+
   ThunkProc* = proc(x: Peer, msgId: int, data: Rlp): Future[void]
     {.gcsafe, raises: [RlpError].}
+
   MessageContentPrinter* = proc(msg: pointer): string
     {.gcsafe, raises: [].}
+
   RequestResolver* = proc(msg: pointer, future: FutureBase)
     {.gcsafe, raises: [].}
+
   NextMsgResolver* = proc(msgData: Rlp, future: FutureBase)
     {.gcsafe, raises: [RlpError].}
-  PeerStateInitializer* = proc(peer: Peer): RootRef {.gcsafe, raises: [].}
+
+  PeerStateInitializer* = proc(peer: Peer): RootRef
+    {.gcsafe, raises: [].}
+
   NetworkStateInitializer* = proc(network: EthereumNode): RootRef
     {.gcsafe, raises: [].}
-  HandshakeStep* = proc(peer: Peer): Future[void] {.gcsafe, raises: [].}
+
+  HandshakeStep* = proc(peer: Peer): Future[void]
+    {.gcsafe, raises: [].}
+
   DisconnectionHandler* = proc(peer: Peer, reason: DisconnectionReason):
     Future[void] {.gcsafe, raises: [].}
 

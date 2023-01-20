@@ -83,7 +83,7 @@ proc appendTxLegacy(w: var RlpWriter, tx: Transaction) =
   w.append(tx.S)
 
 proc appendTxEip2930(w: var RlpWriter, tx: Transaction) =
-  w.append(1)
+  w.append(TxEip2930)
   w.startList(11)
   w.append(tx.chainId.uint64)
   w.append(tx.nonce)
@@ -98,7 +98,7 @@ proc appendTxEip2930(w: var RlpWriter, tx: Transaction) =
   w.append(tx.S)
 
 proc appendTxEip1559(w: var RlpWriter, tx: Transaction) =
-  w.append(2)
+  w.append(TxEip1559)
   w.startList(12)
   w.append(tx.chainId.uint64)
   w.append(tx.nonce)
@@ -113,6 +113,42 @@ proc appendTxEip1559(w: var RlpWriter, tx: Transaction) =
   w.append(tx.R)
   w.append(tx.S)
 
+proc appendTxEip4844Signed(w: var RlpWriter, tx: Transaction) =
+  # exclude tx type
+  w.startList(14)
+  w.append(tx.chainId.uint64)
+  w.append(tx.nonce)
+  w.append(tx.maxPriorityFee)
+  w.append(tx.maxFee)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.append(tx.maxFeePerDataGas)
+  w.append(tx.versionedHashes)
+  w.append(tx.V)
+  w.append(tx.R)
+  w.append(tx.S)
+
+proc appendTxEip4844Network(w: var RlpWriter, tx: Transaction) =
+  # exclude tx type
+  # spec: rlp([tx_payload, blobs, commitments, proofs])
+  w.startList(4)
+  w.appendTxEip4844Signed(tx)
+  w.append(tx.networkPayload.blobs)
+  w.append(tx.networkPayload.commitments)
+  w.append(tx.networkPayload.proofs)
+
+proc appendTxEip4844(w: var RlpWriter, tx: Transaction) =
+  # append the tx type first
+  w.append(TxEip4844)
+
+  if tx.networkPayload.isNil:
+    w.appendTxEip4844Signed(tx)
+  else:
+    w.appendTxEip4844Network(tx)
+
 proc append*(w: var RlpWriter, tx: Transaction) =
   case tx.txType
   of TxLegacy:
@@ -121,6 +157,8 @@ proc append*(w: var RlpWriter, tx: Transaction) =
     w.appendTxEip2930(tx)
   of TxEip1559:
     w.appendTxEip1559(tx)
+  of TxEip4844:
+    w.appendTxEip4844(tx)
 
 template read[T](rlp: var Rlp, val: var T)=
   val = rlp.read(type val)
@@ -175,6 +213,44 @@ proc readTxEip1559(rlp: var Rlp, tx: var Transaction)=
   rlp.read(tx.R)
   rlp.read(tx.S)
 
+proc readTxEip4844Signed(rlp: var Rlp, tx: var Transaction) =
+  rlp.tryEnterList()
+  tx.chainId = rlp.read(uint64).ChainId
+  rlp.read(tx.nonce)
+  rlp.read(tx.maxPriorityFee)
+  rlp.read(tx.maxFee)
+  rlp.read(tx.gasLimit)
+  rlp.read(tx.to)
+  rlp.read(tx.value)
+  rlp.read(tx.payload)
+  rlp.read(tx.accessList)
+  rlp.read(tx.maxFeePerDataGas)
+  rlp.read(tx.versionedHashes)
+  rlp.read(tx.V)
+  rlp.read(tx.R)
+  rlp.read(tx.S)
+
+proc readTxEip4844Network(rlp: var Rlp, tx: var Transaction) =
+  # spec: rlp([tx_payload, blobs, commitments, proofs])
+  rlp.tryEnterList()
+  rlp.readTxEip4844Signed(tx)
+  var np = NetworkPayload()
+  rlp.read(np.blobs)
+  rlp.read(np.commitments)
+  rlp.read(np.proofs)
+  tx.networkPayload = np
+
+proc readTxEip4844(rlp: var Rlp, tx: var Transaction) =
+  tx.txType = TxEip4844
+  let listLen = rlp.listLen
+  if listLen == 4:
+    rlp.readTxEip4844Network(tx)
+  elif listLen == 14:
+    rlp.readTxEip4844Signed(tx)
+  else:
+    raise newException(MalformedRlpError,
+      "Invalid EIP-4844 transaction: listLen should be in 4 or 14, got: " & $listLen)
+
 proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.inline.} =
   # EIP-2718: We MUST decode the first byte as a byte, not `rlp.read(int)`.
   # If decoded with `rlp.read(int)`, bad transaction data (from the network)
@@ -204,12 +280,14 @@ proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.inline.} =
     of TxEip1559:
       rlp.readTxEip1559(tx)
       return
+    of TxEip4844:
+      rlp.readTxEip4844(tx)
+      return
     else:
       discard
 
   raise newException(UnsupportedRlpError,
-    "TypedTransaction type must be 1 or 2 in this version, got " & $txType)
-
+    "TypedTransaction type must be 1, 2, or 3 in this version, got " & $txType)
 
 proc read*(rlp: var Rlp, T: type Transaction): T =
   # Individual transactions are encoded and stored as either `RLP([fields..])`
@@ -258,7 +336,7 @@ proc append*(rlpWriter: var RlpWriter,
       rlpWriter.append(rlp.encode(tx))
 
 proc append*(w: var RlpWriter, rec: Receipt) =
-  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt}:
+  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt}:
     w.append(rec.receiptType.int)
 
   w.startList(4)
@@ -276,10 +354,12 @@ proc read*(rlp: var Rlp, T: type Receipt): T =
     result.receiptType = LegacyReceipt
   else:
     # EIP 2718
-    let recType = rlp.read(int)
-    if recType notin {1, 2}:
+    let recType = rlp.getByteValue
+    rlp.position += 1
+
+    if recType notin {1, 2, 3}:
       raise newException(UnsupportedRlpError,
-        "TxType expect 1 or 2 got " & $recType)
+        "TxType expect 1, 2, or 3 got " & $recType)
     result.receiptType = ReceiptType(recType)
 
   rlp.tryEnterList()

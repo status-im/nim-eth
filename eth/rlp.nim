@@ -53,6 +53,9 @@ proc currentElemEnd*(self: Rlp): int {.gcsafe.}
 template rawData*(self: Rlp): openArray[byte] =
   self.bytes.toOpenArray(self.position, self.currentElemEnd - 1)
 
+template remainingBytes*(self: Rlp): openArray[byte] =
+  self.bytes.toOpenArray(self.position, self.bytes.len - 1)
+
 proc isBlob*(self: Rlp): bool =
   self.hasData() and self.bytes[self.position] < LIST_START_MARKER
 

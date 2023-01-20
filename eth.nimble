@@ -77,7 +77,7 @@ task test_utp, "Run utp tests":
   runTest("tests/utp/all_utp_tests")
 
 task test_common, "Run common tests":
-  runTest("tests/common/test_eth_types")
+  runTest("tests/common/all_tests")
 
 task test, "Run all tests":
   for filename in [

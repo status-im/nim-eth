@@ -62,10 +62,29 @@ type
 
   AccessList* = seq[AccessPair]
 
+  VersionedHash* = Hash256
+  VersionedHashes* = seq[VersionedHash]
+  KzgCommitment* = array[48, byte]
+  KzgProof* = array[48, byte]
+
+  # 32 -> UInt256
+  # 4096 -> FIELD_ELEMENTS_PER_BLOB
+  NetworkBlob* = array[32*4096, byte]
+
   TxType* = enum
-    TxLegacy
-    TxEip2930
-    TxEip1559
+    TxLegacy    # 0
+    TxEip2930   # 1
+    TxEip1559   # 2
+    TxEip4844   # 3
+
+  # instead of wrap Transaction with
+  # NetworkPayload, we embed it to Transaction
+  # the rest of magic happened in RLP
+  # encoding decoding
+  NetworkPayload* = ref object
+    blobs*       : seq[NetworkBlob]
+    commitments* : seq[KzgCommitment]
+    proofs*      : seq[KzgProof]
 
   Transaction* = object
     txType*        : TxType               # EIP-2718
@@ -79,6 +98,9 @@ type
     value*         : UInt256
     payload*       : Blob
     accessList*    : AccessList           # EIP-2930
+    maxFeePerDataGas*: GasInt             # EIP-4844
+    versionedHashes*: VersionedHashes     # EIP-4844
+    networkPayload*: NetworkPayload       # EIP-4844
     V*             : int64
     R*, S*         : UInt256
 
@@ -138,6 +160,7 @@ type
     # LegacyReceipt  = TxLegacy
     # Eip2930Receipt = TxEip2930
     # Eip1559Receipt = TxEip1559
+    # Eip4844Receipt = TxEip4844
 
   Receipt* = object
     receiptType*      : ReceiptType
@@ -183,6 +206,7 @@ const
   LegacyReceipt*  = TxLegacy
   Eip2930Receipt* = TxEip2930
   Eip1559Receipt* = TxEip1559
+  Eip4844Receipt* = TxEip4844
 
   # TODO clean these up
   EMPTY_ROOT_HASH* = "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
@@ -271,8 +295,12 @@ func destination*(tx: Transaction): EthAddress =
   if tx.to.isSome:
     return tx.to.get
 
-func init*(
-    T: type BlockHashOrNumber, str: string): T {.raises: [ValueError].} =
+func removeNetworkPayload*(tx: Transaction): Transaction =
+  result = tx
+  result.networkPayload = nil
+
+func init*(T: type BlockHashOrNumber, str: string): T
+          {.raises: [ValueError].} =
   if str.startsWith "0x":
     if str.len != sizeof(default(T).hash.data) * 2 + 2:
       raise newException(ValueError, "Block hash has incorrect length")

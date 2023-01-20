@@ -7,12 +7,12 @@
 # those terms.
 
 import
-  std/[hashes, os],
+  std/[hashes],
   nimcrypto/hash, stew/byteutils, metrics,
   ./eth_types
 
 when defined(posix):
-  import std/posix
+  import std/[posix, os]
 
 export metrics
 
