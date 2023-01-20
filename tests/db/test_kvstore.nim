@@ -10,7 +10,7 @@ const
   value2 = [5'u8, 2, 1, 0]
   key2 = [255'u8, 255]
 
-proc testKvStore*(db: KvStoreRef, supportsFind: bool) =
+proc testKvStore*(db: KvStoreRef, supportsFind: bool, supportsClear: bool) =
   check:
     db != nil
 
@@ -45,12 +45,13 @@ proc testKvStore*(db: KvStoreRef, supportsFind: bool) =
 
     not db.del(key)[] # does nothing
 
-  db.put(key, value2)[] # overwrite old value
-  check:
-    db.contains(key)[]
-    db.clear()[]
-    not db.contains(key)[]
-    not db.clear()[]
+  if supportsClear:
+    db.put(key, value2)[] # overwrite old value
+    check:
+      db.contains(key)[]
+      db.clear()[]
+      not db.contains(key)[]
+      not db.clear()[]
 
   if supportsFind:
     check:
@@ -75,4 +76,4 @@ proc testKvStore*(db: KvStoreRef, supportsFind: bool) =
 
 suite "MemoryStoreRef":
   test "KvStore interface":
-    testKvStore(kvStore MemStoreRef.init(), true)
+    testKvStore(kvStore MemStoreRef.init(), true, true)

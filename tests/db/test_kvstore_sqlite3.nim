@@ -14,7 +14,7 @@ procSuite "SqStoreRef":
     let kv = db.openKvStore()
     defer: kv.get()[].close()
 
-    testKvStore(kvStore kv.get(), true)
+    testKvStore(kvStore kv.get(), true, true)
 
   test "Readonly kvstore with no table":
     let db = SqStoreRef.init("", "test", inMemory = true, readOnly = true)[]
