@@ -357,6 +357,44 @@ proc rlpHash*[T](v: T): Hash256 =
 
 func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
 
+proc append*(w: var RlpWriter, b: BlockBody) =
+  w.append(b.transactions)
+  w.append(b.uncles)
+  if b.withdrawals.isSome:
+    w.append(b.withdrawals.get)
+
+# Is there a better way of doing this? We have tests that call
+# rlp.readRecordType(BlockBody, false), so I overrode
+# `readRecordType` as well as `read`. --Adam
+proc readRecordType*(rlp: var Rlp, T: type BlockBody, wrappedInList: bool): BlockBody =
+  if not wrappedInList:
+    # I think this just means the RLP will contain a list
+    # of transactions (without any uncles or withdrawals).
+    result.transactions = rlp.read(seq[Transaction])
+    result.uncles = @[]
+    result.withdrawals = none[seq[Withdrawal]]()
+  else:
+    let len = rlp.listLen
+
+    if len notin {2, 3}:
+      raise newException(UnsupportedRlpError,
+        "BlockBody elems should be 2 or 3, got " & $len)
+
+    rlp.tryEnterList()
+
+    result.transactions = rlp.read(seq[Transaction])
+    result.uncles       = rlp.read(seq[BlockHeader])
+
+    # EIP-4895
+    result.withdrawals =
+      if len >= 3:
+        some(rlp.read(seq[Withdrawal]))
+      else:
+        none[seq[Withdrawal]]()
+
+proc read*(rlp: var Rlp, T: type BlockBody): T =
+  rlp.readRecordType(BlockBody, true)
+
 proc append*(rlpWriter: var RlpWriter, id: NetworkId) =
   rlpWriter.append(id.uint)
 
