@@ -126,6 +126,7 @@ type
   BlockBody* = object
     transactions*:  seq[Transaction]
     uncles*:        seq[BlockHeader]
+    withdrawals*:   Option[seq[Withdrawal]]   # EIP-4895
 
   Log* = object
     address*:       EthAddress
