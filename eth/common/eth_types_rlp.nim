@@ -371,7 +371,7 @@ proc readRecordType*(rlp: var Rlp, T: type BlockBody, wrappedInList: bool): Bloc
     # I think this just means the RLP will contain a list
     # of transactions (without any uncles or withdrawals).
     result.transactions = rlp.read(seq[Transaction])
-    result.uncles = @[]
+    result.uncles = rlp.read(seq[BlockHeader])
     result.withdrawals = none[seq[Withdrawal]]()
   else:
     let len = rlp.listLen
