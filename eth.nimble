@@ -106,7 +106,7 @@ task test_discv5_full, "Run discovery v5 and its dependencies tests":
   test_discv5_task()
 
 task build_dcli, "Build dcli":
-  buildBinary("eth/p2p/discoveryv5/dcli")
+  buildBinary("tools/dcli")
 
 import os, strutils
 
