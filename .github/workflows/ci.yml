@@ -239,7 +239,7 @@ jobs:
           export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
           nim --version
           nimble --version
-          nimble install -y --depsOnly
+          nimble install -y
           nimble test
           nimble build_dcli
           nimble build_fuzzers
