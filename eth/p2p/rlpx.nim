@@ -8,8 +8,8 @@
 {.push raises: [Defect].}
 
 import
-  std/[tables, algorithm, deques, hashes, options, typetraits],
-  stew/shims/macros, chronicles, nimcrypto/utils, chronos,
+  std/[tables, algorithm, deques, hashes, options, typetraits, os],
+  stew/shims/macros, chronicles, nimcrypto/utils, chronos, metrics,
   ".."/[rlp, common, keys, async_utils],
   ./private/p2p_types, "."/[kademlia, auth, rlpxcrypt, enode, p2p_protocol_dsl]
 
@@ -34,7 +34,20 @@ when useSnappy:
 export
   options, p2pProtocol, rlp, chronicles
 
-declarePublicGauge connected_peers, "number of peers in the pool"
+declarePublicGauge rlpx_connected_peers,
+  "Number of connected peers in the pool"
+
+declareCounter rlpx_successful_connects,
+  "Number of successfully rlpx connected peers"
+
+declareCounter rlpx_failed_connects,
+  "Number of rlpx connect attempts that failed", labels = ["reason"]
+
+declareCounter rlpx_successful_accepts,
+  "Number of successfully rlpx accepted peers"
+
+declareCounter rlpx_failed_accepts,
+  "Number of rlpx accept attempts that failed", labels = ["reason"]
 
 logScope:
   topics = "eth p2p rlpx"
@@ -1048,7 +1061,7 @@ proc removePeer(network: EthereumNode, peer: Peer) =
   if network.peerPool != nil and not peer.remote.isNil and
       peer.remote in network.peerPool.connectedNodes:
     network.peerPool.connectedNodes.del(peer.remote)
-    connected_peers.dec()
+    rlpx_connected_peers.dec()
 
     # Note: we need to do this check as disconnect (and thus removePeer)
     # currently can get called before the dispatcher is initialized.
@@ -1290,25 +1303,38 @@ proc rlpxConnect*(node: EthereumNode, remote: Node): Future[Peer] {.async.} =
     else:
       debug "Unexpected disconnect during rlpxConnect", reason = e.reason,
         msg = e.msg, peer = remote
+
+    rlpx_failed_connects.inc(labelValues = [$e.reason])
   except TransportIncompleteError:
     trace "Connection dropped in rlpxConnect", remote
+    rlpx_failed_connects.inc(labelValues = [$TransportIncompleteError])
   except UselessPeerError:
     trace "Disconnecting useless peer", peer = remote
-  except RlpTypeMismatch:
+    rlpx_failed_connects.inc(labelValues = [$UselessPeerError])
+  except RlpTypeMismatch as e:
     # Some peers report capabilities with names longer than 3 chars. We ignore
     # those for now. Maybe we should allow this though.
-    debug "Rlp error in rlpxConnect"
+    debug "Rlp error in rlpxAccept", err = e.msg, errName = e.name
+    rlpx_failed_connects.inc(labelValues = [$RlpTypeMismatch])
   except TransportOsError as e:
-    trace "TransportOsError", err = e.msg
+    trace "TransportOsError", err = e.msg, errName = e.name
+    if e.code == OSErrorCode(110):
+      rlpx_failed_connects.inc(labelValues = ["tcp_timeout"])
+    else:
+      rlpx_failed_connects.inc(labelValues = [$e.name])
   except CatchableError as e:
     error "Unexpected exception in rlpxConnect", remote, exc = e.name,
       err = e.msg
+    rlpx_failed_connects.inc(labelValues = [$e.name])
 
   if not ok:
     if not isNil(peer.transport):
       peer.transport.close()
+
+    rlpx_failed_connects.inc()
     return nil
   else:
+    rlpx_successful_connects.inc()
     return peer
 
 proc rlpxAccept*(node: EthereumNode,
@@ -1407,24 +1433,37 @@ proc rlpxAccept*(node: EthereumNode,
       else:
         debug "Unexpected disconnect during rlpxAccept", reason = e.reason,
           msg = e.msg, peer = peer.remote
+
+    rlpx_failed_accepts.inc(labelValues = [$e.reason])
   except TransportIncompleteError:
     trace "Connection dropped in rlpxAccept", remote = peer.remote
+    rlpx_failed_accepts.inc(labelValues = [$TransportIncompleteError])
   except UselessPeerError:
     trace "Disconnecting useless peer", peer = peer.remote
-  except RlpTypeMismatch:
+    rlpx_failed_accepts.inc(labelValues = [$UselessPeerError])
+  except RlpTypeMismatch as e:
     # Some peers report capabilities with names longer than 3 chars. We ignore
     # those for now. Maybe we should allow this though.
-    debug "Rlp error in rlpxAccept"
+    debug "Rlp error in rlpxAccept", err = e.msg, errName = e.name
+    rlpx_failed_accepts.inc(labelValues = [$RlpTypeMismatch])
   except TransportOsError as e:
-    trace "TransportOsError", err = e.msg
+    trace "TransportOsError", err = e.msg, errName = e.name
+    if e.code == OSErrorCode(110):
+      rlpx_failed_accepts.inc(labelValues = ["tcp_timeout"])
+    else:
+      rlpx_failed_accepts.inc(labelValues = [$e.name])
   except CatchableError as e:
     error "Unexpected exception in rlpxAccept", exc = e.name, err = e.msg
+    rlpx_failed_accepts.inc(labelValues = [$e.name])
 
   if not ok:
     if not isNil(peer.transport):
       peer.transport.close()
+
+    rlpx_failed_accepts.inc()
     return nil
   else:
+    rlpx_successful_accepts.inc()
     return peer
 
 when isMainModule:
