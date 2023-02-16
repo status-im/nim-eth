@@ -53,6 +53,10 @@ type
     when useSnappy:
       snappyEnabled*: bool
 
+  SeenNode* = object
+    nodeId*: NodeId
+    stamp*: chronos.Moment
+
   PeerPool* = ref object
     # Private fields:
     network*: EthereumNode
@@ -63,6 +67,7 @@ type
     discovery*: DiscoveryProtocol
     lastLookupTime*: float
     connQueue*: AsyncQueue[Node]
+    seenTable*: Table[NodeId, SeenNode]
     connectedNodes*: Table[Node, Peer]
     connectingNodes*: HashSet[Node]
     running*: bool
