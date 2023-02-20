@@ -115,20 +115,22 @@ proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] 
 # Further more, we check if the bind address (user provided, or a "0.0.0.0"
 # default) is a public IP. That's a long shot, because code paths involving a
 # user-provided bind address are not supposed to get here.
-proc getRoutePrefSrc(bindIp: ValidIpAddress): (Option[ValidIpAddress], PrefSrcStatus) =
+proc getRoutePrefSrc(
+    bindIp: ValidIpAddress): (Option[ValidIpAddress], PrefSrcStatus) =
   let bindAddress = initTAddress(bindIp, Port(0))
 
   if bindAddress.isAnyLocal():
     let ip = getRouteIpv4()
     if ip.isErr():
       # No route was found, log error and continue without IP.
-      error "No routable IP address found, check your network connection", error = ip.error
+      error "No routable IP address found, check your network connection",
+        error = ip.error
       return (none(ValidIpAddress), NoRoutingInfo)
-    elif ip.get().isPublic():
+    elif ip.get().isGlobalUnicast():
       return (some(ip.get()), PrefSrcIsPublic)
     else:
       return (none(ValidIpAddress), PrefSrcIsPrivate)
-  elif bindAddress.isPublic():
+  elif bindAddress.isGlobalUnicast():
     return (some(ValidIpAddress.init(bindIp)), BindAddressIsPublic)
   else:
     return (none(ValidIpAddress), BindAddressIsPrivate)
