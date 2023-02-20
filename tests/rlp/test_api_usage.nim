@@ -38,7 +38,7 @@ suite "test api usage":
     writer.append "foo"
     writer.append "bar"
 
-    expect Defect:
+    expect AssertionDefect:
       discard writer.finish
 
   test "encode/decode object":
