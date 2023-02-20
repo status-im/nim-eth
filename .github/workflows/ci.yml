@@ -56,7 +56,7 @@ jobs:
           sudo apt-fast update -qq
           sudo DEBIAN_FRONTEND='noninteractive' apt-fast install \
             --no-install-recommends -yq gcc-multilib g++-multilib \
-            libz-dev:i386 libbz2-dev:i386 libssl-dev:i386
+            libz-dev:i386 libbz2-dev:i386 liblz4-dev:i386 libssl-dev:i386
           mkdir -p external/bin
           cat << EOF > external/bin/gcc
           #!/bin/bash
