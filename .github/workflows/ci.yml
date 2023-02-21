@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency: # Cancel stale PR builds (but not push builds)
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
@@ -43,11 +47,11 @@ jobs:
 
     name: '${{ matrix.target.os }}-${{ matrix.target.cpu }} (Nim ${{ matrix.branch }})'
     runs-on: ${{ matrix.builder }}
-    continue-on-error: ${{ matrix.branch == 'version-1-6' || matrix.branch == 'devel' }}
+    continue-on-error: ${{ matrix.branch == 'devel' }}
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install build dependencies (Linux i386)
         if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
