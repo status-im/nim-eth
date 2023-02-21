@@ -603,7 +603,7 @@ proc hasTable*(db: SqStoreRef, name: string): KvResult[bool] =
   let
     sql = "SELECT name FROM sqlite_master WHERE type='table' AND name='" &
       name & "';"
-  db.exec(sql, (), proc(_: openArray[byte]) = discard)
+  db.exec(sql, (), proc(_: openArray[byte]) {.callback.} = discard)
 
 proc openKvStore*(
     db: SqStoreRef, name = "kvstore", withoutRowid = false,

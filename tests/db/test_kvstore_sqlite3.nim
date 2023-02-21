@@ -249,7 +249,7 @@ procSuite "SqStoreRef":
 
   proc customSumFun(
     a: openArray[byte],
-    b: openArray[byte]): Result[seq[byte], cstring] {.noSideEffect, gcsafe, cdecl, raises: [Defect].} =
+    b: openArray[byte]): Result[seq[byte], cstring] {.cdecl.} =
     let num1 = uint32.fromBytesBE(a)
     let num2 = uint32.fromBytesBE(b)
     let sum = num1 + num2
