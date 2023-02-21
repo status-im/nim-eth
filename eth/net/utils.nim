@@ -36,19 +36,15 @@ func dec*(ipLimits: var IpLimits, ip: ValidIpAddress) =
   elif val > 1:
     ipLimits.ips[ip] = val - 1
 
-func isPublic*(address: TransportAddress): bool =
-  # TODO: Some are still missing, for special reserved addresses see:
-  # https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
-  # https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
-  if address.isLoopback() or address.isSiteLocal() or
-      address.isMulticast() or address.isLinkLocal():
-    false
-  else:
+func isGlobalUnicast*(address: TransportAddress): bool =
+  if address.isGlobal() and address.isUnicast():
     true
+  else:
+    false
 
-func isPublic*(address: IpAddress): bool =
+func isGlobalUnicast*(address: IpAddress): bool =
   let a = initTAddress(address, Port(0))
-  a.isPublic
+  a.isGlobalUnicast()
 
 proc getRouteIpv4*(): Result[ValidIpAddress, cstring] =
   # Avoiding Exception with initTAddress and can't make it work with static.

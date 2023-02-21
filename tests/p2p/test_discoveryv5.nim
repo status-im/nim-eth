@@ -507,15 +507,15 @@ suite "Discovery v5 Tests":
     await mainNode.closeWait()
     await testNode.closeWait()
 
-  test "Verify records of nodes message":
+  test "Verify records of Nodes message - global src":
     let
       port = Port(9000)
-      fromNoderecord = enr.Record.init(1, PrivateKey.random(rng[]),
+      srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
         some(ValidIpAddress.init("11.12.13.14")),
         some(port), some(port))[]
-      fromNode = newNode(fromNoderecord)[]
+      srcNode = newNode(srcRecord)[]
       pk = PrivateKey.random(rng[])
-      targetDistance = @[logDistance(fromNode.id, pk.toPublicKey().toNodeId())]
+      targetDistance = @[logDistance(srcNode.id, pk.toPublicKey().toNodeId())]
       limit = 16
 
     block: # Duplicates
@@ -526,7 +526,7 @@ suite "Discovery v5 Tests":
 
       # Exact duplicates
       var records = @[record, record]
-      var nodes = verifyNodesRecords(records, fromNode, limit, targetDistance)
+      var nodes = verifyNodesRecords(records, srcNode, limit, targetDistance)
       check nodes.len == 1
 
       # Node id duplicates
@@ -534,7 +534,7 @@ suite "Discovery v5 Tests":
         1, pk, some(ValidIpAddress.init("212.13.14.15")),
         some(port), some(port))[]
       records.add(recordSameId)
-      nodes = verifyNodesRecords(records, fromNode, limit, targetDistance)
+      nodes = verifyNodesRecords(records, srcNode, limit, targetDistance)
       check nodes.len == 1
 
     block: # No address
@@ -542,7 +542,16 @@ suite "Discovery v5 Tests":
         recordNoAddress = enr.Record.init(
           1, pk, none(ValidIpAddress), some(port), some(port))[]
         records = [recordNoAddress]
-        test = verifyNodesRecords(records, fromNode, limit, targetDistance)
+        test = verifyNodesRecords(records, srcNode, limit, targetDistance)
+      check test.len == 0
+
+    block: # Invalid address - any local
+      let
+        recordInvalidAddress = enr.Record.init(
+          1, pk, some(ValidIpAddress.init("0.0.0.0")),
+          some(port), some(port))[]
+        records = [recordInvalidAddress]
+        test = verifyNodesRecords(records, srcNode, limit, targetDistance)
       check test.len == 0
 
     block: # Invalid address - site local
@@ -551,7 +560,7 @@ suite "Discovery v5 Tests":
           1, pk, some(ValidIpAddress.init("10.1.2.3")),
           some(port), some(port))[]
         records = [recordInvalidAddress]
-        test = verifyNodesRecords(records, fromNode, limit, targetDistance)
+        test = verifyNodesRecords(records, srcNode, limit, targetDistance)
       check test.len == 0
 
     block: # Invalid address - loopback
@@ -560,7 +569,7 @@ suite "Discovery v5 Tests":
           1, pk, some(ValidIpAddress.init("127.0.0.1")),
           some(port), some(port))[]
         records = [recordInvalidAddress]
-        test = verifyNodesRecords(records, fromNode, limit, targetDistance)
+        test = verifyNodesRecords(records, srcNode, limit, targetDistance)
       check test.len == 0
 
     block: # Invalid distance
@@ -569,7 +578,7 @@ suite "Discovery v5 Tests":
           1, pk, some(ValidIpAddress.init("12.13.14.15")),
           some(port), some(port))[]
         records = [recordInvalidDistance]
-        test = verifyNodesRecords(records, fromNode, limit, @[0'u16])
+        test = verifyNodesRecords(records, srcNode, limit, @[0'u16])
       check test.len == 0
 
     block: # Invalid distance but distance validation is disabled
@@ -578,7 +587,61 @@ suite "Discovery v5 Tests":
           1, pk, some(ValidIpAddress.init("12.13.14.15")),
           some(port), some(port))[]
         records = [recordInvalidDistance]
-        test = verifyNodesRecords(records, fromNode, limit)
+        test = verifyNodesRecords(records, srcNode, limit)
+      check test.len == 1
+
+  test "Verify records of Nodes message - loopback src":
+    let
+      port = Port(9000)
+      srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
+        some(ValidIpAddress.init("127.0.0.0")),
+        some(port), some(port))[]
+      srcNode = newNode(srcRecord)[]
+      pk = PrivateKey.random(rng[])
+      targetDistance = @[logDistance(srcNode.id, pk.toPublicKey().toNodeId())]
+      limit = 16
+
+    block: # valid address - lo with lo src
+      let
+        record = enr.Record.init(
+          1, pk, some(ValidIpAddress.init("127.0.0.1")),
+          some(port), some(port))[]
+        test = verifyNodesRecords([record], srcNode, limit, targetDistance)
+      check test.len == 1
+
+    block: # valid address - global with lo src
+      let
+        record = enr.Record.init(
+          1, pk, some(ValidIpAddress.init("1.2.3.4")),
+          some(port), some(port))[]
+        test = verifyNodesRecords([record], srcNode, limit, targetDistance)
+      check test.len == 1
+
+  test "Verify records of Nodes message - site local src":
+    let
+      port = Port(9000)
+      srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
+        some(ValidIpAddress.init("192.168.1.1")),
+        some(port), some(port))[]
+      srcNode = newNode(srcRecord)[]
+      pk = PrivateKey.random(rng[])
+      targetDistance = @[logDistance(srcNode.id, pk.toPublicKey().toNodeId())]
+      limit = 16
+
+    block: # valid address - site local with site local src
+      let
+        record = enr.Record.init(
+          1, pk, some(ValidIpAddress.init("192.168.1.2")),
+          some(port), some(port))[]
+        test = verifyNodesRecords([record], srcNode, limit, targetDistance)
+      check test.len == 1
+
+    block: # valid address - global with site local src
+      let
+        record = enr.Record.init(
+          1, pk, some(ValidIpAddress.init("1.2.3.4")),
+          some(port), some(port))[]
+        test = verifyNodesRecords([record], srcNode, limit, targetDistance)
       check test.len == 1
 
   test "Calculate lookup distances":
