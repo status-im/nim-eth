@@ -8,7 +8,12 @@
 ## Simple Key-Value store database interface that allows creating multiple
 ## tables within each store
 
-{.push raises: [Defect].}
+when (NimMajor, NimMinor) < (1, 4):
+  {.push raises: [Defect].}
+  {.pragma: callback, gcsafe, raises: [Defect].}
+else:
+  {.push raises: [].}
+  {.pragma: callback, gcsafe, raises: [].}
 
 import
   std/[tables, hashes, sets],
@@ -25,16 +30,16 @@ type
 
   KvResult*[T] = Result[T, string]
 
-  DataProc* = proc(val: openArray[byte]) {.gcsafe, raises: [Defect].}
-  KeyValueProc* = proc(key, val: openArray[byte]) {.gcsafe, raises: [Defect].}
+  DataProc* = proc(val: openArray[byte]) {.callback.}
+  KeyValueProc* = proc(key, val: openArray[byte]) {.callback.}
 
-  PutProc = proc (db: RootRef, key, val: openArray[byte]): KvResult[void] {.nimcall, gcsafe, raises: [Defect].}
-  GetProc = proc (db: RootRef, key: openArray[byte], onData: DataProc): KvResult[bool] {.nimcall, gcsafe, raises: [Defect].}
-  FindProc = proc (db: RootRef, prefix: openArray[byte], onFind: KeyValueProc): KvResult[int] {.nimcall, gcsafe, raises: [Defect].}
-  DelProc = proc (db: RootRef, key: openArray[byte]): KvResult[bool] {.nimcall, gcsafe, raises: [Defect].}
-  ClearProc = proc (db: RootRef): KvResult[bool] {.nimcall, gcsafe, raises: [Defect].}
-  ContainsProc = proc (db: RootRef, key: openArray[byte]): KvResult[bool] {.nimcall, gcsafe, raises: [Defect].}
-  CloseProc = proc (db: RootRef): KvResult[void] {.nimcall, gcsafe, raises: [Defect].}
+  PutProc = proc (db: RootRef, key, val: openArray[byte]): KvResult[void] {.nimcall, callback.}
+  GetProc = proc (db: RootRef, key: openArray[byte], onData: DataProc): KvResult[bool] {.nimcall, callback.}
+  FindProc = proc (db: RootRef, prefix: openArray[byte], onFind: KeyValueProc): KvResult[int] {.nimcall, callback.}
+  DelProc = proc (db: RootRef, key: openArray[byte]): KvResult[bool] {.nimcall, callback.}
+  ClearProc = proc (db: RootRef): KvResult[bool] {.nimcall, callback.}
+  ContainsProc = proc (db: RootRef, key: openArray[byte]): KvResult[bool] {.nimcall, callback.}
+  CloseProc = proc (db: RootRef): KvResult[void] {.nimcall, callback.}
 
   KvStoreRef* = ref object
     ## Key-Value store virtual interface

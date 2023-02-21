@@ -1,6 +1,11 @@
 ## Implementation of KvStore based on sqlite3
 
-{.push raises: [Defect].}
+when (NimMajor, NimMinor) < (1, 4):
+  {.push raises: [Defect].}
+  {.pragma: callback, gcsafe, raises: [Defect].}
+else:
+  {.push raises: [Defect].}
+  {.pragma: callback, gcsafe, raises: [].}
 
 import
   std/[os, options, strformat, typetraits],
@@ -22,7 +27,7 @@ type
   Sqlite* = ptr sqlite3
   SqliteStmt*[Params; Result] = distinct RawStmtPtr
   NoParams* = tuple # this is the empty tuple
-  ResultHandler*[T] = proc(val: T) {.gcsafe, raises: [Defect].}
+  ResultHandler*[T] = proc(val: T) {.callback.}
 
   SqStoreRef* = ref object
     # Handle for a single database - from here, keyspaces and statements
@@ -48,7 +53,7 @@ type
     proc (
       a: openArray[byte],
       b: openArray[byte]
-    ): Result[seq[byte], cstring] {.noSideEffect, gcsafe, cdecl, raises: [Defect].}
+    ): Result[seq[byte], cstring] {.noSideEffect, cdecl, callback.}
 
 template dispose(db: Sqlite) =
   discard sqlite3_close(db)
