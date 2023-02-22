@@ -664,22 +664,18 @@ proc customScalarBlobFunction(ctx: ptr sqlite3_context, n: cint, v: ptr ptr sqli
     toOpenArray(blob2, 0, blob2Len - 1)
   )
 
-  try:
-    if s.isOk():
-      let bytes = s.unsafeGet()
-      # try is necessary as otherwise nim marks SQLITE_TRANSIENT as throwing
-      # unlisted exception.
-      # Using SQLITE_TRANSIENT destructor type, as it inform sqlite that data
-      # under provided pointer may be deleted at any moment, which is the case
-      # for seq[byte] as it is managed by nim gc. With this flag sqlite copy bytes
-      # under pointer and then releases them itself.
-      sqlite3_result_blob(ctx, unsafeAddr bytes[0], bytes.len.cint, SQLITE_TRANSIENT)
-    else:
-      let errMsg = s.error
-      sqlite3_result_error(ctx, errMsg, -1)
-
-  except Exception as e:
-    raiseAssert(e.msg)
+  if s.isOk():
+    let bytes = s.unsafeGet()
+    # try is necessary as otherwise nim marks SQLITE_TRANSIENT as throwing
+    # unlisted exception.
+    # Using SQLITE_TRANSIENT destructor type, as it inform sqlite that data
+    # under provided pointer may be deleted at any moment, which is the case
+    # for seq[byte] as it is managed by nim gc. With this flag sqlite copy bytes
+    # under pointer and then releases them itself.
+    sqlite3_result_blob(ctx, unsafeAddr bytes[0], bytes.len.cint, SQLITE_TRANSIENT)
+  else:
+    let errMsg = s.error
+    sqlite3_result_error(ctx, errMsg, -1)
 
 proc registerCustomScalarFunction*(db: SqStoreRef, name: string, fun: CustomFunction): KvResult[void] =
   ## Register custom function inside sqlite engine. Registered function can
