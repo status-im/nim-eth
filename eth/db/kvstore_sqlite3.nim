@@ -649,7 +649,7 @@ proc openKvStore*(
   tmp = SqKeyspace() # make close harmless
   ok res
 
-proc customScalarBlobFunction(ctx: ptr sqlite3_context, n: cint, v: ptr ptr sqlite3_value) {.cdecl.} =
+proc customScalarBlobFunction(ctx: ptr sqlite3_context, n: cint, v: ptr ptr sqlite3_value) {.cdecl, callback.} =
   let ptrs = cast[ptr UncheckedArray[ptr sqlite3_value]](v)
   let blob1 = cast[ptr UncheckedArray[byte]](sqlite3_value_blob(ptrs[][0]))
   let blob2 = cast[ptr UncheckedArray[byte]](sqlite3_value_blob(ptrs[][1]))
