@@ -1,8 +1,11 @@
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+# uTP packet format as specified in:
+# https://www.bittorrent.org/beps/bep_0029.html
 
 {.push raises: [Defect].}
 
@@ -37,14 +40,9 @@ type
     extension*: uint8
     connectionId*: uint16
     timestamp*: MicroSeconds
-    # This is the difference between the local time, at the time the last packet
-    # was received, and the timestamp in this last received packet
     timestampDiff*: MicroSeconds
-    # The window size is the number of bytes currently in-flight, i.e. sent but not acked
-    # When sending packets, this should be set to the number of bytes left in the socket's receive buffer.
     wndSize*: uint32
     seqNr*: uint16
-    # sequence number the sender of the packet last received in the other direction
     ackNr*: uint16
 
   SelectiveAckExtension* = object
@@ -59,22 +57,21 @@ type
     moment*: Moment
     timestamp*: uint32
 
-# Important timing assumptions for utp protocol here:
+# Important timing assumptions for uTP protocol here:
 # 1. Microsecond precisions
 # 2. Monotonicity
-# Reference lib have a lot of checks to assume that this is monotonic on
+# Reference lib has a lot of checks to assume that this is monotonic on
 # every system, and warnings when monotonic clock is not available.
 proc getMonoTimestamp*(): TimeStampInfo =
   let currentMoment = Moment.now()
 
-  # Casting this value from int64 to uin32, my lead to some sudden spikes in
-  # timestamp numeric values i.e it is possible that timestamp can suddenly change
-  # from 4294967296 to for example 10, this may lead to sudden spikes in
-  # calculated delays
-  # uTP implementation is resistant to those spikes are as it keeps history of
-  # few last delays on uses smallest one for calculating ledbat window.
-  # so any outlier huge value will be ignored
-  #
+  # Casting this value from int64 to uint32, may lead to some sudden spikes in
+  # timestamp numeric values, i.e it is possible that the timestamp will
+  # suddenly change from 4294967296 to for example 10. This may lead to sudden
+  # spikes in calculated delays.
+  # The uTP implementation is resistant to those spikes are as it keeps a
+  # history of several last delays and uses the smallest one for calculating
+  # the ledbat window, thus any outlier value will be ignored.
   let timestamp = uint32((currentMoment - zeroMoment).microseconds())
   TimeStampInfo(moment: currentMoment, timestamp: timestamp)
 
@@ -86,7 +83,7 @@ proc randUint16*(rng: var HmacDrbgContext): uint16 =
 proc randUint32*(rng: var HmacDrbgContext): uint32 =
   uint32(rand(rng, int(high(uint32))))
 
-proc encodeTypeVer(h: PacketHeaderV1): uint8 =
+func encodeTypeVer(h: PacketHeaderV1): uint8 =
   var typeVer = 0'u8
   let typeOrd = uint8(ord(h.pType))
   typeVer = (typeVer and 0xf0) or (h.version and 0xf)
@@ -109,7 +106,7 @@ proc encodeHeaderStream(s: var OutputStream, h: PacketHeaderV1) =
 
 proc encodeExtensionStream(s: var OutputStream, e: SelectiveAckExtension) =
   try:
-    # writing 0 as there is not further extensions after selective ack
+    # writing always 0 as there are no other extensions (only selective ack)
     s.write(0'u8)
     s.write(acksArrayLength)
     s.write(e.acks)
@@ -130,14 +127,14 @@ proc encodePacket*(p: Packet): seq[byte] =
     # This should not happen in case of in-memory streams
     raiseAssert e.msg
 
-proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
+func decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
     let receivedBytesLength = len(bytes)
     if receivedBytesLength < minimalHeaderSize:
-      return err("invalid header size")
+      return err("Invalid header size")
 
     let version = bytes[0] and 0xf
     if version != protocolVersion:
-      return err("invalid packet version")
+      return err("Invalid packet version")
 
     var kind: PacketType
     if not checkedEnumAssign(kind, (bytes[0] shr 4)):
@@ -162,30 +159,35 @@ proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
       )
 
     if extensionByte == 0:
-      # packet without any extensions
+      # packet without extensions
       let payload =
         if (receivedBytesLength == minimalHeaderSize):
           @[]
         else:
           bytes[minimalHeaderSize..^1]
 
-      return ok(Packet(header: header, eack: none[SelectiveAckExtension](), payload: payload))
+      return ok(Packet(
+        header: header,
+        eack: none[SelectiveAckExtension](),
+        payload: payload))
     else:
-      # packet with selective ack extension
+      # packet with the selective ack extension
       if (receivedBytesLength < minimalHeaderSizeWithSelectiveAck):
-        return err("Packet too short for selective ack extension")
+        return err("Packet too short for selective ack extension: " &
+          "len = " & $receivedBytesLength)
 
       let nextExtension = bytes[20]
       let extLength = bytes[21]
 
-      # As selective ack is only supported extension the byte for nextExtension
-      # must be equal to 0.
-      # As for extLength, specification says that it must be at least 4, and in multiples of 4
-      # but reference implementation always uses 4 bytes bit mask which makes sense
-      # as 4byte bit mask is able to ack 32 packets in the future which is more than enough
+      # The byte for nextExtension must be 0 as selective ack is currently the
+      # only supported extension.
+      # For extLength, the specification states that it must be at least 4, and
+      # in multiples of 4. However, the reference implementation always uses a 4
+      # bytes bit mask, which makes sense as a 4 byte bit mask is able to ack
+      # 32 packets in the future, which is sounds more than enough.
       if (nextExtension != 0 or extLength != 4):
-        return err("Bad format of selective ack extension")
-
+        return err("Bad format of selective ack extension: " &
+          "extension = " & $nextExtension & " len = " & $extLength)
 
       let extension = SelectiveAckExtension(
         acks: toArray(4, bytes.toOpenArray(22, 25))
@@ -199,19 +201,21 @@ proc decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
 
       return ok(Packet(header: header, eack: some(extension), payload: payload))
 
-proc modifyTimeStampAndAckNr*(packetBytes: var seq[byte], newTimestamp: uint32, newAckNr: uint16) =
-  ## Modifies timestamp and ack nr of already encoded packets. Those fields should be
-  ## filled right before sending, so when re-sending the packet we would like to update
-  ## it without decoding and re-encoding the packet once again
+proc modifyTimeStampAndAckNr*(
+    packetBytes: var seq[byte], newTimestamp: uint32, newAckNr: uint16) =
+  ## Modifies timestamp and ack nr of already encoded packets. These fields
+  ## must be filled right before sending, so when re-sending the packet they
+  ## can be updated without decoding and re-encoding the packet.
   doAssert(len(packetBytes) >= minimalHeaderSize)
   packetBytes[4..7] = toBytesBE(newTimestamp)
   packetBytes[18..19] = toBytesBE(newAckNr)
 
-# connectionId - should be random not already used number
-# bufferSize - should be pre configured initial buffer size for socket
-# SYN packets are special, and should have the receive ID in the connid field,
-# instead of conn_id_send.
-proc synPacket*(seqNr: uint16, rcvConnectionId: uint16, bufferSize: uint32): Packet =
+proc synPacket*(
+    seqNr: uint16, rcvConnectionId: uint16, bufferSize: uint32): Packet =
+  # rcvConnectionId - should be a random, not already used, number
+  # bufferSize - should be a pre-configured initial buffer size for the socket
+  # SYN packets are special and have the conn_id_recv in the conn_id field,
+  # instead of conn_id_send.
   let h = PacketHeaderV1(
     pType: ST_SYN,
     version: protocolVersion,
@@ -221,8 +225,7 @@ proc synPacket*(seqNr: uint16, rcvConnectionId: uint16, bufferSize: uint32): Pac
     timestampDiff: 0'u32,
     wndSize: bufferSize,
     seqNr: seqNr,
-    # Initially we did not receive any acks
-    ackNr: 0'u16
+    ackNr: 0'u16 # At start, no acks have been received
   )
 
   Packet(header: h, eack: none[SelectiveAckExtension](), payload: @[])
@@ -267,8 +270,7 @@ proc dataPacket*(
   let h = PacketHeaderV1(
     pType: ST_DATA,
     version: protocolVersion,
-    # data packets always have extension field set to 0
-    extension: 0'u8,
+    extension: 0'u8, # data packets always have extension field set to 0
     connectionId: sndConnectionId,
     timestamp: getMonoTimestamp().timestamp,
     timestampDiff: timestampDiff,
@@ -279,16 +281,16 @@ proc dataPacket*(
 
   Packet(header: h, eack: none[SelectiveAckExtension](), payload: payload)
 
-proc resetPacket*(seqNr: uint16, sndConnectionId: uint16, ackNr: uint16): Packet =
+proc resetPacket*(
+    seqNr: uint16, sndConnectionId: uint16, ackNr: uint16): Packet =
   let h = PacketHeaderV1(
     pType: ST_RESET,
     version: protocolVersion,
-    # data packets always have extension field set to 0
-    extension: 0'u8,
+    extension: 0'u8, # reset packets always have extension field set to 0
     connectionId: sndConnectionId,
     timestamp: getMonoTimestamp().timestamp,
-    # reset packet informs remote about lack of state for given connection, therefore
-    # we do not inform remote about its delay.
+    # reset packet informs remote about lack of state for given connection,
+    # therefore the remote is not informed about its delay.
     timestampDiff: 0,
     wndSize: 0,
     seqNr: seqNr,
@@ -307,8 +309,7 @@ proc finPacket*(
   let h = PacketHeaderV1(
     pType: ST_FIN,
     version: protocolVersion,
-    # fin packets always have extension field set to 0
-    extension: 0'u8,
+    extension: 0'u8, # fin packets always have extension field set to 0
     connectionId: sndConnectionId,
     timestamp: getMonoTimestamp().timestamp,
     timestampDiff: timestampDiff,
