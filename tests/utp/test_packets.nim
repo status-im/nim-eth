@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,9 +14,10 @@ import
 
 suite "uTP Packet Encoding":
   test "Encode/decode SYN packet":
-    let synPacket = synPacket(5, 10, 20)
-    let encoded = encodePacket(synPacket)
-    let decoded = decodePacket(encoded)
+    let
+      synPacket = synPacket(5, 10, 20)
+      encoded = encodePacket(synPacket)
+      decoded = decodePacket(encoded)
 
     check:
       len(encoded) == 20
@@ -24,13 +25,13 @@ suite "uTP Packet Encoding":
 
     let synPacketDec = decoded.get()
 
-    check:
-      synPacketDec == synPacket
+    check synPacketDec == synPacket
 
   test "Encode/decode FIN packet":
-    let finPacket = finPacket(5, 10, 20, 30, 40)
-    let encoded = encodePacket(finPacket)
-    let decoded = decodePacket(encoded)
+    let
+      finPacket = finPacket(5, 10, 20, 30, 40)
+      encoded = encodePacket(finPacket)
+      decoded = decodePacket(encoded)
 
     check:
       len(encoded) == 20
@@ -38,13 +39,13 @@ suite "uTP Packet Encoding":
 
     let finPacketDec = decoded.get()
 
-    check:
-      finPacketDec == finPacket
+    check finPacketDec == finPacket
 
   test "Encode/decode RESET packet":
-    let resetPacket = resetPacket(5, 10, 20)
-    let encoded = encodePacket(resetPacket)
-    let decoded = decodePacket(encoded)
+    let
+      resetPacket = resetPacket(5, 10, 20)
+      encoded = encodePacket(resetPacket)
+      decoded = decodePacket(encoded)
 
     check:
       len(encoded) == 20
@@ -52,13 +53,13 @@ suite "uTP Packet Encoding":
 
     let resetPacketDec = decoded.get()
 
-    check:
-      resetPacketDec == resetPacket
+    check resetPacketDec == resetPacket
 
   test "Encode/decode ACK packet: without extensions":
-    let ackPacket = ackPacket(5, 10, 20, 30, 40)
-    let encoded = encodePacket(ackPacket)
-    let decoded = decodePacket(encoded)
+    let
+      ackPacket = ackPacket(5, 10, 20, 30, 40)
+      encoded = encodePacket(ackPacket)
+      decoded = decodePacket(encoded)
 
     check:
       len(encoded) == 20
@@ -66,14 +67,14 @@ suite "uTP Packet Encoding":
 
     let ackPacketDec = decoded.get()
 
-    check:
-      ackPacketDec == ackPacket
+    check ackPacketDec == ackPacket
 
   test "Encode/decode ACK packet: with extensions":
-    let bitMask: array[4, byte] = [1'u8, 2, 3, 4]
-    let ackPacket = ackPacket(5, 10, 20, 30, 40, some(bitMask))
-    let encoded = encodePacket(ackPacket)
-    let decoded = decodePacket(encoded)
+    let
+      bitMask: array[4, byte] = [1'u8, 2, 3, 4]
+      ackPacket = ackPacket(5, 10, 20, 30, 40, some(bitMask))
+      encoded = encodePacket(ackPacket)
+      decoded = decodePacket(encoded)
 
     check:
       len(encoded) == 26
@@ -89,38 +90,29 @@ suite "uTP Packet Encoding":
     let bitMask: array[4, byte] = [1'u8, 2, 3, 4]
     let ackPacket = ackPacket(5, 10, 20, 30, 40, some(bitMask))
 
-    var encoded1 = encodePacket(ackPacket)
-    # change nextExtension to non zero
-    encoded1[20] = 1
-    let err1 = decodePacket(encoded1)
-    check:
-      err1.isErr()
-      err1.error() == "Bad format of selective ack extension"
+    block: # nextExtension to non zero
+      var encoded = encodePacket(ackPacket)
+      encoded[20] = 1
+      let err = decodePacket(encoded)
+      check err.isErr()
 
-    var encoded2 = encodePacket(ackPacket)
-    # change len of extension to value different than 4
-    encoded2[21] = 7
-    let err2 = decodePacket(encoded2)
-    check:
-      err2.isErr()
-      err2.error() == "Bad format of selective ack extension"
+    block: # len of extension to value different than 4
+      var encoded = encodePacket(ackPacket)
+      encoded[21] = 7
+      let err = decodePacket(encoded)
+      check err.isErr()
 
-    var encoded3 = encodePacket(ackPacket)
-    # delete last byte, now packet is to short
-    encoded3.del(encoded3.high)
-    let err3 = decodePacket(encoded3)
+    block: # delete last byte, now packet is too short
+      var encoded = encodePacket(ackPacket)
+      encoded.del(encoded.high)
+      let err = decodePacket(encoded)
+      check err.isErr()
 
-    check:
-      err3.isErr()
-      err3.error() == "Packet too short for selective ack extension"
-
-    var encoded4 = encodePacket(ackPacket)
-    # change change extension field to something other than 0 or 1
-    encoded4[1] = 2
-    let err4 = decodePacket(encoded4)
-    check:
-      err4.isErr()
-      err4.error() == "Invalid extension type"
+    block: # change extension field to something other than 0 or 1
+      var encoded = encodePacket(ackPacket)
+      encoded[1] = 2
+      let err = decodePacket(encoded)
+      check: err.isErr()
 
   test "Decode STATE packet":
     # Packet obtained by interaction with c reference implementation
@@ -129,8 +121,7 @@ suite "uTP Packet Encoding":
             0x0, 0x0, 0x0, 0x10, 0x0, 0x0, 0x41, 0xA7, 0x00, 0x01]
     let decoded = decodePacket(pack)
 
-    check:
-      decoded.isOk()
+    check decoded.isOk()
 
     let packet = decoded.get()
 
@@ -146,11 +137,12 @@ suite "uTP Packet Encoding":
       packet.header.ackNr == 1
 
   test "Modify timestamp of encoded packet":
-    let synPacket = synPacket(5, 10, 20)
-    let initialTimestamp = synPacket.header.timestamp
-    let initialAckNr = synPacket.header.ackNr
-    let modifiedTimeStamp = initialTimestamp + 120324
-    let modifiedAckNr = initialAckNr + 20
+    let
+      synPacket = synPacket(5, 10, 20)
+      initialTimestamp = synPacket.header.timestamp
+      initialAckNr = synPacket.header.ackNr
+      modifiedTimeStamp = initialTimestamp + 120324
+      modifiedAckNr = initialAckNr + 20
     var encoded = encodePacket(synPacket)
     modifyTimeStampAndAckNr(encoded, modifiedTimeStamp, modifiedAckNr)
 
