@@ -18,7 +18,11 @@ init:
   node2 = setupTestNode(rng, eth)
 
   node2.startListening()
-  peer = waitFor node1.rlpxConnect(newNode(node2.toENode()))
+  let res = waitFor node1.rlpxConnect(newNode(node2.toENode()))
+  if res.isErr():
+    quit 1
+  else:
+    peer = res.get()
 
 test:
   aflLoop: # This appears to have unstable results with afl-clang-fast, probably

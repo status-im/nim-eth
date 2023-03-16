@@ -9,11 +9,14 @@
 
 import
   std/[tables, hashes, times, algorithm, sets, sequtils],
-  chronos, chronicles, stint, nimcrypto/keccak,
+  chronos, chronicles, stint, nimcrypto/keccak, metrics,
   ../keys, ./discoveryv5/random2,
   ./enode
 
 export sets # TODO: This should not be needed, but compilation fails otherwise
+
+declarePublicGauge routing_table_nodes,
+  "Discovery routing table nodes"
 
 logScope:
   topics = "eth p2p kademlia"
@@ -215,6 +218,7 @@ proc add(k: KBucket, n: Node): Node =
       k.nodes.add(n)
   elif k.len < BUCKET_SIZE:
       k.nodes.add(n)
+      routing_table_nodes.inc()
   else:
       k.replacementCache.add(n)
       return k.head
@@ -222,7 +226,9 @@ proc add(k: KBucket, n: Node): Node =
 
 proc removeNode(k: KBucket, n: Node) =
   let i = k.nodes.find(n)
-  if i != -1: k.nodes.delete(i)
+  if i != -1:
+    routing_table_nodes.dec()
+    k.nodes.delete(i)
 
 proc split(k: KBucket): tuple[lower, upper: KBucket] =
   ## Split at the median id

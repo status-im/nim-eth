@@ -16,7 +16,10 @@ var
   node2 = setupTestNode(rng, eth)
 
 node2.startListening()
-var peer = waitFor node1.rlpxConnect(newNode(node2.toENode()))
+let res = waitFor node1.rlpxConnect(newNode(node2.toENode()))
+check res.isOk()
+
+let peer = res.get()
 
 proc testThunk(payload: openArray[byte]) =
   var (msgId, msgData) = recvMsgMock(payload)

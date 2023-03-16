@@ -26,6 +26,42 @@ const
   maxConcurrentConnectionRequests = 40
   sleepBeforeTryingARandomBootnode = chronos.milliseconds(3000)
 
+  ## Period of time for dead / unreachable peers.
+  SeenTableTimeDeadPeer = chronos.minutes(10)
+  ## Period of time for Useless peers, either because of no matching
+  ## capabilities or on an irrelevant network.
+  SeenTableTimeUselessPeer = chronos.hours(24)
+  ## Period of time for peers with a protocol error.
+  SeenTableTimeProtocolError = chronos.minutes(30)
+  ## Period of time for peers with general disconnections / transport errors.
+  SeenTableTimeReconnect = chronos.minutes(5)
+
+proc isSeen(p: PeerPool, nodeId: NodeId): bool =
+  ## Returns ``true`` if ``nodeId`` present in SeenTable and time period is not
+  ## yet expired.
+  let currentTime = now(chronos.Moment)
+  if nodeId notin p.seenTable:
+    false
+  else:
+    let item = try: p.seenTable[nodeId]
+    except KeyError: raiseAssert "checked with notin"
+    if currentTime >= item.stamp:
+      # Peer is in SeenTable, but the time period has expired.
+      p.seenTable.del(nodeId)
+      false
+    else:
+      true
+
+proc addSeen(
+    p: PeerPool, nodeId: NodeId, period: chronos.Duration) =
+  ## Adds peer with NodeId ``nodeId`` to SeenTable and timeout ``period``.
+  let item = SeenNode(nodeId: nodeId, stamp: now(chronos.Moment) + period)
+  withValue(p.seenTable, nodeId, entry) do:
+    if entry.stamp < item.stamp:
+      entry.stamp = item.stamp
+  do:
+    p.seenTable[nodeId] = item
+
 proc newPeerPool*(
     network: EthereumNode, networkId: NetworkId, keyPair: KeyPair,
     discovery: DiscoveryProtocol, clientId: string, minPeers = 10): PeerPool =
@@ -84,28 +120,36 @@ proc connect(p: PeerPool, remote: Node): Future[Peer] {.async.} =
     # debug "skipping connection"
     return nil
 
+  if p.isSeen(remote.id):
+    return nil
+
   trace "Connecting to node", remote
   p.connectingNodes.incl(remote)
-  result = await p.network.rlpxConnect(remote)
+  let res = await p.network.rlpxConnect(remote)
   p.connectingNodes.excl(remote)
 
-  # expected_exceptions = (
-  #   UnreachablePeer, TimeoutError, PeerConnectionLost, HandshakeFailure)
-  # try:
-  #   self.logger.debug("Connecting to %s...", remote)
-  #   peer = await wait_with_token(
-  #     handshake(remote, self.privkey, self.peer_class, self.network_id),
-  #     token=self.cancel_token,
-  #     timeout=HANDSHAKE_TIMEOUT)
-  #   return peer
-  # except OperationCancelled:
-  #   # Pass it on to instruct our main loop to stop.
-  #   raise
-  # except expected_exceptions as e:
-  #   self.logger.debug("Could not complete handshake with %s: %s", remote, repr(e))
-  # except Exception:
-  #   self.logger.exception("Unexpected error during auth/p2p handshake with %s", remote)
-  # return None
+  # TODO: Probably should move all this logic to rlpx.nim
+  if res.isOk():
+    rlpx_connect_success.inc()
+    return res.get()
+  else:
+    rlpx_connect_failure.inc()
+    rlpx_connect_failure.inc(labelValues = [$res.error])
+    case res.error():
+    of UselessRlpxPeerError:
+      p.addSeen(remote.id, SeenTableTimeUselessPeer)
+    of TransportConnectError:
+      p.addSeen(remote.id, SeenTableTimeDeadPeer)
+    of RlpxHandshakeError, ProtocolError, InvalidIdentityError:
+      p.addSeen(remote.id, SeenTableTimeProtocolError)
+    of RlpxHandshakeTransportError,
+        P2PHandshakeError,
+        P2PTransportError,
+        PeerDisconnectedError,
+        TooManyPeersError:
+      p.addSeen(remote.id, SeenTableTimeReconnect)
+
+    return nil
 
 proc lookupRandomNode(p: PeerPool) {.async.} =
   discard await p.discovery.lookupRandom()
@@ -118,7 +162,7 @@ proc getRandomBootnode(p: PeerPool): Option[Node] =
 proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe.} =
   doAssert(peer.remote notin pool.connectedNodes)
   pool.connectedNodes[peer.remote] = peer
-  connected_peers.inc()
+  rlpx_connected_peers.inc()
   for o in pool.observers.values:
     if not o.onPeerConnected.isNil:
       if o.protocol.isNil or peer.supports(o.protocol):
