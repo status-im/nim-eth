@@ -368,11 +368,15 @@ proc append*(w: var RlpWriter, b: BlockBody) =
 # `readRecordType` as well as `read`. --Adam
 proc readRecordType*(rlp: var Rlp, T: type BlockBody, wrappedInList: bool): BlockBody =
   if not wrappedInList:
-    # I think this just means the RLP will contain a list
-    # of transactions (without any uncles or withdrawals).
     result.transactions = rlp.read(seq[Transaction])
     result.uncles = rlp.read(seq[BlockHeader])
-    result.withdrawals = none[seq[Withdrawal]]()
+    # Is this the right thing to do here? I don't really
+    # understand what wrappedInList is used for. --Adam
+    result.withdrawals =
+      if rlp.hasData:
+        some(rlp.read(seq[Withdrawal]))
+      else:
+        none[seq[Withdrawal]]()
   else:
     let len = rlp.listLen
 
