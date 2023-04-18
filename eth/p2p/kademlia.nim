@@ -95,6 +95,9 @@ proc `$`*(n: Node): string =
   else:
     "Node[" & $n.node.address.ip & ":" & $n.node.address.udpPort & "]"
 
+chronicles.formatIt(Node): $it
+chronicles.formatIt(seq[Node]): $it
+
 proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.toRaw)
 proc `==`*(a, b: Node): bool = (a.isNil and b.isNil) or
   (not a.isNil and not b.isNil and a.node.pubkey == b.node.pubkey)
