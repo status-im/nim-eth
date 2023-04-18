@@ -138,7 +138,7 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
     block:
       let payload = rlp.encode((nodes, expiration()))
       let msg = pack(cmdNeighbours, payload, d.privKey)
-      trace "Neighbours to", node, nodes
+      trace "Neighbours to", node, nodes = $nodes
       d.send(node, msg)
       nodes.setLen(0)
 
