@@ -358,10 +358,11 @@ proc rlpHash*[T](v: T): Hash256 =
 func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
 
 proc append*(w: var RlpWriter, b: BlockBody) =
+  w.startList 2 + b.withdrawals.isSome.ord
   w.append(b.transactions)
   w.append(b.uncles)
   if b.withdrawals.isSome:
-    w.append(b.withdrawals.get)
+    w.append(b.withdrawals.unsafeGet)
 
 # Is there a better way of doing this? We have tests that call
 # rlp.readRecordType(BlockBody, false), so I overrode
