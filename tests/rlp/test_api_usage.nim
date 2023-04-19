@@ -4,11 +4,37 @@ import
   std/[math, strutils],
   unittest2,
   stew/byteutils,
-  ../../eth/rlp
+  ../../eth/[common, rlp]
 
 proc q(s: string): string = "\"" & s & "\""
 proc i(s: string): string = s.replace(" ").replace("\n")
 proc inspectMatch(r: Rlp, s: string): bool = r.inspect.i == s.i
+
+proc `==`(a,b: ChainId): bool {.borrow.}
+  ## helper for ` test_calcBlockBodyTranscode()`
+
+proc test_blockBodyTranscode() =
+  ## RLP encode/decode a list of `BlockBody` objects. Note that tere is/was a
+  ## problem in `eth/common/eth_types_rlp.append()` for `BlockBody` encoding.
+  let blkSeq = @[
+    BlockBody(
+      transactions: @[
+        Transaction(nonce: 1)]),
+    BlockBody(
+      uncles: @[
+        BlockHeader(nonce: [0x20u8,0,0,0,0,0,0,0])]),
+    BlockBody(),
+    BlockBody(
+      transactions: @[
+        Transaction(nonce: 3),
+        Transaction(nonce: 4)])]
+
+  let trBlkSeq = blkSeq.encode.decode(typeof blkSeq)
+
+  check trBlkSeq.len == blkSeq.len
+  for n in 0 ..< min(trBlkSeq.len, trBlkSeq.len):
+    check (n, trBlkSeq[n]) == (n, blkSeq[n])
+
 
 when (NimMajor, NimMinor, NimPatch) < (1, 4, 0):
   type AssertionDefect = AssertionError
@@ -119,6 +145,9 @@ suite "test api usage":
 
     check(not list.hasData)
     expect AssertionDefect: list.skipElem
+
+  test "encode and decode block body":
+    test_blockBodyTranscode()
 
   test "toBytes":
     let rlp = rlpFromHex("f2cb847f000001827666827666a040ef02798f211da2e8173d37f255be908871ae65060dbb2f77fb29c0421447f4845ab90b50")
