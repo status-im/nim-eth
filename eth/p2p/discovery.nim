@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  std/times,
+  std/[times, net],
   chronos, stint, nimcrypto/keccak, chronicles,
   stew/[objects, results],
   ".."/[keys, rlp],

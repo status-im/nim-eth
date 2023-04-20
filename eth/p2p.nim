@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  std/[tables, algorithm, random, typetraits, strutils],
+  std/[tables, algorithm, random, typetraits, strutils, net],
   chronos, chronos/timer, chronicles,
   ./keys, ./p2p/private/p2p_types,
   ./p2p/[kademlia, discovery, enode, peer_pool, rlpx]
