@@ -368,11 +368,6 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
   of talkReq:
     discovery_message_requests_incoming.inc()
     d.handleTalkReq(srcId, fromAddr, message.talkReq, message.reqId)
-  of regTopic, topicQuery:
-    discovery_message_requests_incoming.inc()
-    discovery_message_requests_incoming.inc(labelValues = ["no_response"])
-    trace "Received unimplemented message kind", kind = message.kind,
-      origin = fromAddr
   else:
     var waiter: Future[Option[Message]]
     if d.awaitedMessages.take((srcId, message.reqId), waiter):

@@ -31,10 +31,6 @@ type
     nodes = 0x04
     talkReq = 0x05
     talkResp = 0x06
-    regTopic = 0x07
-    ticket = 0x08
-    regConfirmation = 0x09
-    topicQuery = 0x0A
 
   RequestId* = object
     id*: seq[byte]
@@ -61,12 +57,6 @@ type
   TalkRespMessage* = object
     response*: seq[byte]
 
-  # Not implemented, specification is not final here.
-  RegTopicMessage* = object
-  TicketMessage* = object
-  RegConfirmationMessage* = object
-  TopicQueryMessage* = object
-
   SomeMessage* = PingMessage or PongMessage or FindNodeMessage or NodesMessage or
     TalkReqMessage or TalkRespMessage
 
@@ -85,14 +75,6 @@ type
       talkReq*: TalkReqMessage
     of talkResp:
       talkResp*: TalkRespMessage
-    of regTopic:
-      regtopic*: RegTopicMessage
-    of ticket:
-      ticket*: TicketMessage
-    of regConfirmation:
-      regConfirmation*: RegConfirmationMessage
-    of topicQuery:
-      topicQuery*: TopicQueryMessage
     else:
       discard
 
