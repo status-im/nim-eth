@@ -34,7 +34,7 @@ logScope:
 # Support overriding the default discv5 protocol version and protocol id
 #  via compile time defines (e.g., '-d:discv5_protocol_id=d5waku')
 const
-  discv5_protocol_version {.intdefine.} : uint16 = 1
+  discv5_protocol_version {.intdefine.} : uint16 = 2
   discv5_protocol_id {.strdefine.} = "discv5"
 
 const
