@@ -160,7 +160,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
       var s = PrivateKey.fromHex(privateKeys[i])[]
       var p = PublicKey.fromHex(stripSpaces(publicKeys[i]))[]
       let expect = fromHex(stripSpaces(sharedSecrets[i]))
-      let secret = ecdhRaw(s, p)
+      let secret = ecdhSecret(s, p)
       check:
         expect == secret.data
 
@@ -172,7 +172,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
     var s = PrivateKey.fromRaw(keccak256.digest("ecdhAgree").data)[]
     var p = s.toPublicKey()
     let expect = fromHex(stripSpaces(expectm))
-    let secret = ecdhRaw(s, p)
+    let secret = ecdhSecret(s, p)
     check:
       expect == secret.data
 
@@ -189,7 +189,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
     var s = PrivateKey.fromHex(stripSpaces(s0))[]
     var p = PublicKey.fromHex(stripSpaces(p0))[]
     let expect = fromHex(stripSpaces(e0))
-    let secret = ecdhRaw(s, p)
+    let secret = ecdhSecret(s, p)
     check:
       compare(expect, secret.data) == true
 
@@ -242,8 +242,8 @@ suite "ECC/ECDSA/ECDHE tests suite":
       var alicePublic = aliceSecret.toPublicKey()
       var bobSecret = PrivateKey.random(rng[])
       var bobPublic = bobSecret.toPublicKey()
-      var secret1 = ecdhRaw(aliceSecret, bobPublic)
-      var secret2 = ecdhRaw(bobSecret, alicePublic)
+      var secret1 = ecdhSecret(aliceSecret, bobPublic)
+      var secret2 = ecdhSecret(bobSecret, alicePublic)
       check:
         secret1 == secret2
 

@@ -150,7 +150,7 @@ proc authMessagePreEIP8(h: var Handshake,
   outlen = 0
   let header = cast[ptr AuthMessageV4](addr buffer[0])
 
-  var secret = ecdhRaw(h.host.seckey, pubkey)
+  var secret = ecdhSecret(h.host.seckey, pubkey)
   secret.data = secret.data xor h.initiatorNonce
 
   let signature = sign(h.ephemeral.seckey, SkMessage(secret.data))
@@ -190,7 +190,7 @@ proc authMessageEIP8(h: var Handshake,
   doAssert(EIP8 in h.flags)
   outlen = 0
 
-  var secret = ecdhRaw(h.host.seckey, pubkey)
+  var secret = ecdhSecret(h.host.seckey, pubkey)
   secret.data = secret.data xor h.initiatorNonce
 
   let signature = sign(h.ephemeral.seckey, SkMessage(secret.data))
@@ -364,7 +364,7 @@ proc decodeAuthMessageV4(h: var Handshake, m: openArray[byte]): AuthResult[void]
     pubkey = ? PublicKey.fromRaw(header.pubkey).mapErrTo(InvalidPubKey)
     signature = ? Signature.fromRaw(header.signature).mapErrTo(SignatureError)
 
-  var secret = ecdhRaw(h.host.seckey, pubkey)
+  var secret = ecdhSecret(h.host.seckey, pubkey)
   secret.data = secret.data xor header.nonce
 
   var recovered = recover(signature, SkMessage(secret.data))
@@ -415,7 +415,7 @@ proc decodeAuthMessageEIP8(h: var Handshake, m: openArray[byte]): AuthResult[voi
       pubkey = ? PublicKey.fromRaw(pubkeyBr).mapErrTo(InvalidPubKey)
       nonce = toArray(KeyLength, nonceBr)
 
-    var secret = ecdhRaw(h.host.seckey, pubkey)
+    var secret = ecdhSecret(h.host.seckey, pubkey)
     secret.data = secret.data xor nonce
 
     let recovered = recover(signature, SkMessage(secret.data))
@@ -524,7 +524,7 @@ proc getSecrets*(
     secret: ConnectionSecret
 
   # ecdhe-secret = ecdh.agree(ephemeral-privkey, remote-ephemeral-pubk)
-  var shsec = ecdhRaw(h.ephemeral.seckey, h.remoteEPubkey)
+  var shsec = ecdhSecret(h.ephemeral.seckey, h.remoteEPubkey)
 
   # shared-secret = keccak(ecdhe-secret || keccak(nonce || initiator-nonce))
   ctx0.init()

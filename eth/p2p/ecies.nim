@@ -114,8 +114,8 @@ proc eciesEncrypt*(rng: var HmacDrbgContext, input: openArray[byte],
 
   var
     ephemeral = KeyPair.random(rng)
-    secret = ecdhRaw(ephemeral.seckey, pubkey)
-    material = kdf(secret.data)
+    secret    = ecdhSecret(ephemeral.seckey, pubkey)
+    material  = kdf(secret.data)
 
   clear(secret)
 
@@ -183,10 +183,10 @@ proc eciesDecrypt*(input: openArray[byte],
 
   var
     pubkey = ? PublicKey.fromRaw(header.pubkey).mapErrTo(IncorrectKey)
-    secret = ecdhRaw(seckey, pubkey)
+    secret   = ecdhSecret(seckey, pubkey)
+    material = kdf(secret.data)
 
-  var material = kdf(secret.data)
-  burnMem(secret)
+  clear(secret)
 
   copyMem(addr encKey[0], addr material[0], aes128.sizeKey)
   var macKey =

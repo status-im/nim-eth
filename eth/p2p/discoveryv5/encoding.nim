@@ -138,7 +138,7 @@ proc verifyIdSignature*(sig: SignatureNR, challengeData, ephKey: openArray[byte]
 
 proc deriveKeys*(n1, n2: NodeId, priv: PrivateKey, pub: PublicKey,
     challengeData: openArray[byte]): HandshakeSecrets =
-  let eph = ecdhRawFull(priv, pub)
+  let eph = ecdhSecretFull(priv, pub)
 
   var info = newSeqOfCap[byte](keyAgreementPrefix.len + 32 * 2)
   for i, c in keyAgreementPrefix: info.add(byte(c))

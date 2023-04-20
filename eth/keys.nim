@@ -17,7 +17,7 @@
 import
   std/strformat,
   secp256k1, bearssl/hash as bhash, bearssl/rand,
-  stew/[byteutils, objects, results],
+  stew/[byteutils, objects, results, ptrops],
   ./common/eth_hash
 
 from nimcrypto/utils import burnMem
@@ -25,7 +25,9 @@ from nimcrypto/utils import burnMem
 export secp256k1, results, rand
 
 const
-  KeyLength* = SkEcdhRawSecretSize - 1
+  FullKeyLength* = 33
+
+  KeyLength* = FullKeyLength - 1
     ## Shared secret key length without format marker
   RawPublicKeySize* = SkRawPublicKeySize - 1
     ## Size of uncompressed public key without format marker (0x04)
@@ -43,7 +45,9 @@ type
   SignatureNR* = distinct SkSignature
     ## ...but ENR uses non-recoverable signatures!
 
-  SharedSecretFull* = SkEcdhRawSecret
+  SharedSecretFull* = object
+    data*: array[FullKeyLength, byte]
+
   SharedSecret* = object
     data*: array[KeyLength, byte]
 
@@ -230,11 +234,28 @@ func verify*(sig: SignatureNR, msg: openArray[byte], key: PublicKey): bool =
   let hash = keccakHash(msg)
   verify(sig, SkMessage(hash.data), key)
 
-func ecdhRaw*(seckey: PrivateKey, pubkey: PublicKey): SharedSecret =
-  let tmp = ecdhRaw(SkSecretKey(seckey), SkPublicKey(pubkey))
+proc ecdhSecretHash(output: ptr byte, x32, y32: ptr byte, data: pointer): cint
+                    {.cdecl, raises: [].} =
+  copyMem(output, x32, 32)
+  return 1
 
-  # Remove first byte!
-  copyMem(addr result.data[0], unsafeAddr(tmp.data[1]), sizeof(result))
+func ecdhSecret*(seckey: PrivateKey, pubkey: PublicKey): SharedSecret =
+  # This function only fail if the hash function return zero.
+  # Because our hash function always success, we can turn the error into defect
+  let res = ecdh[KeyLength](SkSecretKey(seckey), SkPublicKey(pubkey), ecdhSecretHash, nil)
+  doAssert res.isOk, $res.error
+  SharedSecret(data: res.get)
 
-func ecdhRawFull*(seckey: PrivateKey, pubkey: PublicKey): SharedSecretFull =
-  SharedSecretFull(ecdhRaw(SkSecretKey(seckey), SkPublicKey(pubkey)))
+proc ecdhSecretFullHash(output: ptr byte, x32, y32: ptr byte, data: pointer): cint
+                    {.cdecl, raises: [].} =
+  # output[0] = 0x02 | (y32[31] & 1)
+  output[] = 0x02 or (y32.offset(31)[] and 0x01)
+  copyMem(output.offset(1), x32, 32)
+  return 1
+
+func ecdhSecretFull*(seckey: PrivateKey, pubkey: PublicKey): SharedSecretFull =
+  # This function only fail if the hash function return zero.
+  # Because our hash function always success, we can turn the error into defect
+  let res = ecdh[FullKeyLength](SkSecretKey(seckey), SkPublicKey(pubkey), ecdhSecretFullHash, nil)
+  doAssert res.isOk, $res.error
+  SharedSecretFull(data: res.get)
