@@ -180,7 +180,7 @@ suite "Discovery v5.1 Cryptographic Primitives Test Vectors":
     let
       pub = PublicKey.fromHex(publicKey)[]
       priv = PrivateKey.fromHex(secretKey)[]
-      eph = ecdhSecretFull(priv, pub)
+      eph = ecdhSharedSecretFull(priv, pub)
     check:
       eph.data == hexToSeqByte(sharedSecret)
 
