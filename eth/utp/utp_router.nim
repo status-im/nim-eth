@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -97,9 +97,10 @@ proc registerUtpSocket[A](p: UtpRouter, s: UtpSocket[A]) =
   ## Register socket, overwriting already existing one
   p.sockets[s.socketKey] = s
   utp_established_connections.set(int64(len(p.sockets)))
-  debug "Registered new utp socket", dst = s.socketKey, lenSockets = len(p.sockets)
-  # Install deregister handler, so when socket gets closed, in will be promptly
-  # removed from open sockets table
+  debug "Registered new uTP socket",
+    dst = s.socketKey, totalSockets = len(p.sockets)
+  # Install deregister handler so that when the socket gets closed, it gets
+  # removed from open sockets table.
   s.registerCloseCallback(proc () = p.deRegisterUtpSocket(s))
 
 proc registerIfAbsent[A](p: UtpRouter, s: UtpSocket[A]): bool =
@@ -144,7 +145,9 @@ proc new*[A](
     rng = newRng()): UtpRouter[A] =
   doAssert(not(isNil(acceptConnectionCb)))
   GC_ref(udata)
-  UtpRouter[A].new(acceptConnectionCb, allowConnectionCb, cast[pointer](udata), socketConfig, rng)
+  UtpRouter[A].new(
+    acceptConnectionCb, allowConnectionCb,
+    cast[pointer](udata), socketConfig, rng)
 
 proc new*[A](
     T: type UtpRouter[A],
@@ -168,7 +171,8 @@ proc getSocketOnReset[A](
   # id is our send id, and we did initiate the connection, our recv id is id - 1
   let sendInitKey = UtpSocketKey[A].init(sender, id - 1)
 
-  # id is our send id, and we did not initiate the connection, so our recv id is id + 1
+  # id is our send id, and we did not initiate the connection,
+  # our recv id is id + 1
   let sendNoInitKey = UtpSocketKey[A].init(sender, id + 1)
 
   r.getUtpSocket(recvKey)
@@ -178,7 +182,7 @@ proc getSocketOnReset[A](
 proc shouldAllowConnection[A](
     r: UtpRouter[A], remoteAddress: A, connectionId: uint16): bool =
   if r.allowConnection == nil:
-    # if the callback is not configured it means all incoming connections are allowed
+    # if the callback is not configured all incoming connections are allowed
     true
   else:
     r.allowConnection(r, remoteAddress, connectionId)
@@ -194,16 +198,17 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
     if maybeSocket.isSome():
       debug "Received RST packet on known connection, closing socket"
       let socket = maybeSocket.unsafeGet()
-      # reference implementation actually changes the socket state to reset state unless
-      # user explicitly closed socket before. The only difference between reset and destroy
-      # state is that socket in destroy state is ultimately deleted from active connection
-      # list but socket in reset state lingers there until user of library closes it
-      # explicitly.
+      # The reference implementation actually changes the socket state to reset
+      # state unless the user explicitly closed the socket before. The only
+      # difference between the reset and the destroy state is that a socket in
+      # the destroy state is ultimately deleted from active connection list but
+      # a socket in reset state lingers there until the user of library closes
+      # it explicitly.
       socket.destroy()
     else:
       debug "Received RST packet for unknown connection, ignoring"
   of ST_SYN:
-    # Syn packet are special, and we need to add 1 to header connectionId
+    # SYN packets are special and need an addition of 1 to header connectionId
     let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId + 1)
     let maybeSocket = r.getUtpSocket(socketKey)
     if (maybeSocket.isSome()):
@@ -220,7 +225,7 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       if (r.shouldAllowConnection(sender, p.header.connectionId)):
         debug "Received SYN for new connection. Initiating incoming connection",
           synSeqNr = p.header.seqNr
-        # Initial ackNr is set to incoming packer seqNr
+        # Initial ackNr is set to incoming packet seqNr
         let incomingSocket = newIncomingSocket[A](
           sender, r.sendCb, r.socketConfig,
           p.header.connectionId, p.header.seqNr, r.rng[])
@@ -242,7 +247,7 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       let socket = maybeSocket.unsafeGet()
       await socket.processPacket(p)
     else:
-      # TODO add keeping track of recently send reset packets and do not send
+      # TODO: add keeping track of recently send reset packets and do not send
       # reset to peers which we recently send reset to.
       debug "Received FIN/DATA/ACK on not known socket sending reset"
       let rstPacket = resetPacket(
@@ -334,8 +339,8 @@ proc connectTo*[A](
     let connFut = socket.connect()
     return connFut
 
-# Connect to provided address with provided connection id, if socket with this id
-# and address already exists return error
+# Connect to provided address with provided connection id. If the socket with
+# this id and address already exists, return error
 proc connectTo*[A](
     r: UtpRouter[A], address: A, connectionId: uint16):
     Future[ConnectionResult[A]] =

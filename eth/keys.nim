@@ -17,7 +17,7 @@
 import
   std/strformat,
   secp256k1, bearssl/hash as bhash, bearssl/rand,
-  stew/[byteutils, objects, results],
+  stew/[byteutils, objects, results, ptrops],
   ./common/eth_hash
 
 from nimcrypto/utils import burnMem
@@ -25,10 +25,16 @@ from nimcrypto/utils import burnMem
 export secp256k1, results, rand
 
 const
-  KeyLength* = SkEcdhRawSecretSize - 1
-    ## Shared secret key length without format marker
+  KeyLength* = SkEcdhSecretSize
+    ## Ecdh shared secret key length without leading byte
+    ## (publicKey * privateKey).x, where length of x is 32 bytes
+
+  FullKeyLength* = KeyLength + 1
+    ## Ecdh shared secret with leading byte 0x02 or 0x03
+
   RawPublicKeySize* = SkRawPublicKeySize - 1
     ## Size of uncompressed public key without format marker (0x04)
+
   RawSignatureSize* = SkRawRecoverableSignatureSize
 
   RawSignatureNRSize* = SkRawSignatureSize
@@ -43,8 +49,13 @@ type
   SignatureNR* = distinct SkSignature
     ## ...but ENR uses non-recoverable signatures!
 
-  SharedSecretFull* = SkEcdhRawSecret
+  SharedSecretFull* = object
+    ## Representation of ECDH shared secret, with leading `y` byte
+    ## (`y` is 0x02 when (publicKey * privateKey).y is even or 0x03 when odd)
+    data*: array[FullKeyLength, byte]
+
   SharedSecret* = object
+    ## Representation of ECDH shared secret, without leading `y` byte
     data*: array[KeyLength, byte]
 
   KeyPair* = distinct SkKeyPair
@@ -230,11 +241,44 @@ func verify*(sig: SignatureNR, msg: openArray[byte], key: PublicKey): bool =
   let hash = keccakHash(msg)
   verify(sig, SkMessage(hash.data), key)
 
-func ecdhRaw*(seckey: PrivateKey, pubkey: PublicKey): SharedSecret =
-  let tmp = ecdhRaw(SkSecretKey(seckey), SkPublicKey(pubkey))
+proc ecdhSharedSecretHash(output: ptr byte, x32, y32: ptr byte, data: pointer): cint
+                    {.cdecl, raises: [].} =
+  ## Hash function used by `ecdhSharedSecret` below
+  # `x32` and `y32` are result of scalar multiplication of publicKey * privateKey.
+  # Both `x32` and `y32` are 32 bytes length.
+  # Take the `x32` part as ecdh shared secret.
 
-  # Remove first byte!
-  copyMem(addr result.data[0], unsafeAddr(tmp.data[1]), sizeof(result))
+  # output length is derived from x32 length and taken from ecdh
+  # generic parameter `KeyLength`
+  copyMem(output, x32, KeyLength)
+  return 1
 
-func ecdhRawFull*(seckey: PrivateKey, pubkey: PublicKey): SharedSecretFull =
-  SharedSecretFull(ecdhRaw(SkSecretKey(seckey), SkPublicKey(pubkey)))
+func ecdhSharedSecret*(seckey: PrivateKey, pubkey: PublicKey): SharedSecret =
+  ## Compute ecdh agreed shared secret.
+  let res = ecdh[KeyLength](SkSecretKey(seckey), SkPublicKey(pubkey), ecdhSharedSecretHash, nil)
+  # This function only fail if the hash function return zero.
+  # Because our hash function always success, we can turn the error into defect
+  doAssert res.isOk, $res.error
+  SharedSecret(data: res.get)
+
+proc ecdhSharedSecretFullHash(output: ptr byte, x32, y32: ptr byte, data: pointer): cint
+                    {.cdecl, raises: [].} =
+  ## Hash function used by `ecdhSharedSecretFull` below
+  # `x32` and `y32` are result of scalar multiplication of publicKey * privateKey.
+  # Leading byte is 0x02 if `y32` is even and 0x03 if odd. Then concat with `x32`.
+
+  # output length is derived from `x32` length + 1 and taken from ecdh
+  # generic parameter `FullKeyLength`
+
+  # output[0] = 0x02 | (y32[31] & 1)
+  output[] = 0x02 or (y32.offset(31)[] and 0x01)
+  copyMem(output.offset(1), x32, KeyLength)
+  return 1
+
+func ecdhSharedSecretFull*(seckey: PrivateKey, pubkey: PublicKey): SharedSecretFull =
+  ## Compute ecdh agreed shared secret with leading byte.
+  let res = ecdh[FullKeyLength](SkSecretKey(seckey), SkPublicKey(pubkey), ecdhSharedSecretFullHash, nil)
+  # This function only fail if the hash function return zero.
+  # Because our hash function always success, we can turn the error into defect
+  doAssert res.isOk, $res.error
+  SharedSecretFull(data: res.get)

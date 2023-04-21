@@ -12,6 +12,7 @@
 
 import
   std/[uri, strutils, net],
+  pkg/chronicles,
   ../keys
 
 export keys
@@ -133,3 +134,6 @@ proc `$`*(a: Address): string =
   result.add($a.ip)
   result.add(":" & $a.udpPort)
   result.add(":" & $a.tcpPort)
+
+chronicles.formatIt(Address): $it
+chronicles.formatIt(ENode): $it
