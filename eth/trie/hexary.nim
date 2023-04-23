@@ -31,6 +31,9 @@ proc expectHash(r: Rlp): seq[byte] =
     raise newException(RlpTypeMismatch,
       "RLP expected to be a Keccak hash value, but has an incorrect length")
 
+when (NimMajor, NimMinor, NimPatch) < (1, 4, 0):
+  type AssertionDefect = AssertionError
+
 type MissingNodeError* = ref object of AssertionDefect
   path*: NibblesSeq
   nodeHashBytes*: seq[byte]
