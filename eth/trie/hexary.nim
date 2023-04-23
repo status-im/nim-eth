@@ -52,8 +52,8 @@ proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey
 # where it's needed.
 proc getPossiblyMissingNode(db: DB, data: openArray[byte], fullPath: NibblesSeq, pathIndex: int): seq[byte]
   {.gcsafe, raises: [Defect].} =
-  let nodeBytes = db.get(data)
-  if nodeBytes.len > 0:
+  let nodeBytes = db.get(data)  # need to call this before the call to contains, otherwise CaptureDB complains
+  if db.contains(data):
     nodeBytes
   else:
     raise MissingNodeError(path: fullPath.slice(0, pathIndex), nodeHashBytes: @data)
