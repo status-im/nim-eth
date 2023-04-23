@@ -37,8 +37,6 @@ type MissingNodeError* = ref object of Defect
 
 proc dbGet(db: DB, data: openArray[byte]): seq[byte]
   {.gcsafe, raises: [Defect].} =
-  # Useful for debugging:
-  # doAssert(db.contains(data), "dbGet, db must contain the data")
   db.get(data)
 
 proc dbGet(db: DB, key: Rlp): seq[byte] =
@@ -54,15 +52,11 @@ proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey
 # where it's needed.
 proc getPossiblyMissingNode(db: DB, data: openArray[byte], fullPath: NibblesSeq, pathIndex: int): seq[byte]
   {.gcsafe, raises: [Defect].} =
-  # FIXME-Adam: This causes some tests to fail in nimbus-eth1; I'm not
-  # sure why. I need to figure it out, though, because we need this
-  # behaviour.
-  #
-  # if db.contains(data):
-  #   db.get(data)
-  # else:
-  #   raise MissingNodeError(path: fullPath.slice(0, pathIndex), nodeHashBytes: @data)
-  db.get(data)
+  let nodeBytes = db.get(data)
+  if nodeBytes.len > 0:
+    nodeBytes
+  else:
+    raise MissingNodeError(path: fullPath.slice(0, pathIndex), nodeHashBytes: @data)
 
 proc getPossiblyMissingNode(db: DB, key: Rlp, fullPath: NibblesSeq, pathIndex: int): seq[byte] =
   getPossiblyMissingNode(db, key.expectHash, fullPath, pathIndex)
