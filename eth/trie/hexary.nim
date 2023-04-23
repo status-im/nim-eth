@@ -31,7 +31,7 @@ proc expectHash(r: Rlp): seq[byte] =
     raise newException(RlpTypeMismatch,
       "RLP expected to be a Keccak hash value, but has an incorrect length")
 
-type MissingNodeError* = ref object of Defect
+type MissingNodeError* = ref object of AssertionDefect
   path*: NibblesSeq
   nodeHashBytes*: seq[byte]
 
@@ -53,7 +53,7 @@ proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey
 proc getPossiblyMissingNode(db: DB, data: openArray[byte], fullPath: NibblesSeq, pathIndex: int): seq[byte]
   {.gcsafe, raises: [Defect].} =
   let nodeBytes = db.get(data)  # need to call this before the call to contains, otherwise CaptureDB complains
-  if db.contains(data):
+  if nodeBytes.len > 0:
     nodeBytes
   else:
     raise MissingNodeError(path: fullPath.slice(0, pathIndex), nodeHashBytes: @data)
