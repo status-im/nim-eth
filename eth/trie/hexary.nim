@@ -54,6 +54,23 @@ proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey
 # the missing node. So here we need the path to be passed in, and if the
 # node is missing we'll raise an exception to get that information up to
 # where it's needed.
+#
+# Incidentally, the reason why missing nodes are possible in stateless
+# mode is: when there's a trie node with two children, and then there's
+# a deletion that transforms it into a node with only one child, the
+# rules of the hexary trie say that the single child of the one-element
+# node needs to be "grafted" on, to become part of an extension node or
+# a leaf node. (That is, the trie isn't allowed to contain a 16-wide
+# node that only contains one child; that's exactly why extension nodes
+# and leaf nodes have the ability to shortcut past many levels of the
+# tree without needing all the nodes along that path to be explicitly
+# represented.) The problem is that in stateless mode we don't *have*
+# the lone-child node; we never received it (when doing our various
+# fetches using eth_getProof), because that node isn't directly on the
+# path from the root down to whatever leaves we requested. (It's a
+# nephew, not a direct child.)
+#
+# Anyway, that's why we need this extra complexity.
 proc getPossiblyMissingNode(db: DB, data: openArray[byte], fullPath: NibblesSeq, pathIndex: int, errorIfMissing: bool): seq[byte]
   {.gcsafe, raises: [Defect].} =
   let nodeBytes = db.get(data)  # need to call this before the call to contains, otherwise CaptureDB complains
