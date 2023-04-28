@@ -106,6 +106,8 @@ func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
       of nodes: rlp.decode(message.nodes)
       of talkReq: rlp.decode(message.talkReq)
       of talkResp: rlp.decode(message.talkResp)
+      of relayInit: return err("To implement")
+      of relayMsg: return err("To implement")
     except RlpError, ValueError:
       return err("Invalid message encoding")
 
