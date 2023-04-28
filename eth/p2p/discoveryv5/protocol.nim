@@ -454,6 +454,9 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
         if node.address.isSome() and a == node.address.get():
           if d.addNode(node):
             trace "Added new node to routing table after handshake", node
+    of SessionMessage:
+      # TODO: implement
+      discard
   else:
     trace "Packet decoding error", error = decoded.error, address = a
 

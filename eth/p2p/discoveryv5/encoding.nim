@@ -82,6 +82,7 @@ type
     OrdinaryMessage = 0x00
     Whoareyou = 0x01
     HandshakeMessage = 0x02
+    SessionMessage = 0x03
 
   Packet* = object
     case flag*: Flag
@@ -96,6 +97,9 @@ type
       # TODO record or node immediately?
       node*: Option[Node]
       srcIdHs*: NodeId
+    of SessionMessage:
+      # TODO: Implement
+      discard
 
   HandshakeKey* = object
     nodeId*: NodeId
@@ -570,3 +574,7 @@ proc decodePacket*(c: var Codec, fromAddr: Address, input: openArray[byte]):
     return decodeHandshakePacket(c, fromAddr, staticHeader.nonce,
       input.toOpenArray(0, ivSize - 1), header,
       input.toOpenArray(ivSize + header.len, input.high))
+
+  of SessionMessage:
+    # TODO: Implement
+    return ok(Packet(flag: Flag.SessionMessage))
