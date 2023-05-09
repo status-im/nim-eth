@@ -4,7 +4,7 @@ description   = "Ethereum Common library"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 1.2.0",
+requires "nim >= 1.6.0",
          "nimcrypto",
          "stint",
          "secp256k1",
@@ -18,17 +18,11 @@ requires "nim >= 1.2.0",
          "testutils",
          "unittest2"
 
-let styleCheckStyle =
-  if (NimMajor, NimMinor) < (1, 6):
-    "hint"
-  else:
-    "error"
-
 let commonParams =
   " --skipUserCfg:on" &
   " --verbosity:0 --hints:off" &
-  " --warning[ObservableStores]:off " &
-  " --styleCheck:usages --styleCheck:" & styleCheckStyle &
+  " --warning[ObservableStores]:off" &
+  " --styleCheck:usages --styleCheck:error" &
   " " & getEnv("NIMFLAGS") &
   " -d:chronosStrictException" &
   " -d:chronicles_log_level=TRACE"

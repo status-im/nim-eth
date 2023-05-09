@@ -1,11 +1,7 @@
 ## Implementation of KvStore based on sqlite3
 
-when (NimMajor, NimMinor) < (1, 4):
-  {.push raises: [Defect].}
-  {.pragma: callback, gcsafe, raises: [Defect].}
-else:
-  {.push raises: [Defect].}
-  {.pragma: callback, gcsafe, raises: [].}
+{.push raises: [Defect].}
+{.pragma: callback, gcsafe, raises: [].}
 
 import
   std/[os, options, strformat, typetraits],
