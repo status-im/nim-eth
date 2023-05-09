@@ -35,10 +35,6 @@ proc test_blockBodyTranscode() =
   for n in 0 ..< min(trBlkSeq.len, trBlkSeq.len):
     check (n, trBlkSeq[n]) == (n, blkSeq[n])
 
-
-when (NimMajor, NimMinor, NimPatch) < (1, 4, 0):
-  type AssertionDefect = AssertionError
-
 suite "test api usage":
   test "empty bytes are not a proper RLP":
     var rlp = rlpFromBytes seq[byte](@[])
