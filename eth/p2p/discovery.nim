@@ -1,11 +1,11 @@
 # nim-eth
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[times, net],
@@ -86,7 +86,7 @@ proc recoverMsgPublicKey(msg: openArray[byte]): DiscResult[PublicKey] =
   recover(sig, msg.toOpenArray(HEAD_SIZE, msg.high))
 
 proc unpack(msg: openArray[byte]): tuple[cmdId: CommandId, payload: seq[byte]]
-    {.raises: [DiscProtocolError, Defect].} =
+    {.raises: [DiscProtocolError].} =
   # Check against possible RangeError
   if msg[HEAD_SIZE].int < CommandId.low.ord or
      msg[HEAD_SIZE].int > CommandId.high.ord:
@@ -99,14 +99,14 @@ proc expiration(): uint32 =
 
 # Wire protocol
 
-proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) {.raises: [Defect].} =
+proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) =
   let ta = initTAddress(n.node.address.ip, n.node.address.udpPort)
   let f = d.transp.sendTo(ta, data)
   f.callback = proc(data: pointer) {.gcsafe.} =
     if f.failed:
       debug "Discovery send failed", msg = f.readError.msg
 
-proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] {.raises: [Defect].} =
+proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] =
   let payload = rlp.encode((PROTO_VERSION, d.address, n.node.address,
                             expiration()))
   let msg = pack(cmdPing, payload, d.privKey)
@@ -172,17 +172,17 @@ proc newDiscoveryProtocol*(
   discovery
 
 proc recvPing(d: DiscoveryProtocol, node: Node, msgHash: MDigest[256])
-    {.raises: [ValueError, Defect].} =
+    {.raises: [ValueError].} =
   d.kademlia.recvPing(node, msgHash)
 
 proc recvPong(d: DiscoveryProtocol, node: Node, payload: seq[byte])
-    {.raises: [RlpError, Defect].} =
+    {.raises: [RlpError].} =
   let rlp = rlpFromBytes(payload)
   let tok = rlp.listElem(1).toBytes()
   d.kademlia.recvPong(node, tok)
 
 proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
-    {.raises: [RlpError, Defect].} =
+    {.raises: [RlpError].} =
   let rlp = rlpFromBytes(payload)
   let neighboursList = rlp.listElem(0)
   let sz = neighboursList.listLen()
@@ -214,7 +214,7 @@ proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
   d.kademlia.recvNeighbours(node, neighbours)
 
 proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
-    {.raises: [RlpError, ValueError, Defect].} =
+    {.raises: [RlpError, ValueError].} =
   let rlp = rlpFromBytes(payload)
   trace "<<< find_node from ", node
   let rng = rlp.listElem(0).toBytes
@@ -242,7 +242,7 @@ proc expirationValid(cmdId: CommandId, rlpEncodedPayload: openArray[byte]):
     raise newException(DiscProtocolError, "Invalid RLP list for this packet id")
 
 proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte])
-    {.raises: [DiscProtocolError, RlpError, ValueError, Defect].} =
+    {.raises: [DiscProtocolError, RlpError, ValueError].} =
   # Note: export only needed for testing
   let msgHash = validateMsgHash(msg)
   if msgHash.isOk():
@@ -272,7 +272,7 @@ proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte])
     notice "Wrong msg mac from ", a
 
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
-    Future[void] {.async, raises: [Defect].} =
+    Future[void] {.async.} =
   var proto = getUserData[DiscoveryProtocol](transp)
   let buf = try: transp.getMessage()
             except TransportOsError as e:
@@ -289,7 +289,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
   except ValueError as e:
     debug "Receive failed", exc = e.name, err = e.msg
 
-proc open*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
+proc open*(d: DiscoveryProtocol) {.raises: [CatchableError].} =
   # TODO: allow binding to both IPv4 and IPv6
   let ta = initTAddress(d.bindIp, d.bindPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)

@@ -7,7 +7,7 @@
 #  Apache License, version 2.0, (LICENSE-APACHEv2)
 #              MIT license (LICENSE-MIT)
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[strutils, json],
@@ -480,7 +480,8 @@ proc loadKeyFile*(pathname: string,
     data = json.parseFile(pathname)
   except JsonParsingError:
     return err(JsonError)
-  except Exception: # json raises Exception
+  except Exception:
+    # json parseFile also raises IOError, ValueError and raw Exception
     return err(OsError)
 
   decodeKeyFileJson(data, password)

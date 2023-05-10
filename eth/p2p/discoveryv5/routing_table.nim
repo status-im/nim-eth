@@ -1,11 +1,11 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[algorithm, times, sequtils, bitops, sets, options],
@@ -20,9 +20,12 @@ declarePublicGauge routing_table_nodes,
   "Discovery routing table nodes", labels = ["state"]
 
 type
-  DistanceProc* = proc(a, b: NodeId): NodeId {.raises: [Defect], gcsafe, noSideEffect.}
-  LogDistanceProc* = proc(a, b: NodeId): uint16 {.raises: [Defect], gcsafe, noSideEffect.}
-  IdAtDistanceProc* = proc (id: NodeId, dist: uint16): NodeId {.raises: [Defect], gcsafe, noSideEffect.}
+  DistanceProc* =
+    proc(a, b: NodeId): NodeId {.raises: [], gcsafe, noSideEffect.}
+  LogDistanceProc* =
+    proc(a, b: NodeId): uint16 {.raises: [], gcsafe, noSideEffect.}
+  IdAtDistanceProc* =
+    proc (id: NodeId, dist: uint16): NodeId {.raises: [], gcsafe, noSideEffect.}
 
   DistanceCalculator* = object
     calculateDistance*: DistanceProc

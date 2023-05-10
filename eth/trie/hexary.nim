@@ -1,3 +1,10 @@
+# nim-eth
+# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
   std/[options, tables],
   nimcrypto/[keccak, hash],
@@ -37,14 +44,14 @@ type MissingNodeError* = ref object of AssertionDefect
   nodeHashBytes*: seq[byte]
 
 proc dbGet(db: DB, data: openArray[byte]): seq[byte]
-  {.gcsafe, raises: [Defect].} =
+  {.gcsafe, raises: [].} =
   db.get(data)
 
 proc dbGet(db: DB, key: Rlp): seq[byte] =
   dbGet(db, key.expectHash)
 
 proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey
-  {.gcsafe, raises: [Defect].}
+  {.gcsafe, raises: [].}
 
 # For stateless mode, it's possible for nodes to be missing from the DB,
 # and we need the higher-level code to be able to find out the *path* to
@@ -52,7 +59,7 @@ proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey
 # node is missing we'll raise an exception to get that information up to
 # where it's needed.
 proc getPossiblyMissingNode(db: DB, data: openArray[byte], fullPath: NibblesSeq, pathIndex: int, errorIfMissing: bool): seq[byte]
-  {.gcsafe, raises: [Defect].} =
+  {.gcsafe, raises: [].} =
   let nodeBytes = db.get(data)  # need to call this before the call to contains, otherwise CaptureDB complains
   if nodeBytes.len > 0 or not errorIfMissing:
     nodeBytes
@@ -76,7 +83,7 @@ template initSecureHexaryTrie*(db: DB, rootHash: KeccakHash, isPruning = true, s
   SecureHexaryTrie initHexaryTrie(db, rootHash, isPruning, shouldMissingNodesBeErrors)
 
 proc initHexaryTrie*(db: DB, isPruning = true, shouldMissingNodesBeErrors = false): HexaryTrie
-    {.raises: [Defect].} =
+    {.raises: [].} =
   result.db = db
   result.root = result.db.dbPut(emptyRlp)
   result.isPruning = isPruning
@@ -115,7 +122,7 @@ proc getLookup(db: DB, elem: Rlp, fullPath: NibblesSeq, pathIndex: int, errorIfM
   else: rlpFromBytes(getPossiblyMissingNode(db, elem.expectHash, fullPath, pathIndex, errorIfMissing))
 
 proc getAux(db: DB, nodeRlp: Rlp, fullPath: NibblesSeq, pathIndex: int, errorIfMissing: bool): seq[byte]
-    {.gcsafe, raises: [RlpError, Defect].} =
+    {.gcsafe, raises: [RlpError].} =
   if not nodeRlp.hasData or nodeRlp.isEmpty:
     return
 
@@ -377,7 +384,7 @@ proc dbDel(t: var HexaryTrie, data: openArray[byte]) =
   if data.len >= 32: t.prune(data.keccakHash.data)
 
 proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey
-    {.raises: [Defect].} =
+    {.raises: [].} =
   result.hash = data.keccakHash
   result.usedBytes = 32
   put(db, result.asDbKey, data)
@@ -439,7 +446,7 @@ proc deleteAt(self: var HexaryTrie;
               origRlp: Rlp,
               fullPath: NibblesSeq,
               pathIndex: int): seq[byte]
-  {.gcsafe, raises: [RlpError, Defect].}
+  {.gcsafe, raises: [RlpError].}
 
 proc deleteAux(self: var HexaryTrie;
                rlpWriter: var RlpWriter;
@@ -498,7 +505,7 @@ proc mergeAndGraft(self: var HexaryTrie;
 # If the key is present, returns the RLP bytes for a node that
 # omits this key. Returns an empty seq if the key is absent.
 proc deleteAt(self: var HexaryTrie; origRlp: Rlp, fullPath: NibblesSeq, pathIndex: int): seq[byte]
-    {.gcsafe, raises: [RlpError, Defect].} =
+    {.gcsafe, raises: [RlpError].} =
   if origRlp.isEmpty:
     # It's empty RLP, so the key is absent, so no change necessary.
     return
@@ -592,7 +599,7 @@ proc del*(self: var HexaryTrie; key: openArray[byte]) =
 proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
   fullPath: NibblesSeq, pathIndex: int, value: openArray[byte],
   isInline = false): seq[byte]
-  {.gcsafe, raises: [RlpError, Defect].}
+  {.gcsafe, raises: [RlpError].}
 
 proc mergeAt(self: var HexaryTrie, rlp: Rlp,
              fullPath: NibblesSeq, pathIndex: int, value: openArray[byte],
@@ -613,7 +620,7 @@ proc mergeAtAux(self: var HexaryTrie, output: var RlpWriter, orig: Rlp,
 proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
     fullPath: NibblesSeq, pathIndex: int, value: openArray[byte],
     isInline = false): seq[byte]
-    {.gcsafe, raises: [RlpError, Defect].} =
+    {.gcsafe, raises: [RlpError].} =
   let path = fullPath.slice(pathIndex)
   template origWithNewValue: auto =
     self.prune(origHash.data)
@@ -771,7 +778,7 @@ proc maybeGetLookup(db: DB, elem: Rlp): Option[Rlp] =
       some(rlpFromBytes(bytes))
 
 proc maybeGetAux(db: DB, nodeRlp: Rlp, fullPath: NibblesSeq, pathIndex: int): Option[seq[byte]]
-    {.gcsafe, raises: [RlpError, Defect].} =
+    {.gcsafe, raises: [RlpError].} =
   # FIXME-Adam: do I need to distinguish between these two cases?
   if not nodeRlp.hasData:
     let zero: seq[byte] = @[]

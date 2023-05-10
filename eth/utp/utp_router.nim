@@ -4,7 +4,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[tables, options, sugar],
@@ -38,12 +38,12 @@ type
   # ``server`` - UtpProtocol object.
   # ``client`` - accepted client utp socket.
   AcceptConnectionCallback*[A] = proc(server: UtpRouter[A],
-    client: UtpSocket[A]): Future[void] {.gcsafe, raises: [Defect].}
+    client: UtpSocket[A]): Future[void] {.gcsafe, raises: [].}
 
   # Callback to act as firewall for incoming peers. Should return true if peer
   # is allowed to connect.
   AllowConnectionCallback*[A] = proc(r: UtpRouter[A], remoteAddress: A,
-    connectionId: uint16): bool {.gcsafe, raises: [Defect], noSideEffect.}
+    connectionId: uint16): bool {.gcsafe, raises: [], noSideEffect.}
 
   # Object responsible for creating and maintaining table of utp sockets.
   # Caller should use `processIncomingBytes` proc to feed it with incoming byte

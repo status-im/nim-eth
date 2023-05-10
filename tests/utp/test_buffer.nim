@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -67,17 +67,17 @@ suite "Utp ring buffer":
     let textIdx = 11'u32
 
     check:
-      not buff.exists(textIdx, x => x.foo == text)
+      not buff.exists(textIdx, x {.gcsafe, raises: [].} => x.foo == text)
 
     buff.put(textIdx, TestObj(foo: "old"))
 
     check:
-      not buff.exists(textIdx, x => x.foo == text)
+      not buff.exists(textIdx, x {.gcsafe, raises: [].} => x.foo == text)
 
     buff[textIdx].foo = text
 
     check:
-      buff.exists(textIdx, x => x.foo == text)
+      buff.exists(textIdx, x {.gcsafe, raises: [].} => x.foo == text)
 
   test "Deleting elements from buffer":
     var buff = GrowableCircularBuffer[int].init(size = 4)
@@ -144,7 +144,7 @@ suite "Utp ring buffer":
     buff.ensureSize(0, 1)
     buff.put(0, 0)
 
-    # index 2 will not fit in buffer of size 2 so it will need to be expanded to 4
+    # index 2 will not fit in buffer of size 2 so it needs to be expanded to 4
     buff.ensureSize(1, 2)
     buff.put(1, 1)
 

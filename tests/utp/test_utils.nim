@@ -4,7 +4,7 @@ import
   ../../eth/utp/packets,
   ../../eth/keys
 
-type AssertionCallback = proc(): bool {.gcsafe, raises: [Defect].}
+type AssertionCallback = proc(): bool {.gcsafe, raises: [].}
 
 let testBufferSize* = 1024'u32
 let defaultRcvOutgoingId = 314'u16

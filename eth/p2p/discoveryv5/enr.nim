@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 ## ENR implementation according to specification in EIP-778:
 ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-778.md
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[strutils, macros, algorithm, options],
@@ -394,7 +394,7 @@ func verifySignatureV4(
   else:
     false
 
-func verifySignature(r: Record): bool {.raises: [RlpError, Defect].} =
+func verifySignature(r: Record): bool {.raises: [RlpError].} =
   var rlp = rlpFromBytes(r.raw)
   let sz = rlp.listLen
   if not rlp.enterList:
@@ -420,7 +420,7 @@ func verifySignature(r: Record): bool {.raises: [RlpError, Defect].} =
     # No Identity Scheme provided
     false
 
-func fromBytesAux(r: var Record): bool {.raises: [RlpError, Defect].} =
+func fromBytesAux(r: var Record): bool {.raises: [RlpError].} =
   if r.raw.len > maxEnrSize:
     return false
 
@@ -546,7 +546,7 @@ func `==`*(a, b: Record): bool = a.raw == b.raw
 
 func read*(
     rlp: var Rlp, T: type Record):
-    T {.raises: [RlpError, ValueError, Defect].} =
+    T {.raises: [RlpError, ValueError].} =
   var res: T
   if not rlp.hasData() or not res.fromBytes(rlp.rawData):
     # TODO: This could also just be an invalid signature, would be cleaner to

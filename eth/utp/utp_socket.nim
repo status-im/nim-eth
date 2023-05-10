@@ -4,7 +4,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[sugar, deques],
@@ -49,7 +49,7 @@ type
 
   # Socket callback to send data to remote peer
   SendCallback*[A] =
-    proc (to: A, data: seq[byte]): Future[void] {.gcsafe, raises: [Defect]}
+    proc (to: A, data: seq[byte]): Future[void] {.gcsafe, raises: []}
 
   SocketConfig* = object
     # This is configurable (in contrast to reference impl), as with standard 2
@@ -297,7 +297,7 @@ type
 
   # User driven call back to be called whenever socket is permanently closed i.e
   # reaches destroy state
-  SocketCloseCallback* = proc (): void {.gcsafe, raises: [Defect].}
+  SocketCloseCallback* = proc (): void {.gcsafe, raises: [].}
 
   ConnectionError* = object of CatchableError
 
