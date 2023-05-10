@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2022 Status Research & Development GmbH
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -7,7 +7,7 @@
 #
 ## Discovery v5 Protocol Messages RLP Encoding
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/net,
@@ -20,7 +20,7 @@ from stew/objects import checkedEnumAssign
 export messages, rlp, results
 
 func read*(rlp: var Rlp, T: type RequestId): T
-    {.raises: [ValueError, RlpError, Defect].} =
+    {.raises: [ValueError, RlpError].} =
   mixin read
   var reqId: RequestId
   reqId.id = rlp.toBytes()
@@ -34,7 +34,7 @@ func append*(writer: var RlpWriter, value: RequestId) =
   writer.append(value.id)
 
 func read*(rlp: var Rlp, T: type IpAddress): T
-    {.raises: [RlpError, Defect].} =
+    {.raises: [RlpError].} =
   let ipBytes = rlp.toBytes()
   rlp.skipElem()
 
@@ -93,7 +93,7 @@ func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
       return err("Invalid request-id")
 
     func decode[T](rlp: var Rlp, v: var T)
-        {.nimcall, raises:[RlpError, ValueError, Defect].} =
+        {.nimcall, raises: [RlpError, ValueError].} =
       for k, v in v.fieldPairs:
         v = rlp.read(typeof(v))
 

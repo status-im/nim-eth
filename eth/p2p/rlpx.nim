@@ -1,11 +1,11 @@
 # nim-eth
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[tables, algorithm, deques, hashes, options, typetraits, os],
@@ -71,7 +71,7 @@ type
     value: DisconnectionReason
 
 proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
-    {.gcsafe, raises: [RlpError, Defect].} =
+    {.gcsafe, raises: [RlpError].} =
   ## Rlp mixin: `DisconnectionReasonList` parser
 
   if rlp.isList:
@@ -321,7 +321,7 @@ proc cmp*(lhs, rhs: ProtocolInfo): int =
   return cmp(lhs.name, rhs.name)
 
 proc nextMsgResolver[MsgType](msgData: Rlp, future: FutureBase)
-    {.gcsafe, raises: [RlpError, Defect].} =
+    {.gcsafe, raises: [RlpError].} =
   var reader = msgData
   Future[MsgType](future).complete reader.readRecordType(MsgType,
     MsgType.rlpFieldsCount > 1)
@@ -374,7 +374,7 @@ template perPeerMsgId(peer: Peer, MsgType: type): int =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
 
 proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void]
-    {.raises: [UnsupportedMessageError, RlpError, Defect].} =
+    {.raises: [UnsupportedMessageError, RlpError].} =
   template invalidIdError: untyped =
     raise newException(UnsupportedMessageError,
       "RLPx message with an invalid id " & $msgId &
@@ -698,7 +698,7 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
 
 
 proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type):
-    auto {.raises: [RlpError, Defect].} =
+    auto {.raises: [RlpError].} =
   when defined(release):
     return r.read(MsgType)
   else:
@@ -962,7 +962,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       proc `thunkName`(`peerVar`: `Peer`, _: int, data: Rlp)
           # Fun error if you just use `RlpError` instead of `rlp.RlpError`:
           # "Error: type expected, but got symbol 'RlpError' of kind 'EnumField'"
-          {.async, gcsafe, raises: [rlp.RlpError, Defect].} =
+          {.async, gcsafe, raises: [rlp.RlpError].} =
         var `receivedRlp` = data
         var `receivedMsg` {.noinit.}: `msgRecName`
         `readParamsPrelude`
@@ -1130,13 +1130,13 @@ func validatePubKeyInHello(msg: DevP2P.hello, pubKey: PublicKey): bool =
   let pk = PublicKey.fromRaw(msg.nodeId)
   pk.isOk and pk[] == pubKey
 
-func checkUselessPeer(peer: Peer) {.raises: [UselessPeerError, Defect].} =
+func checkUselessPeer(peer: Peer) {.raises: [UselessPeerError].} =
   if peer.dispatcher.numProtocols == 0:
     # XXX: Send disconnect + UselessPeer
     raise newException(UselessPeerError, "Useless peer")
 
 proc initPeerState*(peer: Peer, capabilities: openArray[Capability])
-    {.raises: [UselessPeerError, Defect].} =
+    {.raises: [UselessPeerError].} =
   peer.dispatcher = getDispatcher(peer.network, capabilities)
   checkUselessPeer(peer)
 

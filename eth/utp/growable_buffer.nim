@@ -1,21 +1,23 @@
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.push raises: [].}
 
 import
   std/[options, math]
 
 export options
 
-# Buffer implementation similar to the one in in reference implementation.
-# Main rationale for it, is to refer to items in buffer by their sequence number,
-# and support out of order packets.
-# Therefore it is super specific data structure, and it mostly usefully for
-# utp implementation.
-# Another alternative would be to use standard deque from deques module, and calculate
-# item indexes from their sequence numbers.
+# Buffer implementation similar to the one in the reference implementation.
+# Main rationale for it is to refer to items in buffer by their sequence number
+# and to support out of order packets.
+# Therefore it is a super specific data structure, and it mostly usefully for
+# the uTP implementation.
+# An alternative could be to use standard deque from deques module, and
+# calculate item indexes from their sequence numbers.
 type
   GrowableCircularBuffer*[A] = object
     items: seq[Option[A]]
@@ -44,7 +46,9 @@ proc delete*[A](buff: var GrowableCircularBuffer[A], i: uint32) =
 proc hasKey*[A](buff: GrowableCircularBuffer[A], i: uint32): bool =
   buff.get(i).isSome()
 
-proc exists*[A](buff: GrowableCircularBuffer[A], i: uint32, check: proc (x: A): bool): bool =
+proc exists*[A](
+    buff: GrowableCircularBuffer[A], i: uint32,
+    check: proc (x: A): bool {.gcsafe, raises: [].}): bool =
   let maybeElem = buff.get(i)
   if (maybeElem.isSome()):
     let elem = maybeElem.unsafeGet()
@@ -53,8 +57,8 @@ proc exists*[A](buff: GrowableCircularBuffer[A], i: uint32, check: proc (x: A): 
     false
 
 proc `[]`*[A](buff: var GrowableCircularBuffer[A], i: uint32): var A =
-  ## Returns contents of the `var GrowableCircularBuffer`. If it is not set, then an exception
-  ## is thrown.
+  ## Returns contents of the `var GrowableCircularBuffer`. If it is not set,
+  ## then an exception is thrown.
   buff.items[i and buff.mask].get()
 
 proc len*[A](buff: GrowableCircularBuffer[A]): int =
@@ -74,7 +78,8 @@ proc calculateNextMask(currentMask: uint32, index:uint32): uint32 =
 
 # Item contains the element we want to make space for
 # index is the index in the list.
-proc ensureSize*[A](buff: var GrowableCircularBuffer[A], item: uint32, index: uint32) =
+proc ensureSize*[A](
+    buff: var GrowableCircularBuffer[A], item: uint32, index: uint32) =
   if (index > buff.mask):
     let newMask = calculateNextMask(buff.mask, index)
     var newSeq = newSeq[Option[A]](int(newMask) + 1)

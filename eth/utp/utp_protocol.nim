@@ -1,10 +1,10 @@
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[tables, options, hashes, math],
@@ -23,7 +23,9 @@ type
     transport: DatagramTransport
     utpRouter: UtpRouter[TransportAddress]
 
-  SendCallbackBuilder* = proc (d: DatagramTransport): SendCallback[TransportAddress] {.gcsafe, raises: [Defect].}
+  SendCallbackBuilder* =
+    proc (d: DatagramTransport):
+      SendCallback[TransportAddress] {.gcsafe, raises: [].}
 
 # This should probably be defined in TransportAddress module, as hash function should
 # be consistent with equality function
@@ -82,7 +84,7 @@ proc new*(
     socketConfig: SocketConfig = SocketConfig.init(),
     allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
     sendCallbackBuilder: SendCallbackBuilder = nil,
-    rng = newRng()): UtpProtocol {.raises: [Defect, CatchableError].} =
+    rng = newRng()): UtpProtocol {.raises: [CatchableError].} =
 
   doAssert(not(isNil(acceptConnectionCb)))
 
@@ -111,7 +113,7 @@ proc new*(
     socketConfig: SocketConfig = SocketConfig.init(),
     allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
     sendCallbackBuilder: SendCallbackBuilder = nil,
-    rng = newRng()): UtpProtocol {.raises: [Defect, CatchableError].} =
+    rng = newRng()): UtpProtocol {.raises: [CatchableError].} =
   GC_ref(udata)
   UtpProtocol.new(
     acceptConnectionCb,

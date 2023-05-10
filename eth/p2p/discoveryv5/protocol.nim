@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2022 Status Research & Development GmbH
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -78,7 +78,7 @@
 ## When distance 0 is provided in the requested list of distances, only the own
 ## ENR will be returned.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[tables, sets, options, math, sequtils, algorithm],
@@ -158,7 +158,7 @@ type
   TalkProtocolHandler* = proc(
     p: TalkProtocol, request: seq[byte],
     fromId: NodeId, fromUdpAddress: Address): seq[byte]
-    {.gcsafe, raises: [Defect].}
+    {.gcsafe, raises: [].}
 
   TalkProtocol* = ref object of RootObj
     protocolHandler*: TalkProtocolHandler
@@ -1016,7 +1016,7 @@ proc newProtocol*(
 template listeningAddress*(p: Protocol): Address =
   p.bindAddress
 
-proc open*(d: Protocol) {.raises: [Defect, CatchableError].} =
+proc open*(d: Protocol) {.raises: [CatchableError].} =
   info "Starting discovery node", node = d.localNode,
     bindAddress = d.bindAddress
 

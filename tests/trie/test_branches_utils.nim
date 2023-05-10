@@ -58,7 +58,7 @@ suite "branches utils":
           discard getBranch(db, trie.getRootHash(), key)
         except InvalidKeyError:
           check(true)
-        except:
+        except CatchableError:
           check(false)
 
   const trieNodesData = [

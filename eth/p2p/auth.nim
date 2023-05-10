@@ -1,6 +1,6 @@
 #
 #                 Ethereum P2P
-#              (c) Copyright 2018-2022
+#              (c) Copyright 2018-2023
 #       Status Research & Development GmbH
 #
 #            Licensed under either of
@@ -10,7 +10,7 @@
 
 ## This module implements Ethereum RLPx authentication
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   nimcrypto/[rijndael, keccak, utils],

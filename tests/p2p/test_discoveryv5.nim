@@ -793,7 +793,7 @@ suite "Discovery v5 Tests":
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
         fromId: NodeId, fromUdpAddress: Address):
-        seq[byte] {.gcsafe, raises: [Defect].} =
+        seq[byte] {.gcsafe, raises: [].} =
       request
 
     let echoProtocol = TalkProtocol(protocolHandler: handler)
@@ -820,7 +820,7 @@ suite "Discovery v5 Tests":
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
         fromId: NodeId, fromUdpAddress: Address):
-        seq[byte] {.gcsafe, raises: [Defect].} =
+        seq[byte] {.gcsafe, raises: [].} =
       request
 
     let echoProtocol = TalkProtocol(protocolHandler: handler)
@@ -844,7 +844,7 @@ suite "Discovery v5 Tests":
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
         fromId: NodeId, fromUdpAddress: Address):
-        seq[byte] {.gcsafe, raises: [Defect].} =
+        seq[byte] {.gcsafe, raises: [].} =
       request
 
     let echoProtocol = TalkProtocol(protocolHandler: handler)
@@ -883,7 +883,7 @@ suite "Discovery v5 Tests":
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
         fromId: NodeId, fromUdpAddress: Address):
-        seq[byte] {.gcsafe, raises: [Defect].} =
+        seq[byte] {.gcsafe, raises: [].} =
       # Return the request + same protocol id + 2 bytes, to make it 1 byte
       # bigger than the request
       request & "echo12".toBytes()

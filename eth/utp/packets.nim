@@ -7,7 +7,7 @@
 # uTP packet format as specified in:
 # https://www.bittorrent.org/beps/bep_0029.html
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   faststreams,

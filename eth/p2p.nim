@@ -1,11 +1,11 @@
 # nim-eth
-# Copyright (c) 2018-2022 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[tables, algorithm, random, typetraits, strutils, net],
@@ -134,7 +134,7 @@ proc processIncoming(server: StreamServer,
 proc listeningAddress*(node: EthereumNode): ENode =
   node.toENode()
 
-proc startListening*(node: EthereumNode) {.raises: [CatchableError, Defect].} =
+proc startListening*(node: EthereumNode) {.raises: [CatchableError].} =
   # TODO: allow binding to both IPv4 & IPv6
   let ta = initTAddress(node.bindIp, node.bindPort)
   if node.listeningServer == nil:
@@ -165,7 +165,7 @@ proc connectToNetwork*(
     trace "Waiting for more peers", peers = node.peerPool.connectedNodes.len
     await sleepAsync(500.milliseconds)
 
-proc stopListening*(node: EthereumNode) {.raises: [CatchableError, Defect].} =
+proc stopListening*(node: EthereumNode) {.raises: [CatchableError].} =
   node.listeningServer.stop()
 
 iterator peers*(node: EthereumNode): Peer =

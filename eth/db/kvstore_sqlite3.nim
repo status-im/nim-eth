@@ -1,6 +1,6 @@
 ## Implementation of KvStore based on sqlite3
 
-{.push raises: [Defect].}
+{.push raises: [].}
 {.pragma: callback, gcsafe, raises: [].}
 
 import

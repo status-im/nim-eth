@@ -29,11 +29,11 @@ template networkState*(connection: Peer, Protocol: type): untyped =
   protocolState(connection.network, Protocol)
 
 proc initProtocolState*[T](state: T, x: Peer|EthereumNode)
-    {.gcsafe, raises: [Defect].} =
+    {.gcsafe, raises: [].} =
   discard
 
 proc initProtocolStates(peer: Peer, protocols: openArray[ProtocolInfo])
-    {.raises: [Defect].} =
+    {.raises: [].} =
   # Initialize all the active protocol states
   newSeq(peer.protocolStates, allProtocols.len)
   for protocol in protocols:

@@ -1,5 +1,5 @@
-# Nim Ethereum Keys (nim-eth-keys)
-# Copyright (c) 2020 Status Research & Development GmbH
+# Nim Ethereum Keys
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed under either of
 # - Apache License, version 2.0, (LICENSE-APACHEv2)
 # - MIT license (LICENSE-MIT)
@@ -12,7 +12,7 @@
 # * Shared secrets are serialized in raw format without the initial byte
 # * distinct types are used to avoid confusion with the "standard" secp types
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/strformat,

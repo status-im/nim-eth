@@ -268,8 +268,8 @@ func destination*(tx: Transaction): EthAddress =
   if tx.to.isSome:
     return tx.to.get
 
-func init*(T: type BlockHashOrNumber, str: string): T
-          {.raises: [ValueError, Defect].} =
+func init*(
+    T: type BlockHashOrNumber, str: string): T {.raises: [ValueError].} =
   if str.startsWith "0x":
     if str.len != sizeof(default(T).hash.data) * 2 + 2:
       raise newException(ValueError, "Block hash has incorrect length")
