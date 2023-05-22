@@ -147,9 +147,10 @@ type
     logs*             : seq[Log]
 
   EthBlock* = object
-    header*: BlockHeader
-    txs*:    seq[Transaction]
-    uncles*: seq[BlockHeader]
+    header*     : BlockHeader
+    txs*        : seq[Transaction]
+    uncles*     : seq[BlockHeader]
+    withdrawals*: Option[seq[Withdrawal]]   # EIP-4895
 
   # TODO: Make BlockNumber a uint64 and deprecate either this or BlockHashOrNumber
   HashOrNum* = object

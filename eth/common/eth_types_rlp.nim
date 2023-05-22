@@ -400,6 +400,32 @@ proc readRecordType*(rlp: var Rlp, T: type BlockBody, wrappedInList: bool): Bloc
 proc read*(rlp: var Rlp, T: type BlockBody): T =
   rlp.readRecordType(BlockBody, true)
 
+proc read*(rlp: var Rlp, T: type EthBlock): T =
+  let len = rlp.listLen
+  if len notin {3, 4}:
+    raise newException(UnsupportedRlpError,
+      "EthBlock elems should be 3 or 4, got " & $len)
+
+  rlp.tryEnterList()
+  result.header = rlp.read(BlockHeader)
+  result.txs    = rlp.read(seq[Transaction])
+  result.uncles = rlp.read(seq[BlockHeader])
+
+  # EIP-4895
+  result.withdrawals =
+    if len >= 4:
+      some(rlp.read(seq[Withdrawal]))
+    else:
+      none[seq[Withdrawal]]()
+
+proc append*(w: var RlpWriter, b: EthBlock) =
+  w.startList 3 + b.withdrawals.isSome.ord
+  w.append(b.header)
+  w.append(b.txs)
+  w.append(b.uncles)
+  if b.withdrawals.isSome:
+    w.append(b.withdrawals.unsafeGet)
+
 proc append*(rlpWriter: var RlpWriter, id: NetworkId) =
   rlpWriter.append(id.uint)
 
