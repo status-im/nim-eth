@@ -317,8 +317,16 @@ proc append*(rlpWriter: var RlpWriter, t: Time) {.inline.} =
 proc append*(w: var RlpWriter, h: BlockHeader) =
   var len = 15
   if h.fee.isSome: inc len
-  if h.withdrawalsRoot.isSome: inc len
-  if h.excessDataGas.isSome: inc len
+  if h.withdrawalsRoot.isSome:
+    if h.fee.isNone:
+      raise newException(RlpError, "baseFee expected")
+    inc len
+  if h.excessDataGas.isSome:
+    if h.fee.isNone:
+      raise newException(RlpError, "baseFee expected")
+    if h.withdrawalsRoot.isNone:
+      raise newException(RlpError, "withdrawalsRoot expected")
+    inc len
   w.startList(len)
   for k, v in fieldPairs(h):
     when v isnot Option:
@@ -364,17 +372,20 @@ proc append*(w: var RlpWriter, b: BlockBody) =
   if b.withdrawals.isSome:
     w.append(b.withdrawals.unsafeGet)
 
-# Is there a better way of doing this? We have tests that call
-# rlp.readRecordType(BlockBody, false), so I overrode
-# `readRecordType` as well as `read`. --Adam
 proc readRecordType*(rlp: var Rlp, T: type BlockBody, wrappedInList: bool): BlockBody =
   if not wrappedInList:
     result.transactions = rlp.read(seq[Transaction])
     result.uncles = rlp.read(seq[BlockHeader])
-    # Is this the right thing to do here? I don't really
-    # understand what wrappedInList is used for. --Adam
+
+    const
+      # If in the future Withdrawal have optional fields
+      # we should put it into consideration
+      wdFieldsCount = rlpFieldsCount(Withdrawal)
+
     result.withdrawals =
-      if rlp.hasData:
+      if rlp.hasData and
+         rlp.isList and
+         rlp.listLen == wdFieldsCount:
         some(rlp.read(seq[Withdrawal]))
       else:
         none[seq[Withdrawal]]()
