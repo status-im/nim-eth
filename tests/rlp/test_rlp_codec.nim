@@ -2,7 +2,7 @@
 
 import
   std/[os, strutils],
-  stew/[io2, results],
+  stew/[io2, results, shims/stddefects],
   unittest2,
   ../../eth/[rlp, common]
 
@@ -67,7 +67,7 @@ suite "BlockHeader roundtrip test":
   
   test "Header + none(baseFee) + some(withdrawalsRoot)":
     let h = BlockHeader(withdrawalsRoot: some(Hash256()))
-    expect RlpError:
+    expect AssertionDefect:
       roundTrip(h)
   
   test "Header + none(baseFee) + some(withdrawalsRoot) + some(excessDataGas)":
@@ -75,14 +75,14 @@ suite "BlockHeader roundtrip test":
       withdrawalsRoot: some(Hash256()), 
       excessDataGas: some(1.u256)
     )
-    expect RlpError:
+    expect AssertionDefect:
       roundTrip(h)
   
   test "Header + none(baseFee) + none(withdrawalsRoot) + some(excessDataGas)":
     let h = BlockHeader(      
       excessDataGas: some(1.u256)
     )
-    expect RlpError:
+    expect AssertionDefect:
       roundTrip(h)
   
   test "Header + some(baseFee) + none(withdrawalsRoot) + some(excessDataGas)":
@@ -90,7 +90,7 @@ suite "BlockHeader roundtrip test":
       fee: some(2.u256),
       excessDataGas: some(1.u256)
     )
-    expect RlpError:
+    expect AssertionDefect:
       roundTrip(h)
       
   test "Header + some(baseFee) + some(withdrawalsRoot)":

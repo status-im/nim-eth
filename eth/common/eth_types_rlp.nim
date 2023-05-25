@@ -318,14 +318,11 @@ proc append*(w: var RlpWriter, h: BlockHeader) =
   var len = 15
   if h.fee.isSome: inc len
   if h.withdrawalsRoot.isSome:
-    if h.fee.isNone:
-      raise newException(RlpError, "baseFee expected")
+    doAssert(h.fee.isSome, "baseFee expected")
     inc len
   if h.excessDataGas.isSome:
-    if h.fee.isNone:
-      raise newException(RlpError, "baseFee expected")
-    if h.withdrawalsRoot.isNone:
-      raise newException(RlpError, "withdrawalsRoot expected")
+    doAssert(h.fee.isSome, "baseFee expected")
+    doAssert(h.withdrawalsRoot.isSome, "withdrawalsRoot expected")
     inc len
   w.startList(len)
   for k, v in fieldPairs(h):
