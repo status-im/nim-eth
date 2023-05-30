@@ -4,7 +4,7 @@
 
 import
   std/[strutils, options],
-  stew/[byteutils, shims/macros],
+  stew/[byteutils, shims/macros, results],
   ./rlp/[writer, object_serialization],
   ./rlp/priv/defs
 
@@ -379,6 +379,7 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
     rlp.position += payloadOffset
 
   template getUnderlyingType[T](_: Option[T]): untyped = T
+  template getUnderlyingType[T](_: Opt[T]): untyped = T
 
   template op(RecordType, fieldName, field) =
     type FieldType {.used.} = type field
@@ -394,6 +395,16 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
         field = some(rlp.read(UT))
       else:
         field = none(UT)
+    elif field is Opt:
+      # this works for optional fields at the end of an object/tuple
+      # if the optional field is followed by a mandatory field,
+      # custom serialization for a field or for the parent object
+      # will be better
+      type UT = getUnderlyingType(field)
+      if rlp.position < payloadEnd:
+        field = Opt.some(rlp.read(UT))
+      else:
+        field = Opt.none(UT)
     else:
       field = rlp.read(FieldType)
 

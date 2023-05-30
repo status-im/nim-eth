@@ -120,31 +120,31 @@ template genTest(TT) =
     test "Empty " & TTS:
       let blk = TT()
       roundTrip(blk)
-  
+
     test TTS & " with withdrawals":
       let blk = TT(withdrawals: some(@[Withdrawal()]))
       roundTrip(blk)
-  
+
     test "2 " & TTS & " none(Withdrawal)+none(Withdrawal)":
       let blk = TT()
       roundTrip2(blk, blk):
         check b1.withdrawals.isNone
         check b2.withdrawals.isNone
-  
+
     test "2 " & TTS & " none(Withdrawal)+some(Withdrawal)":
       let blk1 = TT()
       let blk2 = TT(withdrawals: some(@[Withdrawal()]))
       roundTrip2(blk1, blk2):
         check b1.withdrawals.isNone
         check b2.withdrawals.isSome
-  
+
     test "2 " & TTS & " some(Withdrawal)+none(Withdrawal)":
       let blk1 = TT()
       let blk2 = TT(withdrawals: some(@[Withdrawal()]))
       roundTrip2(blk2, blk1):
         check b1.withdrawals.isSome
         check b2.withdrawals.isNone
-  
+
     test "2 " & TTS & " some(Withdrawal)+some(Withdrawal)":
       let blk = TT(withdrawals: some(@[Withdrawal()]))
       roundTrip2(blk, blk):
@@ -153,3 +153,75 @@ template genTest(TT) =
 
 genTest(EthBlock)
 genTest(BlockBody)
+
+type
+  BlockHeaderOpt* = object
+    parentHash*:      Hash256
+    ommersHash*:      Hash256
+    coinbase*:        EthAddress
+    stateRoot*:       Hash256
+    txRoot*:          Hash256
+    receiptRoot*:     Hash256
+    bloom*:           BloomFilter
+    difficulty*:      DifficultyInt
+    blockNumber*:     BlockNumber
+    gasLimit*:        GasInt
+    gasUsed*:         GasInt
+    timestamp*:       EthTime
+    extraData*:       Blob
+    mixDigest*:       Hash256
+    nonce*:           BlockNonce
+    fee*:             Opt[UInt256]
+    withdrawalsRoot*: Opt[Hash256]
+    excessDataGas*:   Opt[UInt256]
+
+  BlockBodyOpt* = object
+    transactions*:  seq[Transaction]
+    uncles*:        seq[BlockHeaderOpt]
+    withdrawals*:   Opt[seq[Withdrawal]]
+
+  EthBlockOpt* = object
+    header*     : BlockHeader
+    txs*        : seq[Transaction]
+    uncles*     : seq[BlockHeaderOpt]
+    withdrawals*: Opt[seq[Withdrawal]]
+
+template genTestOpt(TT) =
+  const TTS = astToStr(TT)
+  suite TTS & " roundtrip test":
+    test "Empty " & TTS:
+      let blk = TT()
+      roundTrip(blk)
+
+    test TTS & " with withdrawals":
+      let blk = TT(withdrawals: Opt.some(@[Withdrawal()]))
+      roundTrip(blk)
+
+    test "2 " & TTS & " none(Withdrawal)+none(Withdrawal)":
+      let blk = TT()
+      roundTrip2(blk, blk):
+        check b1.withdrawals.isNone
+        check b2.withdrawals.isNone
+
+    test "2 " & TTS & " none(Withdrawal)+some(Withdrawal)":
+      let blk1 = TT()
+      let blk2 = TT(withdrawals: Opt.some(@[Withdrawal()]))
+      roundTrip2(blk1, blk2):
+        check b1.withdrawals.isNone
+        check b2.withdrawals.isSome
+
+    test "2 " & TTS & " some(Withdrawal)+none(Withdrawal)":
+      let blk1 = TT()
+      let blk2 = TT(withdrawals: Opt.some(@[Withdrawal()]))
+      roundTrip2(blk2, blk1):
+        check b1.withdrawals.isSome
+        check b2.withdrawals.isNone
+
+    test "2 " & TTS & " some(Withdrawal)+some(Withdrawal)":
+      let blk = TT(withdrawals: Opt.some(@[Withdrawal()]))
+      roundTrip2(blk, blk):
+        check b1.withdrawals.isSome
+        check b2.withdrawals.isSome
+
+genTestOpt(BlockBodyOpt)
+genTestOpt(EthBlockOpt)

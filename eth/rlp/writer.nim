@@ -1,6 +1,6 @@
 import
   std/options,
-  stew/shims/macros,
+  stew/[shims/macros, results],
   ./object_serialization, ./priv/defs
 
 type
@@ -187,10 +187,10 @@ proc hasOptionalFields(T: type): bool =
 
   proc helper: bool =
     var dummy: T
-    template countFields(RT, n, x) =
-      when x is Option:
+    template detectOptionalField(RT, n, x) =
+      when x is Option or x is Opt:
         return true
-    enumerateRlpFields(dummy, countFields)
+    enumerateRlpFields(dummy, detectOptionalField)
     false
 
   const res = helper()
@@ -211,7 +211,7 @@ proc checkedOptionalFields(T: type, FC: static[int]): int =
     res: array[FC, bool]
 
   template op(RT, fN, f) =
-    res[i] = f is Option
+    res[i] = f is Option or f is Opt
     inc i
 
   enumerateRlpFields(dummy, op)
@@ -300,13 +300,13 @@ proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrap
   template op(RecordType, fieldName, field) =
     when hasCustomPragmaFixed(RecordType, fieldName, rlpCustomSerialization):
       append(self, obj, field)
-    elif field is Option and hasOptional:
+    elif (field is Option or field is Opt) and hasOptional:
       # this works for optional fields at the end of an object/tuple
       # if the optional field is followed by a mandatory field,
       # custom serialization for a field or for the parent object
       # will be better
       if field.isSome:
-        append(self, field.unsafeGet)
+        append(self, field.unsafeGet)    
     else:
       append(self, field)
 
