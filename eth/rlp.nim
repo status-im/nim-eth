@@ -3,8 +3,8 @@
 ## https://ethereum.github.io/yellowpaper/paper.pdf
 
 import
-  std/[macros, strutils],
-  stew/byteutils,
+  std/[strutils, options],
+  stew/[byteutils, shims/macros],
   ./rlp/[writer, object_serialization],
   ./rlp/priv/defs
 
@@ -365,6 +365,7 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
               wrappedInList = wrapObjsInList): T =
   mixin enumerateRlpFields, read
 
+  var payloadEnd = rlp.bytes.len
   if wrappedInList:
     if not rlp.isList:
       raise newException(RlpTypeMismatch,
@@ -373,15 +374,28 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
       payloadOffset = rlp.payloadOffset()
 
     # there's an exception-raising side effect in there *sigh*
-    discard rlp.payloadBytesCount()
+    payloadEnd = rlp.position + payloadOffset + rlp.payloadBytesCount()
 
     rlp.position += payloadOffset
 
-  template op(field) =
-    when hasCustomPragma(field, rlpCustomSerialization):
-      field = rlp.read(result, type(field))
+  template getUnderlyingType[T](_: Option[T]): untyped = T
+
+  template op(RecordType, fieldName, field) =
+    type FieldType {.used.} = type field
+    when hasCustomPragmaFixed(RecordType, fieldName, rlpCustomSerialization):
+      field = rlp.read(result, FieldType)
+    elif field is Option:
+      # this works for optional fields at the end of an object/tuple
+      # if the optional field is followed by a mandatory field,
+      # custom serialization for a field or for the parent object
+      # will be better
+      type UT = getUnderlyingType(field)
+      if rlp.position < payloadEnd:
+        field = some(rlp.read(UT))
+      else:
+        field = none(UT)
     else:
-      field = rlp.read(type(field))
+      field = rlp.read(FieldType)
 
   enumerateRlpFields(result, op)
 

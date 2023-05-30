@@ -113,13 +113,6 @@ proc append*(w: var RlpWriter, tx: Transaction) =
   of TxEip1559:
     w.appendTxEip1559(tx)
 
-proc append*(w: var RlpWriter, withdrawal: Withdrawal) =
-  w.startList(4)
-  w.append(withdrawal.index)
-  w.append(withdrawal.validatorIndex)
-  w.append(withdrawal.address)
-  w.append(withdrawal.amount)
-
 template read[T](rlp: var Rlp, val: var T)=
   val = rlp.read(type val)
 
@@ -314,125 +307,10 @@ proc read*(rlp: var Rlp, T: type HashOrNum): T =
 proc append*(rlpWriter: var RlpWriter, t: Time) {.inline.} =
   rlpWriter.append(t.toUnix())
 
-proc append*(w: var RlpWriter, h: BlockHeader) =
-  var len = 15
-  if h.fee.isSome: inc len
-  if h.withdrawalsRoot.isSome:
-    doAssert(h.fee.isSome, "baseFee expected")
-    inc len
-  if h.excessDataGas.isSome:
-    doAssert(h.fee.isSome, "baseFee expected")
-    doAssert(h.withdrawalsRoot.isSome, "withdrawalsRoot expected")
-    inc len
-  w.startList(len)
-  for k, v in fieldPairs(h):
-    when v isnot Option:
-      w.append(v)
-  if h.fee.isSome:
-    w.append(h.fee.get())
-  if h.withdrawalsRoot.isSome:
-    w.append(h.withdrawalsRoot.get())
-  if h.excessDataGas.isSome:
-    w.append(h.excessDataGas.get())
-
-proc read*(rlp: var Rlp, T: type BlockHeader): T =
-  let len = rlp.listLen
-
-  if len notin {15, 16, 17, 18}:
-    raise newException(UnsupportedRlpError,
-      "BlockHeader elems should be 15, 16, 17, or 18 got " & $len)
-
-  rlp.tryEnterList()
-  for k, v in fieldPairs(result):
-    when v isnot Option:
-      v = rlp.read(type v)
-
-  if len >= 16:
-    # EIP-1559
-    result.baseFee = rlp.read(UInt256)
-  if len >= 17:
-    # EIP-4895
-    result.withdrawalsRoot = some rlp.read(Hash256)
-  if len >= 18:
-    # EIP-4844
-    result.excessDataGas = some rlp.read(UInt256)
-
 proc rlpHash*[T](v: T): Hash256 =
   keccakHash(rlp.encode(v))
 
 func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
-
-proc append*(w: var RlpWriter, b: BlockBody) =
-  w.startList 2 + b.withdrawals.isSome.ord
-  w.append(b.transactions)
-  w.append(b.uncles)
-  if b.withdrawals.isSome:
-    w.append(b.withdrawals.unsafeGet)
-
-proc readRecordType*(rlp: var Rlp, T: type BlockBody, wrappedInList: bool): BlockBody =
-  if not wrappedInList:
-    result.transactions = rlp.read(seq[Transaction])
-    result.uncles = rlp.read(seq[BlockHeader])
-
-    const
-      # If in the future Withdrawal have optional fields
-      # we should put it into consideration
-      wdFieldsCount = rlpFieldsCount(Withdrawal)
-
-    result.withdrawals =
-      if rlp.hasData and
-         rlp.isList and
-         rlp.listLen == wdFieldsCount:
-        some(rlp.read(seq[Withdrawal]))
-      else:
-        none[seq[Withdrawal]]()
-  else:
-    let len = rlp.listLen
-
-    if len notin {2, 3}:
-      raise newException(UnsupportedRlpError,
-        "BlockBody elems should be 2 or 3, got " & $len)
-
-    rlp.tryEnterList()
-
-    result.transactions = rlp.read(seq[Transaction])
-    result.uncles       = rlp.read(seq[BlockHeader])
-
-    # EIP-4895
-    result.withdrawals =
-      if len >= 3:
-        some(rlp.read(seq[Withdrawal]))
-      else:
-        none[seq[Withdrawal]]()
-
-proc read*(rlp: var Rlp, T: type BlockBody): T =
-  rlp.readRecordType(BlockBody, true)
-
-proc read*(rlp: var Rlp, T: type EthBlock): T =
-  let len = rlp.listLen
-  if len notin {3, 4}:
-    raise newException(UnsupportedRlpError,
-      "EthBlock elems should be 3 or 4, got " & $len)
-
-  rlp.tryEnterList()
-  result.header = rlp.read(BlockHeader)
-  result.txs    = rlp.read(seq[Transaction])
-  result.uncles = rlp.read(seq[BlockHeader])
-
-  # EIP-4895
-  result.withdrawals =
-    if len >= 4:
-      some(rlp.read(seq[Withdrawal]))
-    else:
-      none[seq[Withdrawal]]()
-
-proc append*(w: var RlpWriter, b: EthBlock) =
-  w.startList 3 + b.withdrawals.isSome.ord
-  w.append(b.header)
-  w.append(b.txs)
-  w.append(b.uncles)
-  if b.withdrawals.isSome:
-    w.append(b.withdrawals.unsafeGet)
 
 proc append*(rlpWriter: var RlpWriter, id: NetworkId) =
   rlpWriter.append(id.uint)
