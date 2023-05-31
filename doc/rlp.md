@@ -126,6 +126,25 @@ In rare circumstances, you may need to serialize the same field type
 differently depending on the enclosing object type. You can use the
 `rlpCustomSerialization` pragma to achieve this.
 
+### Optional fields
+
+Both `Option[T]` of `std/options` and `Opt[T]` of `stew/results` are supported.
+But the decoder and encoder assume optional fields are always added at the end of the RLP object.
+You can never set a field to `None` unless all following fields are also `None`.
+
+```nim
+## Example
+
+type
+  RlpObject = object
+    size: int
+    color: Option[int]
+    width: Opt[int]
+```
+
+If `color` is `none`, `width` should also `none`. If `color` is `some`, `width` can be both.
+If `color` is `none`, but `width` is some, it will raise assertion error.
+
 ### Contributing / Testing
 
 To test the correctness of any modifications to the library, please execute

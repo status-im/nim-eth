@@ -113,13 +113,6 @@ proc append*(w: var RlpWriter, tx: Transaction) =
   of TxEip1559:
     w.appendTxEip1559(tx)
 
-proc append*(w: var RlpWriter, withdrawal: Withdrawal) =
-  w.startList(4)
-  w.append(withdrawal.index)
-  w.append(withdrawal.validatorIndex)
-  w.append(withdrawal.address)
-  w.append(withdrawal.amount)
-
 template read[T](rlp: var Rlp, val: var T)=
   val = rlp.read(type val)
 
@@ -314,91 +307,10 @@ proc read*(rlp: var Rlp, T: type HashOrNum): T =
 proc append*(rlpWriter: var RlpWriter, t: Time) {.inline.} =
   rlpWriter.append(t.toUnix())
 
-proc append*(w: var RlpWriter, h: BlockHeader) =
-  var len = 15
-  if h.fee.isSome: inc len
-  if h.withdrawalsRoot.isSome: inc len
-  if h.excessDataGas.isSome: inc len
-  w.startList(len)
-  for k, v in fieldPairs(h):
-    when v isnot Option:
-      w.append(v)
-  if h.fee.isSome:
-    w.append(h.fee.get())
-  if h.withdrawalsRoot.isSome:
-    w.append(h.withdrawalsRoot.get())
-  if h.excessDataGas.isSome:
-    w.append(h.excessDataGas.get())
-
-proc read*(rlp: var Rlp, T: type BlockHeader): T =
-  let len = rlp.listLen
-
-  if len notin {15, 16, 17, 18}:
-    raise newException(UnsupportedRlpError,
-      "BlockHeader elems should be 15, 16, 17, or 18 got " & $len)
-
-  rlp.tryEnterList()
-  for k, v in fieldPairs(result):
-    when v isnot Option:
-      v = rlp.read(type v)
-
-  if len >= 16:
-    # EIP-1559
-    result.baseFee = rlp.read(UInt256)
-  if len >= 17:
-    # EIP-4895
-    result.withdrawalsRoot = some rlp.read(Hash256)
-  if len >= 18:
-    # EIP-4844
-    result.excessDataGas = some rlp.read(UInt256)
-
 proc rlpHash*[T](v: T): Hash256 =
   keccakHash(rlp.encode(v))
 
 func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
-
-proc append*(w: var RlpWriter, b: BlockBody) =
-  w.startList 2 + b.withdrawals.isSome.ord
-  w.append(b.transactions)
-  w.append(b.uncles)
-  if b.withdrawals.isSome:
-    w.append(b.withdrawals.unsafeGet)
-
-# Is there a better way of doing this? We have tests that call
-# rlp.readRecordType(BlockBody, false), so I overrode
-# `readRecordType` as well as `read`. --Adam
-proc readRecordType*(rlp: var Rlp, T: type BlockBody, wrappedInList: bool): BlockBody =
-  if not wrappedInList:
-    result.transactions = rlp.read(seq[Transaction])
-    result.uncles = rlp.read(seq[BlockHeader])
-    # Is this the right thing to do here? I don't really
-    # understand what wrappedInList is used for. --Adam
-    result.withdrawals =
-      if rlp.hasData:
-        some(rlp.read(seq[Withdrawal]))
-      else:
-        none[seq[Withdrawal]]()
-  else:
-    let len = rlp.listLen
-
-    if len notin {2, 3}:
-      raise newException(UnsupportedRlpError,
-        "BlockBody elems should be 2 or 3, got " & $len)
-
-    rlp.tryEnterList()
-
-    result.transactions = rlp.read(seq[Transaction])
-    result.uncles       = rlp.read(seq[BlockHeader])
-
-    # EIP-4895
-    result.withdrawals =
-      if len >= 3:
-        some(rlp.read(seq[Withdrawal]))
-      else:
-        none[seq[Withdrawal]]()
-
-proc read*(rlp: var Rlp, T: type BlockBody): T =
-  rlp.readRecordType(BlockBody, true)
 
 proc append*(rlpWriter: var RlpWriter, id: NetworkId) =
   rlpWriter.append(id.uint)
