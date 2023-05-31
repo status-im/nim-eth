@@ -14,8 +14,6 @@ import
   chronicles, json_serialization/std/net, chronos, confutils,
   ../common/utils, ./utils as netutils
 
-export ConfigurationError
-
 type
   NatStrategy* = enum
     NatAny
@@ -323,7 +321,7 @@ type
       of true: extIp*: ValidIpAddress
       of false: nat*: NatStrategy
 
-func parseCmdArg*(T: type NatConfig, p: string): T {.raises: [ConfigurationError].} =
+func parseCmdArg*(T: type NatConfig, p: string): T {.raises: [ValueError].} =
   case p.toLowerAscii:
     of "any":
       NatConfig(hasExtIp: false, nat: NatAny)
@@ -340,10 +338,10 @@ func parseCmdArg*(T: type NatConfig, p: string): T {.raises: [ConfigurationError
           NatConfig(hasExtIp: true, extIp: ip)
         except ValueError:
           let error = "Not a valid IP address: " & p[6..^1]
-          raise newException(ConfigurationError, error)
+          raise newException(ValueError, error)
       else:
         let error = "Not a valid NAT option: " & p
-        raise newException(ConfigurationError, error)
+        raise newException(ValueError, error)
 
 func completeCmdArg*(T: type NatConfig, val: string): seq[string] =
   return @[]
