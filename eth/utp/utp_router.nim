@@ -301,21 +301,21 @@ proc innerConnect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.} =
       debug "Connection cancelled", dst = s.socketKey
       raise exc
 
-proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] =
+proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.} =
   debug "Initiating connection", dst = s.socketKey
 
   # Create inner future, to make sure we are installing cancelCallback
   # on whole connection future, and not only part of it
-  let connectionFuture = s.innerConnect()
-
-  connectionFuture.cancelCallback = proc(udata: pointer) {.gcsafe.} =
+  try:
+    return await s.innerConnect()
+  except CancelledError as exc:
     debug "Connection cancel callback fired",
       socketKey = s.socketKey
     # if for some reason the future is cancelled, destroy socket to clear it
     # from the active socket list
     s.destroy()
 
-  return connectionFuture
+    raise exc
 
 proc socketAlreadyExists[A](): ConnectionResult[A] =
   return err(OutgoingConnectionError(kind: SocketAlreadyExists))
