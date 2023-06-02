@@ -284,10 +284,8 @@ proc generateNewUniqueSocket[A](
   return none[UtpSocket[A]]()
 
 proc innerConnect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.} =
-    let startFut = s.startOutgoingSocket()
-
     try:
-      await startFut
+      await s.startOutgoingSocket()
       utp_success_outgoing.inc()
       debug "Outgoing connection successful", dst = s.socketKey
       return ok(s)
@@ -304,18 +302,7 @@ proc innerConnect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.} =
 proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] =
   debug "Initiating connection", dst = s.socketKey
 
-  # Create inner future, to make sure we are installing cancelCallback
-  # on whole connection future, and not only part of it
-  let connectionFuture = s.innerConnect()
-
-  connectionFuture.cancelCallback = proc(udata: pointer) {.gcsafe.} =
-    debug "Connection cancel callback fired",
-      socketKey = s.socketKey
-    # if for some reason the future is cancelled, destroy socket to clear it
-    # from the active socket list
-    s.destroy()
-
-  return connectionFuture
+  s.innerConnect()
 
 proc socketAlreadyExists[A](): ConnectionResult[A] =
   return err(OutgoingConnectionError(kind: SocketAlreadyExists))
