@@ -64,14 +64,16 @@ suite "BlockHeader roundtrip test":
   test "Header + none(baseFee) + some(withdrawalsRoot) + some(excessDataGas)":
     let h = BlockHeader(
       withdrawalsRoot: some(Hash256()),
-      excessDataGas: some(1.u256)
+      dataGasUsed: some(1'u64),
+      excessDataGas: some(1'u64)
     )
     expect AssertionDefect:
       roundTrip(h)
 
   test "Header + none(baseFee) + none(withdrawalsRoot) + some(excessDataGas)":
     let h = BlockHeader(
-      excessDataGas: some(1.u256)
+      dataGasUsed: some(1'u64),
+      excessDataGas: some(1'u64)
     )
     expect AssertionDefect:
       roundTrip(h)
@@ -79,7 +81,8 @@ suite "BlockHeader roundtrip test":
   test "Header + some(baseFee) + none(withdrawalsRoot) + some(excessDataGas)":
     let h = BlockHeader(
       fee: some(2.u256),
-      excessDataGas: some(1.u256)
+      dataGasUsed: some(1'u64),
+      excessDataGas: some(1'u64)
     )
     expect AssertionDefect:
       roundTrip(h)
@@ -95,7 +98,8 @@ suite "BlockHeader roundtrip test":
     let h = BlockHeader(
       fee: some(2.u256),
       withdrawalsRoot: some(Hash256()),
-      excessDataGas: some(1.u256)
+      dataGasUsed: some(1'u64),
+      excessDataGas: some(1'u64)
     )
     roundTrip(h)
 
@@ -173,7 +177,8 @@ type
     nonce*:           BlockNonce
     fee*:             Opt[UInt256]
     withdrawalsRoot*: Opt[Hash256]
-    excessDataGas*:   Opt[UInt256]
+    dataGasUsed*:     Opt[GasInt]
+    excessDataGas*:   Opt[GasInt]
 
   BlockBodyOpt* = object
     transactions*:  seq[Transaction]
