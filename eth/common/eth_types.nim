@@ -99,6 +99,7 @@ type
     address*       : EthAddress
     amount*        : uint64
 
+  # https://eips.ethereum.org/EIPS/eip-4844#header-extension
   BlockHeader* = object
     parentHash*:      Hash256
     ommersHash*:      Hash256
@@ -118,7 +119,8 @@ type
     # `baseFee` is the get/set of `fee`
     fee*:             Option[UInt256]   # EIP-1559
     withdrawalsRoot*: Option[Hash256]   # EIP-4895
-    excessDataGas*:   Option[UInt256]   # EIP-4844
+    dataGasUsed*:     Option[uint64]    # EIP-4844
+    excessDataGas*:   Option[uint64]    # EIP-4844
 
   BlockBody* = object
     transactions*:  seq[Transaction]

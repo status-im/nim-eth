@@ -87,7 +87,7 @@ proc recoverMsgPublicKey(msg: openArray[byte]): DiscResult[PublicKey] =
 
 proc unpack(msg: openArray[byte]): tuple[cmdId: CommandId, payload: seq[byte]]
     {.raises: [DiscProtocolError].} =
-  # Check against possible RangeError
+  # Check against possible RangeDefect
   if msg[HEAD_SIZE].int < CommandId.low.ord or
      msg[HEAD_SIZE].int > CommandId.high.ord:
     raise newException(DiscProtocolError, "Unsupported packet id")

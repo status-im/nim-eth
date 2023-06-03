@@ -11,7 +11,7 @@ proc initNibbleRange*(bytes: openArray[byte]): NibblesSeq =
 proc `{}`(r: NibblesSeq, pos: int): byte {.inline.} =
   ## This is a helper for a more raw access to the nibbles.
   ## It works with absolute positions.
-  if pos > r.iend: raise newException(RangeError, "index out of range")
+  if pos > r.iend: raise newException(RangeDefect, "index out of range")
   return if (pos and 1) != 0: (r.bytes[pos div 2] and 0xf)
          else: (r.bytes[pos div 2] shr 4)
 
