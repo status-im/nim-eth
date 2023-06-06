@@ -11,7 +11,7 @@ proc localAddress*(port: int): Address =
                    ip: parseIpAddress("127.0.0.1"))
 
 proc setupTestNode*(
-    rng: ref HmacDrbgContext,
+    rng: ref SecureRngContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode {.gcsafe.} =
   # Don't create new RNG every time in production code!
   let keys1 = KeyPair.random(rng[])

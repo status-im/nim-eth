@@ -104,7 +104,7 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   elif T is TalkReqMessage: talkReq
   elif T is TalkRespMessage: talkResp
 
-func init*(T: type RequestId, rng: var HmacDrbgContext): T =
+func init*(T: type RequestId, rng: var SecureRngContext): T =
   var reqId = RequestId(id: newSeq[byte](8)) # RequestId must be <= 8 bytes
   rng.generate(reqId.id)
   reqId

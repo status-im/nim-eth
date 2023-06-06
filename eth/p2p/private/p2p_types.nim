@@ -37,7 +37,7 @@ type
     discovery*: DiscoveryProtocol
     when useSnappy:
       protocolVersion*: uint
-    rng*: ref HmacDrbgContext
+    rng*: ref SecureRngContext
 
   Peer* = ref object
     remote*: Node

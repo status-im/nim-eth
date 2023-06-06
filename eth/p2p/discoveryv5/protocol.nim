@@ -149,7 +149,7 @@ type
     # overkill here, use sequence
     handshakeTimeout: Duration
     responseTimeout: Duration
-    rng*: ref HmacDrbgContext
+    rng*: ref SecureRngContext
 
   PendingRequest = object
     node: Node

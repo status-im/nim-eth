@@ -63,12 +63,12 @@ type
 template pubkey*(v: KeyPair): PublicKey = PublicKey(SkKeyPair(v).pubkey)
 template seckey*(v: KeyPair): PrivateKey = PrivateKey(SkKeyPair(v).seckey)
 
-proc newRng*(): ref HmacDrbgContext =
+proc newRng*(): ref SecureRngContext =
   # You should only create one instance of the RNG per application / library
   # Ref is used so that it can be shared between components
-  HmacDrbgContext.new()
+  SecureRngContext.new()
 
-proc random*(T: type PrivateKey, rng: var HmacDrbgContext): T =
+proc random*(T: type PrivateKey, rng: var SecureRngContext): T =
   let rngPtr = unsafeAddr rng # doesn't escape
   proc callRng(data: var openArray[byte]) =
     generate(rngPtr[], data)
@@ -109,7 +109,7 @@ func toRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] =
 
 func toRawCompressed*(pubkey: PublicKey): array[33, byte] {.borrow.}
 
-proc random*(T: type KeyPair, rng: var HmacDrbgContext): T =
+proc random*(T: type KeyPair, rng: var SecureRngContext): T =
   let seckey = SkSecretKey(PrivateKey.random(rng))
   KeyPair(SkKeyPair(
     seckey: seckey,

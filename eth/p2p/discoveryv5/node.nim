@@ -86,7 +86,7 @@ func `==`*(a, b: Node): bool =
 func hash*(id: NodeId): Hash =
   hash(id.toByteArrayBE)
 
-proc random*(T: type NodeId, rng: var HmacDrbgContext): T =
+proc random*(T: type NodeId, rng: var SecureRngContext): T =
   rng.generate(T)
 
 func `$`*(id: NodeId): string =

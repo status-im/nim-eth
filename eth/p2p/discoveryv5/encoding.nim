@@ -199,7 +199,7 @@ proc encodeStaticHeader*(flag: Flag, nonce: AESGCMNonce, authSize: int):
   # TODO: assert on authSize of > 2^16?
   result.add((uint16(authSize)).toBytesBE())
 
-proc encodeMessagePacket*(rng: var HmacDrbgContext, c: var Codec,
+proc encodeMessagePacket*(rng: var SecureRngContext, c: var Codec,
     toId: NodeId, toAddr: Address, message: openArray[byte]):
     (seq[byte], AESGCMNonce) =
   let
@@ -244,7 +244,7 @@ proc encodeMessagePacket*(rng: var HmacDrbgContext, c: var Codec,
 
   return (packet, nonce)
 
-proc encodeWhoareyouPacket*(rng: var HmacDrbgContext, c: var Codec,
+proc encodeWhoareyouPacket*(rng: var SecureRngContext, c: var Codec,
     toId: NodeId, toAddr: Address, requestNonce: AESGCMNonce, recordSeq: uint64,
     pubkey: Option[PublicKey]): seq[byte] =
   let
@@ -285,7 +285,7 @@ proc encodeWhoareyouPacket*(rng: var HmacDrbgContext, c: var Codec,
 
   return packet
 
-proc encodeHandshakePacket*(rng: var HmacDrbgContext, c: var Codec,
+proc encodeHandshakePacket*(rng: var SecureRngContext, c: var Codec,
     toId: NodeId, toAddr: Address, message: openArray[byte],
     whoareyouData: WhoareyouData, pubkey: PublicKey): seq[byte] =
   let

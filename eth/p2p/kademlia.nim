@@ -32,7 +32,7 @@ type
     pongFutures: Table[seq[byte], Future[bool]]
     pingFutures: Table[Node, Future[bool]]
     neighboursCallbacks: Table[Node, proc(n: seq[Node]) {.gcsafe, raises: [].}]
-    rng: ref HmacDrbgContext
+    rng: ref SecureRngContext
     pingPongTime: OrderedTable[TimeKey, int64] # int64 -> unix time
 
   NodeId* = UInt256

@@ -76,11 +76,11 @@ proc getMonoTimestamp*(): TimeStampInfo =
   TimeStampInfo(moment: currentMoment, timestamp: timestamp)
 
 # Simple generator, not useful for cryptography
-proc randUint16*(rng: var HmacDrbgContext): uint16 =
+proc randUint16*(rng: var SecureRngContext): uint16 =
   uint16(rand(rng, int(high(uint16))))
 
 # Simple generator, not useful for cryptography
-proc randUint32*(rng: var HmacDrbgContext): uint32 =
+proc randUint32*(rng: var SecureRngContext): uint32 =
   uint32(rand(rng, int(high(uint32))))
 
 func encodeTypeVer(h: PacketHeaderV1): uint8 =

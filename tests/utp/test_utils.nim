@@ -86,7 +86,7 @@ proc generateDataPackets*(
   initialSeqNr: uint16,
   connectionId: uint16,
   ackNr: uint16,
-  rng: var HmacDrbgContext): seq[Packet] =
+  rng: var SecureRngContext): seq[Packet] =
   let packetSize = 100
   var packets = newSeq[Packet]()
   var i = 0'u16

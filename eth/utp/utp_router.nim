@@ -57,7 +57,7 @@ type
    sendCb*: SendCallback[A]
    allowConnection*: AllowConnectionCallback[A]
    udata: pointer
-   rng*: ref HmacDrbgContext
+   rng*: ref SecureRngContext
 
 const
   # Maximal number of tries to generate unique socket while establishing

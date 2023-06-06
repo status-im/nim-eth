@@ -110,7 +110,7 @@ proc mapErrTo[T, E](r: Result[T, E], v: static AuthError): AuthResult[T] =
   r.mapErr(proc (e: E): AuthError = v)
 
 proc init*(
-    T: type Handshake, rng: var HmacDrbgContext, host: KeyPair,
+    T: type Handshake, rng: var SecureRngContext, host: KeyPair,
     flags: set[HandshakeFlag] = {Initiator},
     version: uint8 = SupportedRlpxVersion): T =
   ## Create new `Handshake` object.
@@ -138,7 +138,7 @@ proc init*(
   )
 
 proc authMessagePreEIP8(h: var Handshake,
-                        rng: var HmacDrbgContext,
+                        rng: var SecureRngContext,
                         pubkey: PublicKey,
                         output: var openArray[byte],
                         outlen: var int,
@@ -177,7 +177,7 @@ proc authMessagePreEIP8(h: var Handshake,
   ok()
 
 proc authMessageEIP8(h: var Handshake,
-                     rng: var HmacDrbgContext,
+                     rng: var SecureRngContext,
                      pubkey: PublicKey,
                      output: var openArray[byte],
                      outlen: var int,
@@ -240,7 +240,7 @@ proc authMessageEIP8(h: var Handshake,
   ok()
 
 proc ackMessagePreEIP8(h: var Handshake,
-                       rng: var HmacDrbgContext,
+                       rng: var SecureRngContext,
                        output: var openArray[byte],
                        outlen: var int,
                        flag: byte = 0,
@@ -267,7 +267,7 @@ proc ackMessagePreEIP8(h: var Handshake,
   ok()
 
 proc ackMessageEIP8(h: var Handshake,
-                    rng: var HmacDrbgContext,
+                    rng: var SecureRngContext,
                     output: var openArray[byte],
                     outlen: var int,
                     flag: byte = 0,
@@ -327,7 +327,7 @@ template ackSize*(h: Handshake, encrypt: bool = true): int =
   else:
     if encrypt: (AckMessageV4Length) else: (PlainAckMessageV4Length)
 
-proc authMessage*(h: var Handshake, rng: var HmacDrbgContext,
+proc authMessage*(h: var Handshake, rng: var SecureRngContext,
                   pubkey: PublicKey,
                   output: var openArray[byte],
                   outlen: var int, flag: byte = 0,
@@ -339,7 +339,7 @@ proc authMessage*(h: var Handshake, rng: var HmacDrbgContext,
   else:
     authMessagePreEIP8(h, rng, pubkey, output, outlen, flag, encrypt)
 
-proc ackMessage*(h: var Handshake, rng: var HmacDrbgContext,
+proc ackMessage*(h: var Handshake, rng: var SecureRngContext,
                  output: var openArray[byte],
                  outlen: var int, flag: byte = 0,
                  encrypt: bool = true): AuthResult[void] =

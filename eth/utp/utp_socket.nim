@@ -1939,7 +1939,7 @@ proc newOutgoingSocket*[A](
   snd: SendCallback[A],
   cfg: SocketConfig,
   rcvConnectionId: uint16,
-  rng: var HmacDrbgContext
+  rng: var SecureRngContext
 ): UtpSocket[A] =
   let sndConnectionId = rcvConnectionId + 1
   let initialSeqNr = randUint16(rng)
@@ -1964,7 +1964,7 @@ proc newIncomingSocket*[A](
   cfg: SocketConfig,
   connectionId: uint16,
   ackNr: uint16,
-  rng: var HmacDrbgContext
+  rng: var SecureRngContext
 ): UtpSocket[A] =
   let initialSeqNr = randUint16(rng)
 

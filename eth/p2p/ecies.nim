@@ -94,7 +94,7 @@ proc kdf*(data: openArray[byte]): array[KeyLength, byte] {.noinit.} =
   ctx.clear() # clean ctx
   copyMem(addr result[0], addr storage[0], KeyLength)
 
-proc eciesEncrypt*(rng: var HmacDrbgContext, input: openArray[byte],
+proc eciesEncrypt*(rng: var SecureRngContext, input: openArray[byte],
                    output: var openArray[byte], pubkey: PublicKey,
                    sharedmac: openArray[byte] = emptyMac): EciesResult[void] =
   ## Encrypt data with ECIES method using given public key `pubkey`.
