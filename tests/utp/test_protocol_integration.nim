@@ -52,7 +52,7 @@ proc getServerSocket(
     return some(srvSocket)
 
 procSuite "Utp protocol over udp tests with loss and delays":
-  let rng = newRng()
+  let rng = SecureRngContext.new()
 
   proc sendBuilder(maxDelay: int, packetDropRate: int): SendCallbackBuilder =
     return (

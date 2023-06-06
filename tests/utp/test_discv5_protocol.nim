@@ -20,7 +20,7 @@ import
   ../stubloglevel
 
 procSuite "Utp protocol over discovery v5 tests":
-  let rng = newRng()
+  let rng = SecureRngContext.new()
   let utpProtId = "test-utp".toBytes()
 
   proc registerIncomingSocketCallback(serverSockets: AsyncQueue): AcceptConnectionCallback[NodeAddress] =

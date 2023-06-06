@@ -11,7 +11,7 @@ import
   std/[times, net],
   chronos, stint, nimcrypto/keccak, chronicles,
   stew/[objects, results],
-  ".."/[keys, rlp],
+  ../common/random2, ../rlp,
   "."/[kademlia, enode]
 
 export
@@ -154,7 +154,9 @@ proc newDiscoveryProtocol*(
     privKey: PrivateKey, address: Address,
     bootstrapNodes: openArray[ENode],
     bindPort: Port, bindIp = IPv4_any(),
-    rng = newRng()): DiscoveryProtocol =
+    rng = SecureRngContext.new()): DiscoveryProtocol =
+  doAssert rng != nil, "Cannot initialize RNG"
+
   let
     localNode = newNode(privKey.toPublicKey(), address)
     discovery = DiscoveryProtocol(

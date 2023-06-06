@@ -18,7 +18,7 @@ import
   ../stubloglevel
 
 procSuite "Utp socket unit test":
-  let rng = newRng()
+  let rng = SecureRngContext.new()
   let testAddress = initTAddress("127.0.0.1", 9079)
   let testBufferSize = 1024'u32
   let defaultRcvOutgoingId = 314'u16
@@ -1627,4 +1627,3 @@ procSuite "Utp socket unit test":
       bytesReceivedByRemote == largeDataToWrite
 
     await outgoingSocket.destroyWait()
-

@@ -12,7 +12,7 @@ import
   stew/shims/net,
   ../../eth/p2p/discoveryv5/enr, ../../eth/[keys, rlp]
 
-let rng = newRng()
+let rng = SecureRngContext.new()
 
 suite "ENR":
   test "Serialization":

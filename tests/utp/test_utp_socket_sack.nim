@@ -19,7 +19,7 @@ import
   ../stubloglevel
 
 procSuite "Utp socket selective acks unit test":
-  let rng = newRng()
+  let rng = SecureRngContext.new()
   let testAddress = initTAddress("127.0.0.1", 9079)
   let defaultBufferSize = 1024'u32
 

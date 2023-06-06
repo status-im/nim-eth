@@ -17,7 +17,7 @@ import
   std/[tables, options, hashes, net],
   nimcrypto/[bcmode, rijndael, sha2], stint, chronicles,
   stew/[results, byteutils], metrics,
-  ".."/../[rlp, keys],
+  ../../common/random2, ".."/../[rlp, keys],
   "."/[messages_encoding, node, enr, hkdf, sessions]
 
 from stew/objects import checkedEnumAssign

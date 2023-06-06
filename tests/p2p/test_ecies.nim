@@ -26,7 +26,7 @@ proc compare[A, B](x: openArray[A], y: openArray[B], s: int = 0): bool =
 template offsetOf(a, b): int =
   cast[int](cast[uint](unsafeAddr b) - cast[uint](unsafeAddr a))
 
-let rng = newRng()
+let rng = SecureRngContext.new()
 
 suite "ECIES test suite":
   test "ECIES structures alignment":

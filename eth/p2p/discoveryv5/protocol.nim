@@ -963,8 +963,9 @@ proc newProtocol*(
     bindIp = IPv4_any(),
     enrAutoUpdate = false,
     config = defaultDiscoveryConfig,
-    rng = newRng()):
+    ng = SecureRngContext.new()):
     Protocol =
+  doAssert rng != nil, "Cannot initialize RNG"
   # TODO: Tried adding bindPort = udpPort as parameter but that gave
   # "Error: internal error: environment misses: udpPort" in nim-beacon-chain.
   # Anyhow, nim-beacon-chain would also require some changes to support port

@@ -6,7 +6,7 @@ import
   ../../eth/keys, ../../eth/p2p/discoveryv5/[node, ip_vote]
 
 suite "IP vote":
-  let rng = newRng()
+  let rng = SecureRngContext.new()
 
   test "Majority vote":
     var

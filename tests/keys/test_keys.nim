@@ -25,7 +25,7 @@ proc compare(x: openArray[byte], y: openArray[byte]): bool =
         break
 
 let message = "message".toBytes()
-let rng = newRng()
+let rng = SecureRngContext.new()
 
 const
   pkbytes = "58d23b55bc9cdce1f18c2500f40ff4ab7245df9a89505e9b1fa4851f623d241d"

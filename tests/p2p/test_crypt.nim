@@ -83,7 +83,7 @@ const data = [
       e7c301a0c05559f4c25db65e36820b4b909a226171a60ac6cb7beea09376d6d8""")
 ]
 
-let rng = newRng()
+let rng = SecureRngContext.new()
 
 proc testValue(s: string): string =
   for item in data:

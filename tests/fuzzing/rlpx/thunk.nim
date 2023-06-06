@@ -9,7 +9,7 @@ var
   node2: EthereumNode
   peer: Peer
 
-let rng = newRng()
+let rng = SecureRngContext.new()
 # This is not a good example of a fuzzing test and it would be much better
 # to mock more to get rid of anything sockets, async, etc.
 # However, it can and has provided reasonably quick results anyhow.

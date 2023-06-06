@@ -9,7 +9,7 @@ import
   ./p2p_test_helper,
   ./eth_protocol
 
-let rng = newRng()
+let rng = SecureRngContext.new()
 
 var
   node1 = setupTestNode(rng, eth)

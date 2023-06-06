@@ -59,7 +59,7 @@ p2pProtocol hah(version = 1,
 
 suite "Testing protocol handlers":
   asyncTest "Failing disconnection handler":
-    let rng = newRng()
+    let rng = SecureRngContext.new()
 
     var node1 = setupTestNode(rng, abc, xyz)
     var node2 = setupTestNode(rng, abc, xyz)
@@ -79,7 +79,7 @@ suite "Testing protocol handlers":
       node1.protocolState(xyz).count == 0
 
   asyncTest "Failing connection handler":
-    let rng = newRng()
+    let rng = SecureRngContext.new()
 
     var node1 = setupTestNode(rng, hah)
     var node2 = setupTestNode(rng, hah)
@@ -91,7 +91,7 @@ suite "Testing protocol handlers":
       node1.protocolState(hah).count == 0
 
   test "Override network state":
-    let rng = newRng()
+    let rng = SecureRngContext.new()
     var node = setupTestNode(rng, hah)
     node.addCapability(hah, network(count: 3))
     check node.protocolState(hah).count == 3

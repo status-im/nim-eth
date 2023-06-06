@@ -17,7 +17,7 @@ import
 # Test vectors copied from
 # https://github.com/ethereum/tests/blob/develop/KeyStoreTests/basic_tests.json
 
-let rng = newRng()
+let rng = SecureRngContext.new()
 
 var TestVectors = [
   %*{

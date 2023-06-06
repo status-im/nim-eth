@@ -8,7 +8,7 @@ import
   ../../eth/p2p/discoveryv5/[messages_encoding, encoding, enr, node, sessions],
   ../stubloglevel
 
-let rng = newRng()
+let rng = SecureRngContext.new()
 
 suite "Discovery v5.1 Protocol Message Encodings":
   test "Ping Request":

@@ -26,7 +26,7 @@ type
   TestError* = object of CatchableError
 
 procSuite "Utp router unit tests":
-  let rng = newRng()
+  let rng = SecureRngContext.new()
   let testSender = 1
   let testSender2 = 2
   let testBufferSize = 1024'u32

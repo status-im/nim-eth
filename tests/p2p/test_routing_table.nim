@@ -20,7 +20,7 @@ func customIdAdDist*(id: NodeId, dist: uint16): NodeId =
   id + u256(dist)
 
 suite "Routing Table Tests":
-  let rng = newRng()
+  let rng = SecureRngContext.new()
 
   # Used for testing. Could also at runtime check whether the address is the
   # loopback address as these are only allowed to be added when coming from

@@ -10,7 +10,7 @@
 import
   std/[tables, hashes, times, algorithm, sets, sequtils],
   chronos, chronicles, stint, nimcrypto/keccak, metrics,
-  ../keys, ./discoveryv5/random2,
+  ../common/random2, ../keys,
   ./enode
 
 export sets # TODO: This should not be needed, but compilation fails otherwise
@@ -344,8 +344,9 @@ proc len(r: RoutingTable): int =
   for b in r.buckets: result += b.len
 
 proc newKademliaProtocol*[Wire](
-    thisNode: Node, wire: Wire, rng = newRng()): KademliaProtocol[Wire] =
-  if rng == nil: raiseAssert "Need an RNG" # doAssert gives compile error on mac
+    thisNode: Node, wire: Wire,
+    rng = SecureRngContext.new()): KademliaProtocol[Wire] =
+  doAssert rng != nil, "Cannot initialize RNG"
 
   result.new()
   result.thisNode = thisNode

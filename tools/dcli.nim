@@ -53,7 +53,7 @@ type
 
     nodeKey* {.
       desc: "P2P node private key as hex",
-      defaultValue: PrivateKey.random(keys.newRng()[])
+      defaultValue: PrivateKey.random(SecureRngContext.new()[])
       name: "nodekey" .}: PrivateKey
 
     metricsEnabled* {.
@@ -168,7 +168,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async.} =
         bits.inc(countOnes(byt.uint))
 
       let str = "$#,$#,$#,$#,$#,$#\n"
-      let newLine = str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits] 
+      let newLine = str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits]
 
       ps.write(newLine)
     await sleepAsync(1000) # 1 sec of delay

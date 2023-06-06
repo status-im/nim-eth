@@ -84,9 +84,10 @@ proc new*(
     socketConfig: SocketConfig = SocketConfig.init(),
     allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
     sendCallbackBuilder: SendCallbackBuilder = nil,
-    rng = newRng()): UtpProtocol {.raises: [CatchableError].} =
+    rng = SecureRngContext.new()): UtpProtocol {.raises: [CatchableError].} =
 
   doAssert(not(isNil(acceptConnectionCb)))
+  doAssert rng != nil, "Cannot initialize RNG"
 
   let router = UtpRouter[TransportAddress].new(
     acceptConnectionCb,
@@ -113,7 +114,9 @@ proc new*(
     socketConfig: SocketConfig = SocketConfig.init(),
     allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
     sendCallbackBuilder: SendCallbackBuilder = nil,
-    rng = newRng()): UtpProtocol {.raises: [CatchableError].} =
+    rng = SecureRngContext.new()): UtpProtocol {.raises: [CatchableError].} =
+  doAssert rng != nil, "Cannot initialize RNG"
+  
   GC_ref(udata)
   UtpProtocol.new(
     acceptConnectionCb,

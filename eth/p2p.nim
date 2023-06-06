@@ -10,7 +10,7 @@
 import
   std/[tables, algorithm, random, typetraits, strutils, net],
   chronos, chronos/timer, chronicles,
-  ./keys, ./p2p/private/p2p_types,
+  ./common/random2, ./keys, ./p2p/private/p2p_types,
   ./p2p/[kademlia, discovery, enode, peer_pool, rlpx]
 
 export
@@ -85,10 +85,8 @@ proc newEthereumNode*(
     bindUdpPort: Port,
     bindTcpPort: Port,
     bindIp = IPv4_any(),
-    rng = newRng()): EthereumNode =
-
-  if rng == nil: # newRng could fail
-    raise (ref Defect)(msg: "Cannot initialize RNG")
+    rng = SecureRngContext.new()): EthereumNode =
+  doAssert rng != nil, "Cannot initialize RNG"
 
   new result
   result.keys = keys

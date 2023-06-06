@@ -15,7 +15,7 @@ and `rlp`.
 
 ```Nim
 let
-  rng = keys.newRng
+  rng = SecureRngContext.new()
   privKey = PrivateKey.random(rng[])
   (ip, tcpPort, udpPort) = setupNat(config) # Or fill in external IP/ports manually
   d = newProtocol(privKey, ip, tcpPort, udpPort, rng = rng)

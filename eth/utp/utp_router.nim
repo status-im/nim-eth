@@ -118,8 +118,9 @@ proc new*[A](
     allowConnectionCb: AllowConnectionCallback[A],
     udata: pointer,
     socketConfig: SocketConfig = SocketConfig.init(),
-    rng = newRng()): UtpRouter[A] =
+    rng = SecureRngContext.new()): UtpRouter[A] =
   doAssert(not(isNil(acceptConnectionCb)))
+  doAssert rng != nil, "Cannot initialize RNG"
   UtpRouter[A](
     sockets: initTable[UtpSocketKey[A], UtpSocket[A]](),
     acceptConnection: acceptConnectionCb,
@@ -133,7 +134,8 @@ proc new*[A](
     T: type UtpRouter[A],
     acceptConnectionCb: AcceptConnectionCallback[A],
     socketConfig: SocketConfig = SocketConfig.init(),
-    rng = newRng()): UtpRouter[A] =
+    rng = SecureRngContext.new()): UtpRouter[A] =
+  doAssert rng != nil, "Cannot initialize RNG"
   UtpRouter[A].new(acceptConnectionCb, nil, nil, socketConfig, rng)
 
 proc new*[A](
@@ -142,8 +144,9 @@ proc new*[A](
     allowConnectionCb: AllowConnectionCallback[A],
     udata: ref,
     socketConfig: SocketConfig = SocketConfig.init(),
-    rng = newRng()): UtpRouter[A] =
+    rng = SecureRngContext.new()): UtpRouter[A] =
   doAssert(not(isNil(acceptConnectionCb)))
+  doAssert rng != nil, "Cannot initialize RNG"
   GC_ref(udata)
   UtpRouter[A].new(
     acceptConnectionCb, allowConnectionCb,
@@ -154,7 +157,8 @@ proc new*[A](
     acceptConnectionCb: AcceptConnectionCallback[A],
     udata: ref,
     socketConfig: SocketConfig = SocketConfig.init(),
-    rng = newRng()): UtpRouter[A] =
+    rng = SecureRngContext.new()): UtpRouter[A] =
+  doAssert rng != nil, "Cannot initialize RNG"
   UtpRouter[A].new(acceptConnectionCb, nil, udata, socketConfig, rng)
 
 proc getUserData*[A, T](router: UtpRouter[A]): T =

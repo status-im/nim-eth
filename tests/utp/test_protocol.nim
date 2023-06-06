@@ -121,7 +121,7 @@ proc close(s: TwoClientsServerScenario) {.async.} =
   await s.utp3.shutdownWait()
 
 procSuite "Utp protocol over udp tests":
-  let rng = newRng()
+  let rng = SecureRngContext.new()
 
   asyncTest "Success connect to remote host":
     let server1Called = newAsyncEvent()

@@ -13,7 +13,7 @@ import
 
 suite "Discovery v5 Tests":
   setup:
-    let rng = newRng()
+    let rng = SecureRngContext.new()
 
   asyncTest "GetNode":
     # TODO: This could be tested in just a routing table only context
@@ -645,7 +645,7 @@ suite "Discovery v5 Tests":
       check test.len == 1
 
   test "Calculate lookup distances":
-    let rng = newRng()
+    let rng = SecureRngContext.new()
     let node = generateNode(PrivateKey.random(rng[]))
 
     # Log distance between zeros is zero

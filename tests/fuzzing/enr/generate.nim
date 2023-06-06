@@ -9,7 +9,7 @@ const inputsDir = sourceDir / "corpus"
 
 proc generate() =
   let
-    rng = newRng()
+    rng = SecureRngContext.new()
     privKey = PrivateKey.random(rng[])
     ip = some(ValidIpAddress.init("127.0.0.1"))
     port = some(Port(20301))
