@@ -1,3 +1,11 @@
+# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
 import
   std/[options, strutils, tables, sets],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
@@ -104,35 +112,35 @@ func defaultListenAddress*(conf: DiscoveryConf): ValidIpAddress =
 func defaultAdminListenAddress*(conf: DiscoveryConf): ValidIpAddress =
   (static ValidIpAddress.init("127.0.0.1"))
 
-proc parseCmdArg*(T: type enr.Record, p: string): T =
+proc parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
   if not fromURI(result, p):
-    raise newException(ConfigurationError, "Invalid ENR")
+    raise newException(ValueError, "Invalid ENR")
 
 proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type Node, p: string): T =
+proc parseCmdArg*(T: type Node, p: string): T {.raises: [ValueError].} =
   var record: enr.Record
   if not fromURI(record, p):
-    raise newException(ConfigurationError, "Invalid ENR")
+    raise newException(ValueError, "Invalid ENR")
 
   let n = newNode(record)
   if n.isErr:
-    raise newException(ConfigurationError, $n.error)
+    raise newException(ValueError, $n.error)
 
   if n[].address.isNone():
-    raise newException(ConfigurationError, "ENR without address")
+    raise newException(ValueError, "ENR without address")
 
   n[]
 
 proc completeCmdArg*(T: type Node, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type PrivateKey, p: string): T =
+proc parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =
   try:
     result = PrivateKey.fromHex(string(p)).tryGet()
   except CatchableError:
-    raise newException(ConfigurationError, "Invalid private key")
+    raise newException(ValueError, "Invalid private key")
 
 proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
@@ -168,7 +176,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async.} =
         bits.inc(countOnes(byt.uint))
 
       let str = "$#,$#,$#,$#,$#,$#\n"
-      let newLine = str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits] 
+      let newLine = str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits]
 
       ps.write(newLine)
     await sleepAsync(1000) # 1 sec of delay
