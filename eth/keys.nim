@@ -16,13 +16,13 @@
 
 import
   std/strformat,
-  secp256k1, bearssl/hash as bhash, bearssl/rand,
+  secp256k1,
   stew/[byteutils, objects, results, ptrops],
-  ./common/eth_hash
+  ./common/[eth_hash, random2]
 
 from nimcrypto/utils import burnMem
 
-export secp256k1, results, rand
+export secp256k1, results, random2
 
 const
   KeyLength* = SkEcdhSecretSize
@@ -62,11 +62,6 @@ type
 
 template pubkey*(v: KeyPair): PublicKey = PublicKey(SkKeyPair(v).pubkey)
 template seckey*(v: KeyPair): PrivateKey = PrivateKey(SkKeyPair(v).seckey)
-
-proc newRng*(): ref SecureRngContext =
-  # You should only create one instance of the RNG per application / library
-  # Ref is used so that it can be shared between components
-  SecureRngContext.new()
 
 proc random*(T: type PrivateKey, rng: var SecureRngContext): T =
   let rngPtr = unsafeAddr rng # doesn't escape
