@@ -34,6 +34,15 @@ proc read*(rlp: var Rlp, T: type StUint): T {.inline.} =
 
   rlp.skipElem
 
+func significantBytesBE(val: openArray[byte]): int =
+  ## Returns the number of significant trailing bytes in a big endian
+  ## representation of a number.
+  # TODO: move that in https://github.com/status-im/nim-byteutils
+  for i in 0 ..< val.len:
+    if val[i] != 0:
+      return val.len - i
+  return 1
+
 proc append*(rlpWriter: var RlpWriter, value: StUint) =
   if value > 128:
     let bytes = value.toByteArrayBE
