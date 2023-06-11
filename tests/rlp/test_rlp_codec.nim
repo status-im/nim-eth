@@ -2,7 +2,7 @@
 
 import
   std/[os, strutils],
-  stew/[io2, results, shims/stddefects],
+  stew/[io2, results],
   unittest2,
   ../../eth/[rlp, common]
 
