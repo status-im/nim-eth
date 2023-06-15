@@ -576,9 +576,13 @@ proc checkTimeouts(socket: UtpSocket) =
           retransmitCount = socket.retransmitCount
 
         if socket.state == SynSent and (not socket.connectionFuture.finished()):
-          socket.connectionFuture.fail(newException(ConnectionError, "Connection to peer timed out"))
+          # Note: The socket connect code will already call socket.destroy when
+          # ConnectionError gets raised, no need to do it here.
+          socket.connectionFuture.fail(newException(
+            ConnectionError, "Connection to peer timed out"))
+        else:
+          socket.destroy()
 
-        socket.destroy()
         return
 
       let newTimeout = socket.retransmitTimeout * 2
