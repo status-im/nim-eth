@@ -17,8 +17,6 @@ test:
       of nodes: encoded = encodeMessage(message.nodes, message.reqId)
       of talkReq: encoded = encodeMessage(message.talkReq, message.reqId)
       of talkResp: encoded = encodeMessage(message.talkResp, message.reqId)
-      of regTopic, ticket, regConfirmation, topicQuery:
-        break
 
       # This will hit assert because of issue:
       # https://github.com/status-im/nim-eth/issues/255

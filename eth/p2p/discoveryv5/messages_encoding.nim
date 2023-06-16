@@ -106,12 +106,8 @@ func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
       of nodes: rlp.decode(message.nodes)
       of talkReq: rlp.decode(message.talkReq)
       of talkResp: rlp.decode(message.talkResp)
-      of regTopic, ticket, regConfirmation, topicQuery:
-        # We just pass the empty type of this message without attempting to
-        # decode, so that the protocol knows what was received.
-        # But we ignore the message as per specification as "the content and
-        # semantics of this message are not final".
-        discard
+      of relayInit: return err("To implement")
+      of relayMsg: return err("To implement")
     except RlpError, ValueError:
       return err("Invalid message encoding")
 

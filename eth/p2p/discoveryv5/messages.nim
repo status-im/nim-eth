@@ -13,7 +13,7 @@
 
 import
   std/[hashes, net],
-  ./enr
+  "."/[enr, node]
 
 type
   MessageKind* = enum
@@ -25,16 +25,16 @@ type
     unused = 0x00
 
     # The supported message types
+    # Request & response
     ping = 0x01
     pong = 0x02
     findNode = 0x03
     nodes = 0x04
     talkReq = 0x05
     talkResp = 0x06
-    regTopic = 0x07
-    ticket = 0x08
-    regConfirmation = 0x09
-    topicQuery = 0x0A
+    # Notifications
+    relayInit = 0x07
+    relayMsg = 0x08
 
   RequestId* = object
     id*: seq[byte]
@@ -61,14 +61,19 @@ type
   TalkRespMessage* = object
     response*: seq[byte]
 
-  # Not implemented, specification is not final here.
-  RegTopicMessage* = object
-  TicketMessage* = object
-  RegConfirmationMessage* = object
-  TopicQueryMessage* = object
+  RelayInitNotification* = object
+    initiatorEnr*: Record
+    targetId*: NodeId
+    nonce*: array[12, byte] # TODO: is this ok?
+
+  RelayMsgNotification* = object
+    initiatorEnr*: Record
+    nonce*: array[12, byte]
 
   SomeMessage* = PingMessage or PongMessage or FindNodeMessage or NodesMessage or
     TalkReqMessage or TalkRespMessage
+
+  SomeNotification* = RelayInitNotification or RelayMsgNotification
 
   Message* = object
     reqId*: RequestId
@@ -85,14 +90,6 @@ type
       talkReq*: TalkReqMessage
     of talkResp:
       talkResp*: TalkRespMessage
-    of regTopic:
-      regtopic*: RegTopicMessage
-    of ticket:
-      ticket*: TicketMessage
-    of regConfirmation:
-      regConfirmation*: RegConfirmationMessage
-    of topicQuery:
-      topicQuery*: TopicQueryMessage
     else:
       discard
 
