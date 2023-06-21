@@ -1313,6 +1313,27 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
   if wrapCompareLess(socket.fastResendSeqNr, pkAckNr + 1):
     socket.fastResendSeqNr = pkAckNr + 1
 
+  # The specifications indicate that ST_DATA packets are only to be send
+  # when the socket is in connected state. It is unclear what to do when an
+  # ST_FIN is received while not in connected state.
+  # So the socket will drop any received ST_DATA or ST_FIN packet while not in
+  # connected state.
+  # Note: In the set-up where the connection initiator is not sending the
+  # (first) data, it could be that ST_DATA arrives before an ST_STATE (SYN-ACK).
+  # In this scenario, all ST_DATA gets dropped and the initiator will eventually
+  # re-send the ST_SYN.
+  # This check does need to happen before `ackPackets` as else the SYN packet
+  # could get erased from the `outBuffer` already while the connection remains
+  # in `SynSent` state as an ack from ST_DATA will not be accepted to set the
+  # socket in `Connected` state.
+  if (p.header.pType == ST_DATA or p.header.pType == ST_FIN) and
+      socket.state != Connected:
+    debug "Unexpected packet",
+      socketState = socket.state,
+      packetType = p.header.pType
+
+    return
+
   socket.ackPackets(acks, timestampInfo.moment)
 
   # packets in front may have been acked by selective ack, decrease window until we hit
@@ -1352,15 +1373,6 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
     socket.selectiveAckPackets(pkAckNr, p.eack.unsafeGet(), timestampInfo.moment)
 
   if p.header.pType == ST_DATA or p.header.pType == ST_FIN:
-    if socket.state != Connected:
-      debug "Unexpected packet",
-        socketState = socket.state,
-        packetType = p.header.pType
-
-      # we have received user generated packet (DATA or FIN), in not connected
-      # state. Stop processing it.
-      return
-
     if (p.header.pType == ST_FIN and (not socket.gotFin)):
       debug "Received FIN packet",
         eofPktNr = pkSeqNr,
