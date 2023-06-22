@@ -27,6 +27,8 @@ type
     proc (d: DatagramTransport):
       SendCallback[TransportAddress] {.gcsafe, raises: [].}
 
+chronicles.formatIt(TransportAddress): $it
+
 # This should probably be defined in TransportAddress module, as hash function should
 # be consistent with equality function
 # in nim zero arrays always have hash equal to 0, irrespectively of array size, to

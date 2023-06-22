@@ -311,6 +311,8 @@ type
 
   ConnectionResult*[A] = Result[UtpSocket[A], OutgoingConnectionError]
 
+chronicles.formatIt(UtpSocketKey): $it
+
 const
   # Default maximum size of the data packet payload. With this configuration
   # data packets will have 508 bytes (488 + 20 header).
