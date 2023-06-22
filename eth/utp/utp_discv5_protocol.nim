@@ -31,7 +31,8 @@ proc init*(T: type NodeAddress, nodeId: NodeId, address: Address): NodeAddress =
   NodeAddress(nodeId: nodeId, address: address)
 
 proc init*(T: type NodeAddress, node: Node): Option[NodeAddress] =
-  node.address.map((address: Address) => NodeAddress(nodeId: node.id, address: address))
+  node.address.map((address: Address) =>
+    NodeAddress(nodeId: node.id, address: address))
 
 proc hash(x: NodeAddress): Hash =
   var h = 0
@@ -51,25 +52,31 @@ func `$`*(x: UtpSocketKey[NodeAddress]): string =
   ", rcvId: " & $x.rcvId &
   ")"
 
-proc talkReqDirect(p: protocol.Protocol, n: NodeAddress, protocol, request: seq[byte]): Future[void] =
+proc talkReqDirect(
+    p: protocol.Protocol, n: NodeAddress, protocol, request: seq[byte]):
+    Future[void] =
   let
     reqId = RequestId.init(p.rng[])
-    message = encodeMessage(TalkReqMessage(protocol: protocol, request: request), reqId)
+    message = encodeMessage(
+      TalkReqMessage(protocol: protocol, request: request), reqId)
+    (data, nonce) = encodeMessagePacket(
+      p.rng[], p.codec, n.nodeId, n.address, message)
 
-    (data, nonce) = encodeMessagePacket(p.rng[], p.codec, n.nodeId, n.address, message)
-
-  trace "Send message packet", dstId = n.nodeId, address = n.address, kind = MessageKind.talkreq
+  trace "Send message packet",
+    dstId = n.nodeId, address = n.address, kind = MessageKind.talkreq
   p.send(n.address, data)
 
 proc initSendCallback(
-    t: protocol.Protocol, subProtocolName: seq[byte]): SendCallback[NodeAddress] =
+    t: protocol.Protocol, subProtocolName: seq[byte]):
+    SendCallback[NodeAddress] =
   return (
     proc (to: NodeAddress, data: seq[byte]): Future[void] =
       let fut = newFuture[void]()
-      # hidden assumption here is that nodes already have established discv5 session
-      # between each other. In our use case this should be true as opening stream
-      # is only done after successful OFFER/ACCEPT or FINDCONTENT/CONTENT exchange
-      # which forces nodes to establish session between each other.
+      # hidden assumption here is that nodes already have established discv5
+      # session between each other. In our use case this should be true as
+      # opening stream is only done after successful OFFER/ACCEPT or
+      # FINDCONTENT/CONTENT exchange which forces nodes to establish session
+      # between each other.
       discard t.talkReqDirect(to, subProtocolName, data)
       fut.complete()
       return fut

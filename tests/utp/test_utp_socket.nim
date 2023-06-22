@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2022 Status Research & Development GmbH
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -17,48 +17,49 @@ import
   ../../eth/keys,
   ../stubloglevel
 
-procSuite "Utp socket unit test":
-  let rng = newRng()
-  let testAddress = initTAddress("127.0.0.1", 9079)
-  let testBufferSize = 1024'u32
-  let defaultRcvOutgoingId = 314'u16
+procSuite "uTP socket tests":
+  let
+    rng = newRng()
+    testAddress = initTAddress("127.0.0.1", 9079)
+    testBufferSize = 1024'u32
+    defaultRcvOutgoingId = 314'u16
 
   proc packetsToBytes(packets: seq[Packet]): seq[byte] =
-    var resultBytes = newSeq[byte]()
+    var bytes = newSeq[byte]()
     for p in packets:
-      resultBytes.add(p.payload)
-    return resultBytes
+      bytes.add(p.payload)
+    return bytes
 
-  asyncTest "Starting outgoing socket should send Syn packet":
+  asyncTest "Outgoing socket must send SYN packet":
     let q = newAsyncQueue[Packet]()
     let defaultConfig = SocketConfig.init()
-    let sock1 = newOutgoingSocket[TransportAddress](
+    let socket = newOutgoingSocket[TransportAddress](
       testAddress,
       initTestSnd(q),
       defaultConfig,
       defaultRcvOutgoingId,
       rng[]
     )
-    let fut1 = sock1.startOutgoingSocket()
+    let fut = socket.startOutgoingSocket()
     let initialPacket = await q.get()
 
     check:
       initialPacket.header.pType == ST_SYN
       initialPacket.header.wndSize == defaultConfig.optRcvBuffer
 
-    await sock1.destroyWait()
-    fut1.cancel()
+    await socket.destroyWait()
+    fut.cancel()
 
-  asyncTest "Outgoing socket should re-send syn packet 2 times before declaring failure":
+  asyncTest "Outgoing socket should re-send SYN packet 2 times before declaring failure":
     let q = newAsyncQueue[Packet]()
-    let sock1 = newOutgoingSocket[TransportAddress](
+    let socket = newOutgoingSocket[TransportAddress](
       testAddress,
       initTestSnd(q),
       SocketConfig.init(milliseconds(100)),
       defaultRcvOutgoingId,
       rng[]
     )
-    let fut1 =  sock1.startOutgoingSocket()
+    let fut1 =  socket.startOutgoingSocket()
     let initialPacket = await q.get()
 
     check:
@@ -75,24 +76,24 @@ procSuite "Utp socket unit test":
       resentSynPacket1.header.pType == ST_SYN
 
     # next timeout will should disconnect socket
-    await waitUntil(proc (): bool = sock1.isConnected() == false)
+    await waitUntil(proc (): bool = socket.isConnected() == false)
 
     check:
-      not sock1.isConnected()
+      not socket.isConnected()
 
-    await sock1.destroyWait()
+    await socket.destroyWait()
     fut1.cancel()
 
   asyncTest "Processing in order ack should make socket connected":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
 
-    let (sock1, packet) = connectOutGoingSocket(initialRemoteSeq, q)
+    let (socket, packet) = connectOutGoingSocket(initialRemoteSeq, q)
 
     check:
-      sock1.isConnected()
+      socket.isConnected()
 
-    await sock1.destroyWait()
+    await socket.destroyWait()
 
   asyncTest "Processing in order data packet should upload it to buffer and ack packet":
     let q = newAsyncQueue[Packet]()
@@ -1418,9 +1419,9 @@ procSuite "Utp socket unit test":
     let dataDropped = @[1'u8]
     let dataReceived = @[2'u8]
 
-    let sock1 = newOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, defaultRcvOutgoingId, rng[])
+    let socket = newOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, defaultRcvOutgoingId, rng[])
 
-    asyncSpawn sock1.startOutgoingSocket()
+    asyncSpawn socket.startOutgoingSocket()
 
     let initialPacket = await q.get()
 
@@ -1456,16 +1457,16 @@ procSuite "Utp socket unit test":
 
     # even though @[1'u8] is received first, it should be dropped as socket is not
     # yet in connected state
-    await sock1.processPacket(dpDropped)
-    await sock1.processPacket(responseAck)
-    await sock1.processPacket(dpReceived)
+    await socket.processPacket(dpDropped)
+    await socket.processPacket(responseAck)
+    await socket.processPacket(dpReceived)
 
-    let receivedData = await sock1.read(1)
+    let receivedData = await socket.read(1)
 
     check:
       receivedData == dataReceived
 
-    await sock1.destroyWait()
+    await socket.destroyWait()
 
   asyncTest "Clean up all resources when closing due to timeout failure":
     let q = newAsyncQueue[Packet]()
