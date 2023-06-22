@@ -6,6 +6,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   std/[options, strutils, tables, sets],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
@@ -182,7 +184,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async.} =
     await sleepAsync(1000) # 1 sec of delay
 
 
-proc run(config: DiscoveryConf) =
+proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
   let
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
@@ -235,7 +237,9 @@ proc run(config: DiscoveryConf) =
     waitFor(discover(d, config.persistingFile))
 
 when isMainModule:
+  {.pop.}
   let config = DiscoveryConf.load()
+  {.push raises: [].}
 
   setLogLevel(config.logLevel)
 
