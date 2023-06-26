@@ -61,7 +61,7 @@ task test_rlp, "Run rlp tests":
   # cannot reproduce locally on windows-2019
   # running in virtualbox
   let releaseMode =
-    if existsEnv"PLATFORM" and getEnv"PLATFORM" != "windows-amd64":
+    if existsEnv"PLATFORM" and getEnv"PLATFORM" == "windows-amd64":
       "-d:debug"
     else:
       "-d:release"
