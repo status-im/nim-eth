@@ -205,7 +205,7 @@ proc addNode*(d: Protocol, enr: EnrUri): bool =
   if res:
     return d.addNode(r)
 
-proc getNode*(d: Protocol, id: NodeId): Option[Node] =
+proc getNode*(d: Protocol, id: NodeId): Opt[Node] =
   ## Get the node with id from the routing table.
   d.routingTable.getNode(id)
 
@@ -391,7 +391,7 @@ proc registerTalkProtocol*(d: Protocol, protocolId: seq[byte],
     ok()
 
 proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
-    requestNonce: AESGCMNonce, node: Option[Node]) =
+    requestNonce: AESGCMNonce, node: Opt[Node]) =
   let key = HandshakeKey(nodeId: toId, address: a)
   if not d.codec.hasHandshake(key):
     let
@@ -764,7 +764,7 @@ proc queryRandom*(d: Protocol, enrField: (string, seq[byte])):
 
   return filtered
 
-proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
+proc resolve*(d: Protocol, id: NodeId): Future[Opt[Node]] {.async.} =
   ## Resolve a `Node` based on provided `NodeId`.
   ##
   ## This will first look in the own routing table. If the node is known, it
@@ -772,7 +772,7 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
   ## does not reply, a lookup is done to see if it can find a (newer) record of
   ## the node on the network.
   if id == d.localNode.id:
-    return some(d.localNode)
+    return Opt.some(d.localNode)
 
   let node = d.getNode(id)
   if node.isSome():
@@ -780,7 +780,7 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
 
     # TODO: Handle failures better. E.g. stop on different failures than timeout
     if request.isOk() and request[].len > 0:
-      return some(request[][0])
+      return Opt.some(request[][0])
 
   let discovered = await d.lookup(id)
   for n in discovered:
@@ -788,7 +788,7 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
       if node.isSome() and node.get().record.seqNum >= n.record.seqNum:
         return node
       else:
-        return some(n)
+        return Opt.some(n)
 
   return node
 

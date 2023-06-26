@@ -8,13 +8,13 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, times, sequtils, bitops, sets, options],
+  std/[algorithm, times, sequtils, bitops, sets],
   bearssl/rand,
   stint, chronicles, metrics, chronos, stew/shims/net as stewNet,
-  ../../net/utils,
+  ../../net/utils, stew/results,
   "."/[node, random2, enr]
 
-export options
+export results
 
 declarePublicGauge routing_table_nodes,
   "Discovery routing table nodes", labels = ["state"]
@@ -419,13 +419,13 @@ proc replaceNode*(r: var RoutingTable, n: Node) =
       b.add(b.replacementCache[high(b.replacementCache)])
       b.replacementCache.delete(high(b.replacementCache))
 
-proc getNode*(r: RoutingTable, id: NodeId): Option[Node] =
+proc getNode*(r: RoutingTable, id: NodeId): Opt[Node] =
   ## Get the `Node` with `id` as `NodeId` from the routing table.
   ## If no node with provided node id can be found,`none` is returned .
   let b = r.bucketForNode(id)
   for n in b.nodes:
     if n.id == id:
-      return some(n)
+      return Opt.some(n)
 
 proc contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
   # Check if the routing table contains node `n`.
