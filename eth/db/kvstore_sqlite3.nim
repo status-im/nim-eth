@@ -57,9 +57,9 @@ template dispose(db: Sqlite) =
 template dispose(db: RawStmtPtr) =
   discard sqlite3_finalize(db)
 
-template dispose*(db: SqliteStmt) =
-  if db.stmt != nil:
-    discard sqlite3_finalize(db.stmt)
+template dispose*(s: SqliteStmt) =
+  if RawStmtPtr(s) != nil:
+    discard sqlite3_finalize(RawStmtPtr s)
 
 template env(s: RawStmtPtr): Sqlite = sqlite3_db_handle(s)
 
