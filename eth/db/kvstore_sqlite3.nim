@@ -57,8 +57,11 @@ template dispose(db: Sqlite) =
 template dispose(db: RawStmtPtr) =
   discard sqlite3_finalize(db)
 
-template dispose*(db: SqliteStmt) =
-  discard sqlite3_finalize(RawStmtPtr db)
+template dispose*(s: SqliteStmt) =
+  if RawStmtPtr(s) != nil:
+    discard sqlite3_finalize(RawStmtPtr s)
+
+template env(s: RawStmtPtr): Sqlite = sqlite3_db_handle(s)
 
 func isInsideTransaction*(db: SqStoreRef): bool =
   sqlite3_get_autocommit(db.env) == 0
@@ -72,13 +75,21 @@ proc disposeIfUnreleased[T](x: var AutoDisposed[T]) =
   if x.val != nil:
     dispose(x.release)
 
-template checkErr(op, cleanup: untyped) =
+func toErrorString(env: ptr sqlite3, v: cint): string =
+  var err = $sqlite3_errstr(v)
+  if v in [SQLITE_CANTOPEN, SQLITE_IOERR] and not isNil(env):
+    let errno = sqlite3_system_errno(env)
+    if errno != 0:
+      err &= ": " & osErrorMsg(OSErrorCode(errno))
+  err
+
+template checkErr(env: ptr sqlite3, op, cleanup: untyped) =
   if (let v = (op); v != SQLITE_OK):
     cleanup
-    return err($sqlite3_errstr(v))
+    return err(toErrorString(env, v))
 
-template checkErr(op) =
-  checkErr(op): discard
+template checkErr(env: ptr sqlite3, op: untyped) =
+  checkErr(env, op): discard
 
 proc prepareStmt*(db: SqStoreRef,
                   stmt: string,
@@ -86,7 +97,7 @@ proc prepareStmt*(db: SqStoreRef,
                   Res: type,
                   managed = true): KvResult[SqliteStmt[Params, Res]] =
   var s: RawStmtPtr
-  checkErr sqlite3_prepare_v2(db.env, stmt, stmt.len.cint, addr s, nil)
+  checkErr db.env, sqlite3_prepare_v2(db.env, stmt, stmt.len.cint, addr s, nil)
   if managed: db.managedStmts.add s
   ok SqliteStmt[Params, Res](s)
 
@@ -121,10 +132,10 @@ template bindParams(s: RawStmtPtr, params: auto) =
     when params.type.arity > 0:
       var i = 1
       for param in fields(params):
-        checkErr bindParam(s, i, param)
+        checkErr s.env, bindParam(s, i, param)
         inc i
   else:
-    checkErr bindParam(s, 1, params)
+    checkErr s.env, bindParam(s, 1, params)
 
 proc exec*[P](s: SqliteStmt[P, void], params: P): KvResult[void] =
   let s = RawStmtPtr s
@@ -132,7 +143,7 @@ proc exec*[P](s: SqliteStmt[P, void], params: P): KvResult[void] =
 
   let res =
     if (let v = sqlite3_step(s); v != SQLITE_DONE):
-      err($sqlite3_errstr(v))
+      err(toErrorString(s.env, v))
     else:
       ok()
 
@@ -218,7 +229,7 @@ proc exec*[Params, Res](s: SqliteStmt[Params, Res],
       of SQLITE_DONE:
         break
       else:
-        return err($sqlite3_errstr(v))
+        return err(toErrorString(s.env, v))
     return ok gotResults
   finally:
     # release implicit transaction
@@ -236,13 +247,13 @@ iterator exec*[Params, Res](s: SqliteStmt[Params, Res],
     var i = 1
     for param in fields(params):
       if (let v = bindParam(s, i, param); v != SQLITE_OK):
-        res = KvResult[void].err($sqlite3_errstr(v))
+        res = KvResult[void].err(toErrorString(s.env, v))
         break
 
       inc i
   else:
     if (let v = bindParam(s, 1, params); v != SQLITE_OK):
-      res = KvResult[void].err($sqlite3_errstr(v))
+      res = KvResult[void].err(toErrorString(s.env, v))
 
   defer:
     # release implicit transaction
@@ -258,7 +269,7 @@ iterator exec*[Params, Res](s: SqliteStmt[Params, Res],
     of SQLITE_DONE:
       break
     else:
-      res = KvResult[void].err($sqlite3_errstr(v))
+      res = KvResult[void].err(toErrorString(s.env, v))
 
   if not res.isOk():
     yield res
@@ -281,7 +292,7 @@ proc exec*[Params: tuple](db: SqStoreRef,
   result = exec(stmt, params)
   let finalizeStatus = sqlite3_finalize(RawStmtPtr stmt)
   if finalizeStatus != SQLITE_OK and result.isOk:
-    return err($sqlite3_errstr(finalizeStatus))
+    return err(toErrorString(db.env, finalizeStatus))
 
 proc exec*[Params: tuple, Res](db: SqStoreRef,
                               stmt: string,
@@ -291,7 +302,7 @@ proc exec*[Params: tuple, Res](db: SqStoreRef,
   result = exec(stmt, params, onData)
   let finalizeStatus = sqlite3_finalize(RawStmtPtr stmt)
   if finalizeStatus != SQLITE_OK and result.isOk:
-    return err($sqlite3_errstr(finalizeStatus))
+    return err(toErrorString(db.env, finalizeStatus))
 
 template exec*(db: SqStoreRef, stmt: string): KvResult[void] =
   exec(db, stmt, ())
@@ -302,7 +313,7 @@ proc get*(db: SqKeyspaceRef,
   if not db.open: return err("sqlite: database closed")
   let getStmt = db.getStmt
   if getStmt == nil: return ok(false) # no such table
-  checkErr bindParam(getStmt, 1, key)
+  checkErr db.env, bindParam(getStmt, 1, key)
 
   let
     v = sqlite3_step(getStmt)
@@ -316,7 +327,7 @@ proc get*(db: SqKeyspaceRef,
       of SQLITE_DONE:
         ok(false)
       else:
-        err($sqlite3_errstr(v))
+        err(toErrorString(db.env, v))
 
   # release implicit transaction
   discard sqlite3_reset(getStmt) # same return information as step
@@ -357,12 +368,12 @@ proc find*(
         # prefixes that lexicographically are greater, thus we use the
         # query that only does the >= comparison
         if db.findStmt1 == nil: return ok(0) # no such table
-        checkErr bindParam(db.findStmt1, 1, prefix)
+        checkErr db.env, bindParam(db.findStmt1, 1, prefix)
         db.findStmt1
       else:
         if db.findStmt2 == nil: return ok(0) # no such table
-        checkErr bindParam(db.findStmt2, 1, prefix)
-        checkErr bindParam(db.findStmt2, 2, next)
+        checkErr db.env, bindParam(db.findStmt2, 1, prefix)
+        checkErr db.env, bindParam(db.findStmt2, 2, next)
         db.findStmt2
 
 
@@ -388,7 +399,7 @@ proc find*(
       discard sqlite3_reset(findStmt) # same return information as step
       discard sqlite3_clear_bindings(findStmt) # no errors possible
 
-      return err($sqlite3_errstr(v))
+      return err(toErrorString(db.env, v))
 
   # release implicit transaction
   discard sqlite3_reset(findStmt) # same return information as step
@@ -400,12 +411,12 @@ proc put*(db: SqKeyspaceRef, key, value: openArray[byte]): KvResult[void] =
   if not db.open: return err("sqlite: database closed")
   let putStmt = db.putStmt
   if putStmt == nil: return err("sqlite: cannot write to read-only database")
-  checkErr bindParam(putStmt, 1, key)
-  checkErr bindParam(putStmt, 2, value)
+  checkErr db.env, bindParam(putStmt, 1, key)
+  checkErr db.env, bindParam(putStmt, 2, value)
 
   let res =
     if (let v = sqlite3_step(putStmt); v != SQLITE_DONE):
-      err($sqlite3_errstr(v))
+      err(toErrorString(db.env, v))
     else:
       ok()
 
@@ -420,14 +431,14 @@ proc contains*(db: SqKeyspaceRef, key: openArray[byte]): KvResult[bool] =
   let containsStmt = db.containsStmt
   if containsStmt == nil: return ok(false) # no such table
 
-  checkErr bindParam(containsStmt, 1, key)
+  checkErr db.env, bindParam(containsStmt, 1, key)
 
   let
     v = sqlite3_step(containsStmt)
     res = case v
       of SQLITE_ROW: ok(true)
       of SQLITE_DONE: ok(false)
-      else: err($sqlite3_errstr(v))
+      else: err(toErrorString(db.env, v))
 
   # release implicit transaction
   discard sqlite3_reset(containsStmt) # same return information as step
@@ -439,11 +450,11 @@ proc del*(db: SqKeyspaceRef, key: openArray[byte]): KvResult[bool] =
   if not db.open: return err("sqlite: database closed")
   let delStmt = db.delStmt
   if delStmt == nil: return ok(false) # no such table
-  checkErr bindParam(delStmt, 1, key)
+  checkErr db.env, bindParam(delStmt, 1, key)
 
   let res =
     if (let v = sqlite3_step(delStmt); v != SQLITE_DONE):
-      err($sqlite3_errstr(v))
+      err(toErrorString(db.env, v))
     else:
       ok(sqlite3_changes(db.env) > 0)
 
@@ -460,7 +471,7 @@ proc clear*(db: SqKeyspaceRef): KvResult[bool] =
 
   let res =
     if (let v = sqlite3_step(clearStmt); v != SQLITE_DONE):
-      err($sqlite3_errstr(v))
+      err(toErrorString(db.env, v))
     else:
       ok(sqlite3_changes(db.env) > 0)
 
@@ -504,28 +515,28 @@ proc checkpoint*(db: SqStoreRef, kind = SqStoreCheckpointKind.passive) =
 template prepare(env: ptr sqlite3, q: string): ptr sqlite3_stmt =
   block:
     var s: ptr sqlite3_stmt
-    checkErr sqlite3_prepare_v2(env, cstring(q), q.len.cint, addr s, nil):
+    checkErr env, sqlite3_prepare_v2(env, cstring(q), q.len.cint, addr s, nil):
       discard
     s
 
 template prepare(env: ptr sqlite3, q: string, cleanup: untyped): ptr sqlite3_stmt =
   block:
     var s: ptr sqlite3_stmt
-    checkErr sqlite3_prepare_v2(env, cstring(q), q.len.cint, addr s, nil)
+    checkErr env, sqlite3_prepare_v2(env, cstring(q), q.len.cint, addr s, nil)
     s
 
-template checkExec(s: ptr sqlite3_stmt) =
+template checkExec(env: ptr sqlite3, s: ptr sqlite3_stmt) =
   if (let x = sqlite3_step(s); x != SQLITE_DONE):
     discard sqlite3_finalize(s)
-    return err($sqlite3_errstr(x))
+    return err(toErrorString(env, x))
 
   if (let x = sqlite3_finalize(s); x != SQLITE_OK):
-    return err($sqlite3_errstr(x))
+    return err(toErrorString(env, x))
 
 template checkExec(env: ptr sqlite3, q: string) =
   block:
     let s = prepare(env, q): discard
-    checkExec(s)
+    checkExec(env, s)
 
 proc isClosed*(db: SqStoreRef): bool =
   db.env != nil
@@ -556,18 +567,19 @@ proc init*(
     except OSError, IOError:
       return err("sqlite: cannot create database directory")
 
-  checkErr sqlite3_open_v2(cstring name, addr env.val, flags.cint, nil)
+  checkErr env.val, sqlite3_open_v2(cstring name, addr env.val, flags.cint, nil)
 
-  template checkWalPragmaResult(journalModePragma: ptr sqlite3_stmt) =
+  template checkWalPragmaResult(
+      env: ptr sqlite3, journalModePragma: ptr sqlite3_stmt) =
     if (let x = sqlite3_step(journalModePragma); x != SQLITE_ROW):
       discard sqlite3_finalize(journalModePragma)
-      return err($sqlite3_errstr(x))
+      return err(toErrorString(env, x))
 
     if (let x = sqlite3_column_type(journalModePragma, 0); x != SQLITE3_TEXT):
       discard sqlite3_finalize(journalModePragma)
-      return err($sqlite3_errstr(x))
+      return err(toErrorString(env, x))
 
-    if (let x = cstring sqlite3_column_text(journalModePragma, 0);
+    if (let x = sqlite3_column_text(journalModePragma, 0);
         x != "memory" and x != "wal"):
       discard sqlite3_finalize(journalModePragma)
       return err("Invalid pragma result: " & $x)
@@ -579,11 +591,11 @@ proc init*(
     checkExec env.val, "PRAGMA user_version = 3;"
 
     let journalModePragma = prepare(env.val, "PRAGMA journal_mode = WAL;")
-    checkWalPragmaResult(journalModePragma)
-    checkExec journalModePragma
+    checkWalPragmaResult(env.val, journalModePragma)
+    checkExec env.val, journalModePragma
 
   if manualCheckpoint:
-    checkErr sqlite3_wal_autocheckpoint(env.val, 0)
+    checkErr env.val, sqlite3_wal_autocheckpoint(env.val, 0)
     # In manual checkpointing mode, we relax synchronization to NORMAL -
     # this is safe in WAL mode leaving us with a consistent database at all
     # times, though potentially losing any data written between checkpoints.
@@ -683,7 +695,7 @@ proc registerCustomScalarFunction*(db: SqStoreRef, name: string, fun: CustomFunc
   # won't have any side effect this may enable additional optimisations.
   let deterministicUtf8Func = cint(SQLITE_UTF8 or SQLITE_DETERMINISTIC)
 
-  let res = sqlite3_create_function(
+  checkErr db.env, sqlite3_create_function(
     db.env,
     name,
     cint(2),
@@ -694,10 +706,7 @@ proc registerCustomScalarFunction*(db: SqStoreRef, name: string, fun: CustomFunc
     nil
   )
 
-  if res != SQLITE_OK:
-    return err($sqlite3_errstr(res))
-  else:
-    return ok()
+  ok()
 
 when defined(metrics):
   import locks, tables, times,
