@@ -33,6 +33,16 @@ let cfg =
   " -d:chronosStrictException -d:chronicles_log_level=TRACE" &
   " --threads:on"
 
+# workaround for github action CI
+# mysterious crash on windows-2019 64bit mode
+# cannot reproduce locally on windows-2019
+# running in virtualbox
+let releaseMode =
+  if existsEnv"PLATFORM" and getEnv"PLATFORM" == "windows-amd64":
+    "-d:debug"
+  else:
+    "-d:release"
+
 proc build(args, path, outdir: string) =
   exec nimc & " " & lang & " " & cfg & " " & flags & " " & args &
     " --outdir:build/" & outdir & " " & path
@@ -53,19 +63,9 @@ task test_discv4, "Run discovery v4 tests":
   run "-d:release", "tests/p2p/test_discovery", "p2p"
 
 task test_p2p, "Run p2p tests":
-  run "-d:release", "tests/p2p/all_tests", "p2p"
+  run releaseMode, "tests/p2p/all_tests", "p2p"
 
 task test_rlp, "Run rlp tests":
-  # workaround for github action CI
-  # mysterious crash on windows-2019 64bit mode
-  # cannot reproduce locally on windows-2019
-  # running in virtualbox
-  let releaseMode =
-    if existsEnv"PLATFORM" and getEnv"PLATFORM" == "windows-amd64":
-      "-d:debug"
-    else:
-      "-d:release"
-
   run releaseMode, "tests/rlp/all_tests", "rlp"
 
 task test_trie, "Run trie tests":
