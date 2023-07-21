@@ -39,7 +39,7 @@ let cfg =
 # running in virtualbox
 let releaseMode =
   if existsEnv"PLATFORM" and getEnv"PLATFORM" == "windows-amd64":
-    "-d:debug"
+    ""
   else:
     "-d:release"
 
