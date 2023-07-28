@@ -243,7 +243,7 @@ macro genOptionalFieldsValidation(obj: untyped, T: type, num: static[int]): unty
 
   # generate something like
   when false:
-    if obj.excessDataGas.isSome:
+    if obj.excessBlobGas.isSome:
       doAssert(obj.withdrawalsRoot.isSome, "withdrawalsRoot expected")
       doAssert(obj.fee.isSome, "fee expected")
     if obj.withdrawalsRoot.isSome:

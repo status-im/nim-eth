@@ -98,7 +98,7 @@ type
     value*         : UInt256
     payload*       : Blob
     accessList*    : AccessList           # EIP-2930
-    maxFeePerDataGas*: GasInt             # EIP-4844
+    maxFeePerBlobGas*: GasInt             # EIP-4844
     versionedHashes*: VersionedHashes     # EIP-4844
     networkPayload*: NetworkPayload       # EIP-4844
     V*             : int64
@@ -141,8 +141,8 @@ type
     # `baseFee` is the get/set of `fee`
     fee*:             Option[UInt256]   # EIP-1559
     withdrawalsRoot*: Option[Hash256]   # EIP-4895
-    dataGasUsed*:     Option[uint64]    # EIP-4844
-    excessDataGas*:   Option[uint64]    # EIP-4844
+    blobGasUsed*:     Option[uint64]    # EIP-4844
+    excessBlobGas*:   Option[uint64]    # EIP-4844
 
   BlockBody* = object
     transactions*:  seq[Transaction]

@@ -98,7 +98,7 @@ func rlpEncodeEip4844(tx: Transaction): auto =
   w.append(tx.value)
   w.append(tx.payload)
   w.append(tx.accessList)
-  w.append(tx.maxFeePerDataGas)
+  w.append(tx.maxFeePerBlobGas)
   w.append(tx.versionedHashes)
   w.finish()
 

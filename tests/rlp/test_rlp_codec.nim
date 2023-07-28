@@ -61,28 +61,28 @@ suite "BlockHeader roundtrip test":
     expect AssertionDefect:
       roundTrip(h)
 
-  test "Header + none(baseFee) + some(withdrawalsRoot) + some(excessDataGas)":
+  test "Header + none(baseFee) + some(withdrawalsRoot) + some(excessBlobGas)":
     let h = BlockHeader(
       withdrawalsRoot: some(Hash256()),
-      dataGasUsed: some(1'u64),
-      excessDataGas: some(1'u64)
+      blobGasUsed: some(1'u64),
+      excessBlobGas: some(1'u64)
     )
     expect AssertionDefect:
       roundTrip(h)
 
-  test "Header + none(baseFee) + none(withdrawalsRoot) + some(excessDataGas)":
+  test "Header + none(baseFee) + none(withdrawalsRoot) + some(excessBlobGas)":
     let h = BlockHeader(
-      dataGasUsed: some(1'u64),
-      excessDataGas: some(1'u64)
+      blobGasUsed: some(1'u64),
+      excessBlobGas: some(1'u64)
     )
     expect AssertionDefect:
       roundTrip(h)
 
-  test "Header + some(baseFee) + none(withdrawalsRoot) + some(excessDataGas)":
+  test "Header + some(baseFee) + none(withdrawalsRoot) + some(excessBlobGas)":
     let h = BlockHeader(
       fee: some(2.u256),
-      dataGasUsed: some(1'u64),
-      excessDataGas: some(1'u64)
+      blobGasUsed: some(1'u64),
+      excessBlobGas: some(1'u64)
     )
     expect AssertionDefect:
       roundTrip(h)
@@ -94,12 +94,12 @@ suite "BlockHeader roundtrip test":
     )
     roundTrip(h)
 
-  test "Header + some(baseFee) + some(withdrawalsRoot) + some(excessDataGas)":
+  test "Header + some(baseFee) + some(withdrawalsRoot) + some(excessBlobGas)":
     let h = BlockHeader(
       fee: some(2.u256),
       withdrawalsRoot: some(Hash256()),
-      dataGasUsed: some(1'u64),
-      excessDataGas: some(1'u64)
+      blobGasUsed: some(1'u64),
+      excessBlobGas: some(1'u64)
     )
     roundTrip(h)
 
@@ -177,8 +177,8 @@ type
     nonce*:           BlockNonce
     fee*:             Opt[UInt256]
     withdrawalsRoot*: Opt[Hash256]
-    dataGasUsed*:     Opt[GasInt]
-    excessDataGas*:   Opt[GasInt]
+    blobGasUsed*:     Opt[GasInt]
+    excessBlobGas*:   Opt[GasInt]
 
   BlockBodyOpt* = object
     transactions*:  seq[Transaction]
