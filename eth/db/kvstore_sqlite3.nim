@@ -96,6 +96,7 @@ proc prepareStmt*(db: SqStoreRef,
                   Params: type,
                   Res: type,
                   managed = true): KvResult[SqliteStmt[Params, Res]] =
+  mixin env
   var s: RawStmtPtr
   checkErr db.env, sqlite3_prepare_v2(db.env, stmt, stmt.len.cint, addr s, nil)
   if managed: db.managedStmts.add s
@@ -128,6 +129,7 @@ proc bindParam(s: RawStmtPtr, n: int, val: auto): cint =
     {.fatal: "Please add support for the '" & $typeof(val) & "' type".}
 
 template bindParams(s: RawStmtPtr, params: auto) =
+  mixin env
   when params is tuple:
     when params.type.arity > 0:
       var i = 1
@@ -138,6 +140,7 @@ template bindParams(s: RawStmtPtr, params: auto) =
     checkErr s.env, bindParam(s, 1, params)
 
 proc exec*[P](s: SqliteStmt[P, void], params: P): KvResult[void] =
+  mixin env
   let s = RawStmtPtr s
   bindParams(s, params)
 
