@@ -150,7 +150,7 @@ func logDistance*(r: RoutingTable, a, b: NodeId): uint16 =
 func idAtDistance*(r: RoutingTable, id: NodeId, dist: uint16): NodeId =
   r.distanceCalculator.calculateIdAtDistance(id, dist)
 
-proc new(T: type KBucket, istart, iend: NodeId, bucketIpLimit: uint): T =
+func new(T: type KBucket, istart, iend: NodeId, bucketIpLimit: uint): T =
   KBucket(
     istart: istart,
     iend: iend,
@@ -158,14 +158,14 @@ proc new(T: type KBucket, istart, iend: NodeId, bucketIpLimit: uint): T =
     replacementCache: @[],
     ipLimits: IpLimits(limit: bucketIpLimit))
 
-proc midpoint(k: KBucket): NodeId =
+func midpoint(k: KBucket): NodeId =
   k.istart + (k.iend - k.istart) div 2.u256
 
-proc len(k: KBucket): int = k.nodes.len
+func len(k: KBucket): int = k.nodes.len
 
-proc tail(k: KBucket): Node = k.nodes[high(k.nodes)]
+func tail(k: KBucket): Node = k.nodes[high(k.nodes)]
 
-proc ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
+func ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
   ## Check if the ip limits of the routing table and the bucket are reached for
   ## the specified `Node` its ip.
   ## When one of the ip limits is reached return false, else increment them and
@@ -181,7 +181,7 @@ proc ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
 
   return true
 
-proc ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
+func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   ## Decrement the ip limits of the routing table and the bucket for the
   ## specified `Node` its ip.
   let ip = n.address.get().ip # Node from table should always have an address
@@ -189,11 +189,11 @@ proc ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   b.ipLimits.dec(ip)
   r.ipLimits.dec(ip)
 
-proc add(k: KBucket, n: Node) =
+func add(k: KBucket, n: Node) =
   k.nodes.add(n)
   routing_table_nodes.inc()
 
-proc remove(k: KBucket, n: Node): bool =
+func remove(k: KBucket, n: Node): bool =
   let i = k.nodes.find(n)
   if i != -1:
     routing_table_nodes.dec()
@@ -204,7 +204,7 @@ proc remove(k: KBucket, n: Node): bool =
   else:
     false
 
-proc split(k: KBucket): tuple[lower, upper: KBucket] =
+func split(k: KBucket): tuple[lower, upper: KBucket] =
   ## Split the kbucket `k` at the median id.
   let splitid = k.midpoint
   result.lower = KBucket.new(k.istart, splitid, k.ipLimits.limit)
@@ -224,12 +224,12 @@ proc split(k: KBucket): tuple[lower, upper: KBucket] =
     doAssert(bucket.ipLimits.inc(node.address.get().ip),
       "IpLimit increment should work as all buckets have the same limits")
 
-proc inRange(k: KBucket, n: Node): bool =
+func inRange(k: KBucket, n: Node): bool =
   k.istart <= n.id and n.id <= k.iend
 
-proc contains(k: KBucket, n: Node): bool = n in k.nodes
+func contains(k: KBucket, n: Node): bool = n in k.nodes
 
-proc binaryGetBucketForNode*(buckets: openArray[KBucket],
+func binaryGetBucketForNode*(buckets: openArray[KBucket],
                             id: NodeId): KBucket =
   ## Given a list of ordered buckets, returns the bucket for a given `NodeId`.
   ## Returns nil if no bucket in range for given `id` is found.
@@ -263,7 +263,7 @@ proc computeSharedPrefixBits(nodes: openArray[NodeId]): int =
   # Reaching this would mean that all node ids are equal.
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
-proc init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop,
+func init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop,
     ipLimits = DefaultTableIpLimits, rng: ref HmacDrbgContext,
     distanceCalculator = XorDistanceCalculator): T =
   ## Initialize the routing table for provided `Node` and bitsPerHop value.
@@ -276,18 +276,18 @@ proc init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop
     distanceCalculator: distanceCalculator,
     rng: rng)
 
-proc splitBucket(r: var RoutingTable, index: int) =
+func splitBucket(r: var RoutingTable, index: int) =
   let bucket = r.buckets[index]
   let (a, b) = bucket.split()
   r.buckets[index] = a
   r.buckets.insert(b, index + 1)
 
-proc bucketForNode(r: RoutingTable, id: NodeId): KBucket =
+func bucketForNode(r: RoutingTable, id: NodeId): KBucket =
   result = binaryGetBucketForNode(r.buckets, id)
   doAssert(not result.isNil(),
     "Routing table should always cover the full id space")
 
-proc addReplacement(r: var RoutingTable, k: KBucket, n: Node): NodeStatus =
+func addReplacement(r: var RoutingTable, k: KBucket, n: Node): NodeStatus =
   ## Add the node to the tail of the replacement cache of the KBucket.
   ##
   ## If the replacement cache is full, the oldest (first entry) node will be
@@ -398,13 +398,13 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
       # When bucket doesn't get split the node is added to the replacement cache
       return r.addReplacement(bucket, n)
 
-proc removeNode*(r: var RoutingTable, n: Node) =
+func removeNode*(r: var RoutingTable, n: Node) =
   ## Remove the node `n` from the routing table.
   let b = r.bucketForNode(n.id)
   if b.remove(n):
     ipLimitDec(r, b, n)
 
-proc replaceNode*(r: var RoutingTable, n: Node) =
+func replaceNode*(r: var RoutingTable, n: Node) =
   ## Replace node `n` with last entry in the replacement cache. If there are
   ## no entries in the replacement cache, node `n` will simply be removed.
   # TODO: Kademlia paper recommends here to not remove nodes if there are no
@@ -419,7 +419,7 @@ proc replaceNode*(r: var RoutingTable, n: Node) =
       b.add(b.replacementCache[high(b.replacementCache)])
       b.replacementCache.delete(high(b.replacementCache))
 
-proc getNode*(r: RoutingTable, id: NodeId): Opt[Node] =
+func getNode*(r: RoutingTable, id: NodeId): Opt[Node] =
   ## Get the `Node` with `id` as `NodeId` from the routing table.
   ## If no node with provided node id can be found,`none` is returned .
   let b = r.bucketForNode(id)
@@ -427,16 +427,16 @@ proc getNode*(r: RoutingTable, id: NodeId): Opt[Node] =
     if n.id == id:
       return Opt.some(n)
 
-proc contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
+func contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
   # Check if the routing table contains node `n`.
 
-proc bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
+func bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
   sortedByIt(r.buckets,  r.distance(it.midpoint, id))
 
-proc nodesByDistanceTo(r: RoutingTable, k: KBucket, id: NodeId): seq[Node] =
+func nodesByDistanceTo(r: RoutingTable, k: KBucket, id: NodeId): seq[Node] =
   sortedByIt(k.nodes, r.distance(it.id, id))
 
-proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
+func neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
     seenOnly = false): seq[Node] =
   ## Return up to k neighbours of the given node id.
   ## When seenOnly is set to true, only nodes that have been contacted
@@ -457,7 +457,7 @@ proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
   if result.len > k:
     result.setLen(k)
 
-proc neighboursAtDistance*(r: RoutingTable, distance: uint16,
+func neighboursAtDistance*(r: RoutingTable, distance: uint16,
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours at given logarithmic distance.
   result = r.neighbours(r.idAtDistance(r.localNode.id, distance), k, seenOnly)
@@ -465,7 +465,7 @@ proc neighboursAtDistance*(r: RoutingTable, distance: uint16,
   # that are exactly the requested distance.
   keepIf(result, proc(n: Node): bool = r.logDistance(n.id, r.localNode.id) == distance)
 
-proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
+func neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours at given logarithmic distances.
   # TODO: This will currently return nodes with neighbouring distances on the
@@ -479,10 +479,10 @@ proc neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
     keepIf(result, proc(n: Node): bool =
       distances.contains(r.logDistance(n.id, r.localNode.id)))
 
-proc len*(r: RoutingTable): int =
+func len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len
 
-proc moveRight[T](arr: var openArray[T], a, b: int) =
+func moveRight[T](arr: var openArray[T], a, b: int) =
   ## In `arr` move elements in range [a, b] right by 1.
   var t: T
   shallowCopy(t, arr[b + 1])
@@ -490,7 +490,7 @@ proc moveRight[T](arr: var openArray[T], a, b: int) =
     shallowCopy(arr[i + 1], arr[i])
   shallowCopy(arr[a], t)
 
-proc setJustSeen*(r: RoutingTable, n: Node) =
+func setJustSeen*(r: RoutingTable, n: Node) =
   ## Move `n` to the head (most recently seen) of its bucket.
   ## If `n` is not in the routing table, do nothing.
   let b = r.bucketForNode(n.id)
@@ -503,7 +503,7 @@ proc setJustSeen*(r: RoutingTable, n: Node) =
       b.nodes[0].seen = true
       routing_table_nodes.inc(labelValues = ["seen"])
 
-proc nodeToRevalidate*(r: RoutingTable): Node =
+func nodeToRevalidate*(r: RoutingTable): Node =
   ## Return a node to revalidate. The least recently seen node from a random
   ## bucket is selected.
   var buckets = r.buckets
@@ -515,7 +515,8 @@ proc nodeToRevalidate*(r: RoutingTable): Node =
       return b.nodes[^1]
 
 proc randomNodes*(r: RoutingTable, maxAmount: int,
-    pred: proc(x: Node): bool {.gcsafe, noSideEffect.} = nil): seq[Node] =
+    pred: proc(x: Node): bool {.raises: [], gcsafe, noSideEffect.} = nil):
+    seq[Node] =
   ## Get a `maxAmount` of random nodes from the routing table with the `pred`
   ## predicate function applied as filter on the nodes selected.
   var maxAmount = maxAmount

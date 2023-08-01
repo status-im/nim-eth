@@ -205,7 +205,7 @@ proc addNode*(d: Protocol, enr: EnrUri): bool =
   if res:
     return d.addNode(r)
 
-proc getNode*(d: Protocol, id: NodeId): Opt[Node] =
+func getNode*(d: Protocol, id: NodeId): Opt[Node] =
   ## Get the node with id from the routing table.
   d.routingTable.getNode(id)
 
@@ -214,7 +214,7 @@ proc randomNodes*(d: Protocol, maxAmount: int): seq[Node] =
   d.routingTable.randomNodes(maxAmount)
 
 proc randomNodes*(d: Protocol, maxAmount: int,
-    pred: proc(x: Node): bool {.gcsafe, noSideEffect.}): seq[Node] =
+    pred: proc(x: Node): bool {.raises: [], gcsafe, noSideEffect.}): seq[Node] =
   ## Get a `maxAmount` of random nodes from the local routing table with the
   ## `pred` predicate function applied as filter on the nodes selected.
   d.routingTable.randomNodes(maxAmount, pred)
@@ -225,17 +225,17 @@ proc randomNodes*(d: Protocol, maxAmount: int,
   ## the nodes selected are filtered by provided `enrField`.
   d.randomNodes(maxAmount, proc(x: Node): bool = x.record.contains(enrField))
 
-proc neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE,
+func neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE,
     seenOnly = false): seq[Node] =
   ## Return up to k neighbours (closest node ids) of the given node id.
   d.routingTable.neighbours(id, k, seenOnly)
 
-proc neighboursAtDistances*(d: Protocol, distances: seq[uint16],
+func neighboursAtDistances*(d: Protocol, distances: seq[uint16],
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours (closest node ids) at given distances.
   d.routingTable.neighboursAtDistances(distances, k, seenOnly)
 
-proc nodesDiscovered*(d: Protocol): int = d.routingTable.len
+func nodesDiscovered*(d: Protocol): int = d.routingTable.len
 
 func privKey*(d: Protocol): lent PrivateKey =
   d.privateKey
@@ -244,7 +244,7 @@ func getRecord*(d: Protocol): Record =
   ## Get the ENR of the local node.
   d.localNode.record
 
-proc updateRecord*(
+func updateRecord*(
     d: Protocol, enrFields: openArray[(string, seq[byte])]): DiscResult[void] =
   ## Update the ENR of the local node with provided `enrFields` k:v pairs.
   let fields = mapIt(enrFields, toFieldPair(it[0], it[1]))
@@ -382,7 +382,7 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
       trace "Timed out or unrequested message", kind = message.kind,
         origin = fromAddr
 
-proc registerTalkProtocol*(d: Protocol, protocolId: seq[byte],
+func registerTalkProtocol*(d: Protocol, protocolId: seq[byte],
     protocol: TalkProtocol): DiscResult[void] =
   # Currently allow only for one handler per talk protocol.
   if d.talkProtocols.hasKeyOrPut(protocolId, protocol):
@@ -617,7 +617,7 @@ proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Talk response message not received in time")
 
-proc lookupDistances*(target, dest: NodeId): seq[uint16] =
+func lookupDistances*(target, dest: NodeId): seq[uint16] =
   let td = logDistance(target, dest)
   let tdAsInt = int(td)
   result.add(td)
