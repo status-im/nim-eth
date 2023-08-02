@@ -189,11 +189,11 @@ func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   b.ipLimits.dec(ip)
   r.ipLimits.dec(ip)
 
-func add(k: KBucket, n: Node) =
+proc add(k: KBucket, n: Node) =
   k.nodes.add(n)
   routing_table_nodes.inc()
 
-func remove(k: KBucket, n: Node): bool =
+proc remove(k: KBucket, n: Node): bool =
   let i = k.nodes.find(n)
   if i != -1:
     routing_table_nodes.dec()
@@ -398,13 +398,13 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
       # When bucket doesn't get split the node is added to the replacement cache
       return r.addReplacement(bucket, n)
 
-func removeNode*(r: var RoutingTable, n: Node) =
+proc removeNode*(r: var RoutingTable, n: Node) =
   ## Remove the node `n` from the routing table.
   let b = r.bucketForNode(n.id)
   if b.remove(n):
     ipLimitDec(r, b, n)
 
-func replaceNode*(r: var RoutingTable, n: Node) =
+proc replaceNode*(r: var RoutingTable, n: Node) =
   ## Replace node `n` with last entry in the replacement cache. If there are
   ## no entries in the replacement cache, node `n` will simply be removed.
   # TODO: Kademlia paper recommends here to not remove nodes if there are no
@@ -490,7 +490,7 @@ func moveRight[T](arr: var openArray[T], a, b: int) =
     shallowCopy(arr[i + 1], arr[i])
   shallowCopy(arr[a], t)
 
-func setJustSeen*(r: RoutingTable, n: Node) =
+proc setJustSeen*(r: RoutingTable, n: Node) =
   ## Move `n` to the head (most recently seen) of its bucket.
   ## If `n` is not in the routing table, do nothing.
   let b = r.bucketForNode(n.id)
