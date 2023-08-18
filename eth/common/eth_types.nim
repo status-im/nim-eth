@@ -143,6 +143,7 @@ type
     withdrawalsRoot*: Option[Hash256]   # EIP-4895
     blobGasUsed*:     Option[uint64]    # EIP-4844
     excessBlobGas*:   Option[uint64]    # EIP-4844
+    parentBeaconBlockRoot*: Option[Hash256] # EIP-4788
 
   BlockBody* = object
     transactions*:  seq[Transaction]
