@@ -82,8 +82,9 @@ proc initSendCallback(
       return fut
   )
 
-proc messageHandler(protocol: TalkProtocol, request: seq[byte],
-    srcId: NodeId, srcUdpAddress: Address): seq[byte] =
+proc messageHandler(
+    protocol: TalkProtocol, request: seq[byte],
+    srcId: NodeId, srcUdpAddress: Address, node: Opt[Node]): seq[byte] =
   let
     p = UtpDiscv5Protocol(protocol)
     nodeAddress = NodeAddress.init(srcId, srcUdpAddress)
