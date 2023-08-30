@@ -157,7 +157,8 @@ type
 
   TalkProtocolHandler* = proc(
     p: TalkProtocol, request: seq[byte],
-    fromId: NodeId, fromUdpAddress: Address): seq[byte]
+    fromId: NodeId, fromUdpAddress: Address,
+    node: Opt[Node]): seq[byte]
     {.gcsafe, raises: [].}
 
   TalkProtocol* = ref object of RootObj
@@ -338,7 +339,7 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
       d.sendNodes(fromId, fromAddr, reqId, [])
 
 proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
-    talkreq: TalkReqMessage, reqId: RequestId) =
+    talkreq: TalkReqMessage, reqId: RequestId, node: Opt[Node]) =
   let talkProtocol = d.talkProtocols.getOrDefault(talkreq.protocol)
 
   let talkresp =
@@ -348,7 +349,7 @@ proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
       TalkRespMessage(response: @[])
     else:
       TalkRespMessage(response: talkProtocol.protocolHandler(talkProtocol,
-        talkreq.request, fromId, fromAddr))
+        talkreq.request, fromId, fromAddr, node))
   let (data, _) = encodeMessagePacket(d.rng[], d.codec, fromId, fromAddr,
     encodeMessage(talkresp, reqId))
 
@@ -356,8 +357,9 @@ proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
     kind = MessageKind.talkresp
   d.send(fromAddr, data)
 
-proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
-    message: Message) =
+proc handleMessage(
+    d: Protocol, srcId: NodeId, fromAddr: Address,
+    message: Message, node: Opt[Node] = Opt.none(Node)) =
   case message.kind
   of ping:
     discovery_message_requests_incoming.inc()
@@ -367,7 +369,7 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
     d.handleFindNode(srcId, fromAddr, message.findNode, message.reqId)
   of talkReq:
     discovery_message_requests_incoming.inc()
-    d.handleTalkReq(srcId, fromAddr, message.talkReq, message.reqId)
+    d.handleTalkReq(srcId, fromAddr, message.talkReq, message.reqId, node)
   of regTopic, topicQuery:
     discovery_message_requests_incoming.inc()
     discovery_message_requests_incoming.inc(labelValues = ["no_response"])
@@ -447,7 +449,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
     of HandshakeMessage:
       trace "Received handshake message packet", srcId = packet.srcIdHs,
         address = a, kind = packet.message.kind
-      d.handleMessage(packet.srcIdHs, a, packet.message)
+      d.handleMessage(packet.srcIdHs, a, packet.message, packet.node)
       # For a handshake message it is possible that we received an newer ENR.
       # In that case we can add/update it to the routing table.
       if packet.node.isSome():

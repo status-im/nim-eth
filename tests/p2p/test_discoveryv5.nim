@@ -792,7 +792,8 @@ suite "Discovery v5 Tests":
 
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
-        fromId: NodeId, fromUdpAddress: Address):
+        fromId: NodeId, fromUdpAddress: Address,
+        node: Opt[Node]):
         seq[byte] {.gcsafe, raises: [].} =
       request
 
@@ -819,7 +820,8 @@ suite "Discovery v5 Tests":
 
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
-        fromId: NodeId, fromUdpAddress: Address):
+        fromId: NodeId, fromUdpAddress: Address,
+        node: Opt[Node]):
         seq[byte] {.gcsafe, raises: [].} =
       request
 
@@ -843,7 +845,8 @@ suite "Discovery v5 Tests":
 
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
-        fromId: NodeId, fromUdpAddress: Address):
+        fromId: NodeId, fromUdpAddress: Address,
+        node: Opt[Node]):
         seq[byte] {.gcsafe, raises: [].} =
       request
 
@@ -882,7 +885,8 @@ suite "Discovery v5 Tests":
 
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
-        fromId: NodeId, fromUdpAddress: Address):
+        fromId: NodeId, fromUdpAddress: Address,
+        node: Opt[Node]):
         seq[byte] {.gcsafe, raises: [].} =
       # Return the request + same protocol id + 2 bytes, to make it 1 byte
       # bigger than the request
