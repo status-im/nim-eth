@@ -5,6 +5,8 @@
 
 import
   std/[os, options, strformat, typetraits],
+  chronos,
+  chronicles,
   sqlite3_abi,
   ./kvstore
 
@@ -139,22 +141,33 @@ template bindParams(s: RawStmtPtr, params: auto) =
   else:
     checkErr s.env, bindParam(s, 1, params)
 
-proc exec*[P](s: SqliteStmt[P, void], params: P): KvResult[void] =
+proc exec*[P](
+    s: SqliteStmt[P, void], params: P,
+    info: tuple[filename: string, line: int, column: int]): KvResult[void] =
   mixin env
   let s = RawStmtPtr s
   bindParams(s, params)
 
-  let res =
-    if (let v = sqlite3_step(s); v != SQLITE_DONE):
-      err(toErrorString(s.env, v))
-    else:
-      ok()
+  {.noSideEffect.}:
+    let
+      startTick = Moment.now()
+      res =
+        if (let v = sqlite3_step(s); v != SQLITE_DONE):
+          err(toErrorString(s.env, v))
+        else:
+          ok()
+      dur = Moment.now() - startTick
+    if dur > milliseconds(500):
+      info "Executed SQL", dur, info
 
   # release implicit transaction
   discard sqlite3_reset(s) # same return information as step
   discard sqlite3_clear_bindings(s) # no errors possible
 
   res
+
+template exec*[P](s: SqliteStmt[P, void], params: P): KvResult[void] =
+  exec(s, params, instantiationInfo())
 
 template readSimpleResult(s: RawStmtPtr, column: cint, T: type): auto =
   when T is int64:
