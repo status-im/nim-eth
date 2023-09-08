@@ -20,7 +20,7 @@ logScope:
   topics = "eth p2p"
 
 
-proc addCapability*(node: var EthereumNode,
+proc addCapability*(node: EthereumNode,
                     p: ProtocolInfo,
                     networkState: RootRef = nil) =
   doAssert node.connectionState == ConnectionState.None
@@ -35,10 +35,10 @@ proc addCapability*(node: var EthereumNode,
   if networkState.isNil.not:
     node.protocolStates[p.index] = networkState
 
-template addCapability*(node: var EthereumNode, Protocol: type) =
+template addCapability*(node: EthereumNode, Protocol: type) =
   addCapability(node, Protocol.protocolInfo)
 
-template addCapability*(node: var EthereumNode,
+template addCapability*(node: EthereumNode,
                         Protocol: type,
                         networkState: untyped) =
   mixin NetworkState
@@ -53,12 +53,12 @@ template addCapability*(node: var EthereumNode,
   addCapability(node, Protocol.protocolInfo,
     cast[RootRef](networkState))
 
-proc replaceNetworkState*(node: var EthereumNode,
+proc replaceNetworkState*(node: EthereumNode,
                           p: ProtocolInfo,
                           networkState: RootRef) =
   node.protocolStates[p.index] = networkState
 
-template replaceNetworkState*(node: var EthereumNode,
+template replaceNetworkState*(node: EthereumNode,
                               Protocol: type,
                               networkState: untyped) =
   mixin NetworkState
@@ -237,3 +237,7 @@ func hasPeer*(node: EthereumNode, n: Node): bool =
 
 func hasPeer*(node: EthereumNode, n: Peer): bool =
   n in node.peerPool
+
+proc closeWait*(node: EthereumNode) {.async.} =
+  node.stopListening()
+  await node.listeningServer.closeWait()
