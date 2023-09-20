@@ -2,9 +2,9 @@
 
 import
   std/[json, os],
-  unittest2, stint,
+  unittest2,
   chronos, stew/byteutils,
-  ../../eth/[p2p, common],
+  ../../eth/[p2p],
   ../stubloglevel,
   ./p2p_test_helper,
   ./eth_protocol
