@@ -12,9 +12,9 @@ import
   std/[options, strutils, tables, sets],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, stew/byteutils, stew/bitops2,
-  ./eth/keys, ./eth/net/nat,
-  ./eth/p2p/discoveryv5/[enr, node],
-  ./eth/p2p/discoveryv5/protocol as discv5_protocol
+  ../eth/keys, ../eth/net/nat,
+  ../eth/p2p/discoveryv5/[enr, node],
+  ../eth/p2p/discoveryv5/protocol as discv5_protocol
 
 type
   DiscoveryCmd* = enum
