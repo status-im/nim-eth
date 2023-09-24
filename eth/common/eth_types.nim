@@ -98,7 +98,7 @@ type
     value*         : UInt256
     payload*       : Blob
     accessList*    : AccessList           # EIP-2930
-    maxFeePerBlobGas*: GasInt             # EIP-4844
+    maxFeePerBlobGas*: UInt256            # EIP-4844
     versionedHashes*: VersionedHashes     # EIP-4844
     networkPayload*: NetworkPayload       # EIP-4844
     V*             : int64
