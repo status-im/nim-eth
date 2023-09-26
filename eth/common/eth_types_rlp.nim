@@ -377,8 +377,8 @@ proc read*(rlp: var Rlp, T: type Receipt): T =
   rlp.read(result.bloom)
   rlp.read(result.logs)
 
-proc read*(rlp: var Rlp, T: type Time): T {.inline.} =
-  result = fromUnix(rlp.read(int64))
+proc read*(rlp: var Rlp, T: type EthTime): T {.inline.} =
+  result = EthTime rlp.read(uint64)
 
 proc append*(rlpWriter: var RlpWriter, value: HashOrNum) =
   case value.isHash
@@ -393,8 +393,8 @@ proc read*(rlp: var Rlp, T: type HashOrNum): T =
   else:
     result = HashOrNum(isHash: false, number: rlp.read(BlockNumber))
 
-proc append*(rlpWriter: var RlpWriter, t: Time) {.inline.} =
-  rlpWriter.append(t.toUnix())
+proc append*(rlpWriter: var RlpWriter, t: EthTime) {.inline.} =
+  rlpWriter.append(t.uint64)
 
 proc rlpHash*[T](v: T): Hash256 =
   keccakHash(rlp.encode(v))

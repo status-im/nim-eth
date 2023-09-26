@@ -10,17 +10,15 @@
 ## from many places
 
 import
-  std/[options, strutils, times],
+  std/[options, strutils],
   stew/[byteutils, endians2], stint,
-  ./eth_hash
+  ./eth_hash, ./eth_times
 
 export
-  options, stint, eth_hash,
-  times.Time, times.fromUnix, times.toUnix
+  options, stint, eth_hash, eth_times
 
 type
   Hash256* = MDigest[256]
-  EthTime* = Time
   VMWord* = UInt256
   BlockNonce* = array[8, byte]
   AccountNonce* = uint64
@@ -330,3 +328,4 @@ func `==`*(a, b: NetworkId): bool =
 
 func `$`*(x: NetworkId): string =
   `$`(uint(x))
+
