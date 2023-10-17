@@ -14,7 +14,7 @@ import
 type
   EthTime* = distinct uint64
 
-func now*(_: type EthTime): EthTime =
+proc now*(_: type EthTime): EthTime =
   getTime().utc.toTime.toUnix.EthTime
 
 func `+`*(a: EthTime, b: EthTime): EthTime =
