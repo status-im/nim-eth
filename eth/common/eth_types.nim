@@ -295,6 +295,8 @@ func destination*(tx: Transaction): EthAddress =
     return tx.to.get
 
 func removeNetworkPayload*(tx: Transaction): Transaction =
+  if tx.networkPayload.isNil:
+    return tx
   result = tx
   result.networkPayload = nil
 

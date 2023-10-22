@@ -399,6 +399,9 @@ proc append*(rlpWriter: var RlpWriter, t: EthTime) {.inline.} =
 proc rlpHash*[T](v: T): Hash256 =
   keccakHash(rlp.encode(v))
 
+proc rlpHash*(tx: Transaction): Hash256 =
+  keccakHash(rlp.encode(tx.removeNetworkPayload))
+
 func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
 
 proc append*(rlpWriter: var RlpWriter, id: NetworkId) =
