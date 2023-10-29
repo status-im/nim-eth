@@ -400,9 +400,9 @@ procSuite "Utp protocol over udp tests":
     let bytesToTransfer2 = rng[].generateBytes(1000)
     let bytesToTransfer3 = rng[].generateBytes(1000)
 
-    let w1 = await s.clientSocket.write(bytesToTransfer1)
-    let w2 = await s.clientSocket.write(bytesToTransfer2)
-    let w3 = await s.clientSocket.write(bytesToTransfer3)
+    discard await s.clientSocket.write(bytesToTransfer1)
+    discard await s.clientSocket.write(bytesToTransfer2)
+    discard await s.clientSocket.write(bytesToTransfer3)
     await s.clientSocket.closeWait()
 
     let readData = await s.serverSocket.read()

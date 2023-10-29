@@ -13,7 +13,7 @@ import
 
 suite "Discovery v5 Tests":
   setup:
-    let rng = newRng()
+    let rng {.used.} = newRng()
 
   asyncTest "GetNode":
     # TODO: This could be tested in just a routing table only context
