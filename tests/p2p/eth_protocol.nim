@@ -17,7 +17,7 @@ p2pProtocol eth(version = 63,
     let
       network = peer.network
 
-    let m = await peer.status(63,
+    discard await peer.status(63,
                               network.networkId,
                               0.u256,
                               Hash256(),

@@ -70,7 +70,7 @@ procSuite "Utp socket selective acks unit test":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
 
-    let (outgoingSocket, packet) = connectOutGoingSocket(initialRemoteSeq, q)
+    let (outgoingSocket, _) = connectOutGoingSocket(initialRemoteSeq, q)
 
     let extArray = outgoingSocket.generateSelectiveAckBitMask()
 
@@ -217,7 +217,6 @@ procSuite "Utp socket selective acks unit test":
       await incomingSocket.destroyWait()
 
   asyncTest "Socket should ack packets based on selective ack packet":
-    let dataSize = 10
     let initialRemoteSeq = 10'u16
     let smallData = rng[].generateBytes(10)
 
@@ -275,7 +274,6 @@ procSuite "Utp socket selective acks unit test":
   ]
 
   asyncTest "Socket should re-send packets when there are at least 3 packets acked ahead":
-    let dataSize = 10
     let initialRemoteSeq = 10'u16
     let smallData = rng[].generateBytes(10)
 
