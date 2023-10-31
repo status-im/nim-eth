@@ -16,7 +16,7 @@ import
 
 export results
 
-declarePublicGauge routing_table_nodes,
+declareGauge routing_table_nodes,
   "Discovery routing table nodes", labels = ["state"]
 
 type
