@@ -46,7 +46,7 @@ func isGlobalUnicast*(address: IpAddress): bool =
   let a = initTAddress(address, Port(0))
   a.isGlobalUnicast()
 
-proc getRouteIpv4*(): Result[ValidIpAddress, cstring] =
+proc getRouteIpv4*(): Result[IpAddress, cstring] =
   # Avoiding Exception with initTAddress and can't make it work with static.
   # Note: `publicAddress` is only used an "example" IP to find the best route,
   # no data is send over the network to this IP!
