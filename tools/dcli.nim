@@ -191,9 +191,14 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
     # TODO: allow for no TCP port mapping!
     (extIp, _, extUdpPort) = setupAddress(config.nat,
       config.listenAddress, udpPort, udpPort, "dcli")
+    extValidIp =
+      if extIp.isSome:
+        some ValidIpAddress.init(extIp.get)
+      else:
+        none ValidIpAddress
 
   let d = newProtocol(config.nodeKey,
-          extIp, none(Port), extUdpPort,
+          extValidIp, none(Port), extUdpPort,
           bootstrapRecords = config.bootnodes,
           bindIp = bindIp, bindPort = udpPort,
           enrAutoUpdate = config.enrAutoUpdate)
