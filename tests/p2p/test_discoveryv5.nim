@@ -416,7 +416,7 @@ suite "Discovery v5 Tests":
   test "New protocol with enr":
     let
       privKey = PrivateKey.random(rng[])
-      ip = some(ValidIpAddress.init("127.0.0.1"))
+      ip = some(parseIpAddress("127.0.0.1"))
       port = Port(20301)
       node = newProtocol(privKey, ip, some(port), some(port), bindPort = port,
         rng = rng)
@@ -511,7 +511,7 @@ suite "Discovery v5 Tests":
     let
       port = Port(9000)
       srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
-        some(ValidIpAddress.init("11.12.13.14")),
+        some(parseIpAddress("11.12.13.14")),
         some(port), some(port))[]
       srcNode = newNode(srcRecord)[]
       pk = PrivateKey.random(rng[])
@@ -521,7 +521,7 @@ suite "Discovery v5 Tests":
     block: # Duplicates
       let
         record = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("12.13.14.15")),
+          1, pk, some(parseIpAddress("12.13.14.15")),
           some(port), some(port))[]
 
       # Exact duplicates
@@ -531,7 +531,7 @@ suite "Discovery v5 Tests":
 
       # Node id duplicates
       let recordSameId = enr.Record.init(
-        1, pk, some(ValidIpAddress.init("212.13.14.15")),
+        1, pk, some(parseIpAddress("212.13.14.15")),
         some(port), some(port))[]
       records.add(recordSameId)
       nodes = verifyNodesRecords(records, srcNode, limit, targetDistance)
@@ -540,7 +540,7 @@ suite "Discovery v5 Tests":
     block: # No address
       let
         recordNoAddress = enr.Record.init(
-          1, pk, none(ValidIpAddress), some(port), some(port))[]
+          1, pk, none(IpAddress), some(port), some(port))[]
         records = [recordNoAddress]
         test = verifyNodesRecords(records, srcNode, limit, targetDistance)
       check test.len == 0
@@ -548,7 +548,7 @@ suite "Discovery v5 Tests":
     block: # Invalid address - any local
       let
         recordInvalidAddress = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("0.0.0.0")),
+          1, pk, some(parseIpAddress("0.0.0.0")),
           some(port), some(port))[]
         records = [recordInvalidAddress]
         test = verifyNodesRecords(records, srcNode, limit, targetDistance)
@@ -557,7 +557,7 @@ suite "Discovery v5 Tests":
     block: # Invalid address - site local
       let
         recordInvalidAddress = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("10.1.2.3")),
+          1, pk, some(parseIpAddress("10.1.2.3")),
           some(port), some(port))[]
         records = [recordInvalidAddress]
         test = verifyNodesRecords(records, srcNode, limit, targetDistance)
@@ -566,7 +566,7 @@ suite "Discovery v5 Tests":
     block: # Invalid address - loopback
       let
         recordInvalidAddress = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("127.0.0.1")),
+          1, pk, some(parseIpAddress("127.0.0.1")),
           some(port), some(port))[]
         records = [recordInvalidAddress]
         test = verifyNodesRecords(records, srcNode, limit, targetDistance)
@@ -575,7 +575,7 @@ suite "Discovery v5 Tests":
     block: # Invalid distance
       let
         recordInvalidDistance = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("12.13.14.15")),
+          1, pk, some(parseIpAddress("12.13.14.15")),
           some(port), some(port))[]
         records = [recordInvalidDistance]
         test = verifyNodesRecords(records, srcNode, limit, @[0'u16])
@@ -584,7 +584,7 @@ suite "Discovery v5 Tests":
     block: # Invalid distance but distance validation is disabled
       let
         recordInvalidDistance = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("12.13.14.15")),
+          1, pk, some(parseIpAddress("12.13.14.15")),
           some(port), some(port))[]
         records = [recordInvalidDistance]
         test = verifyNodesRecords(records, srcNode, limit)
@@ -594,7 +594,7 @@ suite "Discovery v5 Tests":
     let
       port = Port(9000)
       srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
-        some(ValidIpAddress.init("127.0.0.0")),
+        some(parseIpAddress("127.0.0.0")),
         some(port), some(port))[]
       srcNode = newNode(srcRecord)[]
       pk = PrivateKey.random(rng[])
@@ -604,7 +604,7 @@ suite "Discovery v5 Tests":
     block: # valid address - lo with lo src
       let
         record = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("127.0.0.1")),
+          1, pk, some(parseIpAddress("127.0.0.1")),
           some(port), some(port))[]
         test = verifyNodesRecords([record], srcNode, limit, targetDistance)
       check test.len == 1
@@ -612,7 +612,7 @@ suite "Discovery v5 Tests":
     block: # valid address - global with lo src
       let
         record = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("1.2.3.4")),
+          1, pk, some(parseIpAddress("1.2.3.4")),
           some(port), some(port))[]
         test = verifyNodesRecords([record], srcNode, limit, targetDistance)
       check test.len == 1
@@ -621,7 +621,7 @@ suite "Discovery v5 Tests":
     let
       port = Port(9000)
       srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
-        some(ValidIpAddress.init("192.168.1.1")),
+        some(parseIpAddress("192.168.1.1")),
         some(port), some(port))[]
       srcNode = newNode(srcRecord)[]
       pk = PrivateKey.random(rng[])
@@ -631,7 +631,7 @@ suite "Discovery v5 Tests":
     block: # valid address - site local with site local src
       let
         record = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("192.168.1.2")),
+          1, pk, some(parseIpAddress("192.168.1.2")),
           some(port), some(port))[]
         test = verifyNodesRecords([record], srcNode, limit, targetDistance)
       check test.len == 1
@@ -639,7 +639,7 @@ suite "Discovery v5 Tests":
     block: # valid address - global with site local src
       let
         record = enr.Record.init(
-          1, pk, some(ValidIpAddress.init("1.2.3.4")),
+          1, pk, some(parseIpAddress("1.2.3.4")),
           some(port), some(port))[]
         test = verifyNodesRecords([record], srcNode, limit, targetDistance)
       check test.len == 1
@@ -684,7 +684,7 @@ suite "Discovery v5 Tests":
       let
         privKey = PrivateKey.random(rng[])
         enrRec = enr.Record.init(1, privKey,
-          some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+          some(parseIpAddress("127.0.0.1")), some(Port(9000)),
           some(Port(9000))).expect("Properly initialized private key")
         sendNode = newNode(enrRec).expect("Properly initialized record")
       var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
@@ -713,7 +713,7 @@ suite "Discovery v5 Tests":
     let
       privKey = PrivateKey.random(rng[])
       enrRec = enr.Record.init(1, privKey,
-        some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+        some(parseIpAddress("127.0.0.1")), some(Port(9000)),
         some(Port(9000))).expect("Properly initialized private key")
       sendNode = newNode(enrRec).expect("Properly initialized record")
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
@@ -744,7 +744,7 @@ suite "Discovery v5 Tests":
       a = localAddress(20303)
       privKey = PrivateKey.random(rng[])
       enrRec = enr.Record.init(1, privKey,
-        some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+        some(parseIpAddress("127.0.0.1")), some(Port(9000)),
         some(Port(9000))).expect("Properly initialized private key")
       sendNode = newNode(enrRec).expect("Properly initialized record")
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))

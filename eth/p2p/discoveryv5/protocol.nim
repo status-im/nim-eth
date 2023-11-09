@@ -175,7 +175,7 @@ const
   )
 
 chronicles.formatIt(Option[Port]): $it
-chronicles.formatIt(Option[ValidIpAddress]): $it
+chronicles.formatIt(Option[IpAddress]): $it
 
 proc addNode*(d: Protocol, node: Node): bool =
   ## Add `Node` to discovery routing table.
@@ -865,7 +865,7 @@ proc refreshLoop(d: Protocol) {.async.} =
   except CancelledError:
     trace "refreshLoop canceled"
 
-proc updateExternalIp*(d: Protocol, extIp: ValidIpAddress, udpPort: Port): bool =
+proc updateExternalIp*(d: Protocol, extIp: IpAddress, udpPort: Port): bool =
   var success = false
   let
     previous = d.localNode.address
@@ -956,7 +956,7 @@ func init*(
 
 proc newProtocol*(
     privKey: PrivateKey,
-    enrIp: Option[ValidIpAddress],
+    enrIp: Option[IpAddress],
     enrTcpPort, enrUdpPort: Option[Port],
     localEnrFields: openArray[(string, seq[byte])] = [],
     bootstrapRecords: openArray[Record] = [],

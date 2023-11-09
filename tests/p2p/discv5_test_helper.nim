@@ -40,7 +40,7 @@ proc nodeIdInNodes*(id: NodeId, nodes: openArray[Node]): bool =
     if id == n.id: return true
 
 proc generateNode*(privKey: PrivateKey, port: int = 20302,
-    ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1"),
+    ip: IpAddress = parseIpAddress("127.0.0.1"),
     localEnrFields: openArray[FieldPair] = []): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, some(ip),
