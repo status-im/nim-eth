@@ -63,4 +63,4 @@ proc getRouteIpv4*(): Result[IpAddress, cstring] =
                # This should not occur really.
                error "Address conversion error", exception = e.name, msg = e.msg
                return err("Invalid IP address")
-    ok(ValidIpAddress.init(ip))
+    ok(ip)

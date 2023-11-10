@@ -37,7 +37,7 @@ type
     listenAddress* {.
       defaultValue: defaultListenAddress(config)
       desc: "Listening address for the Discovery v5 traffic"
-      name: "listen-address" }: ValidIpAddress
+      name: "listen-address" }: IpAddress
 
     persistingFile* {.
       defaultValue: "peerstore.csv",
@@ -108,8 +108,8 @@ type
         desc: "ENR URI of the node to send a talkReq message"
         name: "node" .}: Node
 
-func defaultListenAddress*(conf: DiscoveryConf): ValidIpAddress =
-  (static ValidIpAddress.init("0.0.0.0"))
+func defaultListenAddress*(conf: DiscoveryConf): IpAddress =
+  (static parseIpAddress("0.0.0.0"))
 
 func defaultAdminListenAddress*(conf: DiscoveryConf): ValidIpAddress =
   (static ValidIpAddress.init("127.0.0.1"))
