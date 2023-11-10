@@ -12,9 +12,9 @@ suite "IP vote":
     var
       votes = IpVote.init(2)
     let
-      addr1 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(1))
-      addr2 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(2))
-      addr3 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(3))
+      addr1 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(1))
+      addr2 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(2))
+      addr3 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(3))
 
     votes.insert(NodeId.random(rng[]), addr1);
     votes.insert(NodeId.random(rng[]), addr1);
@@ -32,9 +32,9 @@ suite "IP vote":
     var
       votes = IpVote.init(threshold)
     let
-      addr1 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(1))
-      addr2 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(2))
-      addr3 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(3))
+      addr1 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(1))
+      addr2 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(2))
+      addr3 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(3))
 
     votes.insert(NodeId.random(rng[]), addr1);
     votes.insert(NodeId.random(rng[]), addr2);
@@ -50,9 +50,9 @@ suite "IP vote":
     var
       votes = IpVote.init(threshold)
     let
-      addr1 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(1))
-      addr2 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(2))
-      addr3 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(3))
+      addr1 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(1))
+      addr2 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(2))
+      addr3 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(3))
 
     votes.insert(NodeId.random(rng[]), addr1);
     votes.insert(NodeId.random(rng[]), addr2);
@@ -68,8 +68,8 @@ suite "IP vote":
     var
       votes = IpVote.init(threshold)
     let
-      addr1 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(1))
-      addr2 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(2))
+      addr1 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(1))
+      addr2 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(2))
 
     let nodeIdA = NodeId.random(rng[])
     votes.insert(nodeIdA, addr1);
@@ -86,9 +86,9 @@ suite "IP vote":
     var
       votes = IpVote.init(threshold)
     let
-      addr1 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(1))
-      addr2 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(2))
-      addr3 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(3))
+      addr1 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(1))
+      addr2 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(2))
+      addr3 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(3))
 
     let nodeIdA = NodeId.random(rng[])
     votes.insert(nodeIdA, addr1);

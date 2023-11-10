@@ -165,7 +165,7 @@ template toFieldPair*(key: string, value: auto): FieldPair =
 
 func addAddress(
     fields: var seq[FieldPair],
-    ip: Option[ValidIpAddress],
+    ip: Option[IpAddress],
     tcpPort, udpPort: Option[Port]) =
   ## Add address information in new fields. Incomplete address
   ## information is allowed (example: Port but not IP) as that information
@@ -190,7 +190,7 @@ func addAddress(
 func init*(
     T: type Record,
     seqNum: uint64, pk: PrivateKey,
-    ip: Option[ValidIpAddress],
+    ip: Option[IpAddress],
     tcpPort, udpPort: Option[Port],
     extraFields: openArray[FieldPair] = []):
     EnrResult[T] =
@@ -321,7 +321,7 @@ func update*(
 func update*(
     r: var Record,
     pk: PrivateKey,
-    ip: Option[ValidIpAddress],
+    ip: Option[IpAddress],
     tcpPort, udpPort: Option[Port] = none[Port](),
     extraFields: openArray[FieldPair] = []):
     EnrResult[void] =

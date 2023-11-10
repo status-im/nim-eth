@@ -291,7 +291,7 @@ suite "Routing Table Tests":
       # Further fill the bucket with nodes with different ip.
       let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256,
         int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit),
-        ValidIpAddress.init("192.168.0.1"))
+        parseIpAddress("192.168.0.1"))
       for n in diffIpNodes:
         check table.addNode(n) == Added
 
@@ -304,7 +304,7 @@ suite "Routing Table Tests":
       # Add more nodes with different ip and distance 255 to get in the new bucket
       let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 255,
         int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit - 1),
-        ValidIpAddress.init("192.168.1.1"))
+        parseIpAddress("192.168.1.1"))
       for n in diffIpNodes:
         check table.addNode(n) == Added
 
@@ -329,7 +329,7 @@ suite "Routing Table Tests":
     for j in 0..<amount:
       let nodes = node.nodesAtDistanceUniqueIp(rng[], 256 - j,
         int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit),
-        ValidIpAddress.init("192.168.0.1"))
+        parseIpAddress("192.168.0.1"))
       for n in nodes:
         check table.addNode(n) == Added
 
@@ -340,7 +340,7 @@ suite "Routing Table Tests":
 
     # Add a node with a different IP, should work and split a bucket once more.
     let anotherDiffIpNode = node.nodeAtDistance(rng[], 256 - amount,
-      ValidIpAddress.init("192.168.1.1"))
+      parseIpAddress("192.168.1.1"))
     check table.addNode(anotherDiffIpNode) == Added
 
     let amountLeft = int(DefaultTableIpLimits.tableIpLimit mod
@@ -361,7 +361,7 @@ suite "Routing Table Tests":
 
     let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256,
       int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit + 1),
-      ValidIpAddress.init("192.168.0.1"))
+      parseIpAddress("192.168.0.1"))
     for n in diffIpNodes:
       check table.addNode(n) == Added
 
@@ -403,7 +403,7 @@ suite "Routing Table Tests":
 
       let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256,
         int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit + 1),
-        ValidIpAddress.init("192.168.0.1"))
+        parseIpAddress("192.168.0.1"))
       for n in diffIpNodes:
         check table.addNode(n) == Added
 
@@ -413,7 +413,7 @@ suite "Routing Table Tests":
 
       let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256,
         int(REPLACEMENT_CACHE_SIZE - 1),
-        ValidIpAddress.init("192.168.1.1"))
+        parseIpAddress("192.168.1.1"))
       for n in diffIpNodes:
         check table.addNode(n) == ReplacementAdded
 
@@ -423,7 +423,7 @@ suite "Routing Table Tests":
 
     # Add one with different ip, to remove the first
     let diffIpNode = node.nodeAtDistance(rng[], 256,
-      ValidIpAddress.init("192.168.2.1"))
+      parseIpAddress("192.168.2.1"))
     check table.addNode(diffIpNode) == ReplacementAdded
 
     # Now the add should work
@@ -435,7 +435,7 @@ suite "Routing Table Tests":
 
     # Fill bucket
     let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256, BUCKET_SIZE,
-      ValidIpAddress.init("192.168.0.1"))
+      parseIpAddress("192.168.0.1"))
     for n in diffIpNodes:
       check table.addNode(n) == Added
 
@@ -460,7 +460,7 @@ suite "Routing Table Tests":
     let updatedNode1 = generateNode(pk)
     # Need to do an update to get seqNum increased
     let updated = updatedNode1.update(pk,
-      some(ValidIpAddress.init("192.168.0.1")),
+      some(parseIpAddress("192.168.0.1")),
       some(Port(9000)), some(Port(9000)))
     check updated.isOk()
     check table.addNode(updatedNode1) == Existing
@@ -478,7 +478,7 @@ suite "Routing Table Tests":
 
     # Fill bucket
     let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256, BUCKET_SIZE,
-      ValidIpAddress.init("192.168.0.1"))
+      parseIpAddress("192.168.0.1"))
     for n in diffIpNodes:
       check table.addNode(n) == Added
 
@@ -487,7 +487,7 @@ suite "Routing Table Tests":
 
     # For replacements we don't need to get seqNum increased as the node will
     # still get pushed in front of the queue.
-    let updatedNode1 = generateNode(pk, ip = ValidIpAddress.init("192.168.1.1"))
+    let updatedNode1 = generateNode(pk, ip = parseIpAddress("192.168.1.1"))
     check table.addNode(updatedNode1) == ReplacementExisting
 
     let sameIpNodes = node.nodesAtDistance(rng[], 256,
@@ -509,7 +509,7 @@ suite "Routing Table Tests":
     for i in 0..<DefaultTableIpLimits.bucketIpLimit + 1:
       # Need to do an update to get seqNum increased
       let updated = updatedNode1.update(pk,
-        some(ValidIpAddress.init("192.168.0.1")),
+        some(parseIpAddress("192.168.0.1")),
         some(Port(9000+i)), some(Port(9000+i)))
       check updated.isOk()
       check table.addNode(updatedNode1) == Existing
