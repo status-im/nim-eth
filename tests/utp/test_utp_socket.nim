@@ -88,7 +88,7 @@ procSuite "uTP socket tests":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
 
-    let (socket, packet) = connectOutGoingSocket(initialRemoteSeq, q)
+    let (socket, _) = connectOutGoingSocket(initialRemoteSeq, q)
 
     check:
       socket.isConnected()
@@ -381,7 +381,7 @@ procSuite "uTP socket tests":
 
     # lot of data which will generate at least 5 packets
     let bigDataTowWrite = rng[].generateBytes(10000)
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+    let (outgoingSocket, _) = connectOutGoingSocket(initialRemoteSeq, q)
 
     let acker = outgoingSocket.ackAllPacket(q, initialRemoteSeq)
     let bytesWritten = await outgoingSocket.write(bigDataTowWrite)
@@ -430,7 +430,7 @@ procSuite "uTP socket tests":
     let dataToWrite1 = @[0'u8]
     let dataToWrite2 = @[1'u8]
 
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q, cfg = SocketConfig.init(optSndBuffer = 0))
+    let (outgoingSocket, _) = connectOutGoingSocket(initialRemoteSeq, q, cfg = SocketConfig.init(optSndBuffer = 0))
 
     let writeFut1 = outgoingSocket.write(dataToWrite1)
     let writeFut2 = outgoingSocket.write(dataToWrite2)
@@ -738,7 +738,7 @@ procSuite "uTP socket tests":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
 
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+    let (outgoingSocket, _) = connectOutGoingSocket(initialRemoteSeq, q)
 
     outgoingSocket.close()
 
@@ -784,7 +784,7 @@ procSuite "uTP socket tests":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
 
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+    let (outgoingSocket, _) = connectOutGoingSocket(initialRemoteSeq, q)
 
     await outgoingSocket.destroyWait()
 
@@ -803,7 +803,7 @@ procSuite "uTP socket tests":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
 
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+    let (outgoingSocket, _) = connectOutGoingSocket(initialRemoteSeq, q)
 
     outgoingSocket.close()
 
@@ -846,7 +846,7 @@ procSuite "uTP socket tests":
       ack1.header.ackNr == initialRemoteSeqNr
       ack1.header.wndSize == initialRcvBufferSize - uint32(len(data))
 
-    let written = await outgoingSocket.write(data)
+    discard await outgoingSocket.write(data)
 
     let sentData = await q.get()
 
@@ -966,7 +966,7 @@ procSuite "uTP socket tests":
 
     let dataToWrite = @[1'u8, 2, 3, 4, 5]
 
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+    let (outgoingSocket, _) = connectOutGoingSocket(initialRemoteSeq, q)
 
     discard await outgoingSocket.write(dataToWrite)
 
@@ -1027,7 +1027,7 @@ procSuite "uTP socket tests":
     let dataToWrite = @[1'u8, 2, 3]
     let dataToWrite1 = @[6'u8, 7, 8, 9, 10]
 
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
+    let (outgoingSocket, _) = connectOutGoingSocket(initialRemoteSeq, q)
 
     discard await outgoingSocket.write(dataToWrite)
 
@@ -1036,10 +1036,9 @@ procSuite "uTP socket tests":
     check:
       int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite)
 
-
     discard await outgoingSocket.write(dataToWrite1)
 
-    let sentPacket1 = await q.get()
+    discard await q.get()
 
     check:
       int(outgoingSocket.numOfBytesInFlight) == len(dataToWrite) + len(dataToWrite1)
@@ -1101,7 +1100,7 @@ procSuite "uTP socket tests":
 
     let dataToWrite = 1160
     # remote is initialized with buffer to small to handle whole payload
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q, cfg = SocketConfig.init(optSndBuffer = 1160))
+    let (outgoingSocket, _) = connectOutGoingSocket(initialRemoteSeq, q, cfg = SocketConfig.init(optSndBuffer = 1160))
 
     let twoPacketData = rng[].generateBytes(int(dataToWrite))
 
@@ -1124,8 +1123,6 @@ procSuite "uTP socket tests":
   asyncTest "Writing data should respect remote rcv window size":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
-
-    let dataToWrite = @[1'u8, 2, 3, 4, 5]
 
     # remote is initialized with buffer to small to handle whole payload
     let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q)
@@ -1184,7 +1181,7 @@ procSuite "uTP socket tests":
     let q = newAsyncQueue[Packet]()
     let initialRemoteSeq = 10'u16
     let someData = @[1'u8]
-    let (outgoingSocket, packet) =
+    let (outgoingSocket, _) =
       connectOutGoingSocket(
         initialRemoteSeq,
         q,
@@ -1227,7 +1224,7 @@ procSuite "uTP socket tests":
       outgoingSocket.isConnected()
 
     # snd buffer got 1 byte of space so this future should finish
-    let write1 = await outgoingSocket.write(someData1)
+    discard await outgoingSocket.write(someData1)
 
     let writeFut2 = outgoingSocket.write(someData2)
 
@@ -1327,7 +1324,7 @@ procSuite "uTP socket tests":
 
     await outgoingSocket.processPacket(dataP1)
 
-    let fastResend = await q.get()
+    discard await q.get()
 
     let ack = await q.get()
 
@@ -1474,7 +1471,7 @@ procSuite "uTP socket tests":
 
     let dataToWrite = @[1'u8]
     let customCfg = SocketConfig.init(dataResendsBeforeFailure = 2, optSndBuffer = 1)
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeq, q, cfg = customCfg)
+    let (outgoingSocket, _) = connectOutGoingSocket(initialRemoteSeq, q, cfg = customCfg)
 
     let bytesWritten = await outgoingSocket.write(dataToWrite)
     # this future will never finish as there is not place in write buffer
@@ -1484,7 +1481,7 @@ procSuite "uTP socket tests":
     check:
       bytesWritten.get() == len(dataToWrite)
 
-    let sentPacket = await q.get()
+    discard await q.get()
     # wait for failure and cleanup of all resources
     await waitUntil(proc (): bool = outgoingSocket.isClosedAndCleanedUpAllResources())
     check:
@@ -1535,7 +1532,7 @@ procSuite "uTP socket tests":
     let maxPayloadSize = 800'u32
     let config = SocketConfig.init(payloadSize = maxPayloadSize)
 
-    let (outgoingSocket, initialPacket) = connectOutGoingSocket(initialRemoteSeqNr, q, cfg = config)
+    let (outgoingSocket, _) = connectOutGoingSocket(initialRemoteSeqNr, q, cfg = config)
 
     let wr = await outgoingSocket.write(d)
 

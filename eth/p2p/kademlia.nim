@@ -15,8 +15,8 @@ import
 
 export sets # TODO: This should not be needed, but compilation fails otherwise
 
-declarePublicGauge routing_table_nodes,
-  "Discovery routing table nodes"
+declareGauge discv4_routing_table_nodes,
+  "Discovery v4 routing table nodes"
 
 logScope:
   topics = "eth p2p kademlia"
@@ -221,7 +221,7 @@ proc add(k: KBucket, n: Node): Node =
       k.nodes.add(n)
   elif k.len < BUCKET_SIZE:
       k.nodes.add(n)
-      routing_table_nodes.inc()
+      discv4_routing_table_nodes.inc()
   else:
       k.replacementCache.add(n)
       return k.head
@@ -230,7 +230,7 @@ proc add(k: KBucket, n: Node): Node =
 proc removeNode(k: KBucket, n: Node) =
   let i = k.nodes.find(n)
   if i != -1:
-    routing_table_nodes.dec()
+    discv4_routing_table_nodes.dec()
     k.nodes.delete(i)
 
 proc split(k: KBucket): tuple[lower, upper: KBucket] =

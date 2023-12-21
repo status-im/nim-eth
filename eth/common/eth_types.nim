@@ -10,17 +10,15 @@
 ## from many places
 
 import
-  std/[options, strutils, times],
+  std/[options, strutils],
   stew/[byteutils, endians2], stint,
-  ./eth_hash
+  ./eth_hash, ./eth_times
 
 export
-  options, stint, eth_hash,
-  times.Time, times.fromUnix, times.toUnix
+  options, stint, eth_hash, eth_times
 
 type
   Hash256* = MDigest[256]
-  EthTime* = Time
   VMWord* = UInt256
   BlockNonce* = array[8, byte]
   AccountNonce* = uint64
@@ -98,7 +96,7 @@ type
     value*         : UInt256
     payload*       : Blob
     accessList*    : AccessList           # EIP-2930
-    maxFeePerBlobGas*: GasInt             # EIP-4844
+    maxFeePerBlobGas*: UInt256            # EIP-4844
     versionedHashes*: VersionedHashes     # EIP-4844
     networkPayload*: NetworkPayload       # EIP-4844
     V*             : int64
@@ -297,6 +295,8 @@ func destination*(tx: Transaction): EthAddress =
     return tx.to.get
 
 func removeNetworkPayload*(tx: Transaction): Transaction =
+  if tx.networkPayload.isNil:
+    return tx
   result = tx
   result.networkPayload = nil
 
@@ -330,3 +330,4 @@ func `==`*(a, b: NetworkId): bool =
 
 func `$`*(x: NetworkId): string =
   `$`(uint(x))
+

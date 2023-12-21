@@ -133,7 +133,7 @@ proc payloadBytesCount(self: Rlp): int =
 
     # check if the size is not bigger than the max that result can hold
     if lengthBytes > sizeof(result) or
-      (lengthBytes == sizeof(result) and self.bytes[self.position + 1].int > 127):
+        (lengthBytes == sizeof(result) and self.bytes[self.position + 1].int > 127):
       raise newException(UnsupportedRlpError, "Message too large to fit in memory")
 
     for i in 1 .. lengthBytes:
@@ -317,7 +317,7 @@ proc readImpl(rlp: var Rlp, T: type float64): T =
   # https://github.com/gopherjs/gopherjs/blob/master/compiler/natives/src/math/math.go
   let uint64bits = rlp.toInt(uint64)
   var uint32parts = [uint32(uint64bits), uint32(uint64bits shr 32)]
-  return cast[ptr float64](unsafeAddr uint32parts)[]
+  copyMem(addr result, unsafeAddr uint32parts, sizeof(result))
 
 proc readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
   mixin read

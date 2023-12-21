@@ -8,23 +8,7 @@ type
     pendingLists: seq[tuple[remainingItems, outBytes: int]]
     output: seq[byte]
 
-  IntLike* = concept x, y
-    type T = type(x)
-
-    # arithmetic ops
-    x + y is T
-    x * y is T
-    x - y is T
-    x div y is T
-    x mod y is T
-
-    # some int compatibility required for big endian encoding:
-    x shr int is T
-    x shl int is T
-    x and 0xff is int
-    x < 128 is bool
-
-  Integer* = SomeInteger # or IntLike
+  Integer* = SomeInteger
 
 const
   wrapObjsInList* = true
@@ -157,8 +141,9 @@ proc appendFloat(self: var RlpWriter, data: float64) =
   # This is not covered in the RLP spec, but Geth uses Go's
   # `math.Float64bits`, which is defined here:
   # https://github.com/gopherjs/gopherjs/blob/master/compiler/natives/src/math/math.go
-  let uintWords = cast[ptr UncheckedArray[uint32]](unsafeAddr data)
-  let uint64bits = (uint64(uintWords[1]) shl 32) or uint64(uintWords[0])
+  var uint32Words: array[2, uint32]
+  copyMem(addr uint32Words[0], unsafeAddr data, sizeof(uint32Words))
+  let uint64bits = (uint64(uint32Words[1]) shl 32) or uint64(uint32Words[0])
   self.appendInt(uint64bits)
 
 template appendImpl(self: var RlpWriter, i: Integer) =
@@ -306,7 +291,7 @@ proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrap
       # custom serialization for a field or for the parent object
       # will be better
       if field.isSome:
-        append(self, field.unsafeGet)    
+        append(self, field.unsafeGet)
     else:
       append(self, field)
 

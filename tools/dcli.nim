@@ -12,9 +12,9 @@ import
   std/[options, strutils, tables, sets],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, stew/byteutils, stew/bitops2,
-  ./eth/keys, ./eth/net/nat,
-  ./eth/p2p/discoveryv5/[enr, node],
-  ./eth/p2p/discoveryv5/protocol as discv5_protocol
+  ../eth/keys, ../eth/net/nat,
+  ../eth/p2p/discoveryv5/[enr, node],
+  ../eth/p2p/discoveryv5/protocol as discv5_protocol
 
 type
   DiscoveryCmd* = enum
@@ -37,7 +37,7 @@ type
     listenAddress* {.
       defaultValue: defaultListenAddress(config)
       desc: "Listening address for the Discovery v5 traffic"
-      name: "listen-address" }: ValidIpAddress
+      name: "listen-address" }: IpAddress
 
     persistingFile* {.
       defaultValue: "peerstore.csv",
@@ -108,8 +108,8 @@ type
         desc: "ENR URI of the node to send a talkReq message"
         name: "node" .}: Node
 
-func defaultListenAddress*(conf: DiscoveryConf): ValidIpAddress =
-  (static ValidIpAddress.init("0.0.0.0"))
+func defaultListenAddress*(conf: DiscoveryConf): IpAddress =
+  (static parseIpAddress("0.0.0.0"))
 
 func defaultAdminListenAddress*(conf: DiscoveryConf): ValidIpAddress =
   (static ValidIpAddress.init("127.0.0.1"))

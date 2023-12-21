@@ -100,7 +100,7 @@ proc tx6(i: int): Transaction =
     maxFee:              10.GasInt,
     accessList:          accesses,
     versionedHashes:     @[digest],
-    networkPayload: NetworkPayload(        
+    networkPayload: NetworkPayload(
         blobs: @[blob],
         commitments: @[zeroG1],
         proofs: @[zeroG1],
@@ -120,7 +120,7 @@ proc tx7(i: int): Transaction =
     maxFee:              10.GasInt,
     accessList:          accesses,
     versionedHashes:     @[digest],
-    maxFeePerBlobGas:    10000000.GasInt,
+    maxFeePerBlobGas:    10000000.u256,
   )
 
 proc tx8(i: int): Transaction =
@@ -137,7 +137,7 @@ proc tx8(i: int): Transaction =
     maxFee:              10.GasInt,
     accessList:          accesses,
     versionedHashes:     @[digest],
-    maxFeePerBlobGas:    10000000.GasInt,
+    maxFeePerBlobGas:    10000000.u256,
   )
 
 template roundTrip(txFunc: untyped, i: int) =

@@ -157,7 +157,8 @@ type
 
   TalkProtocolHandler* = proc(
     p: TalkProtocol, request: seq[byte],
-    fromId: NodeId, fromUdpAddress: Address): seq[byte]
+    fromId: NodeId, fromUdpAddress: Address,
+    node: Opt[Node]): seq[byte]
     {.gcsafe, raises: [].}
 
   TalkProtocol* = ref object of RootObj
@@ -174,7 +175,7 @@ const
   )
 
 chronicles.formatIt(Option[Port]): $it
-chronicles.formatIt(Option[ValidIpAddress]): $it
+chronicles.formatIt(Option[IpAddress]): $it
 
 proc addNode*(d: Protocol, node: Node): bool =
   ## Add `Node` to discovery routing table.
@@ -338,7 +339,7 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
       d.sendNodes(fromId, fromAddr, reqId, [])
 
 proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
-    talkreq: TalkReqMessage, reqId: RequestId) =
+    talkreq: TalkReqMessage, reqId: RequestId, node: Opt[Node]) =
   let talkProtocol = d.talkProtocols.getOrDefault(talkreq.protocol)
 
   let talkresp =
@@ -348,7 +349,7 @@ proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
       TalkRespMessage(response: @[])
     else:
       TalkRespMessage(response: talkProtocol.protocolHandler(talkProtocol,
-        talkreq.request, fromId, fromAddr))
+        talkreq.request, fromId, fromAddr, node))
   let (data, _) = encodeMessagePacket(d.rng[], d.codec, fromId, fromAddr,
     encodeMessage(talkresp, reqId))
 
@@ -356,8 +357,9 @@ proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
     kind = MessageKind.talkresp
   d.send(fromAddr, data)
 
-proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
-    message: Message) =
+proc handleMessage(
+    d: Protocol, srcId: NodeId, fromAddr: Address,
+    message: Message, node: Opt[Node] = Opt.none(Node)) =
   case message.kind
   of ping:
     discovery_message_requests_incoming.inc()
@@ -367,7 +369,7 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
     d.handleFindNode(srcId, fromAddr, message.findNode, message.reqId)
   of talkReq:
     discovery_message_requests_incoming.inc()
-    d.handleTalkReq(srcId, fromAddr, message.talkReq, message.reqId)
+    d.handleTalkReq(srcId, fromAddr, message.talkReq, message.reqId, node)
   of regTopic, topicQuery:
     discovery_message_requests_incoming.inc()
     discovery_message_requests_incoming.inc(labelValues = ["no_response"])
@@ -447,7 +449,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
     of HandshakeMessage:
       trace "Received handshake message packet", srcId = packet.srcIdHs,
         address = a, kind = packet.message.kind
-      d.handleMessage(packet.srcIdHs, a, packet.message)
+      d.handleMessage(packet.srcIdHs, a, packet.message, packet.node)
       # For a handshake message it is possible that we received an newer ENR.
       # In that case we can add/update it to the routing table.
       if packet.node.isSome():
@@ -477,7 +479,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
            except ValueError as e:
              error "Not a valid IpAddress", exception = e.name, msg = e.msg
              return
-  let a = Address(ip: ValidIpAddress.init(ip), port: raddr.port)
+  let a = Address(ip: ip, port: raddr.port)
 
   proto.receive(a, buf)
 
@@ -830,7 +832,7 @@ proc revalidateNode*(d: Protocol, n: Node) {.async.} =
         discard d.addNode(nodes[][0])
 
     # Get IP and port from pong message and add it to the ip votes
-    let a = Address(ip: ValidIpAddress.init(res.ip), port: Port(res.port))
+    let a = Address(ip: res.ip, port: Port(res.port))
     d.ipVote.insert(n.id, a)
 
 proc revalidateLoop(d: Protocol) {.async.} =
@@ -863,7 +865,7 @@ proc refreshLoop(d: Protocol) {.async.} =
   except CancelledError:
     trace "refreshLoop canceled"
 
-proc updateExternalIp*(d: Protocol, extIp: ValidIpAddress, udpPort: Port): bool =
+proc updateExternalIp*(d: Protocol, extIp: IpAddress, udpPort: Port): bool =
   var success = false
   let
     previous = d.localNode.address
@@ -954,7 +956,7 @@ func init*(
 
 proc newProtocol*(
     privKey: PrivateKey,
-    enrIp: Option[ValidIpAddress],
+    enrIp: Option[IpAddress],
     enrTcpPort, enrUdpPort: Option[Port],
     localEnrFields: openArray[(string, seq[byte])] = [],
     bootstrapRecords: openArray[Record] = [],
@@ -1001,7 +1003,7 @@ proc newProtocol*(
   Protocol(
     privateKey: privKey,
     localNode: node,
-    bindAddress: Address(ip: ValidIpAddress.init(bindIp), port: bindPort),
+    bindAddress: Address(ip: bindIp, port: bindPort),
     codec: Codec(localNode: node, privKey: privKey,
       sessions: Sessions.init(256)),
     bootstrapRecords: @bootstrapRecords,

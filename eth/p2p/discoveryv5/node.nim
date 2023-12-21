@@ -19,7 +19,7 @@ type
   NodeId* = UInt256
 
   Address* = object
-    ip*: ValidIpAddress
+    ip*: IpAddress
     port*: Port
 
   Node* = ref object
@@ -58,7 +58,7 @@ func newNode*(r: Record): Result[Node, cstring] =
     ok(Node(id: pk.get().toNodeId(), pubkey: pk.get(), record: r,
        address: none(Address)))
 
-func update*(n: Node, pk: PrivateKey, ip: Option[ValidIpAddress],
+func update*(n: Node, pk: PrivateKey, ip: Option[IpAddress],
     tcpPort, udpPort: Option[Port] = none[Port](),
     extraFields: openArray[FieldPair] = []): Result[void, cstring] =
   ? n.record.update(pk, ip, tcpPort, udpPort, extraFields)

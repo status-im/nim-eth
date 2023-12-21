@@ -20,7 +20,7 @@
 
 import stew/[byteutils, endians2, results]
 
-from nimcrypto import stripSpaces
+from nimcrypto/utils import stripSpaces
 
 export results
 
