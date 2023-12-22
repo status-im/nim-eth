@@ -61,22 +61,21 @@ suite "MPT trie proof verification":
     check:
       res.isMissing()
 
-  # proof test ref:
-  # - https://github.com/ethereum/go-ethereum/blob/master/trie/proof_test.go
-  # - https://github.com/ethereum/py-trie/blob/master/tests/test_proof.py
+  # The following test cases were copied from the Rust hexary trie implementation.
+  # See here: https://github.com/citahub/cita_trie/blob/master/src/tests/mod.rs#L554
   test "Validate proof for empty trie":
     let db = newMemoryDB()
     var trie = initHexaryTrie(db)
 
-    let 
+    let
       proof = trie.getBranch("not-exist".toBytes)
       res = verifyMptProof(proof, trie.rootHash, "not-exist".toBytes, "not-exist".toBytes)
 
-    check: 
+    check:
       trie.rootHash == keccakHash(emptyRlp)
-      proof.len() == 1 # Maybe this should return an empty list?
+      proof.len() == 1 # Note that the Rust implementation returns an empty list for this scenario
       proof == @[emptyRlp]
-      res.kind == InvalidProof # What should verifyMptProof return in this case?
+      res.kind == InvalidProof
 
   test "Validate proof for one element trie":
     let db = newMemoryDB()
@@ -84,7 +83,7 @@ suite "MPT trie proof verification":
 
     trie.put("k".toBytes, "v".toBytes)
 
-    let 
+    let
       rootHash = trie.rootHash
       proof = trie.getBranch("k".toBytes)
       res = verifyMptProof(proof, rootHash, "k".toBytes, "v".toBytes)
@@ -106,23 +105,23 @@ suite "MPT trie proof verification":
     trie.put("dogglesworth".toBytes, "cat".toBytes)
 
     block:
-      let 
+      let
         rootHash = trie.rootHash
         proof = trie.getBranch("doe".toBytes)
         res = verifyMptProof(proof, rootHash, "doe".toBytes, "reindeer".toBytes)
-      
+
       check:
         to0xHex(rootHash.data) == "0x8aad789dff2f538bca5d8ea56e8abe10f4c7ba3a5dea95fea4cd6e7c3a1168d3"
         proof.len() == 3
         proof[0] == "e5831646f6a0db6ae1fda66890f6693f36560d36b4dca68b4d838f17016b151efe1d4c95c453".hexToSeqByte
         proof[1] == "f83b8080808080ca20887265696e6465657280a037efd11993cb04a54048c25320e9f29c50a432d28afdf01598b2978ce1ca3068808080808080808080".hexToSeqByte
         res.isValid()
-    
+
     block:
-      let 
+      let
         proof = trie.getBranch("dogg".toBytes)
         res = verifyMptProof(proof, trie.rootHash, "dogg".toBytes, "puppy".toBytes)
-      
+
       check:
         proof.len() == 4
         proof[0] == "e5831646f6a0db6ae1fda66890f6693f36560d36b4dca68b4d838f17016b151efe1d4c95c453".hexToSeqByte
@@ -134,14 +133,14 @@ suite "MPT trie proof verification":
       let
         proof = newSeq[seq[byte]]()
         res = verifyMptProof(proof, trie.rootHash, "doe".toBytes, "reindeer".toBytes)
-      
+
       check res.kind == InvalidProof
-    
+
     block:
       let
         proof = @["aaa".toBytes, "ccc".toBytes]
         res = verifyMptProof(proof, trie.rootHash, "doe".toBytes, "reindeer".toBytes)
-      
+
       check res.kind == InvalidProof
 
 
