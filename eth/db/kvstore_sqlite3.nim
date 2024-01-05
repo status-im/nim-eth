@@ -694,35 +694,43 @@ proc createCustomFunction*(
   ok()
 
 when defined(metrics):
-  import locks, tables, times,
-        chronicles, metrics
+  import chronicles, metrics
 
-  type Sqlite3Info = ref object of Gauge
+  type Sqlite3Info = ref object of Collector
 
-  proc newSqlite3Info*(name: string, help: string, registry = defaultRegistry): Sqlite3Info {.raises: [Exception].} =
-    validateName(name)
-    result = Sqlite3Info(name: name,
-                        help: help,
-                        typ: "gauge",
-                        creationThreadId: getThreadId())
-    result.lock.initLock()
-    result.register(registry)
+  proc newSqlite3Info*(name: string, help: string, registry = defaultRegistry): Sqlite3Info {.raises: [CatchableError].} =
+    Sqlite3Info.newCollector(name, help, registry = registry)
 
-  var sqlite3Info* {.global.} = newSqlite3Info("sqlite3_info", "SQLite3 info")
+  let sqlite3Info* = newSqlite3Info("sqlite3_info", "SQLite3 info")
 
-  method collect*(collector: Sqlite3Info): Metrics =
-    result = initOrderedTable[Labels, seq[Metric]]()
-    result[@[]] = @[]
-    let timestamp = getTime().toMilliseconds()
-    var currentMem, highwaterMem: int64
+  when declared(MetricHandler): # nim-metrics 0.1.0+
+    method collect*(collector: Sqlite3Info, output: MetricHandler) =
+      let timestamp = collector.now()
 
-    if (let res = sqlite3_status64(SQLITE_STATUS_MEMORY_USED, currentMem.addr, highwaterMem.addr, 0); res != SQLITE_OK):
-      error "SQLite3 error", msg = sqlite3_errstr(res)
-    else:
-      result[@[]] = @[
-        Metric(
-          name: "sqlite3_memory_used_bytes",
-          value: currentMem.float64,
-          timestamp: timestamp,
-        ),
-      ]
+      var currentMem, highwaterMem: int64
+
+      if (let res = sqlite3_status64(SQLITE_STATUS_MEMORY_USED, currentMem.addr, highwaterMem.addr, 0); res != SQLITE_OK):
+        error "SQLite3 error", msg = sqlite3_errstr(res)
+      else:
+        output(
+          name = "sqlite3_memory_used_bytes",
+          value = currentMem.float64,
+          timestamp = timestamp,
+        )
+  else: # nim-metrics 0.0.1
+    method collect*(collector: Sqlite3Info): Metrics =
+      result = initOrderedTable[Labels, seq[Metric]]()
+      result[@[]] = @[]
+      let timestamp = getTime().toMilliseconds()
+      var currentMem, highwaterMem: int64
+
+      if (let res = sqlite3_status64(SQLITE_STATUS_MEMORY_USED, currentMem.addr, highwaterMem.addr, 0); res != SQLITE_OK):
+        error "SQLite3 error", msg = sqlite3_errstr(res)
+      else:
+        result[@[]] = @[
+          Metric(
+            name: "sqlite3_memory_used_bytes",
+            value: currentMem.float64,
+            timestamp: timestamp,
+          ),
+        ]
