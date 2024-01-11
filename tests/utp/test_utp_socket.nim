@@ -48,7 +48,7 @@ procSuite "uTP socket tests":
       initialPacket.header.wndSize == defaultConfig.optRcvBuffer
 
     await socket.destroyWait()
-    fut.cancel()
+    fut.cancelSoon()
 
   asyncTest "Outgoing socket should re-send SYN packet 2 times before declaring failure":
     let q = newAsyncQueue[Packet]()
@@ -82,7 +82,7 @@ procSuite "uTP socket tests":
       not socket.isConnected()
 
     await socket.destroyWait()
-    fut1.cancel()
+    fut1.cancelSoon()
 
   asyncTest "Processing in order ack should make socket connected":
     let q = newAsyncQueue[Packet]()
@@ -444,8 +444,8 @@ procSuite "uTP socket tests":
 
     outgoingSocket.destroy()
 
-    yield writeFut1
-    yield writeFut2
+    discard await writeFut1
+    discard await writeFut2
 
     check:
       writeFut1.completed()
@@ -485,13 +485,12 @@ procSuite "uTP socket tests":
 
     await outgoingSocket.processPacket(someAckFromRemote)
 
-    yield writeFut1
-    yield writeFut2
-    yield writeFut3
+    discard await writeFut1
+    discard await writeFut3
 
     check:
       writeFut1.completed()
-      writeFut2.cancelled()
+      writeFut2.cancelled() # TODO: This might not always be the case?
       writeFut3.completed()
 
     let p1 = await q.get()
@@ -1250,7 +1249,7 @@ procSuite "uTP socket tests":
     # write should progress
     await outgoingSocket.processPacket(someAckFromRemote)
 
-    yield writeFut2
+    discard await writeFut2
 
     let secondPacket =  await q.get()
 

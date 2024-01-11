@@ -223,7 +223,7 @@ procSuite "Utp protocol over udp tests":
     # this future will be completed when we called accepted connection callback
     await server2Called.wait()
 
-    yield futSock
+    discard (await futSock)
 
     check:
       futSock.finished() and (not futSock.failed()) and (not futSock.cancelled())

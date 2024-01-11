@@ -46,7 +46,7 @@ procSuite "Utp protocol over discovery v5 tests":
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
       utp1 = UtpDiscv5Protocol.new(node1, utpProtId, registerIncomingSocketCallback(queue))
-      utp2 = UtpDiscv5Protocol.new(node2, utpProtId, registerIncomingSocketCallback(queue))
+      utp2 {.used.} = UtpDiscv5Protocol.new(node2, utpProtId, registerIncomingSocketCallback(queue))
 
     # nodes must have session between each other
     check:
@@ -81,7 +81,7 @@ procSuite "Utp protocol over discovery v5 tests":
 
       # constructor which uses connection callback and user data pointer as ref
       utp1 = UtpDiscv5Protocol.new(node1, utpProtId, cbUserData, queue)
-      utp2 = UtpDiscv5Protocol.new(node2, utpProtId, cbUserData, queue)
+      utp2 {.used.} = UtpDiscv5Protocol.new(node2, utpProtId, cbUserData, queue)
 
     # nodes must have session between each other
     check:
@@ -111,7 +111,7 @@ procSuite "Utp protocol over discovery v5 tests":
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
       utp1 = UtpDiscv5Protocol.new(node1, utpProtId, registerIncomingSocketCallback(queue))
-      utp2 = UtpDiscv5Protocol.new(node2, utpProtId, registerIncomingSocketCallback(queue))
+      utp2 {.used.} = UtpDiscv5Protocol.new(node2, utpProtId, registerIncomingSocketCallback(queue))
 
     # nodes must have session between each other
     check:
@@ -154,7 +154,7 @@ procSuite "Utp protocol over discovery v5 tests":
         utpProtId,
         registerIncomingSocketCallback(queue),
         socketConfig = SocketConfig.init(lowSynTimeout))
-      utp2 =
+      utp2 {.used.} =
         UtpDiscv5Protocol.new(
           node2,
           utpProtId,
@@ -195,7 +195,7 @@ procSuite "Utp protocol over discovery v5 tests":
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
       utp1 = UtpDiscv5Protocol.new(node1, utpProtId, registerIncomingSocketCallback(queue))
-      utp2 = UtpDiscv5Protocol.new(
+      utp2 {.used.} = UtpDiscv5Protocol.new(
         node2,
         utpProtId,
         registerIncomingSocketCallback(queue),

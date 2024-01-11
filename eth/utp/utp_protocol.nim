@@ -67,7 +67,8 @@ proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
   let router = getUserData[UtpRouter[TransportAddress]](transp)
   # TODO: should we use `peekMessage()` to avoid allocation?
   let buf = try: transp.getMessage()
-            except TransportOsError as e:
+            except TransportError as e:
+              trace "Error reading datagram msg: ", error = e.msg
               # This is likely to be local network connection issues.
               return
   await processIncomingBytes[TransportAddress](router, buf, raddr)
