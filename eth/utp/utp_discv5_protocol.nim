@@ -59,7 +59,7 @@ proc talkReqDirect(
     reqId = RequestId.init(p.rng[])
     message = encodeMessage(
       TalkReqMessage(protocol: protocol, request: request), reqId)
-    (data, nonce) = encodeMessagePacket(
+    (data, _) = encodeMessagePacket(
       p.rng[], p.codec, n.nodeId, n.address, message)
 
   trace "Send message packet",

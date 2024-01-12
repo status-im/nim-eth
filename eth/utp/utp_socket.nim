@@ -623,7 +623,7 @@ proc checkTimeouts(socket: UtpSocket) =
         socket.slowStart = true
 
       # Note: with selective acks enabled, every selectively acked packet resets
-      # the timeout timer and removes te packet from the outBuffer.
+      # the timeout timer and removes the packet from the outBuffer.
       markAllPacketAsLost(socket)
 
       let oldestPacketSeqNr = socket.seqNr - socket.curWindowPackets
@@ -673,7 +673,7 @@ proc handleDataWrite(socket: UtpSocket, data: seq[byte]): int =
     let lastIndex = i + pSize - 1
     let lastOrEnd = min(lastIndex, endIndex)
     let dataSlice = data[i..lastOrEnd]
-    let payloadLength =  uint32(len(dataSlice))
+    let payloadLength = uint32(len(dataSlice))
     if (socket.outBufferBytes + payloadLength <= socket.socketConfig.optSndBuffer):
       let wndSize = socket.getRcvWindowSize()
       let dataPacket =
@@ -994,8 +994,6 @@ proc selectiveAckPackets(
     if (maybePacket.isNone() or maybePacket.unsafeGet().transmissions == 0):
       dec bits
       continue
-
-    let pkt = maybePacket.unsafeGet()
 
     if bitSet:
       debug "Packet acked by selective ack",

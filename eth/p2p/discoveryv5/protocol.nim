@@ -470,7 +470,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
 
   # TODO: should we use `peekMessage()` to avoid allocation?
   let buf = try: transp.getMessage()
-            except TransportOsError as e:
+            except TransportError as e:
               # This is likely to be local network connection issues.
               warn "Transport getMessage", exception = e.name, msg = e.msg
               return
