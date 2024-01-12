@@ -270,8 +270,8 @@ procSuite "Utp protocol over udp tests":
 
       (not s.serverSocket.isConnected())
 
-    # 5000 bytes is over maximal packet size
-    let bytesToTransfer = rng[].generateBytes(5000)
+    # 20_000 bytes is way over maximal packet size
+    let bytesToTransfer = rng[].generateBytes(20_000)
 
     let bytesReceivedFromClient = await transferData(s.clientSocket, s.serverSocket, bytesToTransfer)
     let bytesReceivedFromServer = await transferData(s.serverSocket, s.clientSocket, bytesToTransfer)
