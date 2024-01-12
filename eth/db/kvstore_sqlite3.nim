@@ -718,6 +718,8 @@ when defined(metrics):
           timestamp = timestamp,
         )
   else: # nim-metrics 0.0.1
+    import std/times
+
     method collect*(collector: Sqlite3Info): Metrics =
       result = initOrderedTable[Labels, seq[Metric]]()
       result[@[]] = @[]
