@@ -452,11 +452,11 @@ proc registerOutgoingPacket(socket: UtpSocket, oPacket: OutgoingPacket) =
   inc socket.seqNr
   inc socket.curWindowPackets
 
-proc sendData(socket: UtpSocket, data: seq[byte]) =
-  let f = socket.send(socket.remoteAddress, data)
-  f.callback = proc(data: pointer) {.gcsafe.} =
-    if f.failed:
-      warn "UTP send failed", msg = f.readError.msg
+proc sendData(socket: UtpSocket, data: seq[byte]): Future[void] {.async.} =
+  try:
+    await socket.send(socket.remoteAddress, data)
+  except CatchableError as e:
+    warn "UTP send failed", msg = e.msg
 
 proc sendPacket(socket: UtpSocket, seqNr: uint16) =
   proc setSend(p: var OutgoingPacket): seq[byte] =
@@ -474,7 +474,7 @@ proc sendPacket(socket: UtpSocket, seqNr: uint16) =
 
     return p.packetBytes
 
-  socket.sendData(setSend(socket.outBuffer[seqNr]))
+  asyncSpawn socket.sendData(setSend(socket.outBuffer[seqNr]))
 
 proc resetSendTimeout(socket: UtpSocket) =
   socket.retransmitTimeout = socket.rto
@@ -1108,7 +1108,7 @@ proc sendAck(socket: UtpSocket) =
     pkAckNr = ackPacket.header.ackNr,
     gotEACK = ackPacket.eack.isSome()
 
-  socket.sendData(encodePacket(ackPacket))
+  asyncSpawn socket.sendData(encodePacket(ackPacket))
 
 
 proc tryfinalizeConnection(socket: UtpSocket, p: Packet) =
@@ -2077,5 +2077,5 @@ proc startOutgoingSocket*(socket: UtpSocket): Future[void] =
   socket.registerOutgoingPacket(outgoingPacket)
   socket.startEventLoop()
   socket.startTimeoutLoop()
-  socket.sendData(outgoingPacket.packetBytes)
+  asyncSpawn socket.sendData(outgoingPacket.packetBytes)
   return socket.connectionFuture
