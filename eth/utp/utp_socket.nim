@@ -734,7 +734,7 @@ proc destroy*(s: UtpSocket) =
   ## Moves socket to destroy state and clean all resources.
   ## Remote is not notified in any way about socket end of life.
   s.state = Destroy
-  s.eventLoop.cancel()
+  s.eventLoop.cancelSoon()
   # This procedure initiate cleanup process which goes like:
   # Cancel EventLoop -> Cancel timeoutsLoop -> Fire closeEvent
   # This is necessary due to how evenLoop look like i.e it has only one await
@@ -1758,7 +1758,7 @@ proc eventLoop(socket: UtpSocket) {.async.} =
     socket.pendingWrites.clear()
     socket.pendingReads.clear()
     # main eventLoop has been cancelled, try to cancel `checkTimeoutsLoop`
-    socket.checkTimeoutsLoop.cancel()
+    socket.checkTimeoutsLoop.cancelSoon()
     trace "main socket event loop cancelled"
     raise exc
 

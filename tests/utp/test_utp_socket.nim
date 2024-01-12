@@ -48,7 +48,7 @@ procSuite "uTP socket tests":
       initialPacket.header.wndSize == defaultConfig.optRcvBuffer
 
     await socket.destroyWait()
-    fut.cancel()
+    fut.cancelSoon()
 
   asyncTest "Outgoing socket should re-send SYN packet 2 times before declaring failure":
     let q = newAsyncQueue[Packet]()
@@ -82,7 +82,7 @@ procSuite "uTP socket tests":
       not socket.isConnected()
 
     await socket.destroyWait()
-    fut1.cancel()
+    fut1.cancelSoon()
 
   asyncTest "Processing in order ack should make socket connected":
     let q = newAsyncQueue[Packet]()
