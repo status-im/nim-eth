@@ -117,7 +117,7 @@ procSuite "Utp protocol over discovery v5 tests":
     check:
       (await node1.ping(node2.localNode)).isOk()
 
-    let numOfBytes = 5000
+    let numOfBytes = 5000 * 2
     let clientSocketResult = await utp1.connectTo(NodeAddress.init(node2.localNode).unsafeGet())
     let clientSocket = clientSocketResult.get()
 
