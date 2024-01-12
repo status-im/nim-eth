@@ -1038,11 +1038,11 @@ proc close*(d: Protocol) =
 
   debug "Closing discovery node", node = d.localNode
   if not d.revalidateLoop.isNil:
-    d.revalidateLoop.cancelSoon()
+    d.revalidateLoop.cancel()
   if not d.refreshLoop.isNil:
-    d.refreshLoop.cancelSoon()
+    d.refreshLoop.cancel()
   if not d.ipMajorityLoop.isNil:
-    d.ipMajorityLoop.cancelSoon()
+    d.ipMajorityLoop.cancel()
 
   d.transp.close()
 
