@@ -110,7 +110,7 @@ proc newEthereumNode*(
     result.protocolVersion = if useCompression: devp2pSnappyVersion
                              else: devp2pVersion
 
-  result.protocolStates.newSeq allProtocols.len
+  result.protocolStates.newSeq protocolCount()
 
   result.peerPool = newPeerPool(
     result, networkId, keys, nil, clientId, minPeers = minPeers)
@@ -118,8 +118,8 @@ proc newEthereumNode*(
   result.peerPool.discovery = result.discovery
 
   if addAllCapabilities:
-    for p in allProtocols:
-      result.addCapability(p)
+    for cap in protocols():
+      result.addCapability(cap)
 
 proc processIncoming(server: StreamServer,
                      remote: StreamTransport): Future[void] {.async, gcsafe.} =
