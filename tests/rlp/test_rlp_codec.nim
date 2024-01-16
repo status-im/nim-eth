@@ -61,7 +61,8 @@ suite "BlockHeader roundtrip test":
     expect AssertionDefect:
       roundTrip(h)
 
-  test "Header + none(baseFee) + some(withdrawalsRoot) + some(excessBlobGas)":
+  test "Header + none(baseFee) + some(withdrawalsRoot) + " &
+      "some(blobGasUsed) + some(excessBlobGas)":
     let h = BlockHeader(
       withdrawalsRoot: some(Hash256()),
       blobGasUsed: some(1'u64),
@@ -70,7 +71,8 @@ suite "BlockHeader roundtrip test":
     expect AssertionDefect:
       roundTrip(h)
 
-  test "Header + none(baseFee) + none(withdrawalsRoot) + some(excessBlobGas)":
+  test "Header + none(baseFee) + none(withdrawalsRoot) + " &
+      "some(blobGasUsed) + some(excessBlobGas)":
     let h = BlockHeader(
       blobGasUsed: some(1'u64),
       excessBlobGas: some(1'u64)
@@ -78,7 +80,8 @@ suite "BlockHeader roundtrip test":
     expect AssertionDefect:
       roundTrip(h)
 
-  test "Header + some(baseFee) + none(withdrawalsRoot) + some(excessBlobGas)":
+  test "Header + some(baseFee) + none(withdrawalsRoot) + " &
+      "some(blobGasUsed) + some(excessBlobGas)":
     let h = BlockHeader(
       fee: some(2.u256),
       blobGasUsed: some(1'u64),
@@ -94,7 +97,8 @@ suite "BlockHeader roundtrip test":
     )
     roundTrip(h)
 
-  test "Header + some(baseFee) + some(withdrawalsRoot) + some(excessBlobGas)":
+  test "Header + some(baseFee) + some(withdrawalsRoot) + " &
+      "some(blobGasUsed) + some(excessBlobGas)":
     let h = BlockHeader(
       fee: some(2.u256),
       withdrawalsRoot: some(Hash256()),
