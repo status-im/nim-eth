@@ -14,9 +14,11 @@ template awaitWithTimeout*[T](operation: Future[T],
     # the "next" operation will run concurrently to this one, messing up
     # the order of operations (since await/async is not fair)
     await cancelAndWait(f)
+
+  if f.cancelled: # It could have finished instead of getting cancelled
     onTimeout
   else:
-    f.read
+    await f # Await avoids extraneous exception effects
 
 template awaitWithTimeout*[T](operation: Future[T],
                               timeout: Duration,
@@ -33,10 +35,11 @@ template awaitWithTimeout*(operation: Future[void],
     # the "next" operation will run concurrently to this one, messing up
     # the order of operations (since await/async is not fair)
     await cancelAndWait(f)
+
+  if f.cancelled: # It could have finished instead of getting cancelled
     onTimeout
 
 template awaitWithTimeout*(operation: Future[void],
                            timeout: Duration,
                            onTimeout: untyped) =
   awaitWithTimeout(operation, sleepAsync(timeout), onTimeout)
-
