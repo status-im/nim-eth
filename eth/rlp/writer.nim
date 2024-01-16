@@ -172,11 +172,11 @@ proc hasOptionalFields(T: type): bool =
 
   proc helper: bool =
     var dummy: T
+    result = false
     template detectOptionalField(RT, n, x) =
       when x is Option or x is Opt:
         return true
     enumerateRlpFields(dummy, detectOptionalField)
-    false
 
   const res = helper()
   return res

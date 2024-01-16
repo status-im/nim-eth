@@ -120,7 +120,7 @@ proc payloadBytesCount(self: Rlp): int =
         nonCanonicalNumberError()
     return
 
-  template readInt(startMarker, lenPrefixMarker) =
+  template readInt(output, startMarker, lenPrefixMarker: untyped) =
     var
       lengthBytes = int(marker - lenPrefixMarker)
       remainingBytes = self.bytes.len - self.position
@@ -131,24 +131,24 @@ proc payloadBytesCount(self: Rlp): int =
     if remainingBytes > 1 and self.bytes[self.position + 1] == 0:
       raise newException(MalformedRlpError, "Number encoded with a leading zero")
 
-    # check if the size is not bigger than the max that result can hold
-    if lengthBytes > sizeof(result) or
-        (lengthBytes == sizeof(result) and self.bytes[self.position + 1].int > 127):
+    # check if the size is not bigger than the max that output can hold
+    if lengthBytes > sizeof(output) or
+        (lengthBytes == sizeof(output) and self.bytes[self.position + 1].int > 127):
       raise newException(UnsupportedRlpError, "Message too large to fit in memory")
 
     for i in 1 .. lengthBytes:
-      result = (result shl 8) or int(self.bytes[self.position + i])
+      output = (output shl 8) or int(self.bytes[self.position + i])
 
     # must be greater than the short-list size list
-    if result < THRESHOLD_LIST_LEN:
+    if output < THRESHOLD_LIST_LEN:
       nonCanonicalNumberError()
 
   if marker < LIST_START_MARKER:
-    readInt(BLOB_START_MARKER, LEN_PREFIXED_BLOB_MARKER)
+    result.readInt(BLOB_START_MARKER, LEN_PREFIXED_BLOB_MARKER)
   elif marker <= LEN_PREFIXED_LIST_MARKER:
     result = int(marker - LIST_START_MARKER)
   else:
-    readInt(LIST_START_MARKER, LEN_PREFIXED_LIST_MARKER)
+    result.readInt(LIST_START_MARKER, LEN_PREFIXED_LIST_MARKER)
 
   readAheadCheck(result)
 
@@ -417,14 +417,15 @@ proc toNodes*(self: var Rlp): RlpNode =
   requireData()
 
   if self.isList():
-    result.kind = rlpList
-    newSeq result.elems, 0
+    result = RlpNode(kind: rlpList)
     for e in self:
       result.elems.add e.toNodes
   else:
     doAssert self.isBlob()
-    result.kind = rlpBlob
-    result.bytes = self.toBytes()
+    result = RlpNode(
+      kind: rlpBlob,
+      bytes: self.toBytes(),
+    )
     self.position = self.currentElemEnd()
 
 # We define a single `read` template with a pretty low specificity
@@ -463,6 +464,25 @@ proc isPrintable(s: string): bool =
 
   return true
 
+proc renderBlob(self: var Rlp, hexOutput: bool, output: var string) =
+  let str = self.toString
+  if str.isPrintable:
+    output.add '"'
+    output.add str
+    output.add '"'
+  else:
+    output.add "blob(" & $str.len & ") ["
+    for c in str:
+      if hexOutput:
+        output.add toHex(int(c), 2)
+      else:
+        output.add $ord(c)
+        output.add ","
+    if hexOutput:
+      output.add ']'
+    else:
+      output[^1] = ']'
+
 proc inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) =
   if not self.hasData():
     return
@@ -477,24 +497,7 @@ proc inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) 
     output.add "byte "
     output.add $self.bytes[self.position]
   elif self.isBlob:
-    let str = self.toString
-    if str.isPrintable:
-      output.add '"'
-      output.add str
-      output.add '"'
-    else:
-      output.add "blob(" & $str.len & ") ["
-      for c in str:
-        if hexOutput:
-          output.add toHex(int(c), 2)
-        else:
-          output.add $ord(c)
-          output.add ","
-
-      if hexOutput:
-        output.add ']'
-      else:
-        output[^1] = ']'
+    self.renderBlob(hexOutput, output)
   else:
     output.add "{\n"
     for subitem in self:
