@@ -316,11 +316,11 @@ procSuite "uTP over UDP protocol tests":
       s.clientSocket.numPacketsInOutGoingBuffer() == 0
 
     const
-      amountOftransfers = 3
+      amountOfTransfers = 3
       amountOfBytes = 5000
 
     var totalBytesToTransfer: seq[byte]
-    for i in 0..<amountOftransfers:
+    for i in 0..<amountOfTransfers:
       let bytesToTransfer = rng[].generateBytes(amountOfBytes)
       let written = await s.clientSocket.write(bytesToTransfer)
 
@@ -330,7 +330,7 @@ procSuite "uTP over UDP protocol tests":
 
       totalBytesToTransfer.add(bytesToTransfer)
 
-    let bytesReceived = await s.serverSocket.read(amountOfBytes * amountOftransfers)
+    let bytesReceived = await s.serverSocket.read(amountOfBytes * amountOfTransfers)
     await waitUntil(proc (): bool = s.clientSocket.numPacketsInOutGoingBuffer() == 0)
 
     check:
@@ -546,3 +546,78 @@ procSuite "uTP over UDP protocol tests":
       s.clientSocket.currentMaxWindowSize < maximumMaxWindow
 
     await s.close()
+
+  asyncTest "Data transfer over multiple sockets":
+    const
+      amountOfTransfers = 100
+      dataToSend: seq[byte] = repeat(byte 0xA0, 1_000_000)
+
+    var readFutures: seq[Future[void]]
+
+    proc readAndCheck(
+        socket: UtpSocket[TransportAddress],
+      ): Future[void] {.async.} =
+      let readData = await socket.read()
+      check:
+        readData == dataToSend
+        socket.atEof()
+
+    proc handleIncomingConnection(
+        server: UtpRouter[TransportAddress],
+        client: UtpSocket[TransportAddress]
+      ): Future[void] =
+      readFutures.add(client.readAndCheck())
+
+      var fut = newFuture[void]("test.AcceptConnectionCallback")
+      fut.complete()
+      return fut
+
+    proc handleIncomingConnectionDummy(
+        server: UtpRouter[TransportAddress],
+        client: UtpSocket[TransportAddress]
+      ): Future[void] =
+        var fut = newFuture[void]("test.AcceptConnectionCallback")
+        fut.complete()
+        return fut
+
+    let
+      address1 = initTAddress("127.0.0.1", 9079)
+      utpProto1 = UtpProtocol.new(handleIncomingConnectionDummy, address1)
+      address2 = initTAddress("127.0.0.1", 9080)
+      utpProto2 = UtpProtocol.new(handleIncomingConnection, address2)
+
+    proc connectSendAndCheck(
+        utpProto: UtpProtocol,
+        address: TransportAddress
+      ): Future[void] {.async.} =
+      let socketRes = await utpProto.connectTo(address)
+      check:
+        socketRes.isOk()
+      let socket = socketRes.value()
+      let dataSend = await socket.write(dataToSend)
+      check:
+        dataSend.isOk()
+        dataSend.value() == dataToSend.len()
+
+      await socket.closeWait()
+
+    let t0 = Moment.now()
+    for i in 0..<amountOfTransfers:
+      asyncSpawn utpProto1.connectSendAndCheck(address2)
+
+    while readFutures.len() < amountOfTransfers:
+      await sleepAsync(milliseconds(100))
+
+    await allFutures(readFutures)
+    let elapsed = Moment.now() - t0
+
+    await utpProto1.shutdownWait()
+    await utpProto2.shutdownWait()
+
+    let megabitsSent = amountOfTransfers * dataToSend.len() * 8 / 1_000_000
+    let seconds = float(elapsed.nanoseconds) / 1_000_000_000
+    let throughput = megabitsSent / seconds
+
+    echo ""
+    echo "Sent ", amountOfTransfers, " asynchronous uTP transfers in ", seconds,
+      " seconds, payload throughput: ", throughput, " Mbit/s"
