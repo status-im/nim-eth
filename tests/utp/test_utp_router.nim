@@ -25,7 +25,7 @@ proc hash*(x: UtpSocketKey[int]): Hash =
 type
   TestError* = object of CatchableError
 
-procSuite "Utp router unit tests":
+procSuite "uTP router unit":
   let rng = newRng()
   let testSender = 1
   let testSender2 = 2

@@ -17,7 +17,7 @@ import
   ../../eth/keys,
   ../stubloglevel
 
-procSuite "uTP socket tests":
+procSuite "uTP socket":
   let
     rng = newRng()
     testAddress = initTAddress("127.0.0.1", 9079)

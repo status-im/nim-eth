@@ -130,7 +130,7 @@ proc close(s: TwoClientsServerScenario) {.async.} =
   await s.utp2.shutdownWait()
   await s.utp3.shutdownWait()
 
-procSuite "uTP over UDP protocol tests":
+procSuite "uTP over UDP protocol":
   let rng = newRng()
 
   asyncTest "Connect to remote host: test connection callback":

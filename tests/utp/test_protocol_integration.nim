@@ -51,7 +51,7 @@ proc getServerSocket(
   else:
     return some(srvSocket)
 
-procSuite "Utp protocol over udp tests with loss and delays":
+procSuite "uTP over UDP protocol with loss and delays":
   let rng = newRng()
 
   proc sendBuilder(maxDelay: int, packetDropRate: int): SendCallbackBuilder =
