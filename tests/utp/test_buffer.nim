@@ -14,7 +14,7 @@ import
 type TestObj = object
   foo: string
 
-suite "Utp ring buffer":
+suite "uTP ring buffer":
   test "Empty buffer":
     let buff = GrowableCircularBuffer[int].init(size = 4)
     check:

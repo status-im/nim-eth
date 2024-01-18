@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -481,6 +481,10 @@ proc resetSendTimeout(socket: UtpSocket) =
   socket.rtoTimeout = getMonoTimestamp().moment + socket.retransmitTimeout
 
 proc flushPackets(socket: UtpSocket) =
+  if (socket.freeWindowBytes() == 0):
+    trace "No place in send window, not flushing"
+    return
+
   let oldestOutgoingPacketSeqNr = socket.seqNr - socket.curWindowPackets
   var i: uint16 = oldestOutgoingPacketSeqNr
   while i != socket.seqNr:
