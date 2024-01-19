@@ -10,9 +10,6 @@ type
   EthHeader = object
     header: BlockHeader
 
-func `==`(a, b: ChainId): bool =
-  a.uint64 == b.uint64
-
 proc loadFile(x: int) =
   let fileName = "tests" / "rlp" / "eip2718" / "acl_block_" & $x & ".json"
   test fileName:

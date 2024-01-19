@@ -32,8 +32,6 @@ rlpFields Foo,
 rlpFields Transaction,
   sender, receiver, amount
 
-proc default(T: typedesc): T = discard
-
 proc append*(rlpWriter: var RlpWriter, holder: CustomSerialized, f: Foo) =
   rlpWriter.append(f.x)
   rlpWriter.append(f.y.len)
