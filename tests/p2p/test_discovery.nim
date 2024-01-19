@@ -47,7 +47,31 @@ procSuite "Discovery Tests":
     bootENode = ENode(pubkey: bootNodeKey.toPublicKey(), address: bootNodeAddr)
     bootNode = initDiscoveryNode(bootNodeKey, bootNodeAddr, @[])
   waitFor bootNode.bootstrap()
-  
+
+  asyncTest "Discover nodes":
+    let nodeKeys = [
+      PrivateKey.fromHex(
+        "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")[],
+      PrivateKey.fromHex(
+        "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a619")[],
+      PrivateKey.fromHex(
+        "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a620")[]
+    ]
+
+    var nodes: seq[DiscoveryProtocol]
+    for i in 0..<nodeKeys.len:
+      let node = initDiscoveryNode(nodeKeys[i], localAddress(20302 + i),
+        @[bootENode])
+      nodes.add(node)
+
+    await allFutures(nodes.mapIt(it.bootstrap()))
+    nodes.add(bootNode)
+
+    for i in nodes:
+      for j in nodes:
+        if j != i:
+          check(nodeIdInNodes(i.localNode.id, j.randomNodes(nodes.len - 1)))
+
   test "Test Vectors":
     # These are the test vectors from EIP-8:
     # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-8.md#rlpx-discovery-protocol
@@ -121,28 +145,3 @@ procSuite "Discovery Tests":
     # Just for completeness, wait for the first result out of order.
     # Max delay 5 seconds.
     discard await neighbours1Future
-
-  asyncTest "Discover nodes":
-    let nodeKeys = [
-      PrivateKey.fromHex(
-        "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")[],
-      PrivateKey.fromHex(
-        "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a619")[],
-      PrivateKey.fromHex(
-        "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a620")[]
-    ]
-
-    var nodes: seq[DiscoveryProtocol]
-    for i in 0..<nodeKeys.len:
-      let node = initDiscoveryNode(nodeKeys[i], localAddress(20302 + i),
-        @[bootENode])
-      nodes.add(node)
-
-    await allFutures(nodes.mapIt(it.bootstrap()))
-    nodes.add(bootNode)
-
-    for i in nodes:
-      for j in nodes:
-        if j != i:
-          check(nodeIdInNodes(i.localNode.id, j.randomNodes(nodes.len - 1)))
-          
