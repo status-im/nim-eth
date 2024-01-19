@@ -102,9 +102,10 @@ proc expiration(): uint32 =
 proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) =
   let ta = initTAddress(n.node.address.ip, n.node.address.udpPort)
   let f = d.transp.sendTo(ta, data)
-  f.callback = proc(data: pointer) {.gcsafe.} =
+  let cb = proc(data: pointer) {.gcsafe.} =
     if f.failed:
       debug "Discovery send failed", msg = f.readError.msg
+  f.addCallback cb
 
 proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] =
   let payload = rlp.encode((PROTO_VERSION, d.address, n.node.address,
