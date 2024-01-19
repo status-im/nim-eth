@@ -196,18 +196,27 @@ proc toInt*(self: Rlp, IntType: type): IntType =
   for i in payloadStart ..< (payloadStart + payloadSize):
     result = (result shl 8) or OutputType(self.bytes[self.position + i])
 
+template getPtr(x: untyped): auto =
+  when (NimMajor, NimMinor) <= (1,6):
+    unsafeAddr(x)
+  else:
+    addr(x)
+
 proc toString*(self: Rlp): string =
   if not self.isBlob():
     raise newException(RlpTypeMismatch, "String expected, but the source RLP is not a blob")
 
-  let
-    payloadOffset = self.payloadOffset()
-    payloadLen = self.payloadBytesCount()
+  let payloadLen = self.payloadBytesCount()
 
-  result = newString(payloadLen)
-  for i in 0 ..< payloadLen:
-    # XXX: switch to copyMem here
-    result[i] = char(self.bytes[self.position + payloadOffset + i])
+  if payloadLen > 0:
+    let
+      payloadOffset = self.payloadOffset()
+      begin = self.position + payloadOffset
+
+    result = newString(payloadLen)
+    copyMem(result[0].getPtr,
+      self.bytes[begin].getPtr,
+      payloadLen)
 
 proc toBytes*(self: Rlp): seq[byte] =
   if not self.isBlob():
