@@ -1175,11 +1175,13 @@ proc postHelloSteps(peer: Peer, h: DevP2P.hello) {.async.} =
   #
   var messageProcessingLoop = peer.dispatchMessages()
 
-  messageProcessingLoop.callback = proc(p: pointer) {.gcsafe.} =
+  let cb = proc(p: pointer) {.gcsafe.} =
     if messageProcessingLoop.failed:
       debug "Ending dispatchMessages loop", peer,
             err = messageProcessingLoop.error.msg
       traceAsyncErrors peer.disconnect(ClientQuitting)
+
+  messageProcessingLoop.addCallback(cb)
 
   # The handshake may involve multiple async steps, so we wait
   # here for all of them to finish.
