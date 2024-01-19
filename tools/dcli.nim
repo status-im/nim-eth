@@ -16,6 +16,12 @@ import
   ../eth/p2p/discoveryv5/[enr, node],
   ../eth/p2p/discoveryv5/protocol as discv5_protocol
 
+const
+  defaultListenAddress* = (static parseIpAddress("0.0.0.0"))
+  defaultAdminListenAddress* = (static parseIpAddress("127.0.0.1"))
+  defaultListenAddressDesc = $defaultListenAddress
+  defaultAdminListenAddressDesc = $defaultAdminListenAddress
+
 type
   DiscoveryCmd* = enum
     noCommand
@@ -35,7 +41,8 @@ type
       name: "udp-port" .}: uint16
 
     listenAddress* {.
-      defaultValue: defaultListenAddress(config)
+      defaultValue: defaultListenAddress
+      defaultValueDesc: $defaultListenAddressDesc
       desc: "Listening address for the Discovery v5 traffic"
       name: "listen-address" }: IpAddress
 
@@ -72,9 +79,10 @@ type
       name: "metrics" .}: bool
 
     metricsAddress* {.
-      defaultValue: defaultAdminListenAddress(config)
+      defaultValue: defaultAdminListenAddress
+      defaultValueDesc: $defaultAdminListenAddressDesc
       desc: "Listening address of the metrics server"
-      name: "metrics-address" .}: ValidIpAddress
+      name: "metrics-address" .}: IpAddress
 
     metricsPort* {.
       defaultValue: 8008
@@ -107,12 +115,6 @@ type
         argument
         desc: "ENR URI of the node to send a talkReq message"
         name: "node" .}: Node
-
-func defaultListenAddress*(conf: DiscoveryConf): IpAddress =
-  (static parseIpAddress("0.0.0.0"))
-
-func defaultAdminListenAddress*(conf: DiscoveryConf): ValidIpAddress =
-  (static ValidIpAddress.init("127.0.0.1"))
 
 proc parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
   if not fromURI(result, p):
