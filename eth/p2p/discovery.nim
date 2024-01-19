@@ -102,9 +102,10 @@ proc expiration(): uint32 =
 proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) =
   let ta = initTAddress(n.node.address.ip, n.node.address.udpPort)
   let f = d.transp.sendTo(ta, data)
-  f.callback = proc(data: pointer) {.gcsafe.} =
+  let cb = proc(data: pointer) {.gcsafe.} =
     if f.failed:
       debug "Discovery send failed", msg = f.readError.msg
+  f.addCallback cb
 
 proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] =
   let payload = rlp.encode((PROTO_VERSION, d.address, n.node.address,
@@ -271,15 +272,18 @@ proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte])
     notice "Wrong msg mac from ", a
 
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
-    Future[void] {.async.} =
+    Future[void] {.async: (raises: []).} =
   var proto = getUserData[DiscoveryProtocol](transp)
   let buf = try: transp.getMessage()
             except TransportOsError as e:
               # This is likely to be local network connection issues.
               warn "Transport getMessage", exception = e.name, msg = e.msg
               return
-  let a = Address(ip: raddr.address, udpPort: raddr.port, tcpPort: raddr.port)
+            except TransportError as exc:
+              debug "getMessage error", msg = exc.msg
+              return
   try:
+    let a = Address(ip: raddr.address, udpPort: raddr.port, tcpPort: raddr.port)
     proto.receive(a, buf)
   except RlpError as e:
     debug "Receive failed", exc = e.name, err = e.msg
