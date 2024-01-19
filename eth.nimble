@@ -24,7 +24,6 @@ let commonParams =
   " --warning[ObservableStores]:off" &
   " --styleCheck:usages --styleCheck:error" &
   " " & getEnv("NIMFLAGS") &
-  " -d:chronosStrictException" &
   " -d:chronicles_log_level=TRACE"
 
 proc runTest(path: string, release: bool = true) =

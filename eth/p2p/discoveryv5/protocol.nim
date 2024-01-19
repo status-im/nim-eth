@@ -468,7 +468,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
     trace "Packet decoding error", error = decoded.error, address = a
 
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
-    Future[void] {.async.} =
+    Future[void] {.async: (raises: []).} =
   let proto = getUserData[Protocol](transp)
 
   # TODO: should we use `peekMessage()` to avoid allocation?
@@ -1041,11 +1041,11 @@ proc close*(d: Protocol) =
 
   debug "Closing discovery node", node = d.localNode
   if not d.revalidateLoop.isNil:
-    d.revalidateLoop.cancel()
+    d.revalidateLoop.cancelSoon()
   if not d.refreshLoop.isNil:
-    d.refreshLoop.cancel()
+    d.refreshLoop.cancelSoon()
   if not d.ipMajorityLoop.isNil:
-    d.ipMajorityLoop.cancel()
+    d.ipMajorityLoop.cancelSoon()
 
   d.transp.close()
 
