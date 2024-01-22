@@ -1,9 +1,32 @@
-var
-  gProtocols: seq[ProtocolInfo]
+let protocolManager = ProtocolManager()
 
 # The variables above are immutable RTTI information. We need to tell
 # Nim to not consider them GcSafe violations:
-template allProtocols*: auto = {.gcsafe.}: gProtocols
+proc registerProtocol*(proto: ProtocolInfo) {.gcsafe.} =
+  {.gcsafe.}:
+    proto.index = protocolManager.protocols.len
+    if proto.name == "p2p":
+      doAssert(proto.index == 0)
+    protocolManager.protocols.add proto
+
+proc protocolCount*(): int {.gcsafe.} =
+  {.gcsafe.}:
+    protocolManager.protocols.len
+
+proc getProtocol*(index: int): ProtocolInfo {.gcsafe.} =
+  {.gcsafe.}:
+    protocolManager.protocols[index]
+
+iterator protocols*(): ProtocolInfo {.gcsafe.} =
+  {.gcsafe.}:
+    for x in protocolManager.protocols:
+      yield x
+
+template getProtocol*(Protocol: type): ProtocolInfo =
+  getProtocol(Protocol.index)
+
+template devp2pInfo*(): ProtocolInfo =
+  getProtocol(0)
 
 proc getState*(peer: Peer, proto: ProtocolInfo): RootRef =
   peer.protocolStates[proto.index]
@@ -35,7 +58,7 @@ proc initProtocolState*[T](state: T, x: Peer|EthereumNode)
 proc initProtocolStates(peer: Peer, protocols: openArray[ProtocolInfo])
     {.raises: [].} =
   # Initialize all the active protocol states
-  newSeq(peer.protocolStates, allProtocols.len)
+  newSeq(peer.protocolStates, protocolCount())
   for protocol in protocols:
     let peerStateInit = protocol.peerStateInitializer
     if peerStateInit != nil:

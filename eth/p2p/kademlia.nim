@@ -264,7 +264,7 @@ proc binaryGetBucketForNode(buckets: openArray[KBucket], n: Node):
       result = bucket
 
   if result.isNil:
-    raise newException(ValueError, "No bucket found for node with id " & $n.id)
+    raise newException(ValueError, "No bucket found for node with id " & stint.`$`(n.id))
 
 proc computeSharedPrefixBits(nodes: openArray[Node]): int =
   ## Count the number of prefix bits shared by all nodes.

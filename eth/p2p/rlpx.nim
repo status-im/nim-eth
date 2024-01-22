@@ -212,9 +212,6 @@ proc handshakeImpl[T](peer: Peer,
   else:
     return responseFut.read
 
-var gDevp2pInfo: ProtocolInfo
-template devp2pInfo: auto = {.gcsafe.}: gDevp2pInfo
-
 # Dispatcher
 #
 
@@ -240,7 +237,7 @@ proc getDispatcher(node: EthereumNode,
   # We should be able to find an existing dispatcher without allocating a new one
 
   new result
-  newSeq(result.protocolOffsets, allProtocols.len)
+  newSeq(result.protocolOffsets, protocolCount())
   result.protocolOffsets.fill -1
 
   var nextUserMsgId = 0x10
@@ -257,9 +254,9 @@ proc getDispatcher(node: EthereumNode,
 
   template copyTo(src, dest; index: int) =
     for i in 0 ..< src.len:
-      dest[index + i] = addr src[i]
+      dest[index + i] = src[i]
 
-  result.messages = newSeq[ptr MessageInfo](nextUserMsgId)
+  result.messages = newSeq[MessageInfo](nextUserMsgId)
   devp2pInfo.messages.copyTo(result.messages, 0)
 
   for localProtocol in node.protocols:
@@ -282,30 +279,35 @@ proc getMsgName*(peer: Peer, msgId: int): string =
            of 3: "pong"
            else: $msgId
 
-proc getMsgMetadata*(peer: Peer, msgId: int): (ProtocolInfo, ptr MessageInfo) =
+proc getMsgMetadata*(peer: Peer, msgId: int): (ProtocolInfo, MessageInfo) =
   doAssert msgId >= 0
 
-  if msgId <= devp2pInfo.messages[^1].id:
-    return (devp2pInfo, addr devp2pInfo.messages[msgId])
+  let dpInfo = devp2pInfo()
+  if msgId <= dpInfo.messages[^1].id:
+    return (dpInfo, dpInfo.messages[msgId])
 
   if msgId < peer.dispatcher.messages.len:
-    for i in 0 ..< allProtocols.len:
+    let numProtocol = protocolCount()
+    for i in 0 ..< numProtocol:
+      let protocol = getProtocol(i)
       let offset = peer.dispatcher.protocolOffsets[i]
       if offset != -1 and
-         offset + allProtocols[i].messages[^1].id >= msgId:
-        return (allProtocols[i], peer.dispatcher.messages[msgId])
+         offset + protocol.messages[^1].id >= msgId:
+        return (protocol, peer.dispatcher.messages[msgId])
 
 # Protocol info objects
 #
 
 proc initProtocol(name: string, version: int,
                   peerInit: PeerStateInitializer,
-                  networkInit: NetworkStateInitializer): ProtocolInfoObj =
-  result.name = name
-  result.version = version
-  result.messages = @[]
-  result.peerStateInitializer = peerInit
-  result.networkStateInitializer = networkInit
+                  networkInit: NetworkStateInitializer): ProtocolInfo =
+  ProtocolInfo(
+    name    : name,
+    version : version,
+    messages: @[],
+    peerStateInitializer: peerInit,
+    networkStateInitializer: networkInit
+  )
 
 proc setEventHandlers(p: ProtocolInfo,
                       handshake: HandshakeStep,
@@ -340,16 +342,6 @@ proc registerMsg(protocol: ProtocolInfo,
                                       printer: printer,
                                       requestResolver: requestResolver,
                                       nextMsgResolver: nextMsgResolver)
-
-proc registerProtocol(protocol: ProtocolInfo) =
-  # TODO: This can be done at compile-time in the future
-  if protocol.name != "p2p":
-    let pos = lowerBound(gProtocols, protocol)
-    gProtocols.insert(protocol, pos)
-    for i in 0 ..< gProtocols.len:
-      gProtocols[i].index = i
-  else:
-    gDevp2pInfo = protocol
 
 # Message composition and encryption
 #
@@ -992,7 +984,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       quote: return `sendCall`
 
     let perPeerMsgIdValue = if isSubprotocol:
-      newCall(perPeerMsgIdImpl, peerVar, protocol.protocolInfoVar, newLit(msgId))
+      newCall(perPeerMsgIdImpl, peerVar, protocol.protocolInfo, newLit(msgId))
     else:
       newLit(msgId)
 
@@ -1028,7 +1020,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
 
     protocol.outProcRegistrations.add(
       newCall(registerMsg,
-              protocol.protocolInfoVar,
+              protocolVar,
               newLit(msgId),
               newLit(msgName),
               thunkName,
@@ -1082,7 +1074,7 @@ proc removePeer(network: EthereumNode, peer: Peer) =
 
 proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason):
     Future[void] {.async.} =
-  var futures = newSeqOfCap[Future[void]](allProtocols.len)
+  var futures = newSeqOfCap[Future[void]](protocolCount())
 
   for protocol in peer.dispatcher.activeProtocols:
     if protocol.disconnectHandler != nil:
@@ -1163,7 +1155,7 @@ proc postHelloSteps(peer: Peer, h: DevP2P.hello) {.async.} =
   # chance to send any initial packages they might require over
   # the network and to yield on their `nextMsg` waits.
   #
-  var subProtocolsHandshakes = newSeqOfCap[Future[void]](allProtocols.len)
+  var subProtocolsHandshakes = newSeqOfCap[Future[void]](protocolCount())
   for protocol in peer.dispatcher.activeProtocols:
     if protocol.handshake != nil:
       subProtocolsHandshakes.add((protocol.handshake)(peer))

@@ -43,7 +43,7 @@ jobs:
 
     name: '${{ matrix.target.os }}-${{ matrix.target.cpu }} (Nim ${{ matrix.branch }})'
     runs-on: ${{ matrix.builder }}
-    continue-on-error: ${{ matrix.branch == 'devel' }}
+    # continue-on-error: ${{ matrix.branch == 'devel' }}
     timeout-minutes: 60
     steps:
       - name: Checkout
