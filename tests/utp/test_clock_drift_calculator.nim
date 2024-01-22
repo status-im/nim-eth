@@ -11,8 +11,7 @@ import
   unittest2,
   ../../eth/utp/clock_drift_calculator
 
-suite "Clock drift calculator":
-
+suite "uTP clock drift calculator":
   test "Initial clock drift should be 0":
     let currentTime = Moment.now()
     let calculator = ClockDriftCalculator.init(currentTime)

@@ -13,7 +13,7 @@ import
   ../../eth/utp/packets,
   ../../eth/keys
 
-suite "Utp packets test vectors":
+suite "uTP packets test vectors":
   test "SYN packet":
     let synPacket = Packet(
       header: PacketHeaderV1(

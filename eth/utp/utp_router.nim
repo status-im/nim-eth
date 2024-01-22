@@ -360,4 +360,4 @@ proc shutdownWait*[A](r: UtpRouter[A]) {.async.} =
     activeSockets.add(s)
 
   for s in activeSockets:
-    yield s.destroyWait()
+    await s.destroyWait()

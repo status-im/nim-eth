@@ -1,3 +1,10 @@
+# nim-eth
+# Copyright (c) 2019-2023 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 ## Implementation of KvStore based on sqlite3
 
 {.push raises: [].}
@@ -44,12 +51,6 @@ type
       findStmt0, findStmt1, findStmt2: RawStmtPtr
 
   SqKeyspaceRef* = ref SqKeyspace
-
-  CustomFunction* =
-    proc (
-      a: openArray[byte],
-      b: openArray[byte]
-    ): Result[seq[byte], cstring] {.noSideEffect, cdecl, callback.}
 
 template dispose(db: Sqlite) =
   discard sqlite3_close(db)
@@ -660,51 +661,32 @@ proc openKvStore*(
   tmp = SqKeyspace() # make close harmless
   ok res
 
-proc customScalarBlobFunction(ctx: ptr sqlite3_context, n: cint, v: ptr ptr sqlite3_value) {.cdecl, callback.} =
-  let ptrs = cast[ptr UncheckedArray[ptr sqlite3_value]](v)
-  let blob1 = cast[ptr UncheckedArray[byte]](sqlite3_value_blob(ptrs[][0]))
-  let blob2 = cast[ptr UncheckedArray[byte]](sqlite3_value_blob(ptrs[][1]))
-  let blob1Len = sqlite3_value_bytes(ptrs[][0])
-  let blob2Len = sqlite3_value_bytes(ptrs[][1])
-  # sqlite3_user_data retrieves data which was pointed by 5th param to
-  # sqlite3_create_function functions, which in our case is custom function
-  # provided by user
-  let usrFun = cast[CustomFunction](sqlite3_user_data(ctx))
-  let s = usrFun(
-    toOpenArray(blob1, 0, blob1Len - 1),
-    toOpenArray(blob2, 0, blob2Len - 1)
-  )
+type
+  SqliteContext* = ptr sqlite3_context
+  SqliteValue* = ptr ptr sqlite3_value
+  SqliteCustomFunction* =
+    proc (a1: SqliteContext; a2: cint; a3: SqliteValue) {.cdecl, callback.}
 
-  if s.isOk():
-    let bytes = s.unsafeGet()
-    # try is necessary as otherwise nim marks SQLITE_TRANSIENT as throwing
-    # unlisted exception.
-    # Using SQLITE_TRANSIENT destructor type, as it inform sqlite that data
-    # under provided pointer may be deleted at any moment, which is the case
-    # for seq[byte] as it is managed by nim gc. With this flag sqlite copy bytes
-    # under pointer and then releases them itself.
-    sqlite3_result_blob(ctx, unsafeAddr bytes[0], bytes.len.cint, SQLITE_TRANSIENT)
-  else:
-    let errMsg = s.error
-    sqlite3_result_error(ctx, errMsg, -1)
-
-proc registerCustomScalarFunction*(db: SqStoreRef, name: string, fun: CustomFunction): KvResult[void] =
-  ## Register custom function inside sqlite engine. Registered function can
-  ## be used in further queries by its name. Function should be side-effect
-  ## free and depends only on provided arguments.
-  ## Name of the function should be valid utf8 string.
+proc createCustomFunction*(
+    db: SqStoreRef, name: string, argc: int,
+    customFunction: SqliteCustomFunction):
+    KvResult[void] =
+  ## Create custom function inside sqlite engine. Function can be used in
+  ## queries by the provided name. Function should be side-effect free and
+  ## depend only on provided arguments.
+  ## Name of the function must be a valid utf8 string.
 
   # Using SQLITE_DETERMINISTIC flag to inform sqlite that provided function
-  # won't have any side effect this may enable additional optimisations.
+  # will be deterministic, this may enable additional optimisations.
   let deterministicUtf8Func = cint(SQLITE_UTF8 or SQLITE_DETERMINISTIC)
 
   checkErr db.env, sqlite3_create_function(
     db.env,
     name,
-    cint(2),
+    cint(argc),
     deterministicUtf8Func,
-    cast[pointer](fun),
-    customScalarBlobFunction,
+    nil,
+    customFunction,
     nil,
     nil
   )
@@ -712,35 +694,45 @@ proc registerCustomScalarFunction*(db: SqStoreRef, name: string, fun: CustomFunc
   ok()
 
 when defined(metrics):
-  import locks, tables, times,
-        chronicles, metrics
+  import chronicles, metrics
 
-  type Sqlite3Info = ref object of Gauge
+  type Sqlite3Info = ref object of Collector
 
-  proc newSqlite3Info*(name: string, help: string, registry = defaultRegistry): Sqlite3Info {.raises: [Exception].} =
-    validateName(name)
-    result = Sqlite3Info(name: name,
-                        help: help,
-                        typ: "gauge",
-                        creationThreadId: getThreadId())
-    result.lock.initLock()
-    result.register(registry)
+  proc newSqlite3Info*(name: string, help: string, registry = defaultRegistry): Sqlite3Info {.raises: [CatchableError].} =
+    Sqlite3Info.newCollector(name, help, registry = registry)
 
-  var sqlite3Info* {.global.} = newSqlite3Info("sqlite3_info", "SQLite3 info")
+  let sqlite3Info* = newSqlite3Info("sqlite3_info", "SQLite3 info")
 
-  method collect*(collector: Sqlite3Info): Metrics =
-    result = initOrderedTable[Labels, seq[Metric]]()
-    result[@[]] = @[]
-    let timestamp = getTime().toMilliseconds()
-    var currentMem, highwaterMem: int64
+  when declared(MetricHandler): # nim-metrics 0.1.0+
+    method collect*(collector: Sqlite3Info, output: MetricHandler) =
+      let timestamp = collector.now()
 
-    if (let res = sqlite3_status64(SQLITE_STATUS_MEMORY_USED, currentMem.addr, highwaterMem.addr, 0); res != SQLITE_OK):
-      error "SQLite3 error", msg = sqlite3_errstr(res)
-    else:
-      result[@[]] = @[
-        Metric(
-          name: "sqlite3_memory_used_bytes",
-          value: currentMem.float64,
-          timestamp: timestamp,
-        ),
-      ]
+      var currentMem, highwaterMem: int64
+
+      if (let res = sqlite3_status64(SQLITE_STATUS_MEMORY_USED, currentMem.addr, highwaterMem.addr, 0); res != SQLITE_OK):
+        error "SQLite3 error", msg = sqlite3_errstr(res)
+      else:
+        output(
+          name = "sqlite3_memory_used_bytes",
+          value = currentMem.float64,
+          timestamp = timestamp,
+        )
+  else: # nim-metrics 0.0.1
+    import std/times
+
+    method collect*(collector: Sqlite3Info): Metrics =
+      result = initOrderedTable[Labels, seq[Metric]]()
+      result[@[]] = @[]
+      let timestamp = getTime().toMilliseconds()
+      var currentMem, highwaterMem: int64
+
+      if (let res = sqlite3_status64(SQLITE_STATUS_MEMORY_USED, currentMem.addr, highwaterMem.addr, 0); res != SQLITE_OK):
+        error "SQLite3 error", msg = sqlite3_errstr(res)
+      else:
+        result[@[]] = @[
+          Metric(
+            name: "sqlite3_memory_used_bytes",
+            value: currentMem.float64,
+            timestamp: timestamp,
+          ),
+        ]

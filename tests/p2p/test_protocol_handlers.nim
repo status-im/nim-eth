@@ -17,8 +17,11 @@ import
   ./p2p_test_helper
 
 type
-  network = ref object
+  network = ref object of RootRef
     count*: int
+
+  PeerState = ref object of RootRef
+    status*: string
 
 p2pProtocol abc(version = 1,
                 rlpxName = "abc",
@@ -34,15 +37,18 @@ p2pProtocol abc(version = 1,
 
 p2pProtocol xyz(version = 1,
                 rlpxName = "xyz",
-                networkState = network):
+                networkState = network,
+                peerState = PeerState):
 
   onPeerConnected do (peer: Peer):
     peer.networkState.count += 1
+    peer.state.status = "connected"
 
   onPeerDisconnected do (peer: Peer, reason: DisconnectionReason) {.gcsafe.}:
     peer.networkState.count -= 1
     if true:
       raise newException(CatchableError, "Fake xyz exception")
+    peer.state.status = "disconnected"
 
 p2pProtocol hah(version = 1,
                 rlpxName = "hah",
@@ -66,10 +72,9 @@ suite "Testing protocol handlers":
 
     node2.startListening()
     let res = await node1.rlpxConnect(newNode(node2.toENode()))
-    check:
-      res.isOk()
-
+    check res.isOk()
     let peer = res.get()
+    check peer.state(xyz).status == "connected"
 
     await peer.disconnect(SubprotocolReason, true)
     check:
@@ -77,6 +82,7 @@ suite "Testing protocol handlers":
       # handlers, each handler still ran
       node1.protocolState(abc).count == 0
       node1.protocolState(xyz).count == 0
+      peer.state(xyz).status == "connected"
 
   asyncTest "Failing connection handler":
     let rng = newRng()

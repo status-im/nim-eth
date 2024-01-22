@@ -51,7 +51,7 @@ proc getServerSocket(
   else:
     return some(srvSocket)
 
-procSuite "Utp protocol over udp tests with loss and delays":
+procSuite "uTP over UDP protocol with loss and delays":
   let rng = newRng()
 
   proc sendBuilder(maxDelay: int, packetDropRate: int): SendCallbackBuilder =
@@ -194,7 +194,7 @@ procSuite "Utp protocol over udp tests with loss and delays":
       let smallBytes = 10
       let smallBytesToTransfer = rng[].generateBytes(smallBytes)
       # first transfer and read to make server socket connected
-      let write1 = await clientSocket.write(smallBytesToTransfer)
+      discard await clientSocket.write(smallBytesToTransfer)
       let read1 = await serverSocket.read(smallBytes)
 
       check:

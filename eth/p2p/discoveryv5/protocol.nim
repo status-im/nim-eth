@@ -175,7 +175,7 @@ const
   )
 
 chronicles.formatIt(Option[Port]): $it
-chronicles.formatIt(Option[ValidIpAddress]): $it
+chronicles.formatIt(Option[IpAddress]): $it
 
 proc addNode*(d: Protocol, node: Node): bool =
   ## Add `Node` to discovery routing table.
@@ -253,24 +253,27 @@ func updateRecord*(
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
-proc send*(d: Protocol, a: Address, data: seq[byte]) =
+proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async.} =
   let ta = initTAddress(a.ip, a.port)
-  let f = d.transp.sendTo(ta, data)
-  f.callback = proc(data: pointer) {.gcsafe.} =
-    if f.failed:
-      # Could be `TransportUseClosedError` in case the transport is already
-      # closed, or could be `TransportOsError` in case of a socket error.
-      # In the latter case this would probably mostly occur if the network
-      # interface underneath gets disconnected or similar.
-      # It could also be an "Operation not permitted" error, which would
-      # indicate a firewall restriction kicking in.
-      # TODO: Should this kind of error be propagated upwards? Probably, but
-      # it should not stop the process as that would reset the discovery
-      # progress in case there is even a small window of no connection.
-      # One case that needs this error available upwards is when revalidating
-      # nodes. Else the revalidation might end up clearing the routing tabl
-      # because of ping failures due to own network connection failure.
-      warn "Discovery send failed", msg = f.readError.msg, address = a
+  try:
+    await d.transp.sendTo(ta, data)
+  except CatchableError as e:
+    # Could be `TransportUseClosedError` in case the transport is already
+    # closed, or could be `TransportOsError` in case of a socket error.
+    # In the latter case this would probably mostly occur if the network
+    # interface underneath gets disconnected or similar.
+    # It could also be an "Operation not permitted" error, which would
+    # indicate a firewall restriction kicking in.
+    # TODO: Should this kind of error be propagated upwards? Probably, but
+    # it should not stop the process as that would reset the discovery
+    # progress in case there is even a small window of no connection.
+    # One case that needs this error available upwards is when revalidating
+    # nodes. Else the revalidation might end up clearing the routing tabl
+    # because of ping failures due to own network connection failure.
+    warn "Discovery send failed", msg = e.msg, address = a
+
+proc send*(d: Protocol, a: Address, data: seq[byte]) =
+  asyncSpawn sendTo(d, a, data)
 
 proc send(d: Protocol, n: Node, data: seq[byte]) =
   doAssert(n.address.isSome())
@@ -470,7 +473,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
 
   # TODO: should we use `peekMessage()` to avoid allocation?
   let buf = try: transp.getMessage()
-            except TransportOsError as e:
+            except TransportError as e:
               # This is likely to be local network connection issues.
               warn "Transport getMessage", exception = e.name, msg = e.msg
               return
@@ -479,7 +482,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
            except ValueError as e:
              error "Not a valid IpAddress", exception = e.name, msg = e.msg
              return
-  let a = Address(ip: ValidIpAddress.init(ip), port: raddr.port)
+  let a = Address(ip: ip, port: raddr.port)
 
   proto.receive(a, buf)
 
@@ -832,7 +835,7 @@ proc revalidateNode*(d: Protocol, n: Node) {.async.} =
         discard d.addNode(nodes[][0])
 
     # Get IP and port from pong message and add it to the ip votes
-    let a = Address(ip: ValidIpAddress.init(res.ip), port: Port(res.port))
+    let a = Address(ip: res.ip, port: Port(res.port))
     d.ipVote.insert(n.id, a)
 
 proc revalidateLoop(d: Protocol) {.async.} =
@@ -865,7 +868,7 @@ proc refreshLoop(d: Protocol) {.async.} =
   except CancelledError:
     trace "refreshLoop canceled"
 
-proc updateExternalIp*(d: Protocol, extIp: ValidIpAddress, udpPort: Port): bool =
+proc updateExternalIp*(d: Protocol, extIp: IpAddress, udpPort: Port): bool =
   var success = false
   let
     previous = d.localNode.address
@@ -956,7 +959,7 @@ func init*(
 
 proc newProtocol*(
     privKey: PrivateKey,
-    enrIp: Option[ValidIpAddress],
+    enrIp: Option[IpAddress],
     enrTcpPort, enrUdpPort: Option[Port],
     localEnrFields: openArray[(string, seq[byte])] = [],
     bootstrapRecords: openArray[Record] = [],
@@ -1003,7 +1006,7 @@ proc newProtocol*(
   Protocol(
     privateKey: privKey,
     localNode: node,
-    bindAddress: Address(ip: ValidIpAddress.init(bindIp), port: bindPort),
+    bindAddress: Address(ip: bindIp, port: bindPort),
     codec: Codec(localNode: node, privKey: privKey,
       sessions: Sessions.init(256)),
     bootstrapRecords: @bootstrapRecords,

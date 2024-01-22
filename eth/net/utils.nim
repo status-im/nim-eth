@@ -14,14 +14,14 @@ import
 type
   IpLimits* = object
     limit*: uint
-    ips: Table[ValidIpAddress, uint]
+    ips: Table[IpAddress, uint]
 
-func hash*(ip: ValidIpAddress): Hash =
+func hash*(ip: IpAddress): Hash =
   case ip.family
   of IpAddressFamily.IPv6: hash(ip.address_v6)
   of IpAddressFamily.IPv4: hash(ip.address_v4)
 
-func inc*(ipLimits: var IpLimits, ip: ValidIpAddress): bool =
+func inc*(ipLimits: var IpLimits, ip: IpAddress): bool =
   let val = ipLimits.ips.getOrDefault(ip, 0)
   if val < ipLimits.limit:
     ipLimits.ips[ip] = val + 1
@@ -29,7 +29,7 @@ func inc*(ipLimits: var IpLimits, ip: ValidIpAddress): bool =
   else:
     false
 
-func dec*(ipLimits: var IpLimits, ip: ValidIpAddress) =
+func dec*(ipLimits: var IpLimits, ip: IpAddress) =
   let val = ipLimits.ips.getOrDefault(ip, 0)
   if val == 1:
     ipLimits.ips.del(ip)
@@ -46,7 +46,7 @@ func isGlobalUnicast*(address: IpAddress): bool =
   let a = initTAddress(address, Port(0))
   a.isGlobalUnicast()
 
-proc getRouteIpv4*(): Result[ValidIpAddress, cstring] =
+proc getRouteIpv4*(): Result[IpAddress, cstring] =
   # Avoiding Exception with initTAddress and can't make it work with static.
   # Note: `publicAddress` is only used an "example" IP to find the best route,
   # no data is send over the network to this IP!
@@ -63,4 +63,4 @@ proc getRouteIpv4*(): Result[ValidIpAddress, cstring] =
                # This should not occur really.
                error "Address conversion error", exception = e.name, msg = e.msg
                return err("Invalid IP address")
-    ok(ValidIpAddress.init(ip))
+    ok(ip)

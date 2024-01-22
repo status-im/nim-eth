@@ -172,11 +172,11 @@ proc hasOptionalFields(T: type): bool =
 
   proc helper: bool =
     var dummy: T
+    result = false
     template detectOptionalField(RT, n, x) =
       when x is Option or x is Opt:
         return true
     enumerateRlpFields(dummy, detectOptionalField)
-    false
 
   const res = helper()
   return res
@@ -228,11 +228,15 @@ macro genOptionalFieldsValidation(obj: untyped, T: type, num: static[int]): unty
 
   # generate something like
   when false:
-    if obj.excessBlobGas.isSome:
-      doAssert(obj.withdrawalsRoot.isSome, "withdrawalsRoot expected")
-      doAssert(obj.fee.isSome, "fee expected")
-    if obj.withdrawalsRoot.isSome:
-      doAssert(obj.fee.isSome, "fee expected")
+    if obj.fee.isNone:
+      doAssert(obj.withdrawalsRoot.isNone, "withdrawalsRoot needs fee")
+      doAssert(obj.blobGasUsed.isNone, "blobGasUsed needs fee")
+      doAssert(obj.excessBlobGas.isNone, "excessBlobGas needs fee")
+    if obj.withdrawalsRoot.isNone:
+      doAssert(obj.blobGasUsed.isNone, "blobGasUsed needs withdrawalsRoot")
+      doAssert(obj.excessBlobGas.isNone, "excessBlobGas needs withdrawalsRoot")
+    doAssert obj.blobGasUsed.isSome == obj.excessBlobGas.isSome,
+      "blobGasUsed and excessBlobGas must both be present or absent"
 
 macro countFieldsRuntimeImpl(obj: untyped, T: type, num: static[int]): untyped =
   let
