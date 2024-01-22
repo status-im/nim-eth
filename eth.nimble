@@ -33,15 +33,9 @@ let cfg =
   " -d:chronosStrictException -d:chronicles_log_level=TRACE" &
   " --threads:on"
 
-# workaround for github action CI
-# mysterious crash on windows-2019 64bit mode
-# cannot reproduce locally on windows-2019
-# running in virtualbox
-let releaseMode =
-  if existsEnv"PLATFORM" and getEnv"PLATFORM" == "windows-amd64":
-    ""
-  else:
-    "-d:release"
+# Windows CI releaseMode="-d:debug" or releaseMode=""
+# will cause mysterious crash
+let releaseMode = "-d:release"
 
 proc build(args, path, outdir: string) =
   exec nimc & " " & lang & " " & cfg & " " & flags & " " & args &
