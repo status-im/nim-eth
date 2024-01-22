@@ -1036,28 +1036,20 @@ proc start*(d: Protocol) =
   d.revalidateLoop = revalidateLoop(d)
   d.ipMajorityLoop = ipMajorityLoop(d)
 
-proc close*(d: Protocol) =
+proc closeWait*(d: Protocol) {.async: (raises: []).} =
   doAssert(not d.transp.closed)
 
   debug "Closing discovery node", node = d.localNode
+  var futures: seq[Future[void]]
   if not d.revalidateLoop.isNil:
-    d.revalidateLoop.cancelSoon()
+    futures.add(d.revalidateLoop.cancelAndWait())
   if not d.refreshLoop.isNil:
-    d.refreshLoop.cancelSoon()
+    futures.add(d.refreshLoop.cancelAndWait())
   if not d.ipMajorityLoop.isNil:
-    d.ipMajorityLoop.cancelSoon()
+    futures.add(d.ipMajorityLoop.cancelAndWait())
 
-  d.transp.close()
+  await noCancel(allFutures(futures))
+  await noCancel(d.transp.closeWait())
 
-proc closeWait*(d: Protocol) {.async.} =
-  doAssert(not d.transp.closed)
-
-  debug "Closing discovery node", node = d.localNode
-  if not d.revalidateLoop.isNil:
-    await d.revalidateLoop.cancelAndWait()
-  if not d.refreshLoop.isNil:
-    await d.refreshLoop.cancelAndWait()
-  if not d.ipMajorityLoop.isNil:
-    await d.ipMajorityLoop.cancelAndWait()
-
-  await d.transp.closeWait()
+proc close*(d: Protocol) {.deprecated: "Please use closeWait() instead".} =
+  asyncSpawn d.closeWait()
