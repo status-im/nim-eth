@@ -468,7 +468,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
     trace "Packet decoding error", error = decoded.error, address = a
 
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
-    Future[void] {.async.} =
+    Future[void] {.async: (raises: []).} =
   let proto = getUserData[Protocol](transp)
 
   # TODO: should we use `peekMessage()` to avoid allocation?
@@ -1036,28 +1036,20 @@ proc start*(d: Protocol) =
   d.revalidateLoop = revalidateLoop(d)
   d.ipMajorityLoop = ipMajorityLoop(d)
 
-proc close*(d: Protocol) =
+proc closeWait*(d: Protocol) {.async: (raises: []).} =
   doAssert(not d.transp.closed)
 
   debug "Closing discovery node", node = d.localNode
+  var futures: seq[Future[void]]
   if not d.revalidateLoop.isNil:
-    d.revalidateLoop.cancel()
+    futures.add(d.revalidateLoop.cancelAndWait())
   if not d.refreshLoop.isNil:
-    d.refreshLoop.cancel()
+    futures.add(d.refreshLoop.cancelAndWait())
   if not d.ipMajorityLoop.isNil:
-    d.ipMajorityLoop.cancel()
+    futures.add(d.ipMajorityLoop.cancelAndWait())
 
-  d.transp.close()
+  await noCancel(allFutures(futures))
+  await noCancel(d.transp.closeWait())
 
-proc closeWait*(d: Protocol) {.async.} =
-  doAssert(not d.transp.closed)
-
-  debug "Closing discovery node", node = d.localNode
-  if not d.revalidateLoop.isNil:
-    await d.revalidateLoop.cancelAndWait()
-  if not d.refreshLoop.isNil:
-    await d.refreshLoop.cancelAndWait()
-  if not d.ipMajorityLoop.isNil:
-    await d.ipMajorityLoop.cancelAndWait()
-
-  await d.transp.closeWait()
+proc close*(d: Protocol) {.deprecated: "Please use closeWait() instead".} =
+  asyncSpawn d.closeWait()

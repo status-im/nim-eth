@@ -183,7 +183,7 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async.} =
       let newLine = str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits]
 
       ps.write(newLine)
-    await sleepAsync(1000) # 1 sec of delay
+    await sleepAsync(1.seconds) # 1 sec of delay
 
 
 proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
