@@ -38,8 +38,10 @@ let cfg =
 let releaseMode = "-d:release"
 
 proc build(args, path, outdir: string) =
-  exec nimc & " " & lang & " " & cfg & " " & flags & " " & args &
+  let cmd = nimc & " " & lang & " " & cfg & " " & flags & " " & args &
     " --outdir:build/" & outdir & " " & path
+  echo cmd
+  exec cmd
 
 proc run(args, path, outdir: string) =
   build args & " -r", path, outdir
