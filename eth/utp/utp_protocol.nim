@@ -63,7 +63,7 @@ proc hash(x: UtpSocketKey[TransportAddress]): Hash =
   !$h
 
 proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
-    Future[void] {.async.} =
+    Future[void] {.async: (raises: []).} =
   let router = getUserData[UtpRouter[TransportAddress]](transp)
   # TODO: should we use `peekMessage()` to avoid allocation?
   let buf = try: transp.getMessage()
@@ -71,12 +71,21 @@ proc processDatagram(transp: DatagramTransport, raddr: TransportAddress):
               trace "Error reading datagram msg: ", error = e.msg
               # This is likely to be local network connection issues.
               return
-  await processIncomingBytes[TransportAddress](router, buf, raddr)
+  try:
+    await processIncomingBytes[TransportAddress](router, buf, raddr)
+  except CancelledError:
+    debug "processIncomingBytes canceled"
 
 proc initSendCallback(t: DatagramTransport): SendCallback[TransportAddress] =
   return (
-    proc (to: TransportAddress, data: seq[byte]): Future[void] =
-      t.sendTo(to, data)
+    proc (
+        to: TransportAddress, data: seq[byte]
+    ) {.raises: [], gcsafe.} =
+      let fut = t.sendTo(to, data)
+      let cb = proc(data: pointer) {.gcsafe.} =
+        if fut.failed:
+          debug "uTP send failed", msg = fut.readError.msg
+      fut.addCallback cb
   )
 
 proc new*(

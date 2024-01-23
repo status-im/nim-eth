@@ -49,7 +49,9 @@ type
 
   # Socket callback to send data to remote peer
   SendCallback*[A] =
-    proc (to: A, data: seq[byte]): Future[void] {.gcsafe, raises: []}
+    proc (
+      to: A, data: seq[byte]
+    ) {.gcsafe, raises: [].}
 
   SocketConfig* = object
     # This is configurable (in contrast to reference impl), as with standard 2
@@ -452,11 +454,8 @@ proc registerOutgoingPacket(socket: UtpSocket, oPacket: OutgoingPacket) =
   inc socket.seqNr
   inc socket.curWindowPackets
 
-proc sendData(socket: UtpSocket, data: seq[byte]): Future[void] {.async.} =
-  try:
-    await socket.send(socket.remoteAddress, data)
-  except CatchableError as e:
-    warn "UTP send failed", msg = e.msg
+proc sendData(socket: UtpSocket, data: seq[byte]) =
+  socket.send(socket.remoteAddress, data)
 
 proc sendPacket(socket: UtpSocket, seqNr: uint16) =
   proc setSend(p: var OutgoingPacket): seq[byte] =
@@ -474,7 +473,7 @@ proc sendPacket(socket: UtpSocket, seqNr: uint16) =
 
     return p.packetBytes
 
-  asyncSpawn socket.sendData(setSend(socket.outBuffer[seqNr]))
+  socket.sendData(setSend(socket.outBuffer[seqNr]))
 
 proc resetSendTimeout(socket: UtpSocket) =
   socket.retransmitTimeout = socket.rto
@@ -1112,7 +1111,7 @@ proc sendAck(socket: UtpSocket) =
     pkAckNr = ackPacket.header.ackNr,
     gotEACK = ackPacket.eack.isSome()
 
-  asyncSpawn socket.sendData(encodePacket(ackPacket))
+  socket.sendData(encodePacket(ackPacket))
 
 
 proc tryfinalizeConnection(socket: UtpSocket, p: Packet) =
@@ -1568,7 +1567,9 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
           # will be generated
           socket.sendAck()
 
-proc processPacket*(socket: UtpSocket, p: Packet): Future[void] =
+proc processPacket*(
+    socket: UtpSocket, p: Packet
+  ): Future[void] {.async: (raw: true, raises: [CancelledError]).} =
   socket.eventQueue.put(SocketEvent(kind: NewPacket, packet: p))
 
 template shiftBuffer(t, c: untyped) =
@@ -2081,5 +2082,5 @@ proc startOutgoingSocket*(socket: UtpSocket): Future[void] =
   socket.registerOutgoingPacket(outgoingPacket)
   socket.startEventLoop()
   socket.startTimeoutLoop()
-  asyncSpawn socket.sendData(outgoingPacket.packetBytes)
+  socket.sendData(outgoingPacket.packetBytes)
   return socket.connectionFuture

@@ -106,8 +106,13 @@ proc generateDataPackets*(
   packets
 
 proc initTestSnd*(q: AsyncQueue[Packet]): SendCallback[TransportAddress]=
-  return  (
-    proc (to: TransportAddress, bytes: seq[byte]): Future[void] =
+  return (
+    proc (
+        to: TransportAddress, bytes: seq[byte]
+    ) {.raises: [], gcsafe.} =
       let p = decodePacket(bytes).get()
-      q.addLast(p)
+      try:
+        q.addLastNoWait(p)
+      except AsyncQueueFullError:
+        raiseAssert "Should not occur as unlimited queue"
   )
