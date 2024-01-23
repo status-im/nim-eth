@@ -9,7 +9,7 @@
 import
   std/[options, sequtils],
   chronos,
-  stew/shims/net, stew/byteutils,
+  stew/byteutils,
   testutils/unittests,
   ../../eth/p2p/discoveryv5/[enr, node, routing_table],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol,
