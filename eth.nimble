@@ -28,7 +28,7 @@ let verbose = getEnv("V", "") notin ["", "0"]
 let cfg =
   " --styleCheck:usages --styleCheck:error" &
   (if verbose: "" else: " --verbosity:0 --hints:off") &
-  " --skipParentCfg --skipUserCfg --nimcache:build/nimcache -f" &
+  " --skipUserCfg --nimcache:build/nimcache -f" &
   " --warning[ObservableStores]:off -d:nimOldCaseObjects" &
   " -d:chronosStrictException -d:chronicles_log_level=TRACE" &
   " --threads:on"
