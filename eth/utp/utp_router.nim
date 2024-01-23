@@ -187,7 +187,9 @@ proc shouldAllowConnection[A](
   else:
     r.allowConnection(r, remoteAddress, connectionId)
 
-proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
+proc processPacket[A](
+    r: UtpRouter[A], p: Packet, sender: A
+  ) {.async: (raises: [CancelledError]).}=
   debug "Received packet ",
     sender = sender,
     packetType = p.header.pType
@@ -252,10 +254,11 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
       debug "Received FIN/DATA/ACK on unknown socket, sending reset"
       let rstPacket = resetPacket(
         randUint16(r.rng[]), p.header.connectionId, p.header.seqNr)
-      await r.sendCb(sender, encodePacket(rstPacket))
+      r.sendCb(sender, encodePacket(rstPacket))
 
 proc processIncomingBytes*[A](
-    r: UtpRouter[A], bytes: seq[byte], sender: A) {.async.} =
+    r: UtpRouter[A], bytes: seq[byte], sender: A
+  ) {.async: (raises:[CancelledError]).} =
   if (not r.closed):
     let decoded = decodePacket(bytes)
     if (decoded.isOk()):

@@ -54,16 +54,29 @@ proc getServerSocket(
 procSuite "uTP over UDP protocol with loss and delays":
   let rng = newRng()
 
+  proc simulatedSend(
+      d: DatagramTransport, to: TransportAddress, data: seq[byte],
+      maxDelay: int, packetDropRate: int
+  ) {.async: (raises: []).} =
+    let i = rand(rng[], 99)
+    if i >= packetDropRate:
+      let delay = milliseconds(rand(rng[], maxDelay))
+      try:
+        await sleepAsync(delay)
+        await d.sendTo(to, data)
+      except TransportError:
+        # ignore
+        return
+      except CancelledError:
+        # ignore
+        return
+
   proc sendBuilder(maxDelay: int, packetDropRate: int): SendCallbackBuilder =
     return (
       proc (d: DatagramTransport): SendCallback[TransportAddress] =
         return (
-          proc (to: TransportAddress, data: seq[byte]): Future[void] {.async.} =
-            let i = rand(rng[], 99)
-            if i >= packetDropRate:
-              let delay = milliseconds(rand(rng[], maxDelay))
-              await sleepAsync(delay)
-              await d.sendTo(to, data)
+          proc (to: TransportAddress, data: seq[byte]) =
+            asyncSpawn simulatedSend(d, to, data, maxDelay, packetDropRate)
         )
     )
 

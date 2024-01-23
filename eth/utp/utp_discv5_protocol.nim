@@ -70,16 +70,13 @@ proc initSendCallback(
     t: protocol.Protocol, subProtocolName: seq[byte]):
     SendCallback[NodeAddress] =
   return (
-    proc (to: NodeAddress, data: seq[byte]): Future[void] =
-      let fut = newFuture[void]()
+    proc (to: NodeAddress, data: seq[byte]){.raises: [], gcsafe.} =
       # hidden assumption here is that nodes already have established discv5
       # session between each other. In our use case this should be true as
       # opening stream is only done after successful OFFER/ACCEPT or
       # FINDCONTENT/CONTENT exchange which forces nodes to establish session
       # between each other.
       discard t.talkReqDirect(to, subProtocolName, data)
-      fut.complete()
-      return fut
   )
 
 proc messageHandler(

@@ -37,16 +37,17 @@ procSuite "uTP router unit":
         serverSockets.addLast(client)
     )
 
-  proc testSend(to: int, bytes: seq[byte]): Future[void] =
-    let f = newFuture[void]()
-    f.complete()
-    f
+  proc testSend(to: int, bytes: seq[byte]) =
+    discard
 
   proc initTestSnd(q: AsyncQueue[(Packet, int)]): SendCallback[int]=
-    return  (
-      proc (to: int, bytes: seq[byte]): Future[void] =
+    return (
+      proc (to: int, bytes: seq[byte]) {.raises: [], gcsafe.} =
         let p = decodePacket(bytes).get()
-        q.addLast((p, to))
+        try:
+          q.addLastNoWait((p, to))
+        except AsyncQueueFullError:
+          raiseAssert "Should not occur as unlimited queue"
     )
 
   template connectOutgoing(
@@ -359,14 +360,14 @@ procSuite "uTP router unit":
     check:
       router.len() == 0
 
-  asyncTest "Router should clear all resources and handle error while sending syn packet":
+  asyncTest "Router should clear all resources and handle error when sending syn packet fails":
     let q = newAsyncQueue[UtpSocket[int]]()
     let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(milliseconds(500)), rng)
     router.sendCb =
-      proc (to: int, data: seq[byte]): Future[void] =
-        let f = newFuture[void]()
-        f.fail(newException(TestError, "failed"))
-        return f
+      proc (to: int, data: seq[byte]) =
+        # Can just discard here not to send anything as the send callback does
+        # not forward errors anyhow
+        discard
 
     let connectResult = await router.connectTo(testSender2)
 
