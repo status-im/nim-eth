@@ -1,5 +1,5 @@
 # nim-eth
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,8 +8,10 @@
 {.push raises: [].}
 
 import
-  std/[tables, hashes],
-  stew/results, stew/shims/net as stewNet, chronos, chronicles
+  std/[tables, hashes, net],
+  stew/results, chronos, chronicles
+
+export net.IpAddress
 
 type
   IpLimits* = object
@@ -64,3 +66,9 @@ proc getRouteIpv4*(): Result[IpAddress, cstring] =
                error "Address conversion error", exception = e.name, msg = e.msg
                return err("Invalid IP address")
     ok(ip)
+
+func ipv4*(address: array[4, byte]): IpAddress =
+  IpAddress(family: IPv4, address_v4: address)
+
+func ipv6*(address: array[16, byte]): IpAddress =
+  IpAddress(family: IPv6, address_v6: address)

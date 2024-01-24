@@ -30,7 +30,7 @@ let cfg =
   (if verbose: "" else: " --verbosity:0 --hints:off") &
   " --skipUserCfg --nimcache:build/nimcache -f" &
   " --warning[ObservableStores]:off -d:nimOldCaseObjects" &
-  " -d:chronosStrictException -d:chronicles_log_level=TRACE" &
+  " -d:chronicles_log_level=TRACE" &
   " --threads:on"
 
 # Windows CI releaseMode="-d:debug" or releaseMode=""

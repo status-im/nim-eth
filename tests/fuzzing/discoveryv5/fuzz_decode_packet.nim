@@ -1,5 +1,6 @@
 import
-  testutils/fuzzing, stew/shims/net,
+  std/net,
+  testutils/fuzzing,
   ../../../eth/p2p/discoveryv5/[encoding, enr, sessions, node]
 
 init:
