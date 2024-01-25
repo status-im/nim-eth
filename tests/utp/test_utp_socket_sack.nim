@@ -18,7 +18,7 @@ import
   ../../eth/keys,
   ../stubloglevel
 
-procSuite "Utp socket selective acks unit test":
+procSuite "uTP socket selective acks":
   let rng = newRng()
   let testAddress = initTAddress("127.0.0.1", 9079)
   let defaultBufferSize = 1024'u32

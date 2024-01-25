@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -452,11 +452,11 @@ proc registerOutgoingPacket(socket: UtpSocket, oPacket: OutgoingPacket) =
   inc socket.seqNr
   inc socket.curWindowPackets
 
-proc sendData(socket: UtpSocket, data: seq[byte]) =
-  let f = socket.send(socket.remoteAddress, data)
-  f.callback = proc(data: pointer) {.gcsafe.} =
-    if f.failed:
-      warn "UTP send failed", msg = f.readError.msg
+proc sendData(socket: UtpSocket, data: seq[byte]): Future[void] {.async.} =
+  try:
+    await socket.send(socket.remoteAddress, data)
+  except CatchableError as e:
+    warn "UTP send failed", msg = e.msg
 
 proc sendPacket(socket: UtpSocket, seqNr: uint16) =
   proc setSend(p: var OutgoingPacket): seq[byte] =
@@ -474,13 +474,17 @@ proc sendPacket(socket: UtpSocket, seqNr: uint16) =
 
     return p.packetBytes
 
-  socket.sendData(setSend(socket.outBuffer[seqNr]))
+  asyncSpawn socket.sendData(setSend(socket.outBuffer[seqNr]))
 
 proc resetSendTimeout(socket: UtpSocket) =
   socket.retransmitTimeout = socket.rto
   socket.rtoTimeout = getMonoTimestamp().moment + socket.retransmitTimeout
 
 proc flushPackets(socket: UtpSocket) =
+  if (socket.freeWindowBytes() == 0):
+    trace "No place in send window, not flushing"
+    return
+
   let oldestOutgoingPacketSeqNr = socket.seqNr - socket.curWindowPackets
   var i: uint16 = oldestOutgoingPacketSeqNr
   while i != socket.seqNr:
@@ -623,7 +627,7 @@ proc checkTimeouts(socket: UtpSocket) =
         socket.slowStart = true
 
       # Note: with selective acks enabled, every selectively acked packet resets
-      # the timeout timer and removes te packet from the outBuffer.
+      # the timeout timer and removes the packet from the outBuffer.
       markAllPacketAsLost(socket)
 
       let oldestPacketSeqNr = socket.seqNr - socket.curWindowPackets
@@ -673,7 +677,7 @@ proc handleDataWrite(socket: UtpSocket, data: seq[byte]): int =
     let lastIndex = i + pSize - 1
     let lastOrEnd = min(lastIndex, endIndex)
     let dataSlice = data[i..lastOrEnd]
-    let payloadLength =  uint32(len(dataSlice))
+    let payloadLength = uint32(len(dataSlice))
     if (socket.outBufferBytes + payloadLength <= socket.socketConfig.optSndBuffer):
       let wndSize = socket.getRcvWindowSize()
       let dataPacket =
@@ -995,8 +999,6 @@ proc selectiveAckPackets(
       dec bits
       continue
 
-    let pkt = maybePacket.unsafeGet()
-
     if bitSet:
       debug "Packet acked by selective ack",
         pkSeqNr = v
@@ -1110,7 +1112,7 @@ proc sendAck(socket: UtpSocket) =
     pkAckNr = ackPacket.header.ackNr,
     gotEACK = ackPacket.eack.isSome()
 
-  socket.sendData(encodePacket(ackPacket))
+  asyncSpawn socket.sendData(encodePacket(ackPacket))
 
 
 proc tryfinalizeConnection(socket: UtpSocket, p: Packet) =
@@ -2079,5 +2081,5 @@ proc startOutgoingSocket*(socket: UtpSocket): Future[void] =
   socket.registerOutgoingPacket(outgoingPacket)
   socket.startEventLoop()
   socket.startTimeoutLoop()
-  socket.sendData(outgoingPacket.packetBytes)
+  asyncSpawn socket.sendData(outgoingPacket.packetBytes)
   return socket.connectionFuture

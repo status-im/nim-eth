@@ -25,7 +25,7 @@ proc hash*(x: UtpSocketKey[int]): Hash =
 type
   TestError* = object of CatchableError
 
-procSuite "Utp router unit tests":
+procSuite "uTP router unit":
   let rng = newRng()
   let testSender = 1
   let testSender2 = 2
@@ -56,7 +56,7 @@ procSuite "Utp router unit tests":
     initialRemoteSeq: uint16): (UtpSocket[int], Packet)=
     let connectFuture = router.connectTo(remote)
 
-    let (initialPacket, sender) = await pq.get()
+    let (initialPacket, _) = await pq.get()
 
     check:
       initialPacket.header.pType == ST_SYN
@@ -440,7 +440,7 @@ procSuite "Utp router unit tests":
     let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(), rng)
     router.sendCb = initTestSnd(pq)
 
-    let (outgoingSocket, initialSyn) = router.connectOutgoing(testSender2, pq, 30'u16)
+    let (_, initialSyn) = router.connectOutgoing(testSender2, pq, 30'u16)
 
     check:
       router.len() == 1

@@ -12,7 +12,7 @@ import
   ../../eth/utp/packets,
   ../../eth/keys
 
-suite "uTP Packet Encoding":
+suite "uTP packet encoding":
   test "Encode/decode SYN packet":
     let
       synPacket = synPacket(5, 10, 20)

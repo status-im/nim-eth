@@ -17,7 +17,7 @@ import
   ../../eth/keys,
   ../stubloglevel
 
-procSuite "uTP socket tests":
+procSuite "uTP socket":
   let
     rng = newRng()
     testAddress = initTAddress("127.0.0.1", 9079)
@@ -444,8 +444,8 @@ procSuite "uTP socket tests":
 
     outgoingSocket.destroy()
 
-    yield writeFut1
-    yield writeFut2
+    discard await writeFut1
+    discard await writeFut2
 
     check:
       writeFut1.completed()
@@ -485,13 +485,12 @@ procSuite "uTP socket tests":
 
     await outgoingSocket.processPacket(someAckFromRemote)
 
-    yield writeFut1
-    yield writeFut2
-    yield writeFut3
+    discard await writeFut1
+    discard await writeFut3
 
     check:
       writeFut1.completed()
-      writeFut2.cancelled()
+      writeFut2.cancelled() # TODO: This might not always be the case?
       writeFut3.completed()
 
     let p1 = await q.get()
@@ -1250,7 +1249,7 @@ procSuite "uTP socket tests":
     # write should progress
     await outgoingSocket.processPacket(someAckFromRemote)
 
-    yield writeFut2
+    discard await writeFut2
 
     let secondPacket =  await q.get()
 

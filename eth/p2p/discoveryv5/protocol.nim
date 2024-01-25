@@ -253,24 +253,27 @@ func updateRecord*(
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
-proc send*(d: Protocol, a: Address, data: seq[byte]) =
+proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async.} =
   let ta = initTAddress(a.ip, a.port)
-  let f = d.transp.sendTo(ta, data)
-  f.callback = proc(data: pointer) {.gcsafe.} =
-    if f.failed:
-      # Could be `TransportUseClosedError` in case the transport is already
-      # closed, or could be `TransportOsError` in case of a socket error.
-      # In the latter case this would probably mostly occur if the network
-      # interface underneath gets disconnected or similar.
-      # It could also be an "Operation not permitted" error, which would
-      # indicate a firewall restriction kicking in.
-      # TODO: Should this kind of error be propagated upwards? Probably, but
-      # it should not stop the process as that would reset the discovery
-      # progress in case there is even a small window of no connection.
-      # One case that needs this error available upwards is when revalidating
-      # nodes. Else the revalidation might end up clearing the routing tabl
-      # because of ping failures due to own network connection failure.
-      warn "Discovery send failed", msg = f.readError.msg, address = a
+  try:
+    await d.transp.sendTo(ta, data)
+  except CatchableError as e:
+    # Could be `TransportUseClosedError` in case the transport is already
+    # closed, or could be `TransportOsError` in case of a socket error.
+    # In the latter case this would probably mostly occur if the network
+    # interface underneath gets disconnected or similar.
+    # It could also be an "Operation not permitted" error, which would
+    # indicate a firewall restriction kicking in.
+    # TODO: Should this kind of error be propagated upwards? Probably, but
+    # it should not stop the process as that would reset the discovery
+    # progress in case there is even a small window of no connection.
+    # One case that needs this error available upwards is when revalidating
+    # nodes. Else the revalidation might end up clearing the routing tabl
+    # because of ping failures due to own network connection failure.
+    warn "Discovery send failed", msg = e.msg, address = a
+
+proc send*(d: Protocol, a: Address, data: seq[byte]) =
+  asyncSpawn sendTo(d, a, data)
 
 proc send(d: Protocol, n: Node, data: seq[byte]) =
   doAssert(n.address.isSome())
@@ -470,7 +473,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
 
   # TODO: should we use `peekMessage()` to avoid allocation?
   let buf = try: transp.getMessage()
-            except TransportOsError as e:
+            except TransportError as e:
               # This is likely to be local network connection issues.
               warn "Transport getMessage", exception = e.name, msg = e.msg
               return
