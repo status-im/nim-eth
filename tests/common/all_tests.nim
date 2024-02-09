@@ -1,5 +1,5 @@
-# Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# nim-eth
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,5 +10,6 @@
 
 import
   test_eth_types,
+  test_eth_types_rlp,
+  test_common,
   test_eip4844
-  

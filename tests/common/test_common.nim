@@ -17,7 +17,7 @@ type
     header: BlockHeader
 
 proc loadFile(x: int) =
-  let fileName = "tests" / "rlp" / "eip2718" / "acl_block_" & $x & ".json"
+  let fileName = "tests" / "common" / "eip2718" / "acl_block_" & $x & ".json"
   test fileName:
     let n = json.parseFile(fileName)
     let data = n["rlp"].getStr()

@@ -1,3 +1,13 @@
+# nim-eth
+# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
 {.used.}
 
 import
@@ -28,7 +38,7 @@ proc runTest(importFile: string): bool =
   importBlock(res.get)
 
 suite "Decode multiple EthBlock from bytes":
-  for filename in walkDirRec("tests/rlp/rlps"):
+  for filename in walkDirRec("tests/common/rlps"):
     if not filename.endsWith(".rlp"):
       continue
     test filename:
