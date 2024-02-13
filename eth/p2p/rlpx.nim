@@ -362,7 +362,7 @@ proc supports*(peer: Peer, Protocol: type): bool =
 template perPeerMsgId(peer: Peer, MsgType: type): int =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
 
-proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void]
+proc invokeThunk*(peer: Peer, msgId: int, msgData: Rlp): Future[void]
     {.async: (raises: [CatchableError, rlp.RlpError]).} =
   template invalidIdError: untyped =
     raise newException(UnsupportedMessageError,
