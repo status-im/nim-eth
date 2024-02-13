@@ -1,3 +1,14 @@
+# nim-eth
+# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
+{.push raises: [].}
+
 let protocolManager = ProtocolManager()
 
 # The variables above are immutable RTTI information. We need to tell
@@ -63,4 +74,6 @@ proc initProtocolStates(peer: Peer, protocols: openArray[ProtocolInfo])
     let peerStateInit = protocol.peerStateInitializer
     if peerStateInit != nil:
       peer.protocolStates[protocol.index] = peerStateInit(peer)
+
+{.pop.}
 

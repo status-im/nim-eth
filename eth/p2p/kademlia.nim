@@ -120,8 +120,9 @@ proc timeKeyPong(n: Node): TimeKey =
 proc timeKeyPing(n: Node): TimeKey =
   timeKey(n.id, n.ip, cmdPing)
 
-proc lastPingReceived(k: KademliaProtocol, n: Node): Time =
-  k.pingPongTime.getOrDefault(n.timeKeyPing, 0'i64).fromUnix
+when false:
+  proc lastPingReceived(k: KademliaProtocol, n: Node): Time =
+    k.pingPongTime.getOrDefault(n.timeKeyPing, 0'i64).fromUnix
 
 proc lastPongReceived(k: KademliaProtocol, n: Node): Time =
   k.pingPongTime.getOrDefault(n.timeKeyPong, 0'i64).fromUnix
@@ -182,9 +183,10 @@ proc updateLastPongReceived(k: KademliaProtocol, n: Node, t: Time) =
   k.removeTooOldPingPongTime()
   k.pingPongTime[n.timeKeyPong] = t.toUnix
 
-# checkBond checks if the given node has a recent enough endpoint proof.
-proc checkBond(k: KademliaProtocol, n: Node): bool =
-  getTime() - k.lastPongReceived(n) < BOND_EXPIRATION
+when false:
+  # checkBond checks if the given node has a recent enough endpoint proof.
+  proc checkBond(k: KademliaProtocol, n: Node): bool =
+    getTime() - k.lastPongReceived(n) < BOND_EXPIRATION
 
 proc newKBucket(istart, iend: NodeId): KBucket =
   result.new()
