@@ -11,7 +11,7 @@ template rlpCustomSerialization* {.pragma.}
   ## a reference to the object holding the field.
 
 template enumerateRlpFields*[T](x: T, op: untyped) =
-  type RecordType = type x
+  type RecordType {.used.} = type x
   for fieldName, field in fieldPairs(x):
     when not hasCustomPragmaFixed(RecordType, fieldName, rlpIgnore):
       op(RecordType, fieldName, field)
@@ -21,7 +21,7 @@ proc rlpFieldsCount*(T: type): int =
 
   proc helper: int =
     var dummy: T
-    template countFields(RT, n, x) = inc result
+    template countFields(RT, n, x) {.used.} = inc result
     enumerateRlpFields(dummy, countFields)
 
   const res = helper()
