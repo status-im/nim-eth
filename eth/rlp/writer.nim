@@ -173,7 +173,7 @@ proc hasOptionalFields(T: type): bool =
   proc helper: bool =
     var dummy: T
     result = false
-    template detectOptionalField(RT, n, x) =
+    template detectOptionalField(RT, n, x) {.used.} =
       when x is Option or x is Opt:
         return true
     enumerateRlpFields(dummy, detectOptionalField)
@@ -286,7 +286,7 @@ proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrap
     else:
       self.startList(fieldsCount)
 
-  template op(RecordType, fieldName, field) =
+  template op(RecordType, fieldName, field) {.used.} =
     when hasCustomPragmaFixed(RecordType, fieldName, rlpCustomSerialization):
       append(self, obj, field)
     elif (field is Option or field is Opt) and hasOptional:

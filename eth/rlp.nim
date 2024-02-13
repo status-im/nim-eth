@@ -393,7 +393,7 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
   template getUnderlyingType[T](_: Option[T]): untyped = T
   template getUnderlyingType[T](_: Opt[T]): untyped = T
 
-  template op(RecordType, fieldName, field) =
+  template op(RecordType, fieldName, field) {.used.} =
     type FieldType {.used.} = type field
     when hasCustomPragmaFixed(RecordType, fieldName, rlpCustomSerialization):
       field = rlp.read(result, FieldType)
