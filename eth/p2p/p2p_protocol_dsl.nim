@@ -367,12 +367,12 @@ proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
   # inside each user message handler proc (e.g. peer.state.foo = bar)
   if PeerStateType != nil:
     prelude.add quote do:
-      template state(`peerVar`: `PeerType`): `PeerStateType` =
+      template state(`peerVar`: `PeerType`): `PeerStateType` {.used.} =
         `PeerStateType`(`getState`(`peerVar`, `protocolInfo`))
 
   if NetworkStateType != nil:
     prelude.add quote do:
-      template networkState(`peerVar`: `PeerType`): `NetworkStateType` =
+      template networkState(`peerVar`: `PeerType`): `NetworkStateType` {.used.} =
         `NetworkStateType`(`getNetworkState`(`peerVar`.network, `protocolInfo`))
 
 proc addPreludeDefs*(userHandlerProc: NimNode, definitions: NimNode) =

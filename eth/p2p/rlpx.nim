@@ -176,7 +176,7 @@ proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
   # result = $(cast[ptr MsgType](msg)[])
 
 proc disconnect*(peer: Peer, reason: DisconnectionReason,
-  notifyOtherPeer = false) {.gcsafe, async: (raises:[CatchableError]).}
+  notifyOtherPeer = false) {.async: (raises:[CatchableError]).}
 
 template raisePeerDisconnected(msg: string, r: DisconnectionReason) =
   var e = newException(PeerDisconnected, msg)
@@ -386,7 +386,7 @@ template compressMsg(peer: Peer, data: seq[byte]): seq[byte] =
   else:
     data
 
-proc sendMsg*(peer: Peer, data: seq[byte]) {.gcsafe, async.} =
+proc sendMsg*(peer: Peer, data: seq[byte]) {.async.} =
   var cipherText = encryptMsg(peer.compressMsg(data), peer.secretsState)
   try:
     var res = await peer.transport.write(cipherText)
@@ -948,7 +948,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       proc `thunkName`(`peerVar`: `Peer`, _: int, data: Rlp)
           # Fun error if you just use `RlpError` instead of `rlp.RlpError`:
           # "Error: type expected, but got symbol 'RlpError' of kind 'EnumField'"
-          {.gcsafe, async: (raises: [rlp.RlpError, CatchableError]).} =
+          {.async: (raises: [rlp.RlpError, CatchableError]).} =
         var `receivedRlp` = data
         var `receivedMsg` {.noinit.}: `msgRecName`
         `readParamsPrelude`
@@ -1385,7 +1385,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node):
 
 # TODO: rework rlpxAccept similar to rlpxConnect.
 proc rlpxAccept*(
-    node: EthereumNode, transport: StreamTransport): Future[Peer] {.async.} =
+    node: EthereumNode, transport: StreamTransport): Future[Peer] {.async: (raises: [CatchableError]).} =
   initTracing(devp2pInfo, node.protocols)
 
   let peer = Peer(transport: transport, network: node)
