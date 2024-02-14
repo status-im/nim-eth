@@ -122,14 +122,17 @@ proc newEthereumNode*(
       result.addCapability(cap)
 
 proc processIncoming(server: StreamServer,
-                     remote: StreamTransport): Future[void] {.async, gcsafe.} =
-  var node = getUserData[EthereumNode](server)
-  let peer = await node.rlpxAccept(remote)
-  if not peer.isNil:
-    trace "Connection established (incoming)", peer
-    if node.peerPool != nil:
-      node.peerPool.connectingNodes.excl(peer.remote)
-      node.peerPool.addPeer(peer)
+                     remote: StreamTransport): Future[void] {.async: (raises: []).} =
+  try:
+    var node = getUserData[EthereumNode](server)
+    let peer = await node.rlpxAccept(remote)
+    if not peer.isNil:
+      trace "Connection established (incoming)", peer
+      if node.peerPool != nil:
+        node.peerPool.connectingNodes.excl(peer.remote)
+        node.peerPool.addPeer(peer)
+  except CatchableError as exc:
+    error "processIncoming", msg=exc.msg
 
 proc listeningAddress*(node: EthereumNode): ENode =
   node.toENode()

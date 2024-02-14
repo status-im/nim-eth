@@ -149,7 +149,6 @@ let
 const
   protocolCounter = CacheCounter"protocolCounter"
 
-template Opt(T): auto = newTree(nnkBracketExpr, Option, T)
 template Fut(T): auto = newTree(nnkBracketExpr, Future, T)
 
 proc initFuture*[T](loc: var Future[T]) =
@@ -330,10 +329,6 @@ proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
   if not result.backend.afterProtocolInit.isNil:
     result.backend.afterProtocolInit(result)
 
-proc isFuture(t: NimNode): bool =
-  t.kind == nnkBracketExpr and eqIdent(t[0], "Future")
-
-
 proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
   ## This procs adds a set of common helpers available in all messages handlers
   ## (e.g. `perProtocolMsgId`, `peer.state`, etc).
@@ -362,22 +357,22 @@ proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
     param[^2] = chooseFieldType(param[^2])
 
   prelude.add quote do:
-    type `currentProtocolSym` = `protocolNameIdent`
+    type `currentProtocolSym` {.used.} = `protocolNameIdent`
 
   if msgId >= 0 and p.isRlpx:
     prelude.add quote do:
-      const `perProtocolMsgIdVar` = `msgId`
+      const `perProtocolMsgIdVar` {.used.} = `msgId`
 
   # Define local accessors for the peer and the network protocol states
   # inside each user message handler proc (e.g. peer.state.foo = bar)
   if PeerStateType != nil:
     prelude.add quote do:
-      template state(`peerVar`: `PeerType`): `PeerStateType` =
+      template state(`peerVar`: `PeerType`): `PeerStateType` {.used.} =
         `PeerStateType`(`getState`(`peerVar`, `protocolInfo`))
 
   if NetworkStateType != nil:
     prelude.add quote do:
-      template networkState(`peerVar`: `PeerType`): `NetworkStateType` =
+      template networkState(`peerVar`: `PeerType`): `NetworkStateType` {.used.} =
         `NetworkStateType`(`getNetworkState`(`peerVar`.network, `protocolInfo`))
 
 proc addPreludeDefs*(userHandlerProc: NimNode, definitions: NimNode) =
@@ -395,7 +390,6 @@ proc addTimeoutParam(procDef: NimNode, defaultValue: int64) =
   var
     Duration = bindSym"Duration"
     milliseconds = bindSym"milliseconds"
-    lastParam = procDef.params[^1]
 
   procDef.params.add newTree(nnkIdentDefs,
                              timeoutVar,
@@ -696,8 +690,6 @@ proc useStandardBody*(sendProc: SendProc,
     postSerialization = if postSerializationStep.isNil: newStmtList()
                         else: postSerializationStep(outputStream)
 
-    appendParams = newStmtList()
-
     tracing = when not tracingEnabled:
                 newStmtList()
               else:
@@ -979,7 +971,7 @@ proc genCode*(p: P2PProtocol): NimNode =
   regBody.add newCall(p.backend.registerProtocol, protocolVar)
 
   result.add quote do:
-    proc `protocolReg`() {.raises: [RlpError, Defect].} =
+    proc `protocolReg`() {.raises: [RlpError].} =
       let `protocolVar` = `protocolInit`
       `regBody`
     `protocolReg`()

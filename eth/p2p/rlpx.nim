@@ -176,7 +176,7 @@ proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
   # result = $(cast[ptr MsgType](msg)[])
 
 proc disconnect*(peer: Peer, reason: DisconnectionReason,
-  notifyOtherPeer = false) {.gcsafe, async.}
+  notifyOtherPeer = false) {.async: (raises:[CatchableError]).}
 
 template raisePeerDisconnected(msg: string, r: DisconnectionReason) =
   var e = newException(PeerDisconnected, msg)
@@ -214,9 +214,6 @@ proc handshakeImpl[T](peer: Peer,
 
 # Dispatcher
 #
-
-proc hash(d: Dispatcher): int =
-  hash(d.protocolOffsets)
 
 proc `==`(lhs, rhs: Dispatcher): bool =
   lhs.activeProtocols == rhs.activeProtocols
@@ -365,8 +362,8 @@ proc supports*(peer: Peer, Protocol: type): bool =
 template perPeerMsgId(peer: Peer, MsgType: type): int =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
 
-proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void]
-    {.raises: [UnsupportedMessageError, RlpError].} =
+proc invokeThunk*(peer: Peer, msgId: int, msgData: Rlp): Future[void]
+    {.async: (raises: [CatchableError, rlp.RlpError]).} =
   template invalidIdError: untyped =
     raise newException(UnsupportedMessageError,
       "RLPx message with an invalid id " & $msgId &
@@ -379,7 +376,7 @@ proc invokeThunk*(peer: Peer, msgId: int, msgData: var Rlp): Future[void]
   let thunk = peer.dispatcher.messages[msgId].thunk
   if thunk == nil: invalidIdError()
 
-  return thunk(peer, msgId, msgData)
+  await thunk(peer, msgId, msgData)
 
 template compressMsg(peer: Peer, data: seq[byte]): seq[byte] =
   when useSnappy:
@@ -389,7 +386,7 @@ template compressMsg(peer: Peer, data: seq[byte]): seq[byte] =
   else:
     data
 
-proc sendMsg*(peer: Peer, data: seq[byte]) {.gcsafe, async.} =
+proc sendMsg*(peer: Peer, data: seq[byte]) {.async.} =
   var cipherText = encryptMsg(peer.compressMsg(data), peer.secretsState)
   try:
     var res = await peer.transport.write(cipherText)
@@ -861,10 +858,8 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       msgName = $msgIdent
       msgRecName = msg.recName
       responseMsgId = if msg.response != nil: msg.response.id else: -1
-      ResponseRecord = if msg.response != nil: msg.response.recName else: nil
       hasReqId = msg.hasReqId
       protocol = msg.protocol
-      userPragmas = msg.procDef.pragma
 
       # variables used in the sending procs
       peerOrResponder = ident"peerOrResponder"
@@ -922,7 +917,6 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
 
       # The received RLP data is deserialized to a local variable of
       # the message-specific type. This is done field by field here:
-      let msgNameLit = newLit(msgName)
       readParams.add quote do:
         `receivedMsg`.`param` = `checkedRlpRead`(`peerVar`, `receivedRlp`, `paramType`)
 
@@ -954,7 +948,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       proc `thunkName`(`peerVar`: `Peer`, _: int, data: Rlp)
           # Fun error if you just use `RlpError` instead of `rlp.RlpError`:
           # "Error: type expected, but got symbol 'RlpError' of kind 'EnumField'"
-          {.async, gcsafe, raises: [rlp.RlpError].} =
+          {.async: (raises: [rlp.RlpError, CatchableError]).} =
         var `receivedRlp` = data
         var `receivedMsg` {.noinit.}: `msgRecName`
         `readParamsPrelude`
@@ -1000,7 +994,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
 
     let initWriter = quote do:
       var `rlpWriter` = `initRlpWriter`()
-      const `perProtocolMsgIdVar` = `msgId`
+      const `perProtocolMsgIdVar` {.used.} = `msgId`
       let `perPeerMsgIdVar` = `perPeerMsgIdValue`
       `append`(`rlpWriter`, `perPeerMsgIdVar`)
 
@@ -1088,7 +1082,7 @@ proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason):
       trace "Disconnection handler ended with an error", err = f.error.msg
 
 proc disconnect*(peer: Peer, reason: DisconnectionReason,
-    notifyOtherPeer = false) {.async.} =
+    notifyOtherPeer = false) {.async: (raises: [CatchableError]).} =
   if peer.connectionState notin {Disconnecting, Disconnected}:
     peer.connectionState = Disconnecting
     # Do this first so sub-protocols have time to clean up and stop sending
@@ -1391,7 +1385,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node):
 
 # TODO: rework rlpxAccept similar to rlpxConnect.
 proc rlpxAccept*(
-    node: EthereumNode, transport: StreamTransport): Future[Peer] {.async.} =
+    node: EthereumNode, transport: StreamTransport): Future[Peer] {.async: (raises: [CatchableError]).} =
   initTracing(devp2pInfo, node.protocols)
 
   let peer = Peer(transport: transport, network: node)
