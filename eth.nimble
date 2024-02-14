@@ -43,6 +43,8 @@ proc build(args, path, outdir: string) =
 
 proc run(args, path, outdir: string) =
   build args & " -r", path, outdir
+  if (NimMajor, NimMinor) > (1, 6):
+    build args & " --mm:refc -r", path, outdir
 
 task test_keyfile, "Run keyfile tests":
   run "-d:release", "tests/keyfile/all_tests", "keyfile"
