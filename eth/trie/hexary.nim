@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[options, tables],
+  std/[options, tables, streams, strformat],
   nimcrypto/[keccak, hash],
   ../rlp,
   "."/[trie_defs, nibbles, db]
@@ -279,6 +279,53 @@ proc getPairsAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesSeq]], 
     else:
       raise newException(CorruptedTrieDatabase,
                         "HexaryTrie node with an unexpected number of children")
+
+
+proc dumpTree*(self: HexaryTrie, stream: Stream) =
+  var
+    nodeRlp = rlpFromBytes keyToLocalBytes(self.db, self.root)
+    stack = @[(nodeRlp, initNibbleRange([]))]
+  while stack.len > 0:
+    let (nodeRlp, path) = stack.pop()
+    if not nodeRlp.hasData or nodeRlp.isEmpty:
+      continue
+
+    for _ in 0 .. stack.len:
+      stream.write("  ")
+    case nodeRlp.listLen
+    of 2:
+      let
+        (isLeaf, k) = nodeRlp.extensionNodeKey
+        key = path & k
+        value = nodeRlp.listElem(1)
+
+      if isLeaf:
+        doAssert(key.len mod 2 == 0)
+        stream.writeLine(&"Leaf. path: {$path}. key: {$key}. value: {value.inspect}. Rlp: {nodeRlp.inspect}")
+      else:
+        stream.writeLine(&"Extension. path: {$path}. key: {$key}. value: {value.inspect}. Rlp: {nodeRlp.inspect}")
+        let nextLookup = getLookup(self.db, value, key, key.len, true)
+        stack.add((nextLookup, key))
+    of 17:
+      stream.writeLine(&"Branch. path: {$path}. Rlp: {nodeRlp.inspect}")
+      for i in 0 ..< 16:
+        var branch = nodeRlp.listElem(i)
+        if not branch.isEmpty:
+          var key = path.cloneAndReserveNibble()
+          key.replaceLastNibble(i.byte)
+          let nextLookup = getLookup(self.db, branch, key, key.len, true)
+          stack.add((nextLookup, key))
+
+      var lastElem = nodeRlp.listElem(16)
+      if not lastElem.isEmpty:
+        assert false
+        #doAssert(path.len mod 2 == 0)
+        #return (path.getBytes, lastElem.toBytes)
+    else:
+      raise newException(CorruptedTrieDatabase,
+                        "HexaryTrie node with an unexpected number of children")
+
+
 
 iterator pairs*(self: HexaryTrie): (seq[byte], seq[byte]) =
   var
