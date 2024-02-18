@@ -104,7 +104,13 @@ proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) =
   let f = d.transp.sendTo(ta, data)
   let cb = proc(data: pointer) {.gcsafe.} =
     if f.failed:
-      debug "Discovery send failed", msg = f.readError.msg
+      when defined(chronicles_log_level):
+        try:
+          # readError will raise FutureError
+          debug "Discovery send failed", msg = f.readError.msg
+        except FutureError as exc:
+          error "Failed to get discovery send future error", msg=exc.msg
+          
   f.addCallback cb
 
 proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] =
