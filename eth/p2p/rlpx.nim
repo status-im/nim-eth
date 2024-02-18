@@ -1381,6 +1381,8 @@ proc rlpxConnect*(node: EthereumNode, remote: Node):
     return err(UselessRlpxPeerError)
   except TransportError:
     return err(P2PTransportError)
+  except EthP2PError:
+    return err(ProtocolError)
   except CatchableError as e:
     raiseAssert($e.name & " " & $e.msg)
 
