@@ -33,7 +33,10 @@ p2pProtocol eth(version = 63,
                 genesisHash: KeccakHash)
 
   requestResponse:
-    proc getBlockHeaders(peer: Peer, request: openArray[KeccakHash]) {.gcsafe.} = discard
+    proc getBlockHeaders(peer: Peer, request: openArray[KeccakHash]) {.gcsafe.} =
+      var headers: seq[BlockHeader]
+      await response.send(headers)
+
     proc blockHeaders(p: Peer, headers: openArray[BlockHeader])
 
   requestResponse:

@@ -84,17 +84,21 @@ type
     name*: string
     version*: int
 
-  UnsupportedProtocol* = object of Defect
+  EthP2PError* = object of CatchableError
+
+  UnsupportedProtocol* = object of EthP2PError
     # This is raised when you attempt to send a message from a particular
     # protocol to a peer that doesn't support the protocol.
 
-  MalformedMessageError* = object of CatchableError
-  UnsupportedMessageError* = object of CatchableError
+  MalformedMessageError* = object of EthP2PError
+  UnsupportedMessageError* = object of EthP2PError
 
-  PeerDisconnected* = object of CatchableError
+  PeerDisconnected* = object of EthP2PError
     reason*: DisconnectionReason
 
-  UselessPeerError* = object of CatchableError
+  UselessPeerError* = object of EthP2PError
+
+  P2PInternalError* = object of EthP2PError
 
   ##
   ## Quasy-private types. Use at your own risk.
@@ -155,7 +159,7 @@ type
   MessageHandlerDecorator* = proc(msgId: int, n: NimNode): NimNode
 
   ThunkProc* = proc(x: Peer, msgId: int, data: Rlp): Future[void]
-    {.gcsafe, async: (raises: [RlpError, CatchableError]).}
+    {.gcsafe, async: (raises: [RlpError, EthP2PError]).}
 
   MessageContentPrinter* = proc(msg: pointer): string
     {.gcsafe, raises: [].}
@@ -173,10 +177,10 @@ type
     {.gcsafe, raises: [].}
 
   HandshakeStep* = proc(peer: Peer): Future[void]
-    {.gcsafe, raises: [].}
+    {.gcsafe, async: (raises: [EthP2PError]).}
 
   DisconnectionHandler* = proc(peer: Peer, reason: DisconnectionReason):
-    Future[void] {.gcsafe, raises: [].}
+    Future[void] {.gcsafe, async: (raises: [EthP2PError]).}
 
   ConnectionState* = enum
     None,

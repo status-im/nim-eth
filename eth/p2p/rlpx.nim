@@ -176,7 +176,7 @@ proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
   # result = $(cast[ptr MsgType](msg)[])
 
 proc disconnect*(peer: Peer, reason: DisconnectionReason,
-  notifyOtherPeer = false) {.async: (raises:[CatchableError]).}
+  notifyOtherPeer = false) {.async: (raises:[]).}
 
 template raisePeerDisconnected(msg: string, r: DisconnectionReason) =
   var e = newException(PeerDisconnected, msg)
@@ -185,7 +185,8 @@ template raisePeerDisconnected(msg: string, r: DisconnectionReason) =
 
 proc disconnectAndRaise(peer: Peer,
                         reason: DisconnectionReason,
-                        msg: string) {.async.} =
+                        msg: string) {.async:
+                          (raises: [PeerDisconnected]).} =
   let r = reason
   await peer.disconnect(r)
   raisePeerDisconnected(msg, r)
@@ -193,24 +194,26 @@ proc disconnectAndRaise(peer: Peer,
 proc handshakeImpl[T](peer: Peer,
                       sendFut: Future[void],
                       responseFut: Future[T],
-                      timeout: Duration): Future[T] {.async.} =
+                      timeout: Duration): Future[T] {.async:
+                        (raises: [PeerDisconnected, P2PInternalError]).} =
   sendFut.addCallback do (arg: pointer) {.gcsafe.}:
     if sendFut.failed:
       debug "Handshake message not delivered", peer
 
   doAssert timeout.milliseconds > 0
-  yield responseFut or sleepAsync(timeout)
-  if not responseFut.finished:
+
+  try:
+    let res = await responseFut.wait(timeout)
+    return res
+  except AsyncTimeoutError:
     # TODO: Really shouldn't disconnect and raise everywhere. In order to avoid
     # understanding what error occured where.
     # And also, incoming and outgoing disconnect errors should be seperated,
     # probably by seperating the actual disconnect call to begin with.
     await disconnectAndRaise(peer, HandshakeTimeout,
                              "Protocol handshake was not received in time.")
-  elif responseFut.failed:
-    raise responseFut.error
-  else:
-    return responseFut.read
+  except CatchableError as exc:
+    raise newException(P2PInternalError, exc.msg)
 
 # Dispatcher
 #
@@ -363,7 +366,7 @@ template perPeerMsgId(peer: Peer, MsgType: type): int =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
 
 proc invokeThunk*(peer: Peer, msgId: int, msgData: Rlp): Future[void]
-    {.async: (raises: [CatchableError, rlp.RlpError]).} =
+    {.async: (raises: [rlp.RlpError, EthP2PError]).} =
   template invalidIdError: untyped =
     raise newException(UnsupportedMessageError,
       "RLPx message with an invalid id " & $msgId &
@@ -393,6 +396,7 @@ proc sendMsg*(peer: Peer, data: seq[byte]) {.async.} =
     if res != len(cipherText):
       # This is ECONNRESET or EPIPE case when remote peer disconnected.
       await peer.disconnect(TcpError)
+      discard
   except CatchableError as e:
     await peer.disconnect(TcpError)
     raise e
@@ -948,7 +952,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       proc `thunkName`(`peerVar`: `Peer`, _: int, data: Rlp)
           # Fun error if you just use `RlpError` instead of `rlp.RlpError`:
           # "Error: type expected, but got symbol 'RlpError' of kind 'EnumField'"
-          {.async: (raises: [rlp.RlpError, CatchableError]).} =
+          {.async: (raises: [rlp.RlpError, EthP2PError]).} =
         var `receivedRlp` = data
         var `receivedMsg` {.noinit.}: `msgRecName`
         `readParamsPrelude`
@@ -1067,14 +1071,14 @@ proc removePeer(network: EthereumNode, peer: Peer) =
             observer.onPeerDisconnected(peer)
 
 proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason):
-    Future[void] {.async.} =
+    Future[void] {.async: (raises: []).} =
   var futures = newSeqOfCap[Future[void]](protocolCount())
 
   for protocol in peer.dispatcher.activeProtocols:
     if protocol.disconnectHandler != nil:
       futures.add((protocol.disconnectHandler)(peer, reason))
 
-  await allFutures(futures)
+  await noCancel allFutures(futures)
 
   for f in futures:
     doAssert(f.finished())
@@ -1082,7 +1086,7 @@ proc callDisconnectHandlers(peer: Peer, reason: DisconnectionReason):
       trace "Disconnection handler ended with an error", err = f.error.msg
 
 proc disconnect*(peer: Peer, reason: DisconnectionReason,
-    notifyOtherPeer = false) {.async: (raises: [CatchableError]).} =
+    notifyOtherPeer = false) {.async: (raises: []).} =
   if peer.connectionState notin {Disconnecting, Disconnected}:
     peer.connectionState = Disconnecting
     # Do this first so sub-protocols have time to clean up and stop sending
@@ -1094,14 +1098,15 @@ proc disconnect*(peer: Peer, reason: DisconnectionReason,
       await callDisconnectHandlers(peer, reason)
 
     if notifyOtherPeer and not peer.transport.closed:
-      var fut = peer.sendDisconnectMsg(DisconnectionReasonList(value: reason))
-      yield fut
-      if fut.failed:
-        debug "Failed to deliver disconnect message", peer
 
       proc waitAndClose(peer: Peer, time: Duration) {.async.} =
         await sleepAsync(time)
         await peer.transport.closeWait()
+
+      try:
+        await peer.sendDisconnectMsg(DisconnectionReasonList(value: reason))
+      except CatchableError as exc:
+        debug "Failed to deliver disconnect message", peer, msg=exc.msg
 
       # Give the peer a chance to disconnect
       traceAsyncErrors peer.waitAndClose(2.seconds)
@@ -1336,7 +1341,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node):
           10.seconds)
       except RlpError:
         return err(ProtocolError)
-      except PeerDisconnected as e:
+      except PeerDisconnected:
         return err(PeerDisconnectedError)
         # TODO: Strange compiler error
         # case e.reason:
@@ -1350,6 +1355,8 @@ proc rlpxConnect*(node: EthereumNode, remote: Node):
         #   return err(PeerDisconnectedError)
       except TransportError:
         return err(P2PTransportError)
+      except P2PInternalError:
+        return err(P2PHandshakeError)
       except CatchableError as e:
         raiseAssert($e.name & " " & $e.msg)
 
@@ -1374,6 +1381,8 @@ proc rlpxConnect*(node: EthereumNode, remote: Node):
     return err(UselessRlpxPeerError)
   except TransportError:
     return err(P2PTransportError)
+  except EthP2PError:
+    return err(ProtocolError)
   except CatchableError as e:
     raiseAssert($e.name & " " & $e.msg)
 
@@ -1385,7 +1394,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node):
 
 # TODO: rework rlpxAccept similar to rlpxConnect.
 proc rlpxAccept*(
-    node: EthereumNode, transport: StreamTransport): Future[Peer] {.async: (raises: [CatchableError]).} =
+    node: EthereumNode, transport: StreamTransport): Future[Peer] {.async: (raises: []).} =
   initTracing(devp2pInfo, node.protocols)
 
   let peer = Peer(transport: transport, network: node)

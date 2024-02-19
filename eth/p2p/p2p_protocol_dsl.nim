@@ -335,8 +335,12 @@ proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
 
   userHandlerProc.addPragma ident"gcsafe"
 
+  # we only take the pragma
+  let dummy = quote do:
+    proc dummy(): Future[void] {.async: (raises: [EthP2PError]).}
+
   if p.isRlpx:
-    userHandlerProc.addPragma ident"async"
+    userHandlerProc.addPragma dummy.pragma[0]
 
   var
     getState = ident"getState"
@@ -375,7 +379,17 @@ proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
       template networkState(`peerVar`: `PeerType`): `NetworkStateType` {.used.} =
         `NetworkStateType`(`getNetworkState`(`peerVar`.network, `protocolInfo`))
 
-proc addPreludeDefs*(userHandlerProc: NimNode, definitions: NimNode) =
+proc addExceptionHandler(userHandlerProc: NimNode) =
+  let bodyTemp = userHandlerProc.body
+  userHandlerProc.body = quote do:
+    try:
+      `bodyTemp`
+    except CancelledError as exc:
+      raise newException(EthP2PError, exc.msg)
+    except CatchableError as exc:
+      raise newException(EthP2PError, exc.msg)
+
+proc addPreludeDefs(userHandlerProc: NimNode, definitions: NimNode) =
   userHandlerProc.body[0].add definitions
 
 proc eventHandlerToProc(p: P2PProtocol, doBlock: NimNode, handlerName: string): NimNode =
@@ -385,6 +399,7 @@ proc eventHandlerToProc(p: P2PProtocol, doBlock: NimNode, handlerName: string): 
   doBlock.copyChildrenTo(result)
   result.name = ident(p.name & handlerName) # genSym(nskProc, p.name & handlerName)
   p.augmentUserHandler result
+  result.addExceptionHandler()
 
 proc addTimeoutParam(procDef: NimNode, defaultValue: int64) =
   var
@@ -470,7 +485,8 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
       if protocol.useRequestIds:
         initResponderCall.add reqIdVar
 
-      userHandler.addPreludeDefs newVarStmt(responseVar, initResponderCall)
+      userHandler.addPreludeDefs quote do:
+        var `responseVar` {.used.} = `initResponderCall`
 
       result.initResponderCall = initResponderCall
 
@@ -479,6 +495,7 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
     of msgResponse: userHandler.applyDecorator protocol.incomingResponseDecorator
     else: discard
 
+    userHandler.addExceptionHandler()
     result.userHandler = userHandler
     protocol.outRecvProcs.add result.userHandler
 
@@ -796,12 +813,17 @@ proc createHandshakeTemplate*(msg: Message,
 
   let peerVar = genSym(nskLet ,"peer")
   handshakeExchanger.setBody quote do:
-    let `peerVar` = `peerValue`
-    let sendingFuture = `forwardCall`
-    `handshakeImpl`(`peerVar`,
-                    sendingFuture,
-                    `nextMsg`(`peerVar`, `msgRecName`),
-                    `timeoutVar`)
+    try:
+      let `peerVar` = `peerValue`
+      let sendingFuture = `forwardCall`
+      `handshakeImpl`(`peerVar`,
+                      sendingFuture,
+                      `nextMsg`(`peerVar`, `msgRecName`),
+                      `timeoutVar`)
+    except PeerDisconnected as exc:
+      raise newException(EthP2PError, exc.msg)
+    except P2PInternalError as exc:
+      raise newException(EthP2PError, exc.msg)
 
   return handshakeExchanger
 
