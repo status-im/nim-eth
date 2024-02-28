@@ -248,7 +248,7 @@ iterator exec*[Params, Res](s: SqliteStmt[Params, Res],
   # `yield` statements cause when inlining the loop body
   var res = KvResult[void].ok()
   when params is tuple:
-    var i = 1
+    var i {.used.} = 1
     for param in fields(params):
       if (let v = bindParam(s, i, param); v != SQLITE_OK):
         res = KvResult[void].err(toErrorString(s.env, v))
