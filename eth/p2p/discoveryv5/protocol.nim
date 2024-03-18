@@ -123,6 +123,10 @@ const
   ## call
 
 type
+  OptAddress* = object
+    ip*: Opt[IpAddress]
+    port*: Port
+
   DiscoveryConfig* = object
     tableIpLimits*: TableIpLimits
     bitsPerHop*: int
@@ -133,7 +137,7 @@ type
     transp: DatagramTransport
     localNode*: Node
     privateKey: PrivateKey
-    bindAddress: Address ## UDP binding address
+    bindAddress: OptAddress ## UDP binding address
     pendingRequests: Table[AESGCMNonce, PendingRequest]
     routingTable*: RoutingTable
     codec*: Codec
@@ -1006,7 +1010,7 @@ proc newProtocol*(
   Protocol(
     privateKey: privKey,
     localNode: node,
-    bindAddress: Address(ip: bindIp, port: bindPort),
+    bindAddress: OptAddress(ip: Opt.some(bindIp), port: bindPort),
     codec: Codec(localNode: node, privKey: privKey,
       sessions: Sessions.init(256)),
     bootstrapRecords: @bootstrapRecords,
@@ -1018,16 +1022,88 @@ proc newProtocol*(
     responseTimeout: config.responseTimeout,
     rng: rng)
 
-template listeningAddress*(p: Protocol): Address =
-  p.bindAddress
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Option[IpAddress],
+    enrTcpPort, enrUdpPort: Option[Port],
+    localEnrFields: openArray[(string, seq[byte])] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = none[enr.Record](),
+    bindPort: Port,
+    bindIp: Opt[IpAddress],
+    enrAutoUpdate = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng()): Protocol =
+  let
+    customEnrFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
+    record =
+      if previousRecord.isSome():
+        var res = previousRecord.get()
+        res.update(privKey, enrIp, enrTcpPort, enrUdpPort,
+          customEnrFields).expect("Record within size limits and correct key")
+        res
+      else:
+        enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort,
+          customEnrFields).expect("Record within size limits")
 
-proc open*(d: Protocol) {.raises: [CatchableError].} =
+  info "Discovery ENR initialized", enrAutoUpdate, seqNum = record.seqNum,
+    ip = enrIp, tcpPort = enrTcpPort, udpPort = enrUdpPort,
+    customEnrFields, uri = toURI(record)
+
+  if enrIp.isNone():
+    if enrAutoUpdate:
+      notice "No external IP provided for the ENR, this node will not be " &
+             "discoverable until the ENR is updated with the discovered " &
+             "external IP address"
+    else:
+      warn "No external IP provided for the ENR, this node will not be " &
+           "discoverable"
+
+  let node = newNode(record).expect("Properly initialized record")
+
+  doAssert not(isNil(rng)), "RNG initialization failed"
+
+  Protocol(
+    privateKey: privKey,
+    localNode: node,
+    bindAddress: OptAddress(ip: bindIp, port: bindPort),
+    codec: Codec(localNode: node, privKey: privKey,
+      sessions: Sessions.init(256)),
+    bootstrapRecords: @bootstrapRecords,
+    ipVote: IpVote.init(),
+    enrAutoUpdate: enrAutoUpdate,
+    routingTable: RoutingTable.init(
+      node, config.bitsPerHop, config.tableIpLimits, rng),
+    handshakeTimeout: config.handshakeTimeout,
+    responseTimeout: config.responseTimeout,
+    rng: rng)
+
+proc `$`*(a: OptAddress): string =
+  if a.ip.isNone():
+    $getAutoAddress(a.port)
+  else:
+    $a.ip.get() & ":" & $a.port
+
+chronicles.formatIt(OptAddress): $it
+
+template listeningAddress*(p: Protocol): Address =
+  if p.bindAddress.ip.isNone():
+    let ta = getAutoAddress(p.bindAddress.port)
+    Address(ta.toIpAddress(), ta.port)
+  else:
+    Address(p.bindAddress.ip.get(), p.bindAddress.port)
+
+proc open*(d: Protocol) {.raises: [TransportOsError].} =
   info "Starting discovery node", node = d.localNode,
     bindAddress = d.bindAddress
 
   # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(d.bindAddress.ip, d.bindAddress.port)
-  d.transp = newDatagramTransport(processClient, udata = d, local = ta)
+  d.transp =
+    if d.bindAddress.ip.isSome():
+      let ta = initTAddress(d.bindAddress.ip.get(), d.bindAddress.port)
+      newDatagramTransport(processClient, udata = d, local = ta)
+    else:
+      newDatagramTransport(processClient, udata = d, port = d.bindAddress.port)
 
   d.seedTable()
 
