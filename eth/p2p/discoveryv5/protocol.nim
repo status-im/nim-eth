@@ -1107,7 +1107,7 @@ proc newProtocol*(
 
 proc `$`*(a: OptAddress): string =
   if a.ip.isNone():
-    $getAutoAddress(a.port)
+    "*:" & $a.port
   else:
     $a.ip.get() & ":" & $a.port
 
@@ -1141,6 +1141,15 @@ proc open*(d: Protocol) {.raises: [TransportOsError].} =
         (res, true)
       else:
         raiseAssert "Bound address should only be IPv4 or IPv6 address"
+
+  let localaddr =
+    try:
+      $transp.localAddress()
+    except TransportAddressError:
+      "<error>"
+
+  debug "Discover node has been bound", v4_mapped = v4Mapped,
+        local_address = localaddr
 
   d.transp = transp
   d.v4Mapped = v4Mapped
