@@ -153,6 +153,7 @@ type
     # overkill here, use sequence
     handshakeTimeout: Duration
     responseTimeout: Duration
+    v4Mapped: bool
     rng*: ref HmacDrbgContext
 
   PendingRequest = object
@@ -257,8 +258,20 @@ func updateRecord*(
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
+func prepareAddress(d: Protocol, a: TransportAddress): TransportAddress =
+  case a.family
+  of AddressFamily.IPv4:
+    if d.v4Mapped:
+      a.toIPv6()
+    else:
+      a
+  of AddressFamily.IPv6:
+    a
+  else:
+    raiseAssert "Destination address should only be IPv4 or IPv6 address"
+
 proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async.} =
-  let ta = initTAddress(a.ip, a.port)
+  let ta = d.prepareAddress(initTAddress(a.ip, a.port))
   try:
     await d.transp.sendTo(ta, data)
   except CatchableError as e:
@@ -274,7 +287,7 @@ proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async.} =
     # One case that needs this error available upwards is when revalidating
     # nodes. Else the revalidation might end up clearing the routing tabl
     # because of ping failures due to own network connection failure.
-    warn "Discovery send failed", msg = e.msg, address = a
+    warn "Discovery send failed", msg = e.msg, address = $ta
 
 proc send*(d: Protocol, a: Address, data: seq[byte]) =
   asyncSpawn sendTo(d, a, data)
@@ -1098,13 +1111,25 @@ proc open*(d: Protocol) {.raises: [TransportOsError].} =
     bindAddress = d.bindAddress
 
   # TODO allow binding to specific IP / IPv6 / etc
-  d.transp =
+  let (transp, v4Mapped) =
     if d.bindAddress.ip.isSome():
       let ta = initTAddress(d.bindAddress.ip.get(), d.bindAddress.port)
-      newDatagramTransport(processClient, udata = d, local = ta)
+      (newDatagramTransport(processClient, udata = d, local = ta), false)
     else:
-      newDatagramTransport(processClient, udata = d, port = d.bindAddress.port)
+      let
+        res = newDatagramTransport(processClient, udata = d,
+                                   port = d.bindAddress.port)
+        address = res.localAddress()
+      case address.family
+      of AddressFamily.IPv4:
+        (res, false)
+      of AddressFamily.IPv6:
+        (res, true)
+      else:
+        raiseAssert "Bound address should only be IPv4 or IPv6 address"
 
+  d.transp = transp
+  d.v4Mapped = v4Mapped
   d.seedTable()
 
 proc start*(d: Protocol) =
