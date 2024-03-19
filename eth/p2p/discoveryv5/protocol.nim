@@ -1131,8 +1131,8 @@ proc open*(d: Protocol) {.raises: [TransportOsError].} =
       (newDatagramTransport(processClient, udata = d, local = ta), false)
     else:
       let
-        res = newDatagramTransport(processClient, udata = d,
-                                   port = d.bindAddress.port)
+        res = newDatagramTransport(processClient, d.bindAddress.port,
+                                   udata = d)
         address = res.localAddress()
       case address.family
       of AddressFamily.IPv4:
@@ -1147,9 +1147,6 @@ proc open*(d: Protocol) {.raises: [TransportOsError].} =
       $transp.localAddress()
     except TransportAddressError:
       "<error>"
-
-  debug "Discover node has been bound", v4_mapped = v4Mapped,
-        local_address = localaddr
 
   d.transp = transp
   d.v4Mapped = v4Mapped
