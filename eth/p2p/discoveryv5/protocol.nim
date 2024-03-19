@@ -258,7 +258,7 @@ func updateRecord*(
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
-func prepareAddress(d: Protocol, a: TransportAddress): TransportAddress =
+func encodeAddress(d: Protocol, a: TransportAddress): TransportAddress =
   case a.family
   of AddressFamily.IPv4:
     if d.v4Mapped:
@@ -270,8 +270,24 @@ func prepareAddress(d: Protocol, a: TransportAddress): TransportAddress =
   else:
     raiseAssert "Destination address should only be IPv4 or IPv6 address"
 
+func decodeAddress(d: Protocol, a: TransportAddress): TransportAddress =
+  case a.family
+  of AddressFamily.IPv4:
+    a
+  of AddressFamily.IPv6:
+    if isV4Mapped(a):
+      if d.v4Mapped:
+        # We only decode IPv4 mapped addresses when dualstack being used.
+        a.toIPv4()
+      else:
+        a
+    else:
+      a
+  else:
+    raiseAssert "Source address should only be IPv4 or IPv6 address"
+
 proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async.} =
-  let ta = d.prepareAddress(initTAddress(a.ip, a.port))
+  let ta = d.encodeAddress(initTAddress(a.ip, a.port))
   try:
     await d.transp.sendTo(ta, data)
   except CatchableError as e:
@@ -495,11 +511,9 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
               warn "Transport getMessage", exception = e.name, msg = e.msg
               return
 
-  let ip = try: raddr.address()
-           except ValueError as e:
-             error "Not a valid IpAddress", exception = e.name, msg = e.msg
-             return
-  let a = Address(ip: ip, port: raddr.port)
+  let
+    ip = proto.decodeAddress(raddr).toIpAddress()
+    a = Address(ip: ip, port: raddr.port)
 
   proto.receive(a, buf)
 
