@@ -153,7 +153,6 @@ type
     # overkill here, use sequence
     handshakeTimeout: Duration
     responseTimeout: Duration
-    v4Mapped: bool
     rng*: ref HmacDrbgContext
 
   PendingRequest = object
@@ -258,36 +257,8 @@ func updateRecord*(
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
-func encodeAddress(d: Protocol, a: TransportAddress): TransportAddress =
-  case a.family
-  of AddressFamily.IPv4:
-    if d.v4Mapped:
-      a.toIPv6()
-    else:
-      a
-  of AddressFamily.IPv6:
-    a
-  else:
-    raiseAssert "Destination address should only be IPv4 or IPv6 address"
-
-func decodeAddress(d: Protocol, a: TransportAddress): TransportAddress =
-  case a.family
-  of AddressFamily.IPv4:
-    a
-  of AddressFamily.IPv6:
-    if isV4Mapped(a):
-      if d.v4Mapped:
-        # We only decode IPv4 mapped addresses when dualstack being used.
-        a.toIPv4()
-      else:
-        a
-    else:
-      a
-  else:
-    raiseAssert "Source address should only be IPv4 or IPv6 address"
-
 proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async.} =
-  let ta = d.encodeAddress(initTAddress(a.ip, a.port))
+  let ta = initTAddress(a.ip, a.port)
   try:
     await d.transp.sendTo(ta, data)
   except CatchableError as e:
@@ -512,8 +483,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
               return
 
   let
-    ip = proto.decodeAddress(raddr).toIpAddress()
-    a = Address(ip: ip, port: raddr.port)
+    a = Address(ip: raddr.toIpAddress(), port: raddr.port)
 
   proto.receive(a, buf)
 
@@ -1125,23 +1095,10 @@ proc open*(d: Protocol) {.raises: [TransportOsError].} =
     bindAddress = d.bindAddress
 
   # TODO allow binding to specific IP / IPv6 / etc
-  let (transp, v4Mapped) =
-    if d.bindAddress.ip.isSome():
-      let ta = initTAddress(d.bindAddress.ip.get(), d.bindAddress.port)
-      (newDatagramTransport(processClient, udata = d, local = ta), false)
-    else:
-      let
-        res = newDatagramTransport(processClient, d.bindAddress.port,
-                                   udata = d)
-        address = res.localAddress()
-      case address.family
-      of AddressFamily.IPv4:
-        (res, false)
-      of AddressFamily.IPv6:
-        (res, true)
-      else:
-        raiseAssert "Bound address should only be IPv4 or IPv6 address"
-
+  let transp =
+    newDatagramTransport(processClient, udata = d,
+                         localPort = d.bindAddress.port,
+                         local = d.bindAddress.ip)
   let localaddr =
     try:
       $transp.localAddress()
@@ -1149,7 +1106,6 @@ proc open*(d: Protocol) {.raises: [TransportOsError].} =
       "<error>"
 
   d.transp = transp
-  d.v4Mapped = v4Mapped
   d.seedTable()
 
 proc start*(d: Protocol) =
