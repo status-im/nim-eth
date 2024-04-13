@@ -1095,17 +1095,10 @@ proc open*(d: Protocol) {.raises: [TransportOsError].} =
     bindAddress = d.bindAddress
 
   # TODO allow binding to specific IP / IPv6 / etc
-  let transp =
+  d.transp =
     newDatagramTransport(processClient, udata = d,
                          localPort = d.bindAddress.port,
                          local = d.bindAddress.ip)
-  let localaddr =
-    try:
-      $transp.localAddress()
-    except TransportAddressError:
-      "<error>"
-
-  d.transp = transp
   d.seedTable()
 
 proc start*(d: Protocol) =
