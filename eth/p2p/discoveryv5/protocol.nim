@@ -482,10 +482,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
               warn "Transport getMessage", exception = e.name, msg = e.msg
               return
 
-  let
-    a = Address(ip: raddr.toIpAddress(), port: raddr.port)
-
-  proto.receive(a, buf)
+  proto.receive(Address(ip: raddr.toIpAddress(), port: raddr.port), buf)
 
 proc replaceNode(d: Protocol, n: Node) =
   if n.record notin d.bootstrapRecords:
