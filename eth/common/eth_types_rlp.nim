@@ -287,6 +287,7 @@ proc read*(rlp: var Rlp, T: type Transaction): T =
     rlp.readTxTyped(result)
 
 proc read(rlp: var Rlp, T: type NetworkPayload): T =
+  result = NetworkPayload()
   rlp.read(result.blobs)
   rlp.read(result.commitments)
   rlp.read(result.proofs)
@@ -301,7 +302,7 @@ proc readTxTyped(rlp: var Rlp, tx: var PooledTransaction) =
         false
   if hasNetworkPayload:
     rlp.tryEnterList()  # spec: rlp([tx_payload, blobs, commitments, proofs])
-  rlp.read(tx.tx)
+  rlp.readTxPayload(tx.tx, txType)
   if hasNetworkPayload:
     rlp.read(tx.networkPayload)
 
