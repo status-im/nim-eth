@@ -11,11 +11,22 @@
 
 import
   std/[options, strutils],
-  stew/[byteutils, endians2], stint,
+  results, stew/[byteutils, endians2], stint,
+  ssz_serialization,
   ./eth_hash, ./eth_times
 
 export
-  options, stint, eth_hash, eth_times
+  options, results, stint, ssz_serialization, eth_hash, eth_times
+
+const
+  MAX_CALLDATA_SIZE* = 1 shl 24 # 2^24
+  MAX_ACCESS_LIST_STORAGE_KEYS* = 1 shl 24 # 2^24
+  MAX_ACCESS_LIST_SIZE* = 1 shl 24 # 2^24
+  MAX_BLOB_COMMITMENTS_PER_BLOCK* = 4_096
+  ECDSA_SIGNATURE_SIZE* = 65
+  MAX_TRANSACTION_PAYLOAD_FIELDS* = 32
+  MAX_TRANSACTION_SIGNATURE_FIELDS* = 16
+  MAX_POOLED_TRANSACTION_FIELDS* = 8
 
 type
   Hash256* = MDigest[256]
@@ -54,12 +65,6 @@ type
     storageRoot*: Hash256
     codeHash*:    Hash256
 
-  AccessPair* = object
-    address*    : EthAddress
-    storageKeys*: seq[StorageKey]
-
-  AccessList* = seq[AccessPair]
-
   VersionedHash* = Hash256
   VersionedHashes* = seq[VersionedHash]
   KzgCommitment* = array[48, byte]
@@ -69,37 +74,265 @@ type
   # 4096 -> FIELD_ELEMENTS_PER_BLOB
   NetworkBlob* = array[32*4096, byte]
 
-  TxType* = enum
+  TxType* = enum  # EIP-2718
     TxLegacy    # 0
     TxEip2930   # 1
     TxEip1559   # 2
     TxEip4844   # 3
 
+  StorageKeys* = List[StorageKey, Limit MAX_ACCESS_LIST_STORAGE_KEYS]
+
+  AccessPair* = object
+    address*: EthAddress
+    storage_keys*: StorageKeys
+
+  AccessList* = List[AccessPair, Limit MAX_ACCESS_LIST_SIZE]
+
+  TransactionPayload* {.
+      sszStableContainer: MAX_TRANSACTION_PAYLOAD_FIELDS.} = object
+    nonce*: uint64
+    max_fee_per_gas*: UInt256
+    gas*: uint64
+    to*: Opt[EthAddress]
+    value*: UInt256
+    input*: List[byte, Limit MAX_CALLDATA_SIZE]
+
+    # EIP-2718
+    tx_type* {.serializedFieldName: "type".}: Opt[TxType]
+
+    # EIP-2930
+    access_list*: Opt[AccessList]
+
+    # EIP-1559
+    max_priority_fee_per_gas*: Opt[UInt256]
+
+    # EIP-4844
+    max_fee_per_blob_gas*: Opt[UInt256]
+    blob_versioned_hashes*:
+      Opt[List[VersionedHash, Limit MAX_BLOB_COMMITMENTS_PER_BLOCK]]
+
+  TransactionSignature* {.
+      sszStableContainer: MAX_TRANSACTION_SIGNATURE_FIELDS.} = object
+    from_address* {.serializedFieldName: "from".}: EthAddress
+    ecdsa_signature*: array[ECDSA_SIGNATURE_SIZE, byte]
+
+  Transaction* = object  # EIP-6493
+    payload*: TransactionPayload
+    signature*: TransactionSignature
+
+  ReplayableTransactionPayload* {.sszVariant: TransactionPayload.} = object
+    nonce*: uint64
+    max_fee_per_gas*: UInt256
+    gas*: uint64
+    to*: Opt[EthAddress]
+    value*: UInt256
+    input*: List[byte, Limit MAX_CALLDATA_SIZE]
+
+  ReplayableTransaction* {.sszVariant: Transaction.} = object  # EIP-6493
+    payload*: ReplayableTransactionPayload
+    signature*: TransactionSignature
+
+  LegacyTransactionPayload* {.sszVariant: TransactionPayload.} = object
+    nonce*: uint64
+    max_fee_per_gas*: UInt256
+    gas*: uint64
+    to*: Opt[EthAddress]
+    value*: UInt256
+    input*: List[byte, Limit MAX_CALLDATA_SIZE]
+    tx_type* {.serializedFieldName: "type".}: TxType
+
+  LegacyTransaction* {.sszVariant: Transaction.} = object  # EIP-6493
+    payload*: LegacyTransactionPayload
+    signature*: TransactionSignature
+
+  Eip2930TransactionPayload* {.sszVariant: TransactionPayload.} = object
+    nonce*: uint64
+    max_fee_per_gas*: UInt256
+    gas*: uint64
+    to*: Opt[EthAddress]
+    value*: UInt256
+    input*: List[byte, Limit MAX_CALLDATA_SIZE]
+    tx_type* {.serializedFieldName: "type".}: TxType
+    access_list*: AccessList
+
+  Eip2930Transaction* {.sszVariant: Transaction.} = object  # EIP-6493
+    payload*: Eip2930TransactionPayload
+    signature*: TransactionSignature
+
+  Eip1559TransactionPayload* {.sszVariant: TransactionPayload.} = object
+    nonce*: uint64
+    max_fee_per_gas*: UInt256
+    gas*: uint64
+    to*: Opt[EthAddress]
+    value*: UInt256
+    input*: List[byte, Limit MAX_CALLDATA_SIZE]
+    tx_type* {.serializedFieldName: "type".}: TxType
+    access_list*: AccessList
+    max_priority_fee_per_gas*: UInt256
+
+  Eip1559Transaction* {.sszVariant: Transaction.} = object  # EIP-6493
+    payload*: Eip1559TransactionPayload
+    signature*: TransactionSignature
+
+  Eip4844TransactionPayload* {.sszVariant: TransactionPayload.} = object
+    nonce*: uint64
+    max_fee_per_gas*: UInt256
+    gas*: uint64
+    to*: EthAddress
+    value*: UInt256
+    input*: List[byte, Limit MAX_CALLDATA_SIZE]
+    tx_type* {.serializedFieldName: "type".}: TxType
+    access_list*: AccessList
+    max_priority_fee_per_gas*: UInt256
+    max_fee_per_blob_gas*: UInt256
+    blob_versioned_hashes*:
+      List[VersionedHash, Limit MAX_BLOB_COMMITMENTS_PER_BLOCK]
+
+  Eip4844Transaction* {.sszVariant: Transaction.} = object  # EIP-6493
+    payload*: Eip4844TransactionPayload
+    signature*: TransactionSignature
+
+  TransactionKind* {.pure.} = enum
+    Replayable
+    Legacy
+    Eip2930
+    Eip1559
+    Eip4844
+
+  AnyTransactionPayloadVariant* =
+    ReplayableTransactionPayload |
+    LegacyTransactionPayload |
+    Eip2930TransactionPayload |
+    Eip1559TransactionPayload |
+    Eip4844TransactionPayload
+
+  AnyTransactionPayload* {.sszOneOf: TransactionPayload.} = object
+    case kind*: TransactionKind
+    of TransactionKind.Eip4844:
+      eip4844Data*: Eip4844TransactionPayload
+    of TransactionKind.Eip1559:
+      eip1559Data*: Eip1559TransactionPayload
+    of TransactionKind.Eip2930:
+      eip2930Data*: Eip2930TransactionPayload
+    of TransactionKind.Legacy:
+      legacyData*: LegacyTransactionPayload
+    of TransactionKind.Replayable:
+      replayableData*: ReplayableTransactionPayload
+
+  AnyTransactionVariant* =
+    ReplayableTransaction |
+    LegacyTransaction |
+    Eip2930Transaction |
+    Eip1559Transaction |
+    Eip4844Transaction
+
+  AnyTransaction* {.sszOneOf: Transaction.} = object
+    case kind*: TransactionKind
+    of TransactionKind.Eip4844:
+      eip4844Data*: Eip4844Transaction
+    of TransactionKind.Eip1559:
+      eip1559Data*: Eip1559Transaction
+    of TransactionKind.Eip2930:
+      eip2930Data*: Eip2930Transaction
+    of TransactionKind.Legacy:
+      legacyData*: LegacyTransaction
+    of TransactionKind.Replayable:
+      replayableData*: ReplayableTransaction
+
+template withTxPayloadVariant*(
+    x: AnyTransactionPayload, body: untyped): untyped =
+  case x.kind
+  of TransactionKind.Eip4844:
+    const txKind {.inject, used.} = TransactionKind.Eip4844
+    template txPayloadVariant: untyped {.inject, used.} = x.eip4844Data
+    body
+  of TransactionKind.Eip1559:
+    const txKind {.inject, used.} = TransactionKind.Eip1559
+    template txPayloadVariant: untyped {.inject, used.} = x.eip1559Data
+    body
+  of TransactionKind.Eip2930:
+    const txKind {.inject, used.} = TransactionKind.Eip2930
+    template txPayloadVariant: untyped {.inject, used.} = x.eip2930Data
+    body
+  of TransactionKind.Legacy:
+    const txKind {.inject, used.} = TransactionKind.Legacy
+    template txPayloadVariant: untyped {.inject, used.} = x.legacyData
+    body
+  of TransactionKind.Replayable:
+    const txKind {.inject, used.} = TransactionKind.Replayable
+    template txPayloadVariant: untyped {.inject, used.} = x.replayableData
+    body
+
+func init*(T: typedesc[AnyTransaction], tx: Eip4844Transaction): T =
+  T(kind: TransactionKind.Eip4844, eip4844Data: tx)
+
+func init*(T: typedesc[AnyTransaction], tx: Eip1559Transaction): T =
+  T(kind: TransactionKind.Eip1559, eip1559Data: tx)
+
+func init*(T: typedesc[AnyTransaction], tx: Eip2930Transaction): T =
+  T(kind: TransactionKind.Eip2930, eip2930Data: tx)
+
+func init*(T: typedesc[AnyTransaction], tx: LegacyTransaction): T =
+  T(kind: TransactionKind.Legacy, legacyData: tx)
+
+func init*(T: typedesc[AnyTransaction], tx: ReplayableTransaction): T =
+  T(kind: TransactionKind.Replayable, replayableData: tx)
+
+template withTxVariant*(x: AnyTransaction, body: untyped): untyped =
+  case x.kind
+  of TransactionKind.Eip4844:
+    const txKind {.inject, used.} = TransactionKind.Eip4844
+    template txVariant: untyped {.inject, used.} = x.eip4844Data
+    body
+  of TransactionKind.Eip1559:
+    const txKind {.inject, used.} = TransactionKind.Eip1559
+    template txVariant: untyped {.inject, used.} = x.eip1559Data
+    body
+  of TransactionKind.Eip2930:
+    const txKind {.inject, used.} = TransactionKind.Eip2930
+    template txVariant: untyped {.inject, used.} = x.eip2930Data
+    body
+  of TransactionKind.Legacy:
+    const txKind {.inject, used.} = TransactionKind.Legacy
+    template txVariant: untyped {.inject, used.} = x.legacyData
+    body
+  of TransactionKind.Replayable:
+    const txKind {.inject, used.} = TransactionKind.Replayable
+    template txVariant: untyped {.inject, used.} = x.replayableData
+    body
+
+# https://eips.ethereum.org/EIPS/eip-6493#ssz-signedtransaction-container
+func selectVariant*(value: TransactionPayload): Opt[TransactionKind] =
+  if value.tx_type == Opt.some TxEip4844:
+    return Opt.some TransactionKind.Eip4844
+
+  if value.tx_type == Opt.some TxEip1559:
+    return Opt.some TransactionKind.Eip1559
+
+  if value.tx_type == Opt.some TxEip2930:
+    return Opt.some TransactionKind.Eip2930
+
+  if value.tx_type == Opt.some TxLegacy:
+    return Opt.some TransactionKind.Legacy
+
+  if value.tx_type.isNone:
+    return Opt.some TransactionKind.Replayable
+
+  Opt.none TransactionKind
+
+func selectVariant*(value: Transaction): Opt[TransactionKind] =
+  selectVariant(value.payload)
+
+type
   NetworkPayload* = ref object
-    blobs*       : seq[NetworkBlob]
-    commitments* : seq[KzgCommitment]
-    proofs*      : seq[KzgProof]
+    blobs*       : List[NetworkBlob, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+    commitments* : List[KzgCommitment, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+    proofs*      : List[KzgProof, MAX_BLOB_COMMITMENTS_PER_BLOCK]
 
-  Transaction* = object
-    txType*        : TxType               # EIP-2718
-    chainId*       : ChainId              # EIP-2930
-    nonce*         : AccountNonce
-    gasPrice*      : GasInt
-    maxPriorityFee*: GasInt               # EIP-1559
-    maxFee*        : GasInt               # EIP-1559
-    gasLimit*      : GasInt
-    to*            : Option[EthAddress]
-    value*         : UInt256
-    payload*       : Blob
-    accessList*    : AccessList           # EIP-2930
-    maxFeePerBlobGas*: UInt256            # EIP-4844
-    versionedHashes*: VersionedHashes     # EIP-4844
-    V*             : int64
-    R*, S*         : UInt256
-
-  PooledTransaction* = object
+  PooledTransaction* {.
+      sszStableContainer: MAX_POOLED_TRANSACTION_FIELDS.} = object
     tx*: Transaction
-    networkPayload*: NetworkPayload       # EIP-4844
+    blob_data*: Opt[NetworkPayload]  # EIP-4844
 
   TransactionStatus* = enum
     Unknown,
@@ -290,13 +523,16 @@ func stateRoot*(rec: Receipt): Hash256 {.inline.} =
   rec.hash
 
 template contractCreation*(tx: Transaction): bool =
-  tx.to.isNone
+  tx.payload.to.isNone
 
-func destination*(tx: Transaction): EthAddress =
+func destination*(tx: TransactionPayload): EthAddress =
   # use getRecipient if you also want to get
   # the contract address
   if tx.to.isSome:
     return tx.to.get
+
+func destination*(tx: Transaction): EthAddress =
+  tx.payload.destination
 
 func init*(T: type BlockHashOrNumber, str: string): T
           {.raises: [ValueError].} =
@@ -322,6 +558,8 @@ template hasData*(r: EthResourceRefs): bool = r != nil
 template deref*(b: Blob): auto = b
 template deref*(o: Option): auto = o.get
 template deref*(r: EthResourceRefs): auto = r[]
+
+func `==`*(a, b: ChainId): bool {.borrow.}
 
 func `==`*(a, b: NetworkId): bool =
   a.uint == b.uint

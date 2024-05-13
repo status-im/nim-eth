@@ -8,8 +8,10 @@ skipDirs      = @["tests"]
 
 requires "nim >= 1.6.0",
          "nimcrypto",
+         "results",
          "stint",
          "secp256k1",
+         "ssz_serialization",
          "chronos#head",
          "chronicles",
          "stew",
