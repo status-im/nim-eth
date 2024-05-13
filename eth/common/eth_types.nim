@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -75,10 +75,6 @@ type
     TxEip1559   # 2
     TxEip4844   # 3
 
-  # instead of wrap Transaction with
-  # NetworkPayload, we embed it to Transaction
-  # the rest of magic happened in RLP
-  # encoding decoding
   NetworkPayload* = ref object
     blobs*       : seq[NetworkBlob]
     commitments* : seq[KzgCommitment]
@@ -98,9 +94,12 @@ type
     accessList*    : AccessList           # EIP-2930
     maxFeePerBlobGas*: UInt256            # EIP-4844
     versionedHashes*: VersionedHashes     # EIP-4844
-    networkPayload*: NetworkPayload       # EIP-4844
     V*             : int64
     R*, S*         : UInt256
+
+  PooledTransaction* = object
+    tx*: Transaction
+    networkPayload*: NetworkPayload       # EIP-4844
 
   TransactionStatus* = enum
     Unknown,
@@ -175,6 +174,11 @@ type
     txs*        : seq[Transaction]
     uncles*     : seq[BlockHeader]
     withdrawals*: Option[seq[Withdrawal]]   # EIP-4895
+
+  BlobsBundle* = object
+    commitments*: seq[KzgCommitment]
+    proofs*: seq[KzgProof]
+    blobs*: seq[NetworkBlob]
 
   # TODO: Make BlockNumber a uint64 and deprecate either this or BlockHashOrNumber
   HashOrNum* = object
@@ -294,12 +298,6 @@ func destination*(tx: Transaction): EthAddress =
   if tx.to.isSome:
     return tx.to.get
 
-func removeNetworkPayload*(tx: Transaction): Transaction =
-  if tx.networkPayload.isNil:
-    return tx
-  result = tx
-  result.networkPayload = nil
-
 func init*(T: type BlockHashOrNumber, str: string): T
           {.raises: [ValueError].} =
   if str.startsWith "0x":
@@ -330,4 +328,3 @@ func `==`*(a, b: NetworkId): bool =
 
 func `$`*(x: NetworkId): string =
   `$`(uint(x))
-
