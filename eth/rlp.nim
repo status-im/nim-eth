@@ -263,12 +263,15 @@ func currentElemEnd*(self: Rlp): int =
   self.currentElemEnd(self.position)
 
 func enterList*(self: var Rlp): bool =
-  let item = self.item()
-  if item.typ != rlpList:
-    return false
+  try: # TODO Refactor to remove exception here..
+    let item = self.item()
+    if item.typ != rlpList:
+      return false
 
-  self.position = item.payload.a
-  return true
+    self.position = item.payload.a
+    return true
+  except RlpError:
+    return false
 
 func tryEnterList*(self: var Rlp) =
   if not self.enterList():
