@@ -48,13 +48,6 @@ suite "test api usage":
     expect AssertionDefect:
       rlp.skipElem
 
-    expect MalformedRlpError:
-      discard rlp.getType
-
-    expect AssertionDefect:
-      for e in rlp:
-        discard e.getType
-
   test "you cannot finish a list without appending enough elements":
     var writer = initRlpList(3)
     writer.append "foo"
@@ -208,23 +201,6 @@ suite "test api usage":
       b = rlp.toBytes
     check $b == "@[]"
 
-  test "encode/decode floats":
-    for f in [high(float64), low(float64), 0.1, 122.23,
-              103487315.128934,
-              1943935743563457201.391754032785692,
-              0, -0,
-              Inf, NegInf, NaN]:
-
-      template isNaN(n): bool =
-        classify(n) == fcNan
-
-      template chk(input) =
-        let restored = decode(encode(input), float64)
-        check restored == input or (input.isNaN and restored.isNaN)
-
-      chk  f
-      chk -f
-
   test "invalid enum":
     type
       MyEnum = enum
@@ -234,7 +210,7 @@ suite "test api usage":
     var writer = initRlpWriter()
     writer.append(1) # valid
     writer.append(2) # invalid
-    writer.append(-1) # invalid
+    writer.append(cast[uint64](-1)) # invalid
     let bytes = writer.finish()
     var rlp = rlpFromBytes(bytes)
 

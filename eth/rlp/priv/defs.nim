@@ -1,7 +1,7 @@
 const
   MAX_LENGTH_BYTES* = 8
 
-  BLOB_START_MARKER* = byte(128)
+  BLOB_START_MARKER* = byte(0x80)
   LIST_START_MARKER* = byte(192)
 
   THRESHOLD_LIST_LEN* = 56

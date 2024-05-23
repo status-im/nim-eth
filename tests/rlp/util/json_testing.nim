@@ -43,8 +43,7 @@ proc runTests*(filename: string) =
           expect MalformedRlpError, UnsupportedRlpError, ValueError:
             var rlp = rlpFromHex(output.str)
             inspectOutput = rlp.inspect(1)
-            discard rlp.getType
-            while rlp.hasData: discard rlp.toNodes
+            rlp.validate()
             success = false
           if not success:
             echo "  ACCEPTED MALFORMED BYTES: ", output.str
