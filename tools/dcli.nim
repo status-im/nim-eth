@@ -1,10 +1,26 @@
+# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
+{.push raises: [].}
+
 import
   std/[options, strutils, tables, sets],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, stew/byteutils, stew/bitops2,
-  ./eth/keys, ./eth/net/nat,
-  ./eth/p2p/discoveryv5/[enr, node],
-  ./eth/p2p/discoveryv5/protocol as discv5_protocol
+  ../eth/keys, ../eth/net/nat,
+  ../eth/p2p/discoveryv5/[enr, node],
+  ../eth/p2p/discoveryv5/protocol as discv5_protocol
+
+const
+  defaultListenAddress* = (static parseIpAddress("0.0.0.0"))
+  defaultAdminListenAddress* = (static parseIpAddress("127.0.0.1"))
+  defaultListenAddressDesc = $defaultListenAddress
+  defaultAdminListenAddressDesc = $defaultAdminListenAddress
 
 type
   DiscoveryCmd* = enum
@@ -25,9 +41,10 @@ type
       name: "udp-port" .}: uint16
 
     listenAddress* {.
-      defaultValue: defaultListenAddress(config)
+      defaultValue: defaultListenAddress
+      defaultValueDesc: $defaultListenAddressDesc
       desc: "Listening address for the Discovery v5 traffic"
-      name: "listen-address" }: ValidIpAddress
+      name: "listen-address" }: IpAddress
 
     persistingFile* {.
       defaultValue: "peerstore.csv",
@@ -62,9 +79,10 @@ type
       name: "metrics" .}: bool
 
     metricsAddress* {.
-      defaultValue: defaultAdminListenAddress(config)
+      defaultValue: defaultAdminListenAddress
+      defaultValueDesc: $defaultAdminListenAddressDesc
       desc: "Listening address of the metrics server"
-      name: "metrics-address" .}: ValidIpAddress
+      name: "metrics-address" .}: IpAddress
 
     metricsPort* {.
       defaultValue: 8008
@@ -98,41 +116,35 @@ type
         desc: "ENR URI of the node to send a talkReq message"
         name: "node" .}: Node
 
-func defaultListenAddress*(conf: DiscoveryConf): ValidIpAddress =
-  (static ValidIpAddress.init("0.0.0.0"))
-
-func defaultAdminListenAddress*(conf: DiscoveryConf): ValidIpAddress =
-  (static ValidIpAddress.init("127.0.0.1"))
-
-proc parseCmdArg*(T: type enr.Record, p: string): T =
+proc parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
   if not fromURI(result, p):
-    raise newException(ConfigurationError, "Invalid ENR")
+    raise newException(ValueError, "Invalid ENR")
 
 proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type Node, p: string): T =
+proc parseCmdArg*(T: type Node, p: string): T {.raises: [ValueError].} =
   var record: enr.Record
   if not fromURI(record, p):
-    raise newException(ConfigurationError, "Invalid ENR")
+    raise newException(ValueError, "Invalid ENR")
 
   let n = newNode(record)
   if n.isErr:
-    raise newException(ConfigurationError, $n.error)
+    raise newException(ValueError, $n.error)
 
   if n[].address.isNone():
-    raise newException(ConfigurationError, "ENR without address")
+    raise newException(ValueError, "ENR without address")
 
   n[]
 
 proc completeCmdArg*(T: type Node, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type PrivateKey, p: string): T =
+proc parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =
   try:
     result = PrivateKey.fromHex(string(p)).tryGet()
   except CatchableError:
-    raise newException(ConfigurationError, "Invalid private key")
+    raise newException(ValueError, "Invalid private key")
 
 proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
@@ -168,13 +180,13 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async.} =
         bits.inc(countOnes(byt.uint))
 
       let str = "$#,$#,$#,$#,$#,$#\n"
-      let newLine = str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits] 
+      let newLine = str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits]
 
       ps.write(newLine)
-    await sleepAsync(1000) # 1 sec of delay
+    await sleepAsync(1.seconds) # 1 sec of delay
 
 
-proc run(config: DiscoveryConf) =
+proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
   let
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
@@ -227,7 +239,9 @@ proc run(config: DiscoveryConf) =
     waitFor(discover(d, config.persistingFile))
 
 when isMainModule:
+  {.pop.}
   let config = DiscoveryConf.load()
+  {.push raises: [].}
 
   setLogLevel(config.logLevel)
 

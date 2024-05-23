@@ -1,8 +1,12 @@
+{.used.}
+
 import
   unittest2,
   nimcrypto/hash,
   serialization/testing/generic_suite,
-  ../../eth/common/[eth_types, eth_types_json_serialization]
+  ../../eth/common/[eth_types, eth_types_json_serialization],
+  ../../eth/common/eth_types_rlp,
+  ../../eth/rlp
 
 func `==`*(lhs, rhs: BlockHashOrNumber): bool =
   if lhs.isHash != rhs.isHash:
@@ -12,6 +16,9 @@ func `==`*(lhs, rhs: BlockHashOrNumber): bool =
     lhs.hash == rhs.hash
   else:
     lhs.number == rhs.number
+
+const
+  testHash = Hash256.fromHex "0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
 
 suite "BlockHashOrNumber":
   test "construction":
@@ -51,8 +58,20 @@ suite "BlockHashOrNumber":
                        "\"1209231231\""
 
   test "EIP-4399 prevRandao field":
-    let hash = Hash256.fromHex "0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
     var blk: BlockHeader
-    blk.prevRandao = hash
+    blk.prevRandao = testHash
     let res = blk.prevRandao
-    check hash == res
+    check testHash == res
+
+  test "EIP-4788 parentBeaconBlockRoot field":
+    let header = BlockHeader(
+      fee: some(0.u256),
+      withdrawalsRoot: some(testHash),
+      blobGasUsed: some(1'u64),
+      excessBlobGas: some(2'u64),
+      parentBeaconBlockRoot: some(testHash),
+    )
+    let rlpBytes = rlp.encode(header)
+    let dh = rlp.decode(rlpBytes, BlockHeader)
+    check dh.parentBeaconBlockRoot.isSome
+    check dh.parentBeaconBlockRoot.get == testHash

@@ -1,13 +1,21 @@
+# nim-eth
+# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
-  stew/shims/net, chronos,
+  std/net,
+  chronos,
   ../../eth/keys,
   ../../eth/p2p/discoveryv5/[enr, node, routing_table],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol
 
 export net
 
-proc localAddress*(port: int): Address =
-  Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
+func localAddress*(port: int): Address =
+  Address(ip: parseIpAddress("127.0.0.1"), port: Port(port))
 
 proc initDiscoveryNode*(
     rng: ref HmacDrbgContext,
@@ -35,12 +43,12 @@ proc initDiscoveryNode*(
 
   protocol
 
-proc nodeIdInNodes*(id: NodeId, nodes: openArray[Node]): bool =
+func nodeIdInNodes*(id: NodeId, nodes: openArray[Node]): bool =
   for n in nodes:
     if id == n.id: return true
 
-proc generateNode*(privKey: PrivateKey, port: int = 20302,
-    ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1"),
+func generateNode*(privKey: PrivateKey, port: int = 20302,
+    ip: IpAddress = parseIpAddress("127.0.0.1"),
     localEnrFields: openArray[FieldPair] = []): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, some(ip),
@@ -55,7 +63,7 @@ proc generateNRandomNodes*(rng: var HmacDrbgContext, n: int): seq[Node] =
   res
 
 proc nodeAndPrivKeyAtDistance*(n: Node, rng: var HmacDrbgContext, d: uint32,
-    ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1")): (Node, PrivateKey) =
+    ip: IpAddress = parseIpAddress("127.0.0.1")): (Node, PrivateKey) =
   while true:
     let pk = PrivateKey.random(rng)
     let node = generateNode(pk, ip = ip)
@@ -63,23 +71,23 @@ proc nodeAndPrivKeyAtDistance*(n: Node, rng: var HmacDrbgContext, d: uint32,
       return (node, pk)
 
 proc nodeAtDistance*(n: Node, rng: var HmacDrbgContext, d: uint32,
-    ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1")): Node =
+    ip: IpAddress = parseIpAddress("127.0.0.1")): Node =
   let (node, _) = n.nodeAndPrivKeyAtDistance(rng, d, ip)
   node
 
 proc nodesAtDistance*(
     n: Node, rng: var HmacDrbgContext, d: uint32, amount: int,
-    ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1")): seq[Node] =
+    ip: IpAddress = parseIpAddress("127.0.0.1")): seq[Node] =
   for i in 0..<amount:
     result.add(nodeAtDistance(n, rng, d, ip))
 
 proc nodesAtDistanceUniqueIp*(
     n: Node, rng: var HmacDrbgContext, d: uint32, amount: int,
-    ip: ValidIpAddress = ValidIpAddress.init("127.0.0.1")): seq[Node] =
+    ip: IpAddress = parseIpAddress("127.0.0.1")): seq[Node] =
   var ta = initTAddress(ip, Port(0))
   for i in 0..<amount:
     ta.inc()
-    result.add(nodeAtDistance(n, rng, d, ValidIpAddress.init(ta.address())))
+    result.add(nodeAtDistance(n, rng, d, ta.address()))
 
 proc addSeenNode*(d: discv5_protocol.Protocol, n: Node): bool =
   # Add it as a seen node, warning: for testing convenience only!

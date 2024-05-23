@@ -1,8 +1,15 @@
+# nim-eth
+# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 {.used.}
 
 import
+  std/net,
   unittest2,
-  stew/shims/net,
   ../../eth/keys, ../../eth/p2p/discoveryv5/[node, ip_vote]
 
 suite "IP vote":
@@ -12,9 +19,9 @@ suite "IP vote":
     var
       votes = IpVote.init(2)
     let
-      addr1 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(1))
-      addr2 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(2))
-      addr3 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(3))
+      addr1 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(1))
+      addr2 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(2))
+      addr3 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(3))
 
     votes.insert(NodeId.random(rng[]), addr1);
     votes.insert(NodeId.random(rng[]), addr1);
@@ -32,9 +39,9 @@ suite "IP vote":
     var
       votes = IpVote.init(threshold)
     let
-      addr1 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(1))
-      addr2 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(2))
-      addr3 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(3))
+      addr1 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(1))
+      addr2 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(2))
+      addr3 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(3))
 
     votes.insert(NodeId.random(rng[]), addr1);
     votes.insert(NodeId.random(rng[]), addr2);
@@ -50,9 +57,9 @@ suite "IP vote":
     var
       votes = IpVote.init(threshold)
     let
-      addr1 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(1))
-      addr2 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(2))
-      addr3 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(3))
+      addr1 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(1))
+      addr2 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(2))
+      addr3 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(3))
 
     votes.insert(NodeId.random(rng[]), addr1);
     votes.insert(NodeId.random(rng[]), addr2);
@@ -68,8 +75,8 @@ suite "IP vote":
     var
       votes = IpVote.init(threshold)
     let
-      addr1 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(1))
-      addr2 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(2))
+      addr1 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(1))
+      addr2 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(2))
 
     let nodeIdA = NodeId.random(rng[])
     votes.insert(nodeIdA, addr1);
@@ -86,9 +93,9 @@ suite "IP vote":
     var
       votes = IpVote.init(threshold)
     let
-      addr1 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(1))
-      addr2 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(2))
-      addr3 = Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(3))
+      addr1 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(1))
+      addr2 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(2))
+      addr3 = Address(ip: parseIpAddress("127.0.0.1"), port: Port(3))
 
     let nodeIdA = NodeId.random(rng[])
     votes.insert(nodeIdA, addr1);

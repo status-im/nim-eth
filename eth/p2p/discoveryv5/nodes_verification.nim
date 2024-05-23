@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -6,11 +6,11 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
-  std/[sets, options],
-  stew/results, stew/shims/net, chronicles, chronos,
+  std/[sets, options, net],
+  stew/results, chronicles, chronos,
   ../../net/utils,
   "."/[node, enr, routing_table]
 

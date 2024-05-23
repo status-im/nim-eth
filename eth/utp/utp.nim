@@ -1,10 +1,10 @@
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   chronos, stew/[results, byteutils],
@@ -12,8 +12,9 @@ import
   ./utp_socket,
   ./utp_protocol
 
-# Exemple application to interact with reference implementation server to help with implementation
-# To run lib utp server:
+# Example application to interact with the reference implementation server
+# to be able to test against the reference implementation.
+# To run libutp server:
 # 1. git clone https://github.com/bittorrent/libutp.git
 # 2. cd libutp
 # 3. make
@@ -21,7 +22,9 @@ import
 when isMainModule:
   proc echoIncomingSocketCallBack(): AcceptConnectionCallback[TransportAddress] =
     return (
-      proc (server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] {.gcsafe, raises: [Defect].} =
+      proc (server: UtpRouter[TransportAddress],
+          client: UtpSocket[TransportAddress]):
+          Future[void] {.gcsafe, raises: [].} =
         echo "received incoming connection"
         let fakeFuture = newFuture[void]()
         fakeFuture.complete()

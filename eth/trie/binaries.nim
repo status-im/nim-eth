@@ -1,6 +1,6 @@
 import
   std/sequtils,
-  stew/ranges/ptr_arith,
+  stew/ptrops,
   "."/[trie_defs, trie_bitseq]
 
 type

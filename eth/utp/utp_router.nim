@@ -4,7 +4,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[tables, options, sugar],
@@ -38,12 +38,12 @@ type
   # ``server`` - UtpProtocol object.
   # ``client`` - accepted client utp socket.
   AcceptConnectionCallback*[A] = proc(server: UtpRouter[A],
-    client: UtpSocket[A]): Future[void] {.gcsafe, raises: [Defect].}
+    client: UtpSocket[A]): Future[void] {.gcsafe, raises: [].}
 
   # Callback to act as firewall for incoming peers. Should return true if peer
   # is allowed to connect.
   AllowConnectionCallback*[A] = proc(r: UtpRouter[A], remoteAddress: A,
-    connectionId: uint16): bool {.gcsafe, raises: [Defect], noSideEffect.}
+    connectionId: uint16): bool {.gcsafe, raises: [], noSideEffect.}
 
   # Object responsible for creating and maintaining table of utp sockets.
   # Caller should use `processIncomingBytes` proc to feed it with incoming byte
@@ -187,7 +187,9 @@ proc shouldAllowConnection[A](
   else:
     r.allowConnection(r, remoteAddress, connectionId)
 
-proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
+proc processPacket[A](
+    r: UtpRouter[A], p: Packet, sender: A
+  ) {.async: (raises: [CancelledError]).}=
   debug "Received packet ",
     sender = sender,
     packetType = p.header.pType
@@ -249,13 +251,14 @@ proc processPacket[A](r: UtpRouter[A], p: Packet, sender: A) {.async.}=
     else:
       # TODO: add keeping track of recently send reset packets and do not send
       # reset to peers which we recently send reset to.
-      debug "Received FIN/DATA/ACK on not known socket sending reset"
+      debug "Received FIN/DATA/ACK on unknown socket, sending reset"
       let rstPacket = resetPacket(
         randUint16(r.rng[]), p.header.connectionId, p.header.seqNr)
-      await r.sendCb(sender, encodePacket(rstPacket))
+      r.sendCb(sender, encodePacket(rstPacket))
 
 proc processIncomingBytes*[A](
-    r: UtpRouter[A], bytes: seq[byte], sender: A) {.async.} =
+    r: UtpRouter[A], bytes: seq[byte], sender: A
+  ) {.async: (raises:[CancelledError]).} =
   if (not r.closed):
     let decoded = decodePacket(bytes)
     if (decoded.isOk()):
@@ -284,10 +287,8 @@ proc generateNewUniqueSocket[A](
   return none[UtpSocket[A]]()
 
 proc innerConnect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.} =
-    let startFut = s.startOutgoingSocket()
-
     try:
-      await startFut
+      await s.startOutgoingSocket()
       utp_success_outgoing.inc()
       debug "Outgoing connection successful", dst = s.socketKey
       return ok(s)
@@ -304,18 +305,7 @@ proc innerConnect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.} =
 proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] =
   debug "Initiating connection", dst = s.socketKey
 
-  # Create inner future, to make sure we are installing cancelCallback
-  # on whole connection future, and not only part of it
-  let connectionFuture = s.innerConnect()
-
-  connectionFuture.cancelCallback = proc(udata: pointer) {.gcsafe.} =
-    debug "Connection cancel callback fired",
-      socketKey = s.socketKey
-    # if for some reason the future is cancelled, destroy socket to clear it
-    # from the active socket list
-    s.destroy()
-
-  return connectionFuture
+  s.innerConnect()
 
 proc socketAlreadyExists[A](): ConnectionResult[A] =
   return err(OutgoingConnectionError(kind: SocketAlreadyExists))
@@ -373,4 +363,4 @@ proc shutdownWait*[A](r: UtpRouter[A]) {.async.} =
     activeSockets.add(s)
 
   for s in activeSockets:
-    yield s.destroyWait()
+    await s.destroyWait()

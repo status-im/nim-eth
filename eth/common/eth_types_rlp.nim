@@ -1,4 +1,4 @@
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -33,6 +33,15 @@ proc read*(rlp: var Rlp, T: type StUint): T {.inline.} =
     raise newException(RlpTypeMismatch, "Unsigned integer expected, but the source RLP is a list")
 
   rlp.skipElem
+
+func significantBytesBE(val: openArray[byte]): int =
+  ## Returns the number of significant trailing bytes in a big endian
+  ## representation of a number.
+  # TODO: move that in https://github.com/status-im/nim-byteutils
+  for i in 0 ..< val.len:
+    if val[i] != 0:
+      return val.len - i
+  return 1
 
 proc append*(rlpWriter: var RlpWriter, value: StUint) =
   if value > 128:
@@ -74,7 +83,6 @@ proc appendTxLegacy(w: var RlpWriter, tx: Transaction) =
   w.append(tx.S)
 
 proc appendTxEip2930(w: var RlpWriter, tx: Transaction) =
-  w.append(1)
   w.startList(11)
   w.append(tx.chainId.uint64)
   w.append(tx.nonce)
@@ -89,7 +97,6 @@ proc appendTxEip2930(w: var RlpWriter, tx: Transaction) =
   w.append(tx.S)
 
 proc appendTxEip1559(w: var RlpWriter, tx: Transaction) =
-  w.append(2)
   w.startList(12)
   w.append(tx.chainId.uint64)
   w.append(tx.nonce)
@@ -104,7 +111,24 @@ proc appendTxEip1559(w: var RlpWriter, tx: Transaction) =
   w.append(tx.R)
   w.append(tx.S)
 
-proc append*(w: var RlpWriter, tx: Transaction) =
+proc appendTxEip4844(w: var RlpWriter, tx: Transaction) =
+  w.startList(14)
+  w.append(tx.chainId.uint64)
+  w.append(tx.nonce)
+  w.append(tx.maxPriorityFee)
+  w.append(tx.maxFee)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.append(tx.maxFeePerBlobGas)
+  w.append(tx.versionedHashes)
+  w.append(tx.V)
+  w.append(tx.R)
+  w.append(tx.S)
+
+proc appendTxPayload(w: var RlpWriter, tx: Transaction) =
   case tx.txType
   of TxLegacy:
     w.appendTxLegacy(tx)
@@ -112,24 +136,38 @@ proc append*(w: var RlpWriter, tx: Transaction) =
     w.appendTxEip2930(tx)
   of TxEip1559:
     w.appendTxEip1559(tx)
+  of TxEip4844:
+    w.appendTxEip4844(tx)
 
-proc append*(w: var RlpWriter, withdrawal: Withdrawal) =
-  w.startList(4)
-  w.append(withdrawal.index)
-  w.append(withdrawal.validatorIndex)
-  w.append(withdrawal.address)
-  w.append(withdrawal.amount)
+proc append*(w: var RlpWriter, tx: Transaction) =
+  if tx.txType != TxLegacy:
+    w.append(tx.txType)
+  w.appendTxPayload(tx)
 
-template read[T](rlp: var Rlp, val: var T)=
+proc append(w: var RlpWriter, networkPayload: NetworkPayload) =
+  w.append(networkPayload.blobs)
+  w.append(networkPayload.commitments)
+  w.append(networkPayload.proofs)
+
+proc append*(w: var RlpWriter, tx: PooledTransaction) =
+  if tx.tx.txType != TxLegacy:
+    w.append(tx.tx.txType)
+  if tx.networkPayload != nil:
+    w.startList(4)  # spec: rlp([tx_payload, blobs, commitments, proofs])
+  w.appendTxPayload(tx.tx)
+  if tx.networkPayload != nil:
+    w.append(tx.networkPayload)
+
+template read[T](rlp: var Rlp, val: var T) =
   val = rlp.read(type val)
 
-proc read[T](rlp: var Rlp, val: var Option[T])=
+proc read[T](rlp: var Rlp, val: var Option[T]) =
   if rlp.blobLen != 0:
     val = some(rlp.read(T))
   else:
     rlp.skipElem
 
-proc readTxLegacy(rlp: var Rlp, tx: var Transaction)=
+proc readTxLegacy(rlp: var Rlp, tx: var Transaction) =
   tx.txType = TxLegacy
   rlp.tryEnterList()
   rlp.read(tx.nonce)
@@ -142,7 +180,7 @@ proc readTxLegacy(rlp: var Rlp, tx: var Transaction)=
   rlp.read(tx.R)
   rlp.read(tx.S)
 
-proc readTxEip2930(rlp: var Rlp, tx: var Transaction)=
+proc readTxEip2930(rlp: var Rlp, tx: var Transaction) =
   tx.txType = TxEip2930
   rlp.tryEnterList()
   tx.chainId = rlp.read(uint64).ChainId
@@ -157,7 +195,7 @@ proc readTxEip2930(rlp: var Rlp, tx: var Transaction)=
   rlp.read(tx.R)
   rlp.read(tx.S)
 
-proc readTxEip1559(rlp: var Rlp, tx: var Transaction)=
+proc readTxEip1559(rlp: var Rlp, tx: var Transaction) =
   tx.txType = TxEip1559
   rlp.tryEnterList()
   tx.chainId = rlp.read(uint64).ChainId
@@ -173,7 +211,29 @@ proc readTxEip1559(rlp: var Rlp, tx: var Transaction)=
   rlp.read(tx.R)
   rlp.read(tx.S)
 
-proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.inline.} =
+proc readTxEip4844(rlp: var Rlp, tx: var Transaction) =
+  tx.txType = TxEip4844
+  rlp.tryEnterList()
+  tx.chainId = rlp.read(uint64).ChainId
+  rlp.read(tx.nonce)
+  rlp.read(tx.maxPriorityFee)
+  rlp.read(tx.maxFee)
+  rlp.read(tx.gasLimit)
+  rlp.read(tx.to)
+  rlp.read(tx.value)
+  rlp.read(tx.payload)
+  rlp.read(tx.accessList)
+  rlp.read(tx.maxFeePerBlobGas)
+  rlp.read(tx.versionedHashes)
+  rlp.read(tx.V)
+  rlp.read(tx.R)
+  rlp.read(tx.S)
+
+proc readTxType(rlp: var Rlp): TxType =
+  if rlp.isList:
+    raise newException(RlpTypeMismatch,
+      "Transaction type expected, but source RLP is a list")
+
   # EIP-2718: We MUST decode the first byte as a byte, not `rlp.read(int)`.
   # If decoded with `rlp.read(int)`, bad transaction data (from the network)
   # or even just incorrectly framed data for other reasons fails with
@@ -195,19 +255,26 @@ proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.inline.} =
 
   var txVal: TxType
   if checkedEnumAssign(txVal, txType):
-    case txVal:
-    of TxEip2930:
-      rlp.readTxEip2930(tx)
-      return
-    of TxEip1559:
-      rlp.readTxEip1559(tx)
-      return
-    else:
-      discard
+    return txVal
 
   raise newException(UnsupportedRlpError,
-    "TypedTransaction type must be 1 or 2 in this version, got " & $txType)
+    "TypedTransaction type must be 1, 2, or 3 in this version, got " & $txType)
 
+proc readTxPayload(rlp: var Rlp, tx: var Transaction, txType: TxType) =
+  case txType
+  of TxLegacy:
+    raise newException(RlpTypeMismatch,
+      "LegacyTransaction should not be wrapped in a list")
+  of TxEip2930:
+    rlp.readTxEip2930(tx)
+  of TxEip1559:
+    rlp.readTxEip1559(tx)
+  of TxEip4844:
+    rlp.readTxEip4844(tx)
+
+proc readTxTyped(rlp: var Rlp, tx: var Transaction) =
+  let txType = rlp.readTxType()
+  rlp.readTxPayload(tx, txType)
 
 proc read*(rlp: var Rlp, T: type Transaction): T =
   # Individual transactions are encoded and stored as either `RLP([fields..])`
@@ -219,8 +286,36 @@ proc read*(rlp: var Rlp, T: type Transaction): T =
   else:
     rlp.readTxTyped(result)
 
-proc read*(rlp: var Rlp,
-           T: (type seq[Transaction]) | (type openArray[Transaction])): seq[Transaction] =
+proc read(rlp: var Rlp, T: type NetworkPayload): T =
+  result = NetworkPayload()
+  rlp.read(result.blobs)
+  rlp.read(result.commitments)
+  rlp.read(result.proofs)
+
+proc readTxTyped(rlp: var Rlp, tx: var PooledTransaction) =
+  let
+    txType = rlp.readTxType()
+    hasNetworkPayload =
+      if txType == TxEip4844:
+        rlp.listLen == 4
+      else:
+        false
+  if hasNetworkPayload:
+    rlp.tryEnterList()  # spec: rlp([tx_payload, blobs, commitments, proofs])
+  rlp.readTxPayload(tx.tx, txType)
+  if hasNetworkPayload:
+    rlp.read(tx.networkPayload)
+
+proc read*(rlp: var Rlp, T: type PooledTransaction): T =
+  if rlp.isList:
+    rlp.readTxLegacy(result.tx)
+  else:
+    rlp.readTxTyped(result)
+
+proc read*(
+    rlp: var Rlp,
+    T: (type seq[Transaction]) | (type openArray[Transaction])
+): seq[Transaction] =
   # In arrays (sequences), transactions are encoded as either `RLP([fields..])`
   # for legacy transactions, or `RLP(Type || RLP([fields..]))` for all typed
   # transactions to date.  Spot the extra `RLP(..)` blob encoding, to make it
@@ -245,6 +340,22 @@ proc read*(rlp: var Rlp,
       rr.readTxTyped(tx)
     result.add tx
 
+proc read*(
+    rlp: var Rlp,
+    T: (type seq[PooledTransaction]) | (type openArray[PooledTransaction])
+): seq[PooledTransaction] =
+  if not rlp.isList:
+    raise newException(RlpTypeMismatch,
+      "PooledTransaction list expected, but source RLP is not a list")
+  for item in rlp:
+    var tx: PooledTransaction
+    if item.isList:
+      item.readTxLegacy(tx.tx)
+    else:
+      var rr = rlpFromBytes(rlp.read(Blob))
+      rr.readTxTyped(tx)
+    result.add tx
+
 proc append*(rlpWriter: var RlpWriter,
              txs: seq[Transaction] | openArray[Transaction]) {.inline.} =
   # See above about encoding arrays/sequences of transactions.
@@ -255,8 +366,18 @@ proc append*(rlpWriter: var RlpWriter,
     else:
       rlpWriter.append(rlp.encode(tx))
 
+proc append*(
+    rlpWriter: var RlpWriter,
+    txs: seq[PooledTransaction] | openArray[PooledTransaction]) {.inline.} =
+  rlpWriter.startList(txs.len)
+  for tx in txs:
+    if tx.tx.txType == TxLegacy:
+      rlpWriter.append(tx)
+    else:
+      rlpWriter.append(rlp.encode(tx))
+
 proc append*(w: var RlpWriter, rec: Receipt) =
-  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt}:
+  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt}:
     w.append(rec.receiptType.int)
 
   w.startList(4)
@@ -269,34 +390,114 @@ proc append*(w: var RlpWriter, rec: Receipt) =
   w.append(rec.bloom)
   w.append(rec.logs)
 
-proc read*(rlp: var Rlp, T: type Receipt): T =
-  if rlp.isList:
-    result.receiptType = LegacyReceipt
-  else:
-    # EIP 2718
-    let recType = rlp.read(int)
-    if recType notin {1, 2}:
-      raise newException(UnsupportedRlpError,
-        "TxType expect 1 or 2 got " & $recType)
-    result.receiptType = ReceiptType(recType)
-
+proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) =
+  receipt.receiptType = LegacyReceipt
   rlp.tryEnterList()
   if rlp.isBlob and rlp.blobLen in {0, 1}:
-    result.isHash = false
-    result.status = rlp.read(uint8) == 1
+    receipt.isHash = false
+    receipt.status = rlp.read(uint8) == 1
   elif rlp.isBlob and rlp.blobLen == 32:
-    result.isHash = true
-    result.hash   = rlp.read(Hash256)
+    receipt.isHash = true
+    receipt.hash = rlp.read(Hash256)
   else:
     raise newException(RlpTypeMismatch,
       "HashOrStatus expected, but the source RLP is not a blob of right size.")
 
-  rlp.read(result.cumulativeGasUsed)
-  rlp.read(result.bloom)
-  rlp.read(result.logs)
+  rlp.read(receipt.cumulativeGasUsed)
+  rlp.read(receipt.bloom)
+  rlp.read(receipt.logs)
 
-proc read*(rlp: var Rlp, T: type Time): T {.inline.} =
-  result = fromUnix(rlp.read(int64))
+proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) =
+  if not rlp.hasData:
+    raise newException(MalformedRlpError,
+      "Receipt expected but source RLP is empty")
+  if not rlp.isSingleByte:
+    raise newException(MalformedRlpError,
+      "ReceiptType byte is out of range, must be 0x00 to 0x7f")
+  let recType = rlp.getByteValue
+  rlp.position += 1
+
+  var txVal: ReceiptType
+  if checkedEnumAssign(txVal, recType):
+    case txVal:
+    of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt:
+      receipt.receiptType = txVal
+    of LegacyReceipt:
+      # The legacy type should not be used here.
+      raise newException(MalformedRlpError,
+        "Invalid ReceiptType: " & $recType)
+  else:
+    raise newException(UnsupportedRlpError,
+      "Unsupported ReceiptType: " & $recType)
+
+  # Note: This currently remains the same as the legacy receipt.
+  rlp.tryEnterList()
+  if rlp.isBlob and rlp.blobLen in {0, 1}:
+    receipt.isHash = false
+    receipt.status = rlp.read(uint8) == 1
+  elif rlp.isBlob and rlp.blobLen == 32:
+    receipt.isHash = true
+    receipt.hash = rlp.read(Hash256)
+  else:
+    raise newException(RlpTypeMismatch,
+      "HashOrStatus expected, but the source RLP is not a blob of right size.")
+
+  rlp.read(receipt.cumulativeGasUsed)
+  rlp.read(receipt.bloom)
+  rlp.read(receipt.logs)
+
+proc read*(rlp: var Rlp, T: type Receipt): T =
+  # Individual receipts are encoded and stored as either `RLP([fields..])`
+  # for legacy receipts, or `Type || RLP([fields..])`. Both of these
+  # encodings are byte sequences. The part after `Type` doesn't have to be
+  # RLP in theory, but all types so far use RLP. EIP-2718 covers this.
+  var receipt: Receipt
+  if rlp.isList:
+    rlp.readReceiptLegacy(receipt)
+  else:
+    rlp.readReceiptTyped(receipt)
+  receipt
+
+proc read*(
+    rlp: var Rlp,
+    T: (type seq[Receipt]) | (type openArray[Receipt])
+  ): seq[Receipt] =
+  # In arrays (sequences), receipts are encoded as either `RLP([fields..])`
+  # for legacy receipts, or `RLP(Type || RLP([fields..]))` for all typed
+  # receipts to date. Spot the extra `RLP(..)` blob encoding, to make it
+  # valid RLP inside a larger RLP. EIP-2976 covers this, "Typed Transactions
+  # over Gossip", although it's not very clear about the blob encoding.
+  #
+  # See also note about transactions above.
+  if not rlp.isList:
+    raise newException(RlpTypeMismatch,
+      "Receipts list expected, but source RLP is not a list")
+
+  var receipts: seq[Receipt]
+  for item in rlp:
+    var receipt: Receipt
+    if item.isList:
+      item.readReceiptLegacy(receipt)
+    else:
+      var rr = rlpFromBytes(rlp.read(Blob))
+      rr.readReceiptTyped(receipt)
+    receipts.add receipt
+
+  receipts
+
+proc append*(
+    rlpWriter: var RlpWriter, receipts: seq[Receipt] | openArray[Receipt]
+  ) =
+  # See above about encoding arrays/sequences of receipts.
+  rlpWriter.startList(receipts.len)
+  for receipt in receipts:
+    if receipt.receiptType == LegacyReceipt:
+      rlpWriter.append(receipt)
+    else:
+      rlpWriter.append(rlp.encode(receipt))
+
+proc read*(rlp: var Rlp, T: type EthTime): T {.inline.} =
+  result = EthTime rlp.read(uint64)
 
 proc append*(rlpWriter: var RlpWriter, value: HashOrNum) =
   case value.isHash
@@ -311,94 +512,16 @@ proc read*(rlp: var Rlp, T: type HashOrNum): T =
   else:
     result = HashOrNum(isHash: false, number: rlp.read(BlockNumber))
 
-proc append*(rlpWriter: var RlpWriter, t: Time) {.inline.} =
-  rlpWriter.append(t.toUnix())
-
-proc append*(w: var RlpWriter, h: BlockHeader) =
-  var len = 15
-  if h.fee.isSome: inc len
-  if h.withdrawalsRoot.isSome: inc len
-  if h.excessDataGas.isSome: inc len
-  w.startList(len)
-  for k, v in fieldPairs(h):
-    when v isnot Option:
-      w.append(v)
-  if h.fee.isSome:
-    w.append(h.fee.get())
-  if h.withdrawalsRoot.isSome:
-    w.append(h.withdrawalsRoot.get())
-  if h.excessDataGas.isSome:
-    w.append(h.excessDataGas.get())
-
-proc read*(rlp: var Rlp, T: type BlockHeader): T =
-  let len = rlp.listLen
-
-  if len notin {15, 16, 17, 18}:
-    raise newException(UnsupportedRlpError,
-      "BlockHeader elems should be 15, 16, 17, or 18 got " & $len)
-
-  rlp.tryEnterList()
-  for k, v in fieldPairs(result):
-    when v isnot Option:
-      v = rlp.read(type v)
-
-  if len >= 16:
-    # EIP-1559
-    result.baseFee = rlp.read(UInt256)
-  if len >= 17:
-    # EIP-4895
-    result.withdrawalsRoot = some rlp.read(Hash256)
-  if len >= 18:
-    # EIP-4844
-    result.excessDataGas = some rlp.read(UInt256)
+proc append*(rlpWriter: var RlpWriter, t: EthTime) {.inline.} =
+  rlpWriter.append(t.uint64)
 
 proc rlpHash*[T](v: T): Hash256 =
   keccakHash(rlp.encode(v))
 
+proc rlpHash*(tx: PooledTransaction): Hash256 =
+  keccakHash(rlp.encode(tx.tx))
+
 func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
-
-proc append*(w: var RlpWriter, b: BlockBody) =
-  w.startList 2 + b.withdrawals.isSome.ord
-  w.append(b.transactions)
-  w.append(b.uncles)
-  if b.withdrawals.isSome:
-    w.append(b.withdrawals.unsafeGet)
-
-# Is there a better way of doing this? We have tests that call
-# rlp.readRecordType(BlockBody, false), so I overrode
-# `readRecordType` as well as `read`. --Adam
-proc readRecordType*(rlp: var Rlp, T: type BlockBody, wrappedInList: bool): BlockBody =
-  if not wrappedInList:
-    result.transactions = rlp.read(seq[Transaction])
-    result.uncles = rlp.read(seq[BlockHeader])
-    # Is this the right thing to do here? I don't really
-    # understand what wrappedInList is used for. --Adam
-    result.withdrawals =
-      if rlp.hasData:
-        some(rlp.read(seq[Withdrawal]))
-      else:
-        none[seq[Withdrawal]]()
-  else:
-    let len = rlp.listLen
-
-    if len notin {2, 3}:
-      raise newException(UnsupportedRlpError,
-        "BlockBody elems should be 2 or 3, got " & $len)
-
-    rlp.tryEnterList()
-
-    result.transactions = rlp.read(seq[Transaction])
-    result.uncles       = rlp.read(seq[BlockHeader])
-
-    # EIP-4895
-    result.withdrawals =
-      if len >= 3:
-        some(rlp.read(seq[Withdrawal]))
-      else:
-        none[seq[Withdrawal]]()
-
-proc read*(rlp: var Rlp, T: type BlockBody): T =
-  rlp.readRecordType(BlockBody, true)
 
 proc append*(rlpWriter: var RlpWriter, id: NetworkId) =
   rlpWriter.append(id.uint)

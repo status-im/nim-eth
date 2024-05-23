@@ -1,11 +1,11 @@
 # nim-eth
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[tables, hashes, times, algorithm, sets, sequtils],
@@ -15,8 +15,8 @@ import
 
 export sets # TODO: This should not be needed, but compilation fails otherwise
 
-declarePublicGauge routing_table_nodes,
-  "Discovery routing table nodes"
+declareGauge discv4_routing_table_nodes,
+  "Discovery v4 routing table nodes"
 
 logScope:
   topics = "eth p2p kademlia"
@@ -31,7 +31,7 @@ type
     routing: RoutingTable
     pongFutures: Table[seq[byte], Future[bool]]
     pingFutures: Table[Node, Future[bool]]
-    neighboursCallbacks: Table[Node, proc(n: seq[Node]) {.gcsafe, raises: [Defect].}]
+    neighboursCallbacks: Table[Node, proc(n: seq[Node]) {.gcsafe, raises: [].}]
     rng: ref HmacDrbgContext
     pingPongTime: OrderedTable[TimeKey, int64] # int64 -> unix time
 
@@ -120,8 +120,9 @@ proc timeKeyPong(n: Node): TimeKey =
 proc timeKeyPing(n: Node): TimeKey =
   timeKey(n.id, n.ip, cmdPing)
 
-proc lastPingReceived(k: KademliaProtocol, n: Node): Time =
-  k.pingPongTime.getOrDefault(n.timeKeyPing, 0'i64).fromUnix
+when false:
+  proc lastPingReceived(k: KademliaProtocol, n: Node): Time =
+    k.pingPongTime.getOrDefault(n.timeKeyPing, 0'i64).fromUnix
 
 proc lastPongReceived(k: KademliaProtocol, n: Node): Time =
   k.pingPongTime.getOrDefault(n.timeKeyPong, 0'i64).fromUnix
@@ -182,9 +183,10 @@ proc updateLastPongReceived(k: KademliaProtocol, n: Node, t: Time) =
   k.removeTooOldPingPongTime()
   k.pingPongTime[n.timeKeyPong] = t.toUnix
 
-# checkBond checks if the given node has a recent enough endpoint proof.
-proc checkBond(k: KademliaProtocol, n: Node): bool =
-  getTime() - k.lastPongReceived(n) < BOND_EXPIRATION
+when false:
+  # checkBond checks if the given node has a recent enough endpoint proof.
+  proc checkBond(k: KademliaProtocol, n: Node): bool =
+    getTime() - k.lastPongReceived(n) < BOND_EXPIRATION
 
 proc newKBucket(istart, iend: NodeId): KBucket =
   result.new()
@@ -221,7 +223,7 @@ proc add(k: KBucket, n: Node): Node =
       k.nodes.add(n)
   elif k.len < BUCKET_SIZE:
       k.nodes.add(n)
-      routing_table_nodes.inc()
+      discv4_routing_table_nodes.inc()
   else:
       k.replacementCache.add(n)
       return k.head
@@ -230,7 +232,7 @@ proc add(k: KBucket, n: Node): Node =
 proc removeNode(k: KBucket, n: Node) =
   let i = k.nodes.find(n)
   if i != -1:
-    routing_table_nodes.dec()
+    discv4_routing_table_nodes.dec()
     k.nodes.delete(i)
 
 proc split(k: KBucket): tuple[lower, upper: KBucket] =
@@ -253,7 +255,7 @@ proc isFull(k: KBucket): bool = k.len == BUCKET_SIZE
 proc contains(k: KBucket, n: Node): bool = n in k.nodes
 
 proc binaryGetBucketForNode(buckets: openArray[KBucket], n: Node):
-    KBucket {.raises: [ValueError, Defect].} =
+    KBucket {.raises: [ValueError].} =
   ## Given a list of ordered buckets, returns the bucket for a given node.
   let bucketPos = lowerBound(buckets, n.id) do(a: KBucket, b: NodeId) -> int:
     cmp(a.iend, b)
@@ -264,7 +266,7 @@ proc binaryGetBucketForNode(buckets: openArray[KBucket], n: Node):
       result = bucket
 
   if result.isNil:
-    raise newException(ValueError, "No bucket found for node with id " & $n.id)
+    raise newException(ValueError, "No bucket found for node with id " & stint.`$`(n.id))
 
 proc computeSharedPrefixBits(nodes: openArray[Node]): int =
   ## Count the number of prefix bits shared by all nodes.
@@ -293,14 +295,14 @@ proc splitBucket(r: var RoutingTable, index: int) =
   r.buckets.insert(b, index + 1)
 
 proc bucketForNode(r: RoutingTable, n: Node): KBucket
-    {.raises: [ValueError, Defect].} =
+    {.raises: [ValueError].} =
   binaryGetBucketForNode(r.buckets, n)
 
-proc removeNode(r: var RoutingTable, n: Node) {.raises: [ValueError, Defect].} =
+proc removeNode(r: var RoutingTable, n: Node) {.raises: [ValueError].} =
   r.bucketForNode(n).removeNode(n)
 
 proc addNode(r: var RoutingTable, n: Node): Node
-    {.raises: [ValueError, Defect].} =
+    {.raises: [ValueError].} =
   if n == r.thisNode:
     warn "Trying to add ourselves to the routing table", node = n
     return
@@ -318,7 +320,7 @@ proc addNode(r: var RoutingTable, n: Node): Node
     # Nothing added, ping evictionCandidate
     return evictionCandidate
 
-proc contains(r: RoutingTable, n: Node): bool {.raises: [ValueError, Defect].} =
+proc contains(r: RoutingTable, n: Node): bool {.raises: [ValueError].} =
   n in r.bucketForNode(n)
 
 proc bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
@@ -357,7 +359,7 @@ proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async.}
 proc bondDiscard(k: KademliaProtocol, n: Node) {.async.}
 
 proc updateRoutingTable(k: KademliaProtocol, n: Node)
-    {.raises: [ValueError, Defect], gcsafe.} =
+    {.raises: [ValueError], gcsafe.} =
   ## Update the routing table entry for the given node.
   let evictionCandidate = k.routing.addNode(n)
   if not evictionCandidate.isNil:
@@ -367,7 +369,7 @@ proc updateRoutingTable(k: KademliaProtocol, n: Node)
       # replacement cache.
       asyncSpawn k.bondDiscard(evictionCandidate)
 
-proc doSleep(p: proc() {.gcsafe, raises: [Defect].}) {.async.} =
+proc doSleep(p: proc() {.gcsafe, raises: [].}) {.async.} =
   await sleepAsync(REQUEST_TIMEOUT)
   p()
 
@@ -402,13 +404,12 @@ proc waitPing(k: KademliaProtocol, n: Node): Future[bool] =
       k.pingFutures.del(n)
       fut.complete(false)
 
-proc waitNeighbours(k: KademliaProtocol, remote: Node):
-    Future[seq[Node]] {.raises: [Defect].} =
+proc waitNeighbours(k: KademliaProtocol, remote: Node): Future[seq[Node]] =
   doAssert(remote notin k.neighboursCallbacks)
   result = newFuture[seq[Node]]("waitNeighbours")
   let fut = result
   var neighbours = newSeqOfCap[Node](BUCKET_SIZE)
-  k.neighboursCallbacks[remote] = proc(n: seq[Node]) {.gcsafe, raises: [Defect].} =
+  k.neighboursCallbacks[remote] = proc(n: seq[Node]) {.gcsafe, raises: [].} =
     # This callback is expected to be called multiple times because nodes usually
     # split the neighbours replies into multiple packets, so we only complete the
     # future event.set() we've received enough neighbours.
@@ -607,7 +608,7 @@ proc recvPong*(k: KademliaProtocol, n: Node, token: seq[byte]) =
   k.updateLastPongReceived(n, getTime())
 
 proc recvPing*(k: KademliaProtocol, n: Node, msgHash: auto)
-    {.raises: [ValueError, Defect].} =
+    {.raises: [ValueError].} =
   trace "<<< ping from ", n
   k.wire.sendPong(n, msgHash)
 
@@ -654,7 +655,7 @@ proc recvNeighbours*(k: KademliaProtocol, remote: Node, neighbours: seq[Node]) =
     trace "Unexpected neighbours, probably came too late", remote
 
 proc recvFindNode*(k: KademliaProtocol, remote: Node, nodeId: NodeId)
-    {.raises: [ValueError, Defect].} =
+    {.raises: [ValueError].} =
   if remote notin k.routing:
     # FIXME: This is not correct; a node we've bonded before may have become unavailable
     # and thus removed from self.routing, but once it's back online we should accept

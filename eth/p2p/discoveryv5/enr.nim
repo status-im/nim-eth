@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,13 +8,15 @@
 ## ENR implementation according to specification in EIP-778:
 ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-778.md
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
-  std/[strutils, macros, algorithm, options],
-  nimcrypto/[keccak, utils], stew/shims/net, stew/[base64, results],
+  std/[strutils, macros, algorithm, options, net],
+  nimcrypto/[keccak, utils],
+  stew/[base64, results],
   chronicles,
-  ".."/../[rlp, keys]
+  ".."/../[rlp, keys],
+  ../../net/utils
 
 export options, results, keys
 
@@ -165,7 +167,7 @@ template toFieldPair*(key: string, value: auto): FieldPair =
 
 func addAddress(
     fields: var seq[FieldPair],
-    ip: Option[ValidIpAddress],
+    ip: Option[IpAddress],
     tcpPort, udpPort: Option[Port]) =
   ## Add address information in new fields. Incomplete address
   ## information is allowed (example: Port but not IP) as that information
@@ -190,7 +192,7 @@ func addAddress(
 func init*(
     T: type Record,
     seqNum: uint64, pk: PrivateKey,
-    ip: Option[ValidIpAddress],
+    ip: Option[IpAddress],
     tcpPort, udpPort: Option[Port],
     extraFields: openArray[FieldPair] = []):
     EnrResult[T] =
@@ -321,7 +323,7 @@ func update*(
 func update*(
     r: var Record,
     pk: PrivateKey,
-    ip: Option[ValidIpAddress],
+    ip: Option[IpAddress],
     tcpPort, udpPort: Option[Port] = none[Port](),
     extraFields: openArray[FieldPair] = []):
     EnrResult[void] =
@@ -394,7 +396,7 @@ func verifySignatureV4(
   else:
     false
 
-func verifySignature(r: Record): bool {.raises: [RlpError, Defect].} =
+func verifySignature(r: Record): bool {.raises: [RlpError].} =
   var rlp = rlpFromBytes(r.raw)
   let sz = rlp.listLen
   if not rlp.enterList:
@@ -420,7 +422,7 @@ func verifySignature(r: Record): bool {.raises: [RlpError, Defect].} =
     # No Identity Scheme provided
     false
 
-func fromBytesAux(r: var Record): bool {.raises: [RlpError, Defect].} =
+func fromBytesAux(r: var Record): bool {.raises: [RlpError].} =
   if r.raw.len > maxEnrSize:
     return false
 
@@ -546,7 +548,7 @@ func `==`*(a, b: Record): bool = a.raw == b.raw
 
 func read*(
     rlp: var Rlp, T: type Record):
-    T {.raises: [RlpError, ValueError, Defect].} =
+    T {.raises: [RlpError, ValueError].} =
   var res: T
   if not rlp.hasData() or not res.fromBytes(rlp.rawData):
     # TODO: This could also just be an invalid signature, would be cleaner to

@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2022 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
@@ -7,9 +7,8 @@
 {.used.}
 
 import
-  std/[options, sequtils],
+  std/[options, sequtils, net],
   unittest2,
-  stew/shims/net,
   ../../eth/p2p/discoveryv5/enr, ../../eth/[keys, rlp]
 
 let rng = newRng()
@@ -68,7 +67,7 @@ suite "ENR":
   test "Create from ENode address":
     let
       keypair = KeyPair.random(rng[])
-      ip = ValidIpAddress.init("10.20.30.40")
+      ip = parseIpAddress("10.20.30.40")
       port = some(Port(9000))
       enr = Record.init(
         100, keypair.seckey, some(ip), port, port,@[])[]
@@ -92,7 +91,7 @@ suite "ENR":
       keypair = KeyPair.random(rng[])
       port = none(Port)
       enr = Record.init(
-        100, keypair.seckey, none(ValidIpAddress), port, port)[]
+        100, keypair.seckey, none(IpAddress), port, port)[]
       typedEnr = get enr.toTypedRecord()
 
     check:
@@ -123,7 +122,7 @@ suite "ENR":
       pk = PrivateKey.fromHex(
         "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
       newField = toFieldPair("test", 123'u)
-    var r = Record.init(1, pk, none(ValidIpAddress), none(Port), none(Port))[]
+    var r = Record.init(1, pk, none(IpAddress), none(Port), none(Port))[]
 
     block: # Insert new k:v pair, update of seqNum should occur.
       let updated = r.update(pk, [newField])
@@ -190,11 +189,11 @@ suite "ENR":
     let
       pk = PrivateKey.fromHex(
         "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
-    var r = Record.init(1, pk, none(ValidIpAddress),
+    var r = Record.init(1, pk, none(IpAddress),
       some(Port(9000)), some(Port(9000)))[]
 
     block:
-      let updated = r.update(pk, none(ValidIpAddress),
+      let updated = r.update(pk, none(IpAddress),
         some(Port(9000)), some(Port(9000)))
       check updated.isOk()
       check:
@@ -204,7 +203,7 @@ suite "ENR":
         r.seqNum == 1
 
     block:
-      let updated = r.update(pk, none(ValidIpAddress),
+      let updated = r.update(pk, none(IpAddress),
         some(Port(9001)), some(Port(9002)))
       check updated.isOk()
       check:
@@ -214,7 +213,7 @@ suite "ENR":
         r.seqNum == 2
 
     block:
-      let updated = r.update(pk, some(ValidIpAddress.init("10.20.30.40")),
+      let updated = r.update(pk, some(parseIpAddress("10.20.30.40")),
         some(Port(9000)), some(Port(9000)))
       check updated.isOk()
 
@@ -233,7 +232,7 @@ suite "ENR":
         r.seqNum == 3
 
     block:
-      let updated = r.update(pk, some(ValidIpAddress.init("10.20.30.40")),
+      let updated = r.update(pk, some(parseIpAddress("10.20.30.40")),
         some(Port(9001)), some(Port(9001)))
       check updated.isOk()
 

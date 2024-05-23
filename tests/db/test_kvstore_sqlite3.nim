@@ -1,9 +1,8 @@
 {.used.}
 
 import
-  std/[os, options, sequtils],
+  std/[os, options],
   testutils/unittests,
-  stew/endians2,
   ../../eth/db/[kvstore, kvstore_sqlite3],
   ./test_kvstore
 
@@ -246,51 +245,3 @@ procSuite "SqStoreRef":
         check abc == row
         found = true
       check found
-
-  proc customSumFun(
-    a: openArray[byte],
-    b: openArray[byte]): Result[seq[byte], cstring] {.cdecl.} =
-    let num1 = uint32.fromBytesBE(a)
-    let num2 = uint32.fromBytesBE(b)
-    let sum = num1 + num2
-    let asBytes = sum.toBytesBE().toSeq()
-    return ok(asBytes)
-
-  test "Register custom scalar function":
-    let db = SqStoreRef.init("", "test", inMemory = true)[]
-
-    let registerResult = db.registerCustomScalarFunction("sum32", customSumFun)
-
-    check:
-      registerResult.isOk()
-
-    defer: db.close()
-
-    let kv = db.openKvStore().get()
-    defer: kv.close()
-
-    var sums: seq[seq[byte]] = @[]
-
-    # Use custom function, which interprets blobs as uint32 numbers and sums
-    # them together
-    let sumKeyVal = db.prepareStmt(
-      "SELECT sum32(key, value) FROM kvstore;",
-      NoParams, seq[byte]).get
-
-    let testUint = uint32(38)
-
-    let putRes = kv.put(testUint.toBytesBE(), testUint.toBytesBE())
-
-    check:
-      putRes.isOk()
-
-    discard sumKeyVal.exec do (res: seq[byte]):
-      sums.add(res)
-
-    check:
-      len(sums) == 1
-
-    let sum = uint32.fromBytesBE(sums[0])
-
-    check:
-      sum == testUint + testUint

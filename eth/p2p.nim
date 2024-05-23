@@ -1,14 +1,14 @@
 # nim-eth
-# Copyright (c) 2018-2022 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
-  std/[tables, algorithm, random, typetraits, strutils],
+  std/[tables, algorithm, random, typetraits, strutils, net],
   chronos, chronos/timer, chronicles,
   ./keys, ./p2p/private/p2p_types,
   ./p2p/[kademlia, discovery, enode, peer_pool, rlpx]
@@ -20,7 +20,7 @@ logScope:
   topics = "eth p2p"
 
 
-proc addCapability*(node: var EthereumNode,
+proc addCapability*(node: EthereumNode,
                     p: ProtocolInfo,
                     networkState: RootRef = nil) =
   doAssert node.connectionState == ConnectionState.None
@@ -35,10 +35,10 @@ proc addCapability*(node: var EthereumNode,
   if networkState.isNil.not:
     node.protocolStates[p.index] = networkState
 
-template addCapability*(node: var EthereumNode, Protocol: type) =
+template addCapability*(node: EthereumNode, Protocol: type) =
   addCapability(node, Protocol.protocolInfo)
 
-template addCapability*(node: var EthereumNode,
+template addCapability*(node: EthereumNode,
                         Protocol: type,
                         networkState: untyped) =
   mixin NetworkState
@@ -53,12 +53,12 @@ template addCapability*(node: var EthereumNode,
   addCapability(node, Protocol.protocolInfo,
     cast[RootRef](networkState))
 
-proc replaceNetworkState*(node: var EthereumNode,
+proc replaceNetworkState*(node: EthereumNode,
                           p: ProtocolInfo,
                           networkState: RootRef) =
   node.protocolStates[p.index] = networkState
 
-template replaceNetworkState*(node: var EthereumNode,
+template replaceNetworkState*(node: EthereumNode,
                               Protocol: type,
                               networkState: untyped) =
   mixin NetworkState
@@ -110,7 +110,7 @@ proc newEthereumNode*(
     result.protocolVersion = if useCompression: devp2pSnappyVersion
                              else: devp2pVersion
 
-  result.protocolStates.newSeq allProtocols.len
+  result.protocolStates.newSeq protocolCount()
 
   result.peerPool = newPeerPool(
     result, networkId, keys, nil, clientId, minPeers = minPeers)
@@ -118,23 +118,26 @@ proc newEthereumNode*(
   result.peerPool.discovery = result.discovery
 
   if addAllCapabilities:
-    for p in allProtocols:
-      result.addCapability(p)
+    for cap in protocols():
+      result.addCapability(cap)
 
 proc processIncoming(server: StreamServer,
-                     remote: StreamTransport): Future[void] {.async, gcsafe.} =
-  var node = getUserData[EthereumNode](server)
-  let peer = await node.rlpxAccept(remote)
-  if not peer.isNil:
-    trace "Connection established (incoming)", peer
-    if node.peerPool != nil:
-      node.peerPool.connectingNodes.excl(peer.remote)
-      node.peerPool.addPeer(peer)
+                     remote: StreamTransport): Future[void] {.async: (raises: []).} =
+  try:
+    var node = getUserData[EthereumNode](server)
+    let peer = await node.rlpxAccept(remote)
+    if not peer.isNil:
+      trace "Connection established (incoming)", peer
+      if node.peerPool != nil:
+        node.peerPool.connectingNodes.excl(peer.remote)
+        node.peerPool.addPeer(peer)
+  except CatchableError as exc:
+    error "processIncoming", msg=exc.msg
 
 proc listeningAddress*(node: EthereumNode): ENode =
   node.toENode()
 
-proc startListening*(node: EthereumNode) {.raises: [CatchableError, Defect].} =
+proc startListening*(node: EthereumNode) {.raises: [CatchableError].} =
   # TODO: allow binding to both IPv4 & IPv6
   let ta = initTAddress(node.bindIp, node.bindPort)
   if node.listeningServer == nil:
@@ -165,7 +168,7 @@ proc connectToNetwork*(
     trace "Waiting for more peers", peers = node.peerPool.connectedNodes.len
     await sleepAsync(500.milliseconds)
 
-proc stopListening*(node: EthereumNode) {.raises: [CatchableError, Defect].} =
+proc stopListening*(node: EthereumNode) {.raises: [CatchableError].} =
   node.listeningServer.stop()
 
 iterator peers*(node: EthereumNode): Peer =
@@ -237,3 +240,7 @@ func hasPeer*(node: EthereumNode, n: Node): bool =
 
 func hasPeer*(node: EthereumNode, n: Peer): bool =
   n in node.peerPool
+
+proc closeWait*(node: EthereumNode) {.async.} =
+  node.stopListening()
+  await node.listeningServer.closeWait()

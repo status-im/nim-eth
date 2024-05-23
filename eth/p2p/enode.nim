@@ -1,6 +1,6 @@
 #
 #                 Ethereum P2P
-#              (c) Copyright 2018-2020
+#              (c) Copyright 2018-2023
 #       Status Research & Development GmbH
 #
 #            Licensed under either of
@@ -8,7 +8,7 @@
 #            MIT license (LICENSE-MIT)
 #
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[uri, strutils, net],

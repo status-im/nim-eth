@@ -1,7 +1,7 @@
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
-  std/[options, sequtils],
+  std/[options, sequtils, macrocache],
   stew/shims/macros, chronos, faststreams/outputs
 
 type
@@ -76,7 +76,7 @@ type
 
     # Cached properties
     nameIdent*: NimNode
-    protocolInfoVar*: NimNode
+    protocolInfo*: NimNode
 
     # All messages
     messages*: seq[Message]
@@ -146,7 +146,9 @@ let
   PROTO                 {.compileTime.} = ident "PROTO"
   MSG                   {.compileTime.} = ident "MSG"
 
-template Opt(T): auto = newTree(nnkBracketExpr, Option, T)
+const
+  protocolCounter = CacheCounter"protocolCounter"
+
 template Fut(T): auto = newTree(nnkBracketExpr, Future, T)
 
 proc initFuture*[T](loc: var Future[T]) =
@@ -311,7 +313,7 @@ proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
     PeerStateType: verifyStateType peerState,
     NetworkStateType: verifyStateType networkState,
     nameIdent: ident(name),
-    protocolInfoVar: ident(name & "Protocol"),
+    protocolInfo: newCall(ident("protocolInfo"), ident(name)),
     outSendProcs: newStmtList(),
     outRecvProcs: newStmtList(),
     outProcRegistrations: newStmtList())
@@ -327,23 +329,23 @@ proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
   if not result.backend.afterProtocolInit.isNil:
     result.backend.afterProtocolInit(result)
 
-proc isFuture(t: NimNode): bool =
-  t.kind == nnkBracketExpr and eqIdent(t[0], "Future")
-
-
 proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
   ## This procs adds a set of common helpers available in all messages handlers
   ## (e.g. `perProtocolMsgId`, `peer.state`, etc).
 
   userHandlerProc.addPragma ident"gcsafe"
 
+  # we only take the pragma
+  let dummy = quote do:
+    proc dummy(): Future[void] {.async: (raises: [EthP2PError]).}
+
   if p.isRlpx:
-    userHandlerProc.addPragma ident"async"
+    userHandlerProc.addPragma dummy.pragma[0]
 
   var
     getState = ident"getState"
     getNetworkState = ident"getNetworkState"
-    protocolInfoVar = p.protocolInfoVar
+    protocolInfo = p.protocolInfo
     protocolNameIdent = p.nameIdent
     PeerType = p.backend.PeerType
     PeerStateType = p.PeerStateType
@@ -359,25 +361,35 @@ proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
     param[^2] = chooseFieldType(param[^2])
 
   prelude.add quote do:
-    type `currentProtocolSym` = `protocolNameIdent`
+    type `currentProtocolSym` {.used.} = `protocolNameIdent`
 
   if msgId >= 0 and p.isRlpx:
     prelude.add quote do:
-      const `perProtocolMsgIdVar` = `msgId`
+      const `perProtocolMsgIdVar` {.used.} = `msgId`
 
   # Define local accessors for the peer and the network protocol states
   # inside each user message handler proc (e.g. peer.state.foo = bar)
   if PeerStateType != nil:
     prelude.add quote do:
-      template state(`peerVar`: `PeerType`): `PeerStateType` =
-        cast[`PeerStateType`](`getState`(`peerVar`, `protocolInfoVar`))
+      template state(`peerVar`: `PeerType`): `PeerStateType` {.used.} =
+        `PeerStateType`(`getState`(`peerVar`, `protocolInfo`))
 
   if NetworkStateType != nil:
     prelude.add quote do:
-      template networkState(`peerVar`: `PeerType`): `NetworkStateType` =
-        cast[`NetworkStateType`](`getNetworkState`(`peerVar`.network, `protocolInfoVar`))
+      template networkState(`peerVar`: `PeerType`): `NetworkStateType` {.used.} =
+        `NetworkStateType`(`getNetworkState`(`peerVar`.network, `protocolInfo`))
 
-proc addPreludeDefs*(userHandlerProc: NimNode, definitions: NimNode) =
+proc addExceptionHandler(userHandlerProc: NimNode) =
+  let bodyTemp = userHandlerProc.body
+  userHandlerProc.body = quote do:
+    try:
+      `bodyTemp`
+    except CancelledError as exc:
+      raise newException(EthP2PError, exc.msg)
+    except CatchableError as exc:
+      raise newException(EthP2PError, exc.msg)
+
+proc addPreludeDefs(userHandlerProc: NimNode, definitions: NimNode) =
   userHandlerProc.body[0].add definitions
 
 proc eventHandlerToProc(p: P2PProtocol, doBlock: NimNode, handlerName: string): NimNode =
@@ -387,12 +399,12 @@ proc eventHandlerToProc(p: P2PProtocol, doBlock: NimNode, handlerName: string): 
   doBlock.copyChildrenTo(result)
   result.name = ident(p.name & handlerName) # genSym(nskProc, p.name & handlerName)
   p.augmentUserHandler result
+  result.addExceptionHandler()
 
 proc addTimeoutParam(procDef: NimNode, defaultValue: int64) =
   var
     Duration = bindSym"Duration"
     milliseconds = bindSym"milliseconds"
-    lastParam = procDef.params[^1]
 
   procDef.params.add newTree(nnkIdentDefs,
                              timeoutVar,
@@ -473,7 +485,8 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
       if protocol.useRequestIds:
         initResponderCall.add reqIdVar
 
-      userHandler.addPreludeDefs newVarStmt(responseVar, initResponderCall)
+      userHandler.addPreludeDefs quote do:
+        var `responseVar` {.used.} = `initResponderCall`
 
       result.initResponderCall = initResponderCall
 
@@ -482,6 +495,7 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
     of msgResponse: userHandler.applyDecorator protocol.incomingResponseDecorator
     else: discard
 
+    userHandler.addExceptionHandler()
     result.userHandler = userHandler
     protocol.outRecvProcs.add result.userHandler
 
@@ -693,13 +707,11 @@ proc useStandardBody*(sendProc: SendProc,
     postSerialization = if postSerializationStep.isNil: newStmtList()
                         else: postSerializationStep(outputStream)
 
-    appendParams = newStmtList()
-
     tracing = when not tracingEnabled:
                 newStmtList()
               else:
                 logSentMsgFields(recipient,
-                                 msg.protocol.protocolInfoVar,
+                                 msg.protocol.protocolInfo,
                                  $msg.ident,
                                  sendProc.msgParams)
 
@@ -801,12 +813,17 @@ proc createHandshakeTemplate*(msg: Message,
 
   let peerVar = genSym(nskLet ,"peer")
   handshakeExchanger.setBody quote do:
-    let `peerVar` = `peerValue`
-    let sendingFuture = `forwardCall`
-    `handshakeImpl`(`peerVar`,
-                    sendingFuture,
-                    `nextMsg`(`peerVar`, `msgRecName`),
-                    `timeoutVar`)
+    try:
+      let `peerVar` = `peerValue`
+      let sendingFuture = `forwardCall`
+      `handshakeImpl`(`peerVar`,
+                      sendingFuture,
+                      `nextMsg`(`peerVar`, `msgRecName`),
+                      `timeoutVar`)
+    except PeerDisconnected as exc:
+      raise newException(EthP2PError, exc.msg)
+    except P2PInternalError as exc:
+      raise newException(EthP2PError, exc.msg)
 
   return handshakeExchanger
 
@@ -895,15 +912,23 @@ proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode) =
 
 proc genTypeSection*(p: P2PProtocol): NimNode =
   var
+    protocolIdx = protocolCounter.value
     protocolName = p.nameIdent
     peerState = p.PeerStateType
     networkState= p.NetworkStateType
 
+  protocolCounter.inc
   result = newStmtList()
   result.add quote do:
     # Create a type acting as a pseudo-object representing the protocol
     # (e.g. p2p)
     type `protocolName`* = object
+
+    # The protocol run-time index is available as a pseudo-field
+    # (e.g. `p2p.index`)
+    template index*(`PROTO`: type `protocolName`): auto = `protocolIdx`
+    template protocolInfo*(`PROTO`: type `protocolName`): auto =
+      getProtocol(`protocolIdx`)
 
   if peerState != nil:
     result.add quote do:
@@ -949,33 +974,29 @@ proc genCode*(p: P2PProtocol): NimNode =
   result.add p.genTypeSection()
 
   let
-    protocolInfoVar = p.protocolInfoVar
-    protocolInfoVarObj = ident($protocolInfoVar & "Obj")
-    protocolName = p.nameIdent
     protocolInit = p.backend.implementProtocolInit(p)
-
-  result.add quote do:
-    # One global variable per protocol holds the protocol run-time data
-    var `protocolInfoVarObj` = `protocolInit`
-    var `protocolInfoVar` = addr `protocolInfoVarObj`
-
-    # The protocol run-time data is available as a pseudo-field
-    # (e.g. `p2p.protocolInfo`)
-    template protocolInfo*(`PROTO`: type `protocolName`): auto = `protocolInfoVar`
+    protocolReg  = ident($p.nameIdent & "Registration")
+    regBody      = newStmtList()
 
   result.add p.outSendProcs,
-             p.outRecvProcs,
-             p.outProcRegistrations
+             p.outRecvProcs
 
   if p.onPeerConnected != nil: result.add p.onPeerConnected
   if p.onPeerDisconnected != nil: result.add p.onPeerDisconnected
 
-  result.add newCall(p.backend.setEventHandlers,
-                     protocolInfoVar,
-                     nameOrNil p.onPeerConnected,
-                     nameOrNil p.onPeerDisconnected)
+  regBody.add newCall(p.backend.setEventHandlers,
+                      protocolVar,
+                      nameOrNil p.onPeerConnected,
+                      nameOrNil p.onPeerDisconnected)
 
-  result.add newCall(p.backend.registerProtocol, protocolInfoVar)
+  regBody.add p.outProcRegistrations
+  regBody.add newCall(p.backend.registerProtocol, protocolVar)
+
+  result.add quote do:
+    proc `protocolReg`() {.raises: [RlpError].} =
+      let `protocolVar` = `protocolInit`
+      `regBody`
+    `protocolReg`()
 
 macro emitForSingleBackend(
     name: static[string],
@@ -1006,11 +1027,13 @@ macro emitForSingleBackend(
     peerState.getType, networkState.getType)
 
   result = p.genCode()
-  try:
-    result.storeMacroResult true
-  except IOError:
-    # IO error so the generated nim code might not be stored, don't sweat it.
-    discard
+
+  when defined(p2pProtocolDebug):
+    try:
+      result.storeMacroResult true
+    except IOError:
+      # IO error so the generated nim code might not be stored, don't sweat it.
+      discard
 
 macro emitForAllBackends(backendSyms: typed, options: untyped, body: untyped): untyped =
   let name = $(options[0])

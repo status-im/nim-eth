@@ -1,4 +1,5 @@
-import std/macros
+import
+  stew/shims/macros
 
 template rlpIgnore* {.pragma.}
   ## Specifies that a certain field should be ignored for the purposes
@@ -10,16 +11,17 @@ template rlpCustomSerialization* {.pragma.}
   ## a reference to the object holding the field.
 
 template enumerateRlpFields*[T](x: T, op: untyped) =
-  for f in fields(x):
-    when not hasCustomPragma(f, rlpIgnore):
-      op(f)
+  type RecordType {.used.} = type x
+  for fieldName, field in fieldPairs(x):
+    when not hasCustomPragmaFixed(RecordType, fieldName, rlpIgnore):
+      op(RecordType, fieldName, field)
 
 proc rlpFieldsCount*(T: type): int =
   mixin enumerateRlpFields
 
   proc helper: int =
     var dummy: T
-    template countFields(x) = inc result
+    template countFields(RT, n, x) {.used.} = inc result
     enumerateRlpFields(dummy, countFields)
 
   const res = helper()
@@ -32,7 +34,8 @@ macro rlpFields*(T: typedesc, fields: varargs[untyped]): untyped =
     op = genSym(nskParam, "op")
 
   for field in fields:
-    body.add quote do: `op`(`ins`.`field`)
+    let fieldName = $field
+    body.add quote do: `op`(`T`, `fieldName`, `ins`.`field`)
 
   result = quote do:
     template enumerateRlpFields*(`ins`: `T`, `op`: untyped) {.inject.} =

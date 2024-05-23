@@ -1,9 +1,11 @@
 # nim-eth
-# Copyright (c) 2018-2022 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.push raises: [].}
 
 import
   std/[deques, tables],
@@ -74,31 +76,37 @@ type
     observers*: Table[int, PeerObserver]
 
   PeerObserver* = object
-    onPeerConnected*: proc(p: Peer) {.gcsafe, raises: [Defect].}
-    onPeerDisconnected*: proc(p: Peer) {.gcsafe, raises: [Defect].}
+    onPeerConnected*: proc(p: Peer) {.gcsafe, raises: [].}
+    onPeerDisconnected*: proc(p: Peer) {.gcsafe, raises: [].}
     protocol*: ProtocolInfo
 
   Capability* = object
     name*: string
     version*: int
 
-  UnsupportedProtocol* = object of Defect
+  EthP2PError* = object of CatchableError
+
+  UnsupportedProtocol* = object of EthP2PError
     # This is raised when you attempt to send a message from a particular
     # protocol to a peer that doesn't support the protocol.
 
-  MalformedMessageError* = object of CatchableError
-  UnsupportedMessageError* = object of CatchableError
+  MalformedMessageError* = object of EthP2PError
+  UnsupportedMessageError* = object of EthP2PError
 
-  PeerDisconnected* = object of CatchableError
+  PeerDisconnected* = object of EthP2PError
     reason*: DisconnectionReason
 
-  UselessPeerError* = object of CatchableError
+  UselessPeerError* = object of EthP2PError
+
+  P2PInternalError* = object of EthP2PError
 
   ##
   ## Quasy-private types. Use at your own risk.
   ##
+  ProtocolManager* = ref object
+    protocols*: seq[ProtocolInfo]
 
-  ProtocolInfoObj* = object
+  ProtocolInfo* = ref object
     name*: string
     version*: int
     messages*: seq[MessageInfo]
@@ -111,9 +119,7 @@ type
     handshake*: HandshakeStep
     disconnectHandler*: DisconnectionHandler
 
-  ProtocolInfo* = ptr ProtocolInfoObj
-
-  MessageInfo* = object
+  MessageInfo* = ref object
     id*: int
     name*: string
 
@@ -137,7 +143,7 @@ type
     # `messages` holds a mapping from valid message IDs to their handler procs.
     #
     protocolOffsets*: seq[int]
-    messages*: seq[ptr MessageInfo]
+    messages*: seq[MessageInfo]
     activeProtocols*: seq[ProtocolInfo]
 
   ##
@@ -151,20 +157,30 @@ type
 
   # Private types:
   MessageHandlerDecorator* = proc(msgId: int, n: NimNode): NimNode
+
   ThunkProc* = proc(x: Peer, msgId: int, data: Rlp): Future[void]
-    {.gcsafe, raises: [RlpError, Defect].}
+    {.gcsafe, async: (raises: [RlpError, EthP2PError]).}
+
   MessageContentPrinter* = proc(msg: pointer): string
-    {.gcsafe, raises: [Defect].}
+    {.gcsafe, raises: [].}
+
   RequestResolver* = proc(msg: pointer, future: FutureBase)
-    {.gcsafe, raises: [Defect].}
+    {.gcsafe, raises: [].}
+
   NextMsgResolver* = proc(msgData: Rlp, future: FutureBase)
-    {.gcsafe, raises: [RlpError, Defect].}
-  PeerStateInitializer* = proc(peer: Peer): RootRef {.gcsafe, raises: [Defect].}
+    {.gcsafe, raises: [RlpError].}
+
+  PeerStateInitializer* = proc(peer: Peer): RootRef
+    {.gcsafe, raises: [].}
+
   NetworkStateInitializer* = proc(network: EthereumNode): RootRef
-    {.gcsafe, raises: [Defect].}
-  HandshakeStep* = proc(peer: Peer): Future[void] {.gcsafe, raises: [Defect].}
+    {.gcsafe, raises: [].}
+
+  HandshakeStep* = proc(peer: Peer): Future[void]
+    {.gcsafe, async: (raises: [EthP2PError]).}
+
   DisconnectionHandler* = proc(peer: Peer, reason: DisconnectionReason):
-    Future[void] {.gcsafe, raises: [Defect].}
+    Future[void] {.gcsafe, async: (raises: [EthP2PError]).}
 
   ConnectionState* = enum
     None,

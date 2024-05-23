@@ -1,6 +1,5 @@
 import
-  std/[os, strutils, options],
-  stew/shims/net,
+  std/[os, strutils, options, net],
   ../../../eth/keys, ../../../eth/p2p/discoveryv5/enr,
   ../fuzzing_helpers
 
@@ -11,7 +10,7 @@ proc generate() =
   let
     rng = newRng()
     privKey = PrivateKey.random(rng[])
-    ip = some(ValidIpAddress.init("127.0.0.1"))
+    ip = some(parseIpAddress("127.0.0.1"))
     port = some(Port(20301))
 
   block:

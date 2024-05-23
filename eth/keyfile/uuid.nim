@@ -16,11 +16,11 @@
 ## - ``FreeBSD``, ``OpenBSD``, ``NetBSD``,
 ##   ``DragonflyBSD`` - using `uuid_create()`.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import stew/[byteutils, endians2, results]
 
-from nimcrypto import stripSpaces
+from nimcrypto/utils import stripSpaces
 
 export results
 

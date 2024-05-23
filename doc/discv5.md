@@ -88,13 +88,13 @@ node, by providing its ENR.
 # Make sure you have the latest modules, do NOT trust nimble on this.
 nimble install
 # Build dcli
-nim c -d:chronicles_log_level:trace -d:release --threads:on eth/p2p/discoveryv5/dcli
+nim c -d:chronicles_log_level:trace -d:release --threads:on ./tools/dcli
 # See all options
-./eth/p2p/discoveryv5/dcli --help
+./tools/dcli --help
 # Ping another node
-./eth/p2p/discoveryv5/dcli ping enr:<base64 encoding of ENR>
+./tools/dcli ping enr:<base64 encoding of ENR>
 # Run discovery node
-./eth/p2p/discoveryv5/dcli --log-level:debug --bootnode:enr:<base64 encoding of ENR>
+./tools/dcli --log-level:debug --bootnode:enr:<base64 encoding of ENR>
 ```
 
 ### Metrics
@@ -102,7 +102,7 @@ To run dcli with metrics enabled provide the `metrics` flag:
 
 ```sh
 # Run dcli with metrics
-./eth/p2p/discoveryv5/dcli --metrics --bootnode:enr:<base64 encoding of ENR>
+./tools/dcli --metrics --bootnode:enr:<base64 encoding of ENR>
 ```
 
 You can now see the metrics at http://localhost:8008/metrics. Or use e.g.

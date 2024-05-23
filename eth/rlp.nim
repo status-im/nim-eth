@@ -3,8 +3,8 @@
 ## https://ethereum.github.io/yellowpaper/paper.pdf
 
 import
-  std/[macros, strutils],
-  stew/byteutils,
+  std/[strutils, options],
+  stew/[byteutils, shims/macros, results],
   ./rlp/[writer, object_serialization],
   ./rlp/priv/defs
 
@@ -52,6 +52,9 @@ proc currentElemEnd*(self: Rlp): int {.gcsafe.}
 
 template rawData*(self: Rlp): openArray[byte] =
   self.bytes.toOpenArray(self.position, self.currentElemEnd - 1)
+
+template remainingBytes*(self: Rlp): openArray[byte] =
+  self.bytes.toOpenArray(self.position, self.bytes.len - 1)
 
 proc isBlob*(self: Rlp): bool =
   self.hasData() and self.bytes[self.position] < LIST_START_MARKER
@@ -117,7 +120,7 @@ proc payloadBytesCount(self: Rlp): int =
         nonCanonicalNumberError()
     return
 
-  template readInt(startMarker, lenPrefixMarker) =
+  template readInt(output, startMarker, lenPrefixMarker: untyped) =
     var
       lengthBytes = int(marker - lenPrefixMarker)
       remainingBytes = self.bytes.len - self.position
@@ -128,24 +131,24 @@ proc payloadBytesCount(self: Rlp): int =
     if remainingBytes > 1 and self.bytes[self.position + 1] == 0:
       raise newException(MalformedRlpError, "Number encoded with a leading zero")
 
-    # check if the size is not bigger than the max that result can hold
-    if lengthBytes > sizeof(result) or
-      (lengthBytes == sizeof(result) and self.bytes[self.position + 1].int > 127):
+    # check if the size is not bigger than the max that output can hold
+    if lengthBytes > sizeof(output) or
+        (lengthBytes == sizeof(output) and self.bytes[self.position + 1].int > 127):
       raise newException(UnsupportedRlpError, "Message too large to fit in memory")
 
     for i in 1 .. lengthBytes:
-      result = (result shl 8) or int(self.bytes[self.position + i])
+      output = (output shl 8) or int(self.bytes[self.position + i])
 
     # must be greater than the short-list size list
-    if result < THRESHOLD_LIST_LEN:
+    if output < THRESHOLD_LIST_LEN:
       nonCanonicalNumberError()
 
   if marker < LIST_START_MARKER:
-    readInt(BLOB_START_MARKER, LEN_PREFIXED_BLOB_MARKER)
+    result.readInt(BLOB_START_MARKER, LEN_PREFIXED_BLOB_MARKER)
   elif marker <= LEN_PREFIXED_LIST_MARKER:
     result = int(marker - LIST_START_MARKER)
   else:
-    readInt(LIST_START_MARKER, LEN_PREFIXED_LIST_MARKER)
+    result.readInt(LIST_START_MARKER, LEN_PREFIXED_LIST_MARKER)
 
   readAheadCheck(result)
 
@@ -193,18 +196,27 @@ proc toInt*(self: Rlp, IntType: type): IntType =
   for i in payloadStart ..< (payloadStart + payloadSize):
     result = (result shl 8) or OutputType(self.bytes[self.position + i])
 
+template getPtr(x: untyped): auto =
+  when (NimMajor, NimMinor) <= (1,6):
+    unsafeAddr(x)
+  else:
+    addr(x)
+
 proc toString*(self: Rlp): string =
   if not self.isBlob():
     raise newException(RlpTypeMismatch, "String expected, but the source RLP is not a blob")
 
-  let
-    payloadOffset = self.payloadOffset()
-    payloadLen = self.payloadBytesCount()
+  let payloadLen = self.payloadBytesCount()
 
-  result = newString(payloadLen)
-  for i in 0 ..< payloadLen:
-    # XXX: switch to copyMem here
-    result[i] = char(self.bytes[self.position + payloadOffset + i])
+  if payloadLen > 0:
+    let
+      payloadOffset = self.payloadOffset()
+      begin = self.position + payloadOffset
+
+    result = newString(payloadLen)
+    copyMem(result[0].getPtr,
+      self.bytes[begin].getPtr,
+      payloadLen)
 
 proc toBytes*(self: Rlp): seq[byte] =
   if not self.isBlob():
@@ -314,7 +326,7 @@ proc readImpl(rlp: var Rlp, T: type float64): T =
   # https://github.com/gopherjs/gopherjs/blob/master/compiler/natives/src/math/math.go
   let uint64bits = rlp.toInt(uint64)
   var uint32parts = [uint32(uint64bits), uint32(uint64bits shr 32)]
-  return cast[ptr float64](unsafeAddr uint32parts)[]
+  copyMem(addr result, unsafeAddr uint32parts, sizeof(result))
 
 proc readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
   mixin read
@@ -365,6 +377,7 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
               wrappedInList = wrapObjsInList): T =
   mixin enumerateRlpFields, read
 
+  var payloadEnd = rlp.bytes.len
   if wrappedInList:
     if not rlp.isList:
       raise newException(RlpTypeMismatch,
@@ -373,15 +386,39 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
       payloadOffset = rlp.payloadOffset()
 
     # there's an exception-raising side effect in there *sigh*
-    discard rlp.payloadBytesCount()
+    payloadEnd = rlp.position + payloadOffset + rlp.payloadBytesCount()
 
     rlp.position += payloadOffset
 
-  template op(field) =
-    when hasCustomPragma(field, rlpCustomSerialization):
-      field = rlp.read(result, type(field))
+  template getUnderlyingType[T](_: Option[T]): untyped = T
+  template getUnderlyingType[T](_: Opt[T]): untyped = T
+
+  template op(RecordType, fieldName, field) {.used.} =
+    type FieldType {.used.} = type field
+    when hasCustomPragmaFixed(RecordType, fieldName, rlpCustomSerialization):
+      field = rlp.read(result, FieldType)
+    elif field is Option:
+      # this works for optional fields at the end of an object/tuple
+      # if the optional field is followed by a mandatory field,
+      # custom serialization for a field or for the parent object
+      # will be better
+      type UT = getUnderlyingType(field)
+      if rlp.position < payloadEnd:
+        field = some(rlp.read(UT))
+      else:
+        field = none(UT)
+    elif field is Opt:
+      # this works for optional fields at the end of an object/tuple
+      # if the optional field is followed by a mandatory field,
+      # custom serialization for a field or for the parent object
+      # will be better
+      type UT = getUnderlyingType(field)
+      if rlp.position < payloadEnd:
+        field = Opt.some(rlp.read(UT))
+      else:
+        field = Opt.none(UT)
     else:
-      field = rlp.read(type(field))
+      field = rlp.read(FieldType)
 
   enumerateRlpFields(result, op)
 
@@ -389,14 +426,15 @@ proc toNodes*(self: var Rlp): RlpNode =
   requireData()
 
   if self.isList():
-    result.kind = rlpList
-    newSeq result.elems, 0
+    result = RlpNode(kind: rlpList)
     for e in self:
       result.elems.add e.toNodes
   else:
     doAssert self.isBlob()
-    result.kind = rlpBlob
-    result.bytes = self.toBytes()
+    result = RlpNode(
+      kind: rlpBlob,
+      bytes: self.toBytes(),
+    )
     self.position = self.currentElemEnd()
 
 # We define a single `read` template with a pretty low specificity
@@ -435,6 +473,25 @@ proc isPrintable(s: string): bool =
 
   return true
 
+proc renderBlob(self: var Rlp, hexOutput: bool, output: var string) =
+  let str = self.toString
+  if str.isPrintable:
+    output.add '"'
+    output.add str
+    output.add '"'
+  else:
+    output.add "blob(" & $str.len & ") ["
+    for c in str:
+      if hexOutput:
+        output.add toHex(int(c), 2)
+      else:
+        output.add $ord(c)
+        output.add ","
+    if hexOutput:
+      output.add ']'
+    else:
+      output[^1] = ']'
+
 proc inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) =
   if not self.hasData():
     return
@@ -449,24 +506,7 @@ proc inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) 
     output.add "byte "
     output.add $self.bytes[self.position]
   elif self.isBlob:
-    let str = self.toString
-    if str.isPrintable:
-      output.add '"'
-      output.add str
-      output.add '"'
-    else:
-      output.add "blob(" & $str.len & ") ["
-      for c in str:
-        if hexOutput:
-          output.add toHex(int(c), 2)
-        else:
-          output.add $ord(c)
-          output.add ","
-
-      if hexOutput:
-        output.add ']'
-      else:
-        output[^1] = ']'
+    self.renderBlob(hexOutput, output)
   else:
     output.add "{\n"
     for subitem in self:

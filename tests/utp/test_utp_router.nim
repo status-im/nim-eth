@@ -25,7 +25,7 @@ proc hash*(x: UtpSocketKey[int]): Hash =
 type
   TestError* = object of CatchableError
 
-procSuite "Utp router unit tests":
+procSuite "uTP router unit":
   let rng = newRng()
   let testSender = 1
   let testSender2 = 2
@@ -37,16 +37,17 @@ procSuite "Utp router unit tests":
         serverSockets.addLast(client)
     )
 
-  proc testSend(to: int, bytes: seq[byte]): Future[void] =
-    let f = newFuture[void]()
-    f.complete()
-    f
+  proc testSend(to: int, bytes: seq[byte]) =
+    discard
 
   proc initTestSnd(q: AsyncQueue[(Packet, int)]): SendCallback[int]=
-    return  (
-      proc (to: int, bytes: seq[byte]): Future[void] =
+    return (
+      proc (to: int, bytes: seq[byte]) {.raises: [], gcsafe.} =
         let p = decodePacket(bytes).get()
-        q.addLast((p, to))
+        try:
+          q.addLastNoWait((p, to))
+        except AsyncQueueFullError:
+          raiseAssert "Should not occur as unlimited queue"
     )
 
   template connectOutgoing(
@@ -56,7 +57,7 @@ procSuite "Utp router unit tests":
     initialRemoteSeq: uint16): (UtpSocket[int], Packet)=
     let connectFuture = router.connectTo(remote)
 
-    let (initialPacket, sender) = await pq.get()
+    let (initialPacket, _) = await pq.get()
 
     check:
       initialPacket.header.pType == ST_SYN
@@ -270,7 +271,7 @@ procSuite "Utp router unit tests":
     let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(), rng)
     router.sendCb = initTestSnd(pq)
 
-    let (outgoingSocket, initialSyn) = router.connectOutgoing(testSender2, pq, 30'u16)
+    let (outgoingSocket, _) = router.connectOutgoing(testSender2, pq, 30'u16)
 
     check:
       outgoingSocket.isConnected()
@@ -286,7 +287,7 @@ procSuite "Utp router unit tests":
     let requestedConnectionId = 1'u16
     let connectFuture = router.connectTo(testSender2, requestedConnectionId)
 
-    let (initialPacket, sender) = await pq.get()
+    let (initialPacket, _) = await pq.get()
 
     check:
       initialPacket.header.pType == ST_SYN
@@ -324,7 +325,7 @@ procSuite "Utp router unit tests":
 
     let connectFuture = router.connectTo(testSender2)
 
-    let (initialPacket, sender) = await pq.get()
+    let (initialPacket, _) = await pq.get()
 
     check:
       initialPacket.header.pType == ST_SYN
@@ -346,7 +347,7 @@ procSuite "Utp router unit tests":
 
     let connectFuture = router.connectTo(testSender2)
 
-    let (initialPacket, sender) = await pq.get()
+    let (initialPacket, _) = await pq.get()
 
     check:
       initialPacket.header.pType == ST_SYN
@@ -359,15 +360,14 @@ procSuite "Utp router unit tests":
     check:
       router.len() == 0
 
-  asyncTest "Router should clear all resources and handle error while sending syn packet":
+  asyncTest "Router should clear all resources and handle error when sending syn packet fails":
     let q = newAsyncQueue[UtpSocket[int]]()
-    let pq = newAsyncQueue[(Packet, int)]()
     let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(milliseconds(500)), rng)
     router.sendCb =
-      proc (to: int, data: seq[byte]): Future[void] =
-        let f = newFuture[void]()
-        f.fail(newException(TestError, "failed"))
-        return f
+      proc (to: int, data: seq[byte]) =
+        # Can just discard here not to send anything as the send callback does
+        # not forward errors anyhow
+        discard
 
     let connectResult = await router.connectTo(testSender2)
 
@@ -385,7 +385,7 @@ procSuite "Utp router unit tests":
     let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(), rng)
     router.sendCb = initTestSnd(pq)
 
-    let (outgoingSocket, initialSyn) = router.connectOutgoing(testSender2, pq, 30'u16)
+    let (outgoingSocket, _) = router.connectOutgoing(testSender2, pq, 30'u16)
 
     check:
       outgoingSocket.isConnected()
@@ -441,7 +441,7 @@ procSuite "Utp router unit tests":
     let router = UtpRouter[int].new(registerIncomingSocketCallback(q), SocketConfig.init(), rng)
     router.sendCb = initTestSnd(pq)
 
-    let (outgoingSocket, initialSyn) = router.connectOutgoing(testSender2, pq, 30'u16)
+    let (_, initialSyn) = router.connectOutgoing(testSender2, pq, 30'u16)
 
     check:
       router.len() == 1

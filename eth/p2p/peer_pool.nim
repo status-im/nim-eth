@@ -1,5 +1,5 @@
 # nim-eth
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 # PeerPool attempts to keep connections to at least min_peers
 # on the given network.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[os, tables, times, random, sequtils, options],

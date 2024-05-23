@@ -1,9 +1,16 @@
+# nim-eth
+# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 {.used.}
 
 import
-  std/[options, sequtils, tables],
+  std/[options, sequtils, tables, net],
   unittest2,
-  stint, stew/byteutils, stew/shims/net,
+  stint, stew/byteutils,
   ../../eth/keys,
   ../../eth/p2p/discoveryv5/[messages_encoding, encoding, enr, node, sessions],
   ../stubloglevel
@@ -258,12 +265,12 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
       privKeyB = PrivateKey.fromHex(nodeBKey)[] # receive -> decode
 
       enrRecA = enr.Record.init(1, privKeyA,
-        some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+        some(parseIpAddress("127.0.0.1")), some(Port(9000)),
         some(Port(9000))).expect("Properly initialized private key")
       nodeA = newNode(enrRecA).expect("Properly initialized record")
 
       enrRecB = enr.Record.init(1, privKeyB,
-        some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+        some(parseIpAddress("127.0.0.1")), some(Port(9000)),
         some(Port(9000))).expect("Properly initialized private key")
       nodeB = newNode(enrRecB).expect("Properly initialized record")
 
@@ -479,12 +486,12 @@ suite "Discovery v5.1 Additional Encode/Decode":
       privKeyB = PrivateKey.random(rng[]) # receiver -> decode
 
       enrRecA = enr.Record.init(1, privKeyA,
-        some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+        some(parseIpAddress("127.0.0.1")), some(Port(9000)),
         some(Port(9000))).expect("Properly initialized private key")
       nodeA = newNode(enrRecA).expect("Properly initialized record")
 
       enrRecB = enr.Record.init(1, privKeyB,
-        some(ValidIpAddress.init("127.0.0.1")), some(Port(9000)),
+        some(parseIpAddress("127.0.0.1")), some(Port(9000)),
         some(Port(9000))).expect("Properly initialized private key")
       nodeB = newNode(enrRecB).expect("Properly initialized record")
 

@@ -1,4 +1,12 @@
-{.push raises: [Defect].}
+# nim-eth
+# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+
+{.push raises: [].}
 
 import
   std/[options, tables, hashes, sets],
@@ -15,17 +23,17 @@ type
 
   # XXX: poor's man vtref types
   PutProc = proc (db: RootRef, key, val: openArray[byte]) {.
-    gcsafe, raises: [Defect].}
+    gcsafe, raises: [].}
 
   GetProc = proc (db: RootRef, key: openArray[byte]): seq[byte] {.
-    gcsafe, raises: [Defect].}
+    gcsafe, raises: [].}
     ## The result will be empty seq if not found
 
   DelProc = proc (db: RootRef, key: openArray[byte]): bool {.
-    gcsafe, raises: [Defect].}
+    gcsafe, raises: [].}
 
   ContainsProc = proc (db: RootRef, key: openArray[byte]): bool {.
-    gcsafe, raises: [Defect].}
+    gcsafe, raises: [].}
 
   TrieDatabaseRef* = ref object
     obj: RootRef

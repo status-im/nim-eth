@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -9,7 +9,7 @@
 ## https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire.md#protocol-messages
 ##
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[hashes, net],

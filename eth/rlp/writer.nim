@@ -1,5 +1,6 @@
 import
-  std/macros,
+  std/options,
+  stew/[shims/macros, results],
   ./object_serialization, ./priv/defs
 
 type
@@ -7,23 +8,7 @@ type
     pendingLists: seq[tuple[remainingItems, outBytes: int]]
     output: seq[byte]
 
-  IntLike* = concept x, y
-    type T = type(x)
-
-    # arithmetic ops
-    x + y is T
-    x * y is T
-    x - y is T
-    x div y is T
-    x mod y is T
-
-    # some int compatibility required for big endian encoding:
-    x shr int is T
-    x shl int is T
-    x and 0xff is int
-    x < 128 is bool
-
-  Integer* = SomeInteger # or IntLike
+  Integer* = SomeInteger
 
 const
   wrapObjsInList* = true
@@ -156,8 +141,9 @@ proc appendFloat(self: var RlpWriter, data: float64) =
   # This is not covered in the RLP spec, but Geth uses Go's
   # `math.Float64bits`, which is defined here:
   # https://github.com/gopherjs/gopherjs/blob/master/compiler/natives/src/math/math.go
-  let uintWords = cast[ptr UncheckedArray[uint32]](unsafeAddr data)
-  let uint64bits = (uint64(uintWords[1]) shl 32) or uint64(uintWords[0])
+  var uint32Words: array[2, uint32]
+  copyMem(addr uint32Words[0], unsafeAddr data, sizeof(uint32Words))
+  let uint64bits = (uint64(uint32Words[1]) shl 32) or uint64(uint32Words[0])
   self.appendInt(uint64bits)
 
 template appendImpl(self: var RlpWriter, i: Integer) =
@@ -181,22 +167,142 @@ proc appendImpl[T](self: var RlpWriter, listOrBlob: openArray[T]) =
     for i in 0 ..< listOrBlob.len:
       self.append listOrBlob[i]
 
+proc hasOptionalFields(T: type): bool =
+  mixin enumerateRlpFields
+
+  proc helper: bool =
+    var dummy: T
+    result = false
+    template detectOptionalField(RT, n, x) {.used.} =
+      when x is Option or x is Opt:
+        return true
+    enumerateRlpFields(dummy, detectOptionalField)
+
+  const res = helper()
+  return res
+
+proc optionalFieldsNum(x: openArray[bool]): int =
+  # count optional fields backward
+  for i in countdown(x.len-1, 0):
+    if x[i]: inc result
+    else: break
+
+proc checkedOptionalFields(T: type, FC: static[int]): int =
+  mixin enumerateRlpFields
+
+  var
+    i = 0
+    dummy: T
+    res: array[FC, bool]
+
+  template op(RT, fN, f) =
+    res[i] = f is Option or f is Opt
+    inc i
+
+  enumerateRlpFields(dummy, op)
+
+  # ignoring first optional fields
+  optionalFieldsNum(res) - 1
+
+proc genPrevFields(obj: NimNode, fd: openArray[FieldDescription], hi, lo: int): NimNode =
+  result = newStmtList()
+  for i in countdown(hi, lo):
+    let fieldName = fd[i].name
+    let msg = fieldName.strVal & " expected"
+    result.add quote do:
+      doAssert(`obj`.`fieldName`.isSome, `msg`)
+
+macro genOptionalFieldsValidation(obj: untyped, T: type, num: static[int]): untyped =
+  let
+    Tresolved = getType(T)[1]
+    fd = recordFields(Tresolved.getImpl)
+    loidx = fd.len-num
+
+  result = newStmtList()
+  for i in countdown(fd.high, loidx):
+    let fieldName = fd[i].name
+    let prevFields = genPrevFields(obj, fd, i-1, loidx-1)
+    result.add quote do:
+      if `obj`.`fieldName`.isSome:
+        `prevFields`
+
+  # generate something like
+  when false:
+    if obj.fee.isNone:
+      doAssert(obj.withdrawalsRoot.isNone, "withdrawalsRoot needs fee")
+      doAssert(obj.blobGasUsed.isNone, "blobGasUsed needs fee")
+      doAssert(obj.excessBlobGas.isNone, "excessBlobGas needs fee")
+    if obj.withdrawalsRoot.isNone:
+      doAssert(obj.blobGasUsed.isNone, "blobGasUsed needs withdrawalsRoot")
+      doAssert(obj.excessBlobGas.isNone, "excessBlobGas needs withdrawalsRoot")
+    doAssert obj.blobGasUsed.isSome == obj.excessBlobGas.isSome,
+      "blobGasUsed and excessBlobGas must both be present or absent"
+
+macro countFieldsRuntimeImpl(obj: untyped, T: type, num: static[int]): untyped =
+  let
+    Tresolved = getType(T)[1]
+    fd = recordFields(Tresolved.getImpl)
+    res = ident("result")
+    mlen = fd.len - num
+
+  result = newStmtList()
+  result.add quote do:
+    `res` = `mlen`
+
+  for i in countdown(fd.high, fd.len-num):
+    let fieldName = fd[i].name
+    result.add quote do:
+      `res` += `obj`.`fieldName`.isSome.ord
+
+proc countFieldsRuntime(obj: object|tuple): int =
+  # count mandatory fields and non empty optional fields
+  type ObjType = type obj
+
+  const
+    fieldsCount = ObjType.rlpFieldsCount
+    # include first optional fields
+    cof = checkedOptionalFields(ObjType, fieldsCount) + 1
+
+  countFieldsRuntimeImpl(obj, ObjType, cof)
+
 proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrapObjsInList) =
   mixin enumerateRlpFields, append
 
-  if wrapInList:
-    self.startList(static obj.type.rlpFieldsCount)
+  type ObjType = type obj
 
-  template op(field) =
-    when hasCustomPragma(field, rlpCustomSerialization):
+  const
+    hasOptional = hasOptionalFields(ObjType)
+    fieldsCount = ObjType.rlpFieldsCount
+
+  when hasOptional:
+    const
+      cof = checkedOptionalFields(ObjType, fieldsCount)
+    when cof > 0:
+      genOptionalFieldsValidation(obj, ObjType, cof)
+
+  if wrapInList:
+    when hasOptional:
+      self.startList(obj.countFieldsRuntime)
+    else:
+      self.startList(fieldsCount)
+
+  template op(RecordType, fieldName, field) {.used.} =
+    when hasCustomPragmaFixed(RecordType, fieldName, rlpCustomSerialization):
       append(self, obj, field)
+    elif (field is Option or field is Opt) and hasOptional:
+      # this works for optional fields at the end of an object/tuple
+      # if the optional field is followed by a mandatory field,
+      # custom serialization for a field or for the parent object
+      # will be better
+      if field.isSome:
+        append(self, field.unsafeGet)
     else:
       append(self, field)
 
   enumerateRlpFields(obj, op)
 
 proc appendImpl(self: var RlpWriter, data: object) {.inline.} =
-    self.appendRecordType(data)
+  self.appendRecordType(data)
 
 proc appendImpl(self: var RlpWriter, data: tuple) {.inline.} =
   self.appendRecordType(data)

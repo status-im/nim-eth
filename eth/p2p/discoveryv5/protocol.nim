@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2022 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -78,11 +78,11 @@
 ## When distance 0 is provided in the requested list of distances, only the own
 ## ENR will be returned.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[tables, sets, options, math, sequtils, algorithm],
-  stew/shims/net as stewNet, json_serialization/std/net,
+  json_serialization/std/net,
   stew/results, chronicles, chronos, stint, metrics,
   ".."/../[rlp, keys],
   "."/[messages_encoding, encoding, node, routing_table, enr, random2, sessions,
@@ -123,6 +123,10 @@ const
   ## call
 
 type
+  OptAddress* = object
+    ip*: Opt[IpAddress]
+    port*: Port
+
   DiscoveryConfig* = object
     tableIpLimits*: TableIpLimits
     bitsPerHop*: int
@@ -133,7 +137,7 @@ type
     transp: DatagramTransport
     localNode*: Node
     privateKey: PrivateKey
-    bindAddress: Address ## UDP binding address
+    bindAddress: OptAddress ## UDP binding address
     pendingRequests: Table[AESGCMNonce, PendingRequest]
     routingTable*: RoutingTable
     codec*: Codec
@@ -157,8 +161,9 @@ type
 
   TalkProtocolHandler* = proc(
     p: TalkProtocol, request: seq[byte],
-    fromId: NodeId, fromUdpAddress: Address): seq[byte]
-    {.gcsafe, raises: [Defect].}
+    fromId: NodeId, fromUdpAddress: Address,
+    node: Opt[Node]): seq[byte]
+    {.gcsafe, raises: [].}
 
   TalkProtocol* = ref object of RootObj
     protocolHandler*: TalkProtocolHandler
@@ -174,7 +179,7 @@ const
   )
 
 chronicles.formatIt(Option[Port]): $it
-chronicles.formatIt(Option[ValidIpAddress]): $it
+chronicles.formatIt(Option[IpAddress]): $it
 
 proc addNode*(d: Protocol, node: Node): bool =
   ## Add `Node` to discovery routing table.
@@ -205,7 +210,7 @@ proc addNode*(d: Protocol, enr: EnrUri): bool =
   if res:
     return d.addNode(r)
 
-proc getNode*(d: Protocol, id: NodeId): Option[Node] =
+func getNode*(d: Protocol, id: NodeId): Opt[Node] =
   ## Get the node with id from the routing table.
   d.routingTable.getNode(id)
 
@@ -214,7 +219,7 @@ proc randomNodes*(d: Protocol, maxAmount: int): seq[Node] =
   d.routingTable.randomNodes(maxAmount)
 
 proc randomNodes*(d: Protocol, maxAmount: int,
-    pred: proc(x: Node): bool {.gcsafe, noSideEffect.}): seq[Node] =
+    pred: proc(x: Node): bool {.raises: [], gcsafe, noSideEffect.}): seq[Node] =
   ## Get a `maxAmount` of random nodes from the local routing table with the
   ## `pred` predicate function applied as filter on the nodes selected.
   d.routingTable.randomNodes(maxAmount, pred)
@@ -225,17 +230,17 @@ proc randomNodes*(d: Protocol, maxAmount: int,
   ## the nodes selected are filtered by provided `enrField`.
   d.randomNodes(maxAmount, proc(x: Node): bool = x.record.contains(enrField))
 
-proc neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE,
+func neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE,
     seenOnly = false): seq[Node] =
   ## Return up to k neighbours (closest node ids) of the given node id.
   d.routingTable.neighbours(id, k, seenOnly)
 
-proc neighboursAtDistances*(d: Protocol, distances: seq[uint16],
+func neighboursAtDistances*(d: Protocol, distances: seq[uint16],
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours (closest node ids) at given distances.
   d.routingTable.neighboursAtDistances(distances, k, seenOnly)
 
-proc nodesDiscovered*(d: Protocol): int = d.routingTable.len
+func nodesDiscovered*(d: Protocol): int = d.routingTable.len
 
 func privKey*(d: Protocol): lent PrivateKey =
   d.privateKey
@@ -244,7 +249,7 @@ func getRecord*(d: Protocol): Record =
   ## Get the ENR of the local node.
   d.localNode.record
 
-proc updateRecord*(
+func updateRecord*(
     d: Protocol, enrFields: openArray[(string, seq[byte])]): DiscResult[void] =
   ## Update the ENR of the local node with provided `enrFields` k:v pairs.
   let fields = mapIt(enrFields, toFieldPair(it[0], it[1]))
@@ -252,24 +257,27 @@ proc updateRecord*(
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
-proc send*(d: Protocol, a: Address, data: seq[byte]) =
+proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async.} =
   let ta = initTAddress(a.ip, a.port)
-  let f = d.transp.sendTo(ta, data)
-  f.callback = proc(data: pointer) {.gcsafe.} =
-    if f.failed:
-      # Could be `TransportUseClosedError` in case the transport is already
-      # closed, or could be `TransportOsError` in case of a socket error.
-      # In the latter case this would probably mostly occur if the network
-      # interface underneath gets disconnected or similar.
-      # It could also be an "Operation not permitted" error, which would
-      # indicate a firewall restriction kicking in.
-      # TODO: Should this kind of error be propagated upwards? Probably, but
-      # it should not stop the process as that would reset the discovery
-      # progress in case there is even a small window of no connection.
-      # One case that needs this error available upwards is when revalidating
-      # nodes. Else the revalidation might end up clearing the routing tabl
-      # because of ping failures due to own network connection failure.
-      warn "Discovery send failed", msg = f.readError.msg, address = a
+  try:
+    await d.transp.sendTo(ta, data)
+  except CatchableError as e:
+    # Could be `TransportUseClosedError` in case the transport is already
+    # closed, or could be `TransportOsError` in case of a socket error.
+    # In the latter case this would probably mostly occur if the network
+    # interface underneath gets disconnected or similar.
+    # It could also be an "Operation not permitted" error, which would
+    # indicate a firewall restriction kicking in.
+    # TODO: Should this kind of error be propagated upwards? Probably, but
+    # it should not stop the process as that would reset the discovery
+    # progress in case there is even a small window of no connection.
+    # One case that needs this error available upwards is when revalidating
+    # nodes. Else the revalidation might end up clearing the routing tabl
+    # because of ping failures due to own network connection failure.
+    warn "Discovery send failed", msg = e.msg, address = $ta
+
+proc send*(d: Protocol, a: Address, data: seq[byte]) =
+  asyncSpawn sendTo(d, a, data)
 
 proc send(d: Protocol, n: Node, data: seq[byte]) =
   doAssert(n.address.isSome())
@@ -338,7 +346,7 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
       d.sendNodes(fromId, fromAddr, reqId, [])
 
 proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
-    talkreq: TalkReqMessage, reqId: RequestId) =
+    talkreq: TalkReqMessage, reqId: RequestId, node: Opt[Node]) =
   let talkProtocol = d.talkProtocols.getOrDefault(talkreq.protocol)
 
   let talkresp =
@@ -348,7 +356,7 @@ proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
       TalkRespMessage(response: @[])
     else:
       TalkRespMessage(response: talkProtocol.protocolHandler(talkProtocol,
-        talkreq.request, fromId, fromAddr))
+        talkreq.request, fromId, fromAddr, node))
   let (data, _) = encodeMessagePacket(d.rng[], d.codec, fromId, fromAddr,
     encodeMessage(talkresp, reqId))
 
@@ -356,8 +364,9 @@ proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
     kind = MessageKind.talkresp
   d.send(fromAddr, data)
 
-proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
-    message: Message) =
+proc handleMessage(
+    d: Protocol, srcId: NodeId, fromAddr: Address,
+    message: Message, node: Opt[Node] = Opt.none(Node)) =
   case message.kind
   of ping:
     discovery_message_requests_incoming.inc()
@@ -367,7 +376,7 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
     d.handleFindNode(srcId, fromAddr, message.findNode, message.reqId)
   of talkReq:
     discovery_message_requests_incoming.inc()
-    d.handleTalkReq(srcId, fromAddr, message.talkReq, message.reqId)
+    d.handleTalkReq(srcId, fromAddr, message.talkReq, message.reqId, node)
   of regTopic, topicQuery:
     discovery_message_requests_incoming.inc()
     discovery_message_requests_incoming.inc(labelValues = ["no_response"])
@@ -382,7 +391,7 @@ proc handleMessage(d: Protocol, srcId: NodeId, fromAddr: Address,
       trace "Timed out or unrequested message", kind = message.kind,
         origin = fromAddr
 
-proc registerTalkProtocol*(d: Protocol, protocolId: seq[byte],
+func registerTalkProtocol*(d: Protocol, protocolId: seq[byte],
     protocol: TalkProtocol): DiscResult[void] =
   # Currently allow only for one handler per talk protocol.
   if d.talkProtocols.hasKeyOrPut(protocolId, protocol):
@@ -391,7 +400,7 @@ proc registerTalkProtocol*(d: Protocol, protocolId: seq[byte],
     ok()
 
 proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
-    requestNonce: AESGCMNonce, node: Option[Node]) =
+    requestNonce: AESGCMNonce, node: Opt[Node]) =
   let key = HandshakeKey(nodeId: toId, address: a)
   if not d.codec.hasHandshake(key):
     let
@@ -447,7 +456,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
     of HandshakeMessage:
       trace "Received handshake message packet", srcId = packet.srcIdHs,
         address = a, kind = packet.message.kind
-      d.handleMessage(packet.srcIdHs, a, packet.message)
+      d.handleMessage(packet.srcIdHs, a, packet.message, packet.node)
       # For a handshake message it is possible that we received an newer ENR.
       # In that case we can add/update it to the routing table.
       if packet.node.isSome():
@@ -463,23 +472,17 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
     trace "Packet decoding error", error = decoded.error, address = a
 
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
-    Future[void] {.async.} =
+    Future[void] {.async: (raises: []).} =
   let proto = getUserData[Protocol](transp)
 
   # TODO: should we use `peekMessage()` to avoid allocation?
   let buf = try: transp.getMessage()
-            except TransportOsError as e:
+            except TransportError as e:
               # This is likely to be local network connection issues.
               warn "Transport getMessage", exception = e.name, msg = e.msg
               return
 
-  let ip = try: raddr.address()
-           except ValueError as e:
-             error "Not a valid IpAddress", exception = e.name, msg = e.msg
-             return
-  let a = Address(ip: ValidIpAddress.init(ip), port: raddr.port)
-
-  proto.receive(a, buf)
+  proto.receive(Address(ip: raddr.toIpAddress(), port: raddr.port), buf)
 
 proc replaceNode(d: Protocol, n: Node) =
   if n.record notin d.bootstrapRecords:
@@ -617,7 +620,7 @@ proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Talk response message not received in time")
 
-proc lookupDistances*(target, dest: NodeId): seq[uint16] =
+func lookupDistances*(target, dest: NodeId): seq[uint16] =
   let td = logDistance(target, dest)
   let tdAsInt = int(td)
   result.add(td)
@@ -764,7 +767,7 @@ proc queryRandom*(d: Protocol, enrField: (string, seq[byte])):
 
   return filtered
 
-proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
+proc resolve*(d: Protocol, id: NodeId): Future[Opt[Node]] {.async.} =
   ## Resolve a `Node` based on provided `NodeId`.
   ##
   ## This will first look in the own routing table. If the node is known, it
@@ -772,7 +775,7 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
   ## does not reply, a lookup is done to see if it can find a (newer) record of
   ## the node on the network.
   if id == d.localNode.id:
-    return some(d.localNode)
+    return Opt.some(d.localNode)
 
   let node = d.getNode(id)
   if node.isSome():
@@ -780,7 +783,7 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
 
     # TODO: Handle failures better. E.g. stop on different failures than timeout
     if request.isOk() and request[].len > 0:
-      return some(request[][0])
+      return Opt.some(request[][0])
 
   let discovered = await d.lookup(id)
   for n in discovered:
@@ -788,7 +791,7 @@ proc resolve*(d: Protocol, id: NodeId): Future[Option[Node]] {.async.} =
       if node.isSome() and node.get().record.seqNum >= n.record.seqNum:
         return node
       else:
-        return some(n)
+        return Opt.some(n)
 
   return node
 
@@ -830,7 +833,7 @@ proc revalidateNode*(d: Protocol, n: Node) {.async.} =
         discard d.addNode(nodes[][0])
 
     # Get IP and port from pong message and add it to the ip votes
-    let a = Address(ip: ValidIpAddress.init(res.ip), port: Port(res.port))
+    let a = Address(ip: res.ip, port: Port(res.port))
     d.ipVote.insert(n.id, a)
 
 proc revalidateLoop(d: Protocol) {.async.} =
@@ -863,7 +866,7 @@ proc refreshLoop(d: Protocol) {.async.} =
   except CancelledError:
     trace "refreshLoop canceled"
 
-proc updateExternalIp*(d: Protocol, extIp: ValidIpAddress, udpPort: Port): bool =
+proc updateExternalIp*(d: Protocol, extIp: IpAddress, udpPort: Port): bool =
   var success = false
   let
     previous = d.localNode.address
@@ -954,7 +957,7 @@ func init*(
 
 proc newProtocol*(
     privKey: PrivateKey,
-    enrIp: Option[ValidIpAddress],
+    enrIp: Option[IpAddress],
     enrTcpPort, enrUdpPort: Option[Port],
     localEnrFields: openArray[(string, seq[byte])] = [],
     bootstrapRecords: openArray[Record] = [],
@@ -1001,7 +1004,7 @@ proc newProtocol*(
   Protocol(
     privateKey: privKey,
     localNode: node,
-    bindAddress: Address(ip: ValidIpAddress.init(bindIp), port: bindPort),
+    bindAddress: OptAddress(ip: Opt.some(bindIp), port: bindPort),
     codec: Codec(localNode: node, privKey: privKey,
       sessions: Sessions.init(256)),
     bootstrapRecords: @bootstrapRecords,
@@ -1013,17 +1016,86 @@ proc newProtocol*(
     responseTimeout: config.responseTimeout,
     rng: rng)
 
-template listeningAddress*(p: Protocol): Address =
-  p.bindAddress
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Option[IpAddress],
+    enrTcpPort, enrUdpPort: Option[Port],
+    localEnrFields: openArray[(string, seq[byte])] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = none[enr.Record](),
+    bindPort: Port,
+    bindIp: Opt[IpAddress],
+    enrAutoUpdate = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng()): Protocol =
+  let
+    customEnrFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
+    record =
+      if previousRecord.isSome():
+        var res = previousRecord.get()
+        res.update(privKey, enrIp, enrTcpPort, enrUdpPort,
+          customEnrFields).expect("Record within size limits and correct key")
+        res
+      else:
+        enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort,
+          customEnrFields).expect("Record within size limits")
 
-proc open*(d: Protocol) {.raises: [Defect, CatchableError].} =
+  info "Discovery ENR initialized", enrAutoUpdate, seqNum = record.seqNum,
+    ip = enrIp, tcpPort = enrTcpPort, udpPort = enrUdpPort,
+    customEnrFields, uri = toURI(record)
+
+  if enrIp.isNone():
+    if enrAutoUpdate:
+      notice "No external IP provided for the ENR, this node will not be " &
+             "discoverable until the ENR is updated with the discovered " &
+             "external IP address"
+    else:
+      warn "No external IP provided for the ENR, this node will not be " &
+           "discoverable"
+
+  let node = newNode(record).expect("Properly initialized record")
+
+  doAssert not(isNil(rng)), "RNG initialization failed"
+
+  Protocol(
+    privateKey: privKey,
+    localNode: node,
+    bindAddress: OptAddress(ip: bindIp, port: bindPort),
+    codec: Codec(localNode: node, privKey: privKey,
+      sessions: Sessions.init(256)),
+    bootstrapRecords: @bootstrapRecords,
+    ipVote: IpVote.init(),
+    enrAutoUpdate: enrAutoUpdate,
+    routingTable: RoutingTable.init(
+      node, config.bitsPerHop, config.tableIpLimits, rng),
+    handshakeTimeout: config.handshakeTimeout,
+    responseTimeout: config.responseTimeout,
+    rng: rng)
+
+proc `$`*(a: OptAddress): string =
+  if a.ip.isNone():
+    "*:" & $a.port
+  else:
+    $a.ip.get() & ":" & $a.port
+
+chronicles.formatIt(OptAddress): $it
+
+template listeningAddress*(p: Protocol): Address =
+  if p.bindAddress.ip.isNone():
+    let ta = getAutoAddress(p.bindAddress.port)
+    Address(ta.toIpAddress(), ta.port)
+  else:
+    Address(p.bindAddress.ip.get(), p.bindAddress.port)
+
+proc open*(d: Protocol) {.raises: [TransportOsError].} =
   info "Starting discovery node", node = d.localNode,
     bindAddress = d.bindAddress
 
   # TODO allow binding to specific IP / IPv6 / etc
-  let ta = initTAddress(d.bindAddress.ip, d.bindAddress.port)
-  d.transp = newDatagramTransport(processClient, udata = d, local = ta)
-
+  d.transp =
+    newDatagramTransport(processClient, udata = d,
+                         localPort = d.bindAddress.port,
+                         local = d.bindAddress.ip)
   d.seedTable()
 
 proc start*(d: Protocol) =
@@ -1031,28 +1103,20 @@ proc start*(d: Protocol) =
   d.revalidateLoop = revalidateLoop(d)
   d.ipMajorityLoop = ipMajorityLoop(d)
 
-proc close*(d: Protocol) =
+proc closeWait*(d: Protocol) {.async: (raises: []).} =
   doAssert(not d.transp.closed)
 
   debug "Closing discovery node", node = d.localNode
+  var futures: seq[Future[void]]
   if not d.revalidateLoop.isNil:
-    d.revalidateLoop.cancel()
+    futures.add(d.revalidateLoop.cancelAndWait())
   if not d.refreshLoop.isNil:
-    d.refreshLoop.cancel()
+    futures.add(d.refreshLoop.cancelAndWait())
   if not d.ipMajorityLoop.isNil:
-    d.ipMajorityLoop.cancel()
+    futures.add(d.ipMajorityLoop.cancelAndWait())
 
-  d.transp.close()
+  await noCancel(allFutures(futures))
+  await noCancel(d.transp.closeWait())
 
-proc closeWait*(d: Protocol) {.async.} =
-  doAssert(not d.transp.closed)
-
-  debug "Closing discovery node", node = d.localNode
-  if not d.revalidateLoop.isNil:
-    await d.revalidateLoop.cancelAndWait()
-  if not d.refreshLoop.isNil:
-    await d.refreshLoop.cancelAndWait()
-  if not d.ipMajorityLoop.isNil:
-    await d.ipMajorityLoop.cancelAndWait()
-
-  await d.transp.closeWait()
+proc close*(d: Protocol) {.deprecated: "Please use closeWait() instead".} =
+  asyncSpawn d.closeWait()

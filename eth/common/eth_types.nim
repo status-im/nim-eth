@@ -1,29 +1,24 @@
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-when (NimMajor, NimMinor) < (1, 4):
-  {.push raises: [Defect].}
-else:
-  {.push raises: [].}
+{.push raises: [].}
 
-## Core ethereum types and smalll helpers - keep focused as it gets imported
+## Core ethereum types and small helpers - keep focused as it gets imported
 ## from many places
 
 import
-  std/[options, strutils, times],
+  std/[options, strutils],
   stew/[byteutils, endians2], stint,
-  ./eth_hash
+  ./eth_hash, ./eth_times
 
 export
-  options, stint, eth_hash,
-  times.Time, times.fromUnix, times.toUnix
+  options, stint, eth_hash, eth_times
 
 type
   Hash256* = MDigest[256]
-  EthTime* = Time
   VMWord* = UInt256
   BlockNonce* = array[8, byte]
   AccountNonce* = uint64
@@ -65,10 +60,25 @@ type
 
   AccessList* = seq[AccessPair]
 
+  VersionedHash* = Hash256
+  VersionedHashes* = seq[VersionedHash]
+  KzgCommitment* = array[48, byte]
+  KzgProof* = array[48, byte]
+
+  # 32 -> UInt256
+  # 4096 -> FIELD_ELEMENTS_PER_BLOB
+  NetworkBlob* = array[32*4096, byte]
+
   TxType* = enum
-    TxLegacy
-    TxEip2930
-    TxEip1559
+    TxLegacy    # 0
+    TxEip2930   # 1
+    TxEip1559   # 2
+    TxEip4844   # 3
+
+  NetworkPayload* = ref object
+    blobs*       : seq[NetworkBlob]
+    commitments* : seq[KzgCommitment]
+    proofs*      : seq[KzgProof]
 
   Transaction* = object
     txType*        : TxType               # EIP-2718
@@ -82,8 +92,14 @@ type
     value*         : UInt256
     payload*       : Blob
     accessList*    : AccessList           # EIP-2930
+    maxFeePerBlobGas*: UInt256            # EIP-4844
+    versionedHashes*: VersionedHashes     # EIP-4844
     V*             : int64
     R*, S*         : UInt256
+
+  PooledTransaction* = object
+    tx*: Transaction
+    networkPayload*: NetworkPayload       # EIP-4844
 
   TransactionStatus* = enum
     Unknown,
@@ -102,6 +118,7 @@ type
     address*       : EthAddress
     amount*        : uint64
 
+  # https://eips.ethereum.org/EIPS/eip-4844#header-extension
   BlockHeader* = object
     parentHash*:      Hash256
     ommersHash*:      Hash256
@@ -121,7 +138,9 @@ type
     # `baseFee` is the get/set of `fee`
     fee*:             Option[UInt256]   # EIP-1559
     withdrawalsRoot*: Option[Hash256]   # EIP-4895
-    excessDataGas*:   Option[UInt256]   # EIP-4844
+    blobGasUsed*:     Option[uint64]    # EIP-4844
+    excessBlobGas*:   Option[uint64]    # EIP-4844
+    parentBeaconBlockRoot*: Option[Hash256] # EIP-4788
 
   BlockBody* = object
     transactions*:  seq[Transaction]
@@ -139,6 +158,7 @@ type
     # LegacyReceipt  = TxLegacy
     # Eip2930Receipt = TxEip2930
     # Eip1559Receipt = TxEip1559
+    # Eip4844Receipt = TxEip4844
 
   Receipt* = object
     receiptType*      : ReceiptType
@@ -150,9 +170,15 @@ type
     logs*             : seq[Log]
 
   EthBlock* = object
-    header*: BlockHeader
-    txs*:    seq[Transaction]
-    uncles*: seq[BlockHeader]
+    header*     : BlockHeader
+    txs*        : seq[Transaction]
+    uncles*     : seq[BlockHeader]
+    withdrawals*: Option[seq[Withdrawal]]   # EIP-4895
+
+  BlobsBundle* = object
+    commitments*: seq[KzgCommitment]
+    proofs*: seq[KzgProof]
+    blobs*: seq[NetworkBlob]
 
   # TODO: Make BlockNumber a uint64 and deprecate either this or BlockHashOrNumber
   HashOrNum* = object
@@ -183,6 +209,7 @@ const
   LegacyReceipt*  = TxLegacy
   Eip2930Receipt* = TxEip2930
   Eip1559Receipt* = TxEip1559
+  Eip4844Receipt* = TxEip4844
 
   # TODO clean these up
   EMPTY_ROOT_HASH* = "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
@@ -272,7 +299,7 @@ func destination*(tx: Transaction): EthAddress =
     return tx.to.get
 
 func init*(T: type BlockHashOrNumber, str: string): T
-          {.raises: [ValueError, Defect].} =
+          {.raises: [ValueError].} =
   if str.startsWith "0x":
     if str.len != sizeof(default(T).hash.data) * 2 + 2:
       raise newException(ValueError, "Block hash has incorrect length")

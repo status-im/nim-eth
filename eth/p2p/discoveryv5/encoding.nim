@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,12 +11,12 @@
 ## https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions
 ##
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[tables, options, hashes, net],
   nimcrypto/[bcmode, rijndael, sha2], stint, chronicles,
-  stew/[results, byteutils], metrics,
+  stew/[results, byteutils, endians2], metrics,
   ".."/../[rlp, keys],
   "."/[messages_encoding, node, enr, hkdf, sessions]
 
@@ -94,7 +94,7 @@ type
     of HandshakeMessage:
       message*: Message # In a handshake we expect to always be able to decrypt
       # TODO record or node immediately?
-      node*: Option[Node]
+      node*: Opt[Node]
       srcIdHs*: NodeId
 
   HandshakeKey* = object
@@ -484,7 +484,7 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
       return err("Invalid encoded ENR")
 
   var pubkey: PublicKey
-  var newNode: Option[Node]
+  var newNode: Opt[Node]
   # TODO: Shall we return Node or Record? Record makes more sense, but we do
   # need the pubkey and the nodeid
   if record.isSome():
@@ -496,7 +496,7 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
     # Note: Not checking if the record seqNum is higher than the one we might
     # have stored as it comes from this node directly.
     pubkey = node.pubkey
-    newNode = some(node)
+    newNode = Opt.some(node)
   else:
     # TODO: Hmm, should we still verify node id of the ENR of this node?
     if challenge.pubkey.isSome():

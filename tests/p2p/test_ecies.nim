@@ -23,7 +23,7 @@ proc compare[A, B](x: openArray[A], y: openArray[B], s: int = 0): bool =
       result = false
       break
 
-template offsetOf(a, b): int =
+template offsetOf(a: EciesHeader, b: untyped): int =
   cast[int](cast[uint](unsafeAddr b) - cast[uint](unsafeAddr a))
 
 let rng = newRng()

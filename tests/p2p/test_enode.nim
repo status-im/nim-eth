@@ -101,7 +101,6 @@ suite "ENode":
       true
 
     check runBNTest(MainnetBootnodes)
-    check runBNTest(RopstenBootnodes)
-    check runBNTest(RinkebyBootnodes)
     check runBNTest(GoerliBootnodes)
-    check runBNTest(KovanBootnodes)
+    check runBNTest(SepoliaBootnodes)
+    check runBNTest(HoleskyBootnodes)

@@ -1,31 +1,31 @@
 {
 	"T1": {
-		"in": "INVALID", 
+		"in": "INVALID",
 		"out": ""
 	},
 
 	"T2": {
-		"in": "INVALID", 
+		"in": "INVALID",
 		"out": "00ab"
 	},
 
 	"T3": {
-		"in": "INVALID", 
+		"in": "INVALID",
 		"out": "0000ff"
 	},
 
 	"T4": {
-		"in": "VALID", 
+		"in": "VALID",
 		"out": "83646F67636174"
 	},
 
 	"T5": {
-		"in": "INVALID", 
+		"in": "INVALID",
 		"out": "83646F"
 	},
 
 	"T6": {
-		"in": "INVALID", 
+		"in": "INVALID",
 		"out": "c7c0c1c0c3c0c1c0ff"
 	},
 
