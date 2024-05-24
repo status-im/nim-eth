@@ -352,7 +352,7 @@ func readImpl(rlp: var Rlp, T: type SomeUnsignedInt): T =
 func readImpl(rlp: var Rlp, T: type[enum]): T =
   let
     item = rlp.item()
-    value = rlp.toInt(item, int)
+    value = rlp.toInt(item, uint64)
 
   var res: T
   if not checkedEnumAssign(res, value):
