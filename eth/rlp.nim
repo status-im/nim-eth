@@ -172,6 +172,9 @@ func item(self: Rlp): RlpItem =
 func rlpFromBytes*(data: openArray[byte]): Rlp =
   Rlp(bytes: @data, position: 0)
 
+func rlpFromBytes*(data: sink seq[byte]): Rlp =
+  Rlp(bytes: move(data), position: 0)
+
 const zeroBytesRlp* = Rlp()
 
 func rlpFromHex*(input: string): Rlp =
