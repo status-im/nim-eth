@@ -62,6 +62,7 @@ template getPtr(x: untyped): auto =
     addr(x)
 
 func toString(self: Rlp, item: RlpItem): string =
+  result = "" # TODO https://github.com/nim-lang/Nim/issues/23645
   if item.typ != rlpBlob:
     raiseExpectedBlob()
 
@@ -247,7 +248,11 @@ func toInt*(self: Rlp, IntType: type): IntType =
   self.toInt(self.item(), IntType)
 
 func toString*(self: Rlp): string =
-  self.toString(self.item())
+  # TODO https://github.com/nim-lang/Nim/issues/23645
+  # the returnd string is cleared properly on exception here - the double
+  # result assignment can be removed once that bug is fixed
+  result = ""
+  result = self.toString(self.item())
 
 func toBytes(self: Rlp, item: RlpItem): seq[byte] =
   if item.typ != rlpBlob:
