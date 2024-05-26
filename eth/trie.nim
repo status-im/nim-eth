@@ -1,6 +1,5 @@
 import
-  ./trie/[hexary, sparse_binary]
+  ./trie/[hexary, trie_defs]
 
 export
-  hexary, sparse_binary
-
+  hexary, trie_defs
