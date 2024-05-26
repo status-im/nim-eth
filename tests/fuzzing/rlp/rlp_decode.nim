@@ -25,7 +25,6 @@ test:
   testDecode(payload, uint64)
   testDecode(payload, int)
   testDecode(payload, bool)
-  testDecode(payload, float64)
   testDecode(payload, seq[byte])
   testDecode(payload, (string, int32))
   testDecode(payload, TestEnum)

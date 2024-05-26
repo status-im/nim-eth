@@ -10,8 +10,7 @@ import
 
 from stew/objects import checkedEnumAssign
 
-export
-  writer, object_serialization
+export writer, object_serialization
 
 type
   Rlp* = object
@@ -22,376 +21,428 @@ type
     rlpBlob
     rlpList
 
-  RlpNode* = object
-    case kind*: RlpNodeType
-    of rlpBlob:
-      bytes*: seq[byte]
-    of rlpList:
-      elems*: seq[RlpNode]
-
   RlpError* = object of CatchableError
   MalformedRlpError* = object of RlpError
   UnsupportedRlpError* = object of RlpError
   RlpTypeMismatch* = object of RlpError
 
-proc rlpFromBytes*(data: seq[byte]): Rlp =
-  Rlp(bytes: data, position: 0)
+  RlpItem = tuple[payload: Slice[int], typ: RlpNodeType]
 
-proc rlpFromBytes*(data: openArray[byte]): Rlp =
-  rlpFromBytes(@data)
+func raiseOutOfBounds() {.noreturn, noinline.} =
+  raise (ref MalformedRlpError)(msg: "out-of-bounds payload access")
 
-const zeroBytesRlp* = Rlp()
+func raiseExpectedBlob() {.noreturn, noinline.} =
+  raise (ref RlpTypeMismatch)(msg: "expected blob")
 
-proc rlpFromHex*(input: string): Rlp =
-  rlpFromBytes(hexToSeqByte(input))
+func raiseExpectedList() {.noreturn, noinline.} =
+  raise (ref RlpTypeMismatch)(msg: "expected list")
 
-proc hasData*(self: Rlp): bool =
-  self.position < self.bytes.len
+func raiseNonCanonical() {.noreturn, noinline.} =
+  raise (ref MalformedRlpError)(msg: "non-canonical encoding")
 
-proc currentElemEnd*(self: Rlp): int {.gcsafe.}
+func raiseIntOutOfBounds() {.noreturn, noinline.} =
+  raise (ref UnsupportedRlpError)(msg: "integer out of bounds")
 
-template rawData*(self: Rlp): openArray[byte] =
-  self.bytes.toOpenArray(self.position, self.currentElemEnd - 1)
+template view(input: openArray[byte], position: int): openArray[byte] =
+  if position >= input.len:
+    raiseOutOfBounds()
 
-template remainingBytes*(self: Rlp): openArray[byte] =
-  self.bytes.toOpenArray(self.position, self.bytes.len - 1)
+  toOpenArray(input, position, input.high())
 
-proc isBlob*(self: Rlp): bool =
-  self.hasData() and self.bytes[self.position] < LIST_START_MARKER
+template view(input: openArray[byte], slice: Slice[int]): openArray[byte] =
+  if slice.b >= input.len:
+    raiseOutOfBounds()
 
-proc isEmpty*(self: Rlp): bool =
-  ### Contains a blob or a list of zero length
-  self.hasData() and (self.bytes[self.position] == BLOB_START_MARKER or
-                 self.bytes[self.position] == LIST_START_MARKER)
-
-proc isList*(self: Rlp): bool =
-  self.hasData() and self.bytes[self.position] >= LIST_START_MARKER
-
-template eosError =
-  raise newException(MalformedRlpError, "Read past the end of the RLP stream")
-
-template requireData {.dirty.} =
-  if not self.hasData():
-    raise newException(MalformedRlpError, "Illegal operation over an empty RLP stream")
-
-proc getType*(self: Rlp): RlpNodeType =
-  requireData()
-  return if self.isBlob(): rlpBlob else: rlpList
-
-proc lengthBytesCount(self: Rlp): int =
-  var marker = self.bytes[self.position]
-  if self.isBlob() and marker > LEN_PREFIXED_BLOB_MARKER:
-    return int(marker - LEN_PREFIXED_BLOB_MARKER)
-  if self.isList() and marker > LEN_PREFIXED_LIST_MARKER:
-    return int(marker - LEN_PREFIXED_LIST_MARKER)
-  return 0
-
-proc isSingleByte*(self: Rlp): bool =
-  self.hasData() and self.bytes[self.position] < BLOB_START_MARKER
-
-proc getByteValue*(self: Rlp): byte =
-  doAssert self.isSingleByte()
-  return self.bytes[self.position]
-
-proc payloadOffset(self: Rlp): int =
-  if self.isSingleByte(): 0 else: 1 + self.lengthBytesCount()
-
-template readAheadCheck(numberOfBytes: int) =
-  # important to add nothing to the left side of the equation as `numberOfBytes`
-  # can in theory be at max size of its type already
-  if numberOfBytes > self.bytes.len - self.position - self.payloadOffset():
-    eosError()
-
-template nonCanonicalNumberError =
-  raise newException(MalformedRlpError, "Small number encoded in a non-canonical way")
-
-proc payloadBytesCount(self: Rlp): int =
-  if not self.hasData():
-    return 0
-
-  var marker = self.bytes[self.position]
-  if marker < BLOB_START_MARKER:
-    return 1
-  if marker <= LEN_PREFIXED_BLOB_MARKER:
-    result = int(marker - BLOB_START_MARKER)
-    readAheadCheck(result)
-    if result == 1:
-      if self.bytes[self.position + 1] < BLOB_START_MARKER:
-        nonCanonicalNumberError()
-    return
-
-  template readInt(output, startMarker, lenPrefixMarker: untyped) =
-    var
-      lengthBytes = int(marker - lenPrefixMarker)
-      remainingBytes = self.bytes.len - self.position
-
-    if remainingBytes <= lengthBytes:
-      eosError()
-
-    if remainingBytes > 1 and self.bytes[self.position + 1] == 0:
-      raise newException(MalformedRlpError, "Number encoded with a leading zero")
-
-    # check if the size is not bigger than the max that output can hold
-    if lengthBytes > sizeof(output) or
-        (lengthBytes == sizeof(output) and self.bytes[self.position + 1].int > 127):
-      raise newException(UnsupportedRlpError, "Message too large to fit in memory")
-
-    for i in 1 .. lengthBytes:
-      output = (output shl 8) or int(self.bytes[self.position + i])
-
-    # must be greater than the short-list size list
-    if output < THRESHOLD_LIST_LEN:
-      nonCanonicalNumberError()
-
-  if marker < LIST_START_MARKER:
-    result.readInt(BLOB_START_MARKER, LEN_PREFIXED_BLOB_MARKER)
-  elif marker <= LEN_PREFIXED_LIST_MARKER:
-    result = int(marker - LIST_START_MARKER)
-  else:
-    result.readInt(LIST_START_MARKER, LEN_PREFIXED_LIST_MARKER)
-
-  readAheadCheck(result)
-
-proc blobLen*(self: Rlp): int =
-  if self.isBlob(): self.payloadBytesCount() else: 0
-
-proc isInt*(self: Rlp): bool =
-  if not self.hasData():
-    return false
-  var marker = self.bytes[self.position]
-  if marker < BLOB_START_MARKER:
-    return marker != 0
-  if marker == BLOB_START_MARKER:
-    return true
-  if marker <= LEN_PREFIXED_BLOB_MARKER:
-    return self.bytes[self.position + 1] != 0
-  if marker < LIST_START_MARKER:
-    let offset = self.position + int(marker + 1 - LEN_PREFIXED_BLOB_MARKER)
-    if offset >= self.bytes.len: eosError()
-    return self.bytes[offset] != 0
-  return false
-
-template maxBytes*(o: type[Ordinal | uint64 | uint]): int = sizeof(o)
-
-proc toInt*(self: Rlp, IntType: type): IntType =
-  # XXX: work-around a Nim issue with type parameters
-  type OutputType = IntType
-  mixin maxBytes, to
-
-  # XXX: self insertions are not working in generic procs
-  # https://github.com/nim-lang/Nim/issues/5053
-  if not self.hasData():
-    raise newException(RlpTypeMismatch, "Attempt to read an Int value past the RLP end")
-
-  if self.isList():
-    raise newException(RlpTypeMismatch, "Int expected, but found a List")
-
-  let
-    payloadStart = self.payloadOffset()
-    payloadSize = self.payloadBytesCount()
-
-  if payloadSize > maxBytes(IntType):
-    raise newException(RlpTypeMismatch, "The RLP contains a larger than expected Int value")
-
-  for i in payloadStart ..< (payloadStart + payloadSize):
-    result = (result shl 8) or OutputType(self.bytes[self.position + i])
+  toOpenArray(input, slice.a, slice.b)
 
 template getPtr(x: untyped): auto =
-  when (NimMajor, NimMinor) <= (1,6):
+  when (NimMajor, NimMinor) <= (1, 6):
     unsafeAddr(x)
   else:
     addr(x)
 
-proc toString*(self: Rlp): string =
-  if not self.isBlob():
-    raise newException(RlpTypeMismatch, "String expected, but the source RLP is not a blob")
+func toString(self: Rlp, item: RlpItem): string =
+  result = "" # TODO https://github.com/nim-lang/Nim/issues/23645
+  if item.typ != rlpBlob:
+    raiseExpectedBlob()
 
-  let payloadLen = self.payloadBytesCount()
+  result = newString(item.payload.len)
+  copyMem(addr result[0], self.bytes.view(item.payload)[0].getPtr, result.len)
 
-  if payloadLen > 0:
+func decodeInteger(input: openArray[byte]): uint64 =
+  # For a positive integer, it is converted to the the shortest byte array whose
+  # big-endian interpretation is the integer, and then encoded as a string
+  # according to the rules below.
+  if input.len > sizeof(uint64):
+    raiseIntOutOfBounds()
+
+  if input.len == 0:
+    0
+  else:
+    if input[0] == 0:
+      raiseNonCanonical()
+
+    var v: uint64
+    for b in input:
+      v = (v shl 8) or uint64(b)
+    v
+
+# https://ethereum.org/en/developers/docs/data-structures-and-encoding/rlp/
+func rlpItem(input: openArray[byte], start = 0): RlpItem =
+  # Extract coordinates for the RLP item starting at `start`, ensuring that
+  # it (but not necessarily its payload) is correctly encoded
+  if start >= len(input):
+    raiseOutOfBounds()
+
+  let
+    length = len(input) - start # >= 1
+    prefix = input[start]
+
+  if prefix <= 0x7f:
+    # For a single byte whose value is in the [0x00, 0x7f] (decimal [0, 127])
+    # range, that byte is its own RLP encoding.
+    (start .. start, rlpBlob)
+  elif prefix <= 0xb7:
+    # Otherwise, if a string is 0-55 bytes long, the RLP encoding consists of a
+    # single byte with value 0x80 (dec. 128) plus the length of the string
+    # followed by the string. The range of the first byte is thus [0x80, 0xb7]
+    # (dec. [128, 183]).
+    let strLen = int(prefix - 0x80)
+    if strLen >= length:
+      raiseOutOfBounds()
+    if strLen == 1 and input[start + 1] <= 0x7f:
+      raiseNonCanonical()
+
+    (start + 1 .. start + strLen, rlpBlob)
+  elif prefix <= 0xbf:
+    # If a string is more than 55 bytes long, the RLP encoding consists of a
+    # single byte with value 0xb7 (dec. 183) plus the length in bytes of the
+    # length of the string in binary form, followed by the length of the string,
+    # followed by the string. For example, a 1024 byte long string would be
+    # encoded as \xb9\x04\x00 (dec. 185, 4, 0) followed by the string.
+    # Here, 0xb9 (183 + 2 = 185) as the first byte, followed by the 2 bytes
+    # 0x0400 (dec. 1024) that denote the length of the actual string. The range
+    # of the first byte is thus [0xb8, 0xbf] (dec. [184, 191]).
+
     let
-      payloadOffset = self.payloadOffset()
-      begin = self.position + payloadOffset
+      lenOfStrLen = int(prefix - 0xb7)
+      strLen = decodeInteger(input.view(start + 1 .. start + lenOfStrLen))
 
-    result = newString(payloadLen)
-    copyMem(result[0].getPtr,
-      self.bytes[begin].getPtr,
-      payloadLen)
+    if strLen < THRESHOLD_LIST_LEN:
+      raiseNonCanonical()
 
-proc toBytes*(self: Rlp): seq[byte] =
-  if not self.isBlob():
-    raise newException(RlpTypeMismatch,
-                       "Bytes expected, but the source RLP in not a blob")
+    if strLen >= uint64(length - lenOfStrLen):
+      raiseOutOfBounds()
 
-  let payloadLen = self.payloadBytesCount()
+    (start + 1 + lenOfStrLen .. start + lenOfStrLen + int(strLen), rlpBlob)
+  elif prefix <= 0xf7:
+    # If the total payload of a list (i.e. the combined length of all its items
+    # being RLP encoded) is 0-55 bytes long, the RLP encoding consists of a
+    # single byte with value 0xc0 plus the length of the payload followed by the
+    # concatenation of the RLP encodings of the items. The range of the first
+    # byte is thus [0xc0, 0xf7] (dec. [192, 247]).
+    let listLen = int(prefix - 0xc0)
+    if listLen >= length:
+      raiseOutOfBounds()
 
-  if payloadLen > 0:
+    (start + 1 .. start + listLen, rlpList)
+  else:
+    # If the total payload of a list is more than 55 bytes long, the RLP
+    # encoding consists of a single byte with value 0xf7 plus the length in
+    # bytes of the length of the payload in binary form, followed by the length
+    # of the payload, followed by the concatenation of the RLP encodings of the
+    # items. The range of the first byte is thus [0xf8, 0xff] (dec. [248, 255]).
     let
-      payloadOffset = self.payloadOffset()
-      ibegin = self.position + payloadOffset
-      iend = ibegin + payloadLen - 1
+      lenOfListLen = int(prefix - 0xf7)
+      listLen = decodeInteger(input.view(start + 1 .. start + lenOfListLen))
 
-    result = self.bytes[ibegin..iend]
+    if listLen < THRESHOLD_LIST_LEN:
+      raiseNonCanonical()
 
-proc currentElemEnd*(self: Rlp): int =
-  doAssert self.hasData()
-  result = self.position
+    if listLen >= uint64(length - lenOfListLen):
+      raiseOutOfBounds()
 
-  if self.isSingleByte():
-    result += 1
-  elif self.isBlob() or self.isList():
-    result += self.payloadOffset() + self.payloadBytesCount()
+    (start + 1 + lenOfListLen .. start + lenOfListLen + int(listLen), rlpList)
 
-proc enterList*(self: var Rlp): bool =
-  if not self.isList():
+func item(self: Rlp, position: int): RlpItem =
+  rlpItem(self.bytes, position)
+
+func item(self: Rlp): RlpItem =
+  self.item(self.position)
+
+func rlpFromBytes*(data: openArray[byte]): Rlp =
+  Rlp(bytes: @data, position: 0)
+
+func rlpFromBytes*(data: sink seq[byte]): Rlp =
+  Rlp(bytes: move(data), position: 0)
+
+const zeroBytesRlp* = Rlp()
+
+func rlpFromHex*(input: string): Rlp =
+  Rlp(bytes: hexToSeqByte(input), position: 0)
+
+func hasData(self: Rlp, position: int): bool =
+  position < self.bytes.len
+
+func hasData*(self: Rlp): bool =
+  self.hasData(self.position)
+
+func isBlob(self: Rlp, position: int): bool =
+  self.hasData(position) and self.bytes[position] < LIST_START_MARKER
+
+func isBlob*(self: Rlp): bool =
+  self.isBlob(self.position)
+
+func isEmpty*(self: Rlp): bool =
+  ### Contains a blob or a list of zero length
+  self.hasData() and (
+    self.bytes[self.position] == BLOB_START_MARKER or
+    self.bytes[self.position] == LIST_START_MARKER
+  )
+
+func isList(self: Rlp, position: int): bool =
+  self.hasData(position) and self.bytes[position] >= LIST_START_MARKER
+
+func isList*(self: Rlp): bool =
+  self.isList(self.position)
+
+func isSingleByte(self: Rlp, position: int): bool =
+  self.hasData(position) and self.bytes[position] < BLOB_START_MARKER
+
+func isSingleByte*(self: Rlp): bool =
+  self.isSingleByte(self.position)
+
+func getByteValue*(self: Rlp): byte =
+  doAssert self.isSingleByte()
+  self.bytes[self.position]
+
+func blobLen*(self: Rlp): int =
+  if self.isBlob():
+    self.item().payload.len()
+  else:
+    0
+
+func isInt*(self: Rlp): bool =
+  if not self.hasData():
+    return false
+  let item = self.item()
+  item.typ == rlpBlob and (
+    item.payload.len() == 0 or
+    self.bytes[item.payload.a] != 0)
+
+template maxBytes*(o: type[Ordinal | uint64 | uint]): int =
+  sizeof(o)
+
+func toInt(self: Rlp, item: RlpItem, IntType: type): IntType =
+  mixin maxBytes, to
+  if item.typ != rlpBlob:
+    raiseExpectedBlob()
+
+  if item.payload.len > maxBytes(IntType):
+    raiseIntOutOfBounds()
+
+  for b in self.bytes.view(item.payload):
+    result = (result shl 8) or IntType(b)
+
+func toInt*(self: Rlp, IntType: type): IntType =
+  self.toInt(self.item(), IntType)
+
+func toString*(self: Rlp): string =
+  # TODO https://github.com/nim-lang/Nim/issues/23645
+  # the returnd string is cleared properly on exception here - the double
+  # result assignment can be removed once that bug is fixed
+  result = ""
+  result = self.toString(self.item())
+
+func toBytes(self: Rlp, item: RlpItem): seq[byte] =
+  if item.typ != rlpBlob:
+    raiseExpectedBlob()
+
+  @(self.bytes.view(item.payload))
+
+func toBytes*(self: Rlp): seq[byte] =
+  self.toBytes(self.item())
+
+func currentElemEnd(self: Rlp, position: int): int =
+  let item = self.item(position).payload
+  item.b + 1
+
+func currentElemEnd*(self: Rlp): int =
+  self.currentElemEnd(self.position)
+
+func enterList*(self: var Rlp): bool =
+  try: # TODO Refactor to remove exception here..
+    let item = self.item()
+    if item.typ != rlpList:
+      return false
+
+    self.position = item.payload.a
+    return true
+  except RlpError:
     return false
 
-  self.position += self.payloadOffset()
-  return true
-
-proc tryEnterList*(self: var Rlp) =
+func tryEnterList*(self: var Rlp) =
   if not self.enterList():
-    raise newException(RlpTypeMismatch, "List expected, but source RLP is not a list")
+    raiseExpectedList()
 
-proc skipElem*(rlp: var Rlp) =
-  rlp.position = rlp.currentElemEnd
+func positionAfter(rlp: var Rlp, item: RlpItem) =
+  rlp.position = item.payload.b + 1
+
+func positionAt(rlp: var Rlp, item: RlpItem) =
+  rlp.position = item.payload.a
+
+func skipElem*(rlp: var Rlp) =
+  doAssert rlp.hasData()
+  rlp.positionAfter(rlp.item())
+
+template iterateIt(self: Rlp, position: int, body: untyped) =
+  let item = self.item(position)
+  doAssert item.typ == rlpList
+  var it {.inject.} = item.payload.a
+  let last = item.payload.b
+  while it <= last:
+    let subItem = rlpItem(self.bytes.view(it .. last)).payload
+    body
+    it += subItem.b + 1
+
+iterator items(self: var Rlp, item: RlpItem): var Rlp =
+  # Iterate over items while updating "current" element view, mutating self
+  doAssert item.typ == rlpList
+
+  self.position = item.payload.a
+  let last = item.payload.b
+  while self.position <= last:
+    let
+      subItem = rlpItem(self.bytes.view(self.position .. last)).payload
+      next = self.position + subItem.b + 1
+    yield self
+    self.position = next # self.position might have changed during yield
 
 iterator items*(self: var Rlp): var Rlp =
-  doAssert self.isList()
+  # Iterate over items while updating "current" element view, mutating self
+  let item = self.item()
+  for item in self.items(item):
+    yield item
+
+func listElem*(self: Rlp, i: int): Rlp =
+  let item = self.item()
+  doAssert item.typ == rlpList
 
   var
-    payloadOffset = self.payloadOffset()
-    payloadEnd = self.position + payloadOffset + self.payloadBytesCount()
+    i = i
+    start = item.payload.a
+    payload = rlpItem(self.bytes.view(start .. item.payload.b)).payload
 
-  if payloadEnd > self.bytes.len:
-    raise newException(MalformedRlpError, "List length extends past the end of the stream")
+  while i > 0:
+    start += payload.b + 1
+    payload = rlpItem(self.bytes.view(start .. item.payload.b)).payload
+    dec i
 
-  self.position += payloadOffset
+  rlpFromBytes self.bytes.view(start .. start + payload.b)
 
-  while self.position < payloadEnd:
-    let elemEnd = self.currentElemEnd()
-    yield self
-    self.position = elemEnd
-
-proc listElem*(self: Rlp, i: int): Rlp =
-  doAssert self.isList()
-  let
-    payloadOffset = self.payloadOffset()
-
-  # This will only check if there is some data, not if it is correct according
-  # to list length. Could also run here payloadBytesCount() instead.
-  if self.position + payloadOffset + 1 > self.bytes.len: eosError()
-
-  let payload = self.bytes[self.position + payloadOffset..^1]
-  result = rlpFromBytes payload
-  var pos = 0
-  while pos < i and result.hasData:
-    result.position = result.currentElemEnd()
-    inc pos
-
-proc listLen*(self: Rlp): int =
+func listLen*(self: Rlp): int =
   if not self.isList():
     return 0
 
-  var rlp = self
-  for elem in rlp:
+  self.iterateIt(self.position):
     inc result
 
-proc readImpl(rlp: var Rlp, T: type string): string =
-  result = rlp.toString
-  rlp.skipElem
+func readImpl(rlp: var Rlp, T: type string): string =
+  let item = rlp.item()
+  result = rlp.toString(item)
+  rlp.positionAfter(item)
 
-proc readImpl(rlp: var Rlp, T: type Integer): Integer =
-  result = rlp.toInt(T)
-  rlp.skipElem
+func readImpl(rlp: var Rlp, T: type SomeUnsignedInt): T =
+  let item = rlp.item()
+  result = rlp.toInt(item, T)
+  rlp.positionAfter(item)
 
-proc readImpl(rlp: var Rlp, T: type[enum]): T =
-  let value = rlp.toInt(int)
+func readImpl(rlp: var Rlp, T: type[enum]): T =
+  let
+    item = rlp.item()
+    value = rlp.toInt(item, uint64)
 
   var res: T
   if not checkedEnumAssign(res, value):
-    raise newException(RlpTypeMismatch,
-      "Enum value expected, but the source RLP is not in valid range.")
-  rlp.skipElem
+    raise newException(
+      RlpTypeMismatch, "Enum value expected, but the source RLP is not in valid range."
+    )
+  rlp.positionAfter(item)
 
   res
 
-proc readImpl(rlp: var Rlp, T: type bool): T =
-  result = rlp.toInt(int) != 0
-  rlp.skipElem
+func readImpl(rlp: var Rlp, T: type bool): T =
+  rlp.readImpl(uint64) != 0
 
-proc readImpl(rlp: var Rlp, T: type float64): T =
-  # This is not covered in the RLP spec, but Geth uses Go's
-  # `math.Float64bits`, which is defined here:
-  # https://github.com/gopherjs/gopherjs/blob/master/compiler/natives/src/math/math.go
-  let uint64bits = rlp.toInt(uint64)
-  var uint32parts = [uint32(uint64bits), uint32(uint64bits shr 32)]
-  copyMem(addr result, unsafeAddr uint32parts, sizeof(result))
-
-proc readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
+func readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
   mixin read
 
+  let item = rlp.item()
   when E is (byte or char):
-    if not rlp.isBlob:
-      raise newException(RlpTypeMismatch, "Bytes array expected, but the source RLP is not a blob.")
+    if item.typ != rlpBlob:
+      raiseExpectedBlob()
 
-    var bytes = rlp.toBytes
-    if result.len != bytes.len:
-      raise newException(RlpTypeMismatch, "Fixed-size array expected, but the source RLP contains a blob of different length")
+    if item.payload.len != result.len:
+      raise newException(
+        RlpTypeMismatch,
+        "Fixed-size array expected, but the source RLP contains a blob of different length",
+      )
 
-    copyMem(addr result[0], unsafeAddr bytes[0], bytes.len)
-
-    rlp.skipElem
-
+    copyMem(addr result[0], unsafeAddr rlp.bytes[item.payload.a], result.len)
   else:
-    if not rlp.isList:
-      raise newException(RlpTypeMismatch, "List expected, but the source RLP is not a list.")
-
     if result.len != rlp.listLen:
-      raise newException(RlpTypeMismatch, "Fixed-size array expected, but the source RLP contains a list of different length")
+      raise newException(
+        RlpTypeMismatch,
+        "Fixed-size array expected, but the source RLP contains a list of different length",
+      )
 
     var i = 0
-    for elem in rlp:
+    for elem in rlp.items(item):
       result[i] = rlp.read(E)
       inc i
 
-proc readImpl[E](rlp: var Rlp, T: type seq[E]): T =
-  mixin read
+  rlp.positionAfter(item)
 
-  when E is (byte or char):
-    result = rlp.toBytes
-    rlp.skipElem
+func readImpl[E](rlp: var Rlp, T: type seq[E]): T =
+  mixin read
+  let item = rlp.item()
+  when E is byte:
+    result = rlp.toBytes(item)
   else:
-    if not rlp.isList:
-      raise newException(RlpTypeMismatch, "Sequence expected, but the source RLP is not a list.")
+    if item.typ != rlpList:
+      raiseExpectedList()
 
     result = newSeqOfCap[E](rlp.listLen)
 
-    for elem in rlp:
+    for elem in rlp.items():
       result.add rlp.read(E)
 
-proc readImpl[E](rlp: var Rlp, T: type openArray[E]): seq[E] =
-  result = readImpl(rlp, seq[E])
+  rlp.positionAfter(item)
 
-proc readImpl(rlp: var Rlp, T: type[object|tuple],
-              wrappedInList = wrapObjsInList): T =
+func readImpl[E](rlp: var Rlp, T: type openArray[E]): seq[E] =
+  readImpl(rlp, seq[E])
+
+func readImpl(
+    rlp: var Rlp, T: type[object | tuple], wrappedInList = wrapObjsInList
+): T =
   mixin enumerateRlpFields, read
 
-  var payloadEnd = rlp.bytes.len
-  if wrappedInList:
-    if not rlp.isList:
-      raise newException(RlpTypeMismatch,
-                        "List expected, but the source RLP is not a list.")
-    var
-      payloadOffset = rlp.payloadOffset()
+  let payloadEnd =
+    if wrappedInList:
+      let item = rlp.item()
+      if item.typ != rlpList:
+        raiseExpectedList()
 
-    # there's an exception-raising side effect in there *sigh*
-    payloadEnd = rlp.position + payloadOffset + rlp.payloadBytesCount()
+      rlp.positionAt(item)
+      item.payload.b + 1
+    else:
+      rlp.bytes.len()
 
-    rlp.position += payloadOffset
+  template getUnderlyingType[T](_: Option[T]): untyped =
+    T
 
-  template getUnderlyingType[T](_: Option[T]): untyped = T
-  template getUnderlyingType[T](_: Opt[T]): untyped = T
+  template getUnderlyingType[T](_: Opt[T]): untyped =
+    T
 
   template op(RecordType, fieldName, field) {.used.} =
     type FieldType {.used.} = type field
@@ -422,36 +473,38 @@ proc readImpl(rlp: var Rlp, T: type[object|tuple],
 
   enumerateRlpFields(result, op)
 
-proc toNodes*(self: var Rlp): RlpNode =
-  requireData()
+proc validate(self: Rlp, position: int) =
+  var item = self.item(position)
+  while true:
+    if item.typ == rlpList:
+      self.iterateIt(item.payload.a):
+        self.validate(it)
 
-  if self.isList():
-    result = RlpNode(kind: rlpList)
-    for e in self:
-      result.elems.add e.toNodes
-  else:
-    doAssert self.isBlob()
-    result = RlpNode(
-      kind: rlpBlob,
-      bytes: self.toBytes(),
-    )
-    self.position = self.currentElemEnd()
+    if item.payload.b >= self.bytes.high():
+      break
+
+    item = self.item(item.payload.b + 1)
+
+func validate*(self: Rlp) =
+  self.validate(self.position)
 
 # We define a single `read` template with a pretty low specificity
 # score in order to facilitate easier overloading with user types:
 template read*(rlp: var Rlp, T: type): auto =
-  readImpl(rlp, T)
+  when T is SomeSignedInt:
+    let value = readImpl(rlp, uint64)
+    if value > uint64(T.high()):
+      raiseIntOutOfBounds()
+    T value
+  else:
+    readImpl(rlp, T)
 
-proc `>>`*[T](rlp: var Rlp, location: var T) =
+func `>>`*[T](rlp: var Rlp, location: var T) =
   mixin read
   location = rlp.read(T)
 
 template readRecordType*(rlp: var Rlp, T: type, wrappedInList: bool): auto =
   readImpl(rlp, T, wrappedInList)
-
-proc decode*(bytes: openArray[byte]): RlpNode =
-  var rlp = rlpFromBytes(bytes)
-  rlp.toNodes
 
 template decode*(bytes: openArray[byte], T: type): untyped =
   mixin read
@@ -463,17 +516,20 @@ template decode*(bytes: seq[byte], T: type): untyped =
   var rlp = rlpFromBytes(bytes)
   rlp.read(T)
 
-proc append*(writer: var RlpWriter; rlp: Rlp) =
+template rawData*(self: Rlp): openArray[byte] =
+  self.bytes.toOpenArray(self.position, self.currentElemEnd - 1)
+
+func append*(writer: var RlpWriter, rlp: Rlp) =
   appendRawBytes(writer, rlp.rawData)
 
-proc isPrintable(s: string): bool =
+func isPrintable(s: string): bool =
   for c in s:
     if ord(c) < 32 or ord(c) >= 128:
       return false
 
   return true
 
-proc renderBlob(self: var Rlp, hexOutput: bool, output: var string) =
+func renderBlob(self: var Rlp, hexOutput: bool, output: var string) =
   let str = self.toString
   if str.isPrintable:
     output.add '"'
@@ -492,12 +548,12 @@ proc renderBlob(self: var Rlp, hexOutput: bool, output: var string) =
     else:
       output[^1] = ']'
 
-proc inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) =
+func inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) =
   if not self.hasData():
     return
 
-  template indent =
-    for i in 0..<depth:
+  template indent() =
+    for i in 0 ..< depth:
       output.add "  "
 
   indent()
@@ -509,13 +565,13 @@ proc inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) 
     self.renderBlob(hexOutput, output)
   else:
     output.add "{\n"
-    for subitem in self:
+    for subitem in self.items:
       inspectAux(subitem, depth + 1, hexOutput, output)
       output.add "\n"
     indent()
     output.add "}"
 
-proc inspect*(self: Rlp, indent = 0, hexOutput = true): string =
+func inspect*(self: Rlp, indent = 0, hexOutput = true): string =
   var rlpCopy = self
   result = newStringOfCap(self.bytes.len)
   inspectAux(rlpCopy, indent, hexOutput, result)

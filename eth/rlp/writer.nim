@@ -8,19 +8,17 @@ type
     pendingLists: seq[tuple[remainingItems, outBytes: int]]
     output: seq[byte]
 
-  Integer* = SomeInteger
-
 const
   wrapObjsInList* = true
 
-proc bytesNeeded(num: Integer): int =
+proc bytesNeeded(num: SomeUnsignedInt): int =
   type IntType = type(num)
   var n = num
   while n != IntType(0):
     inc result
     n = n shr 8
 
-proc writeBigEndian(outStream: var seq[byte], number: Integer,
+proc writeBigEndian(outStream: var seq[byte], number: SomeUnsignedInt,
                     lastByteIdx: int, numberOfBytes: int) =
   mixin `and`, `shr`
 
@@ -29,7 +27,7 @@ proc writeBigEndian(outStream: var seq[byte], number: Integer,
     outStream[i] = byte(n and 0xff)
     n = n shr 8
 
-proc writeBigEndian(outStream: var seq[byte], number: Integer,
+proc writeBigEndian(outStream: var seq[byte], number: SomeUnsignedInt,
                     numberOfBytes: int) {.inline.} =
   outStream.setLen(outStream.len + numberOfBytes)
   outStream.writeBigEndian(number, outStream.len - 1, numberOfBytes)
@@ -40,11 +38,11 @@ proc writeCount(bytes: var seq[byte], count: int, baseMarker: byte) =
   else:
     let
       origLen = bytes.len
-      lenPrefixBytes = count.bytesNeeded
+      lenPrefixBytes = uint64(count).bytesNeeded
 
     bytes.setLen(origLen + int(lenPrefixBytes) + 1)
     bytes[origLen] = baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
-    bytes.writeBigEndian(count, bytes.len - 1, lenPrefixBytes)
+    bytes.writeBigEndian(uint64(count), bytes.len - 1, lenPrefixBytes)
 
 proc initRlpWriter*: RlpWriter =
   newSeq(result.pendingLists, 0)
@@ -68,7 +66,7 @@ proc maybeClosePendingLists(self: var RlpWriter) =
 
       # Compute the number of bytes required to write down the list length
       let totalPrefixBytes = if listLen < int(THRESHOLD_LIST_LEN): 1
-                             else: int(listLen.bytesNeeded) + 1
+                             else: int(uint64(listLen).bytesNeeded) + 1
 
       # Shift the written data to make room for the prefix length
       self.output.setLen(self.output.len + totalPrefixBytes)
@@ -83,7 +81,7 @@ proc maybeClosePendingLists(self: var RlpWriter) =
       else:
         let listLenBytes = totalPrefixBytes - 1
         self.output[listStartPos] = LEN_PREFIXED_LIST_MARKER + byte(listLenBytes)
-        self.output.writeBigEndian(listLen, listStartPos + listLenBytes, listLenBytes)
+        self.output.writeBigEndian(uint64(listLen), listStartPos + listLenBytes, listLenBytes)
     else:
       # The currently open list is not finished yet. Nothing to do.
       return
@@ -121,14 +119,14 @@ proc appendBlob(self: var RlpWriter, data: openArray[byte]) =
 proc appendBlob(self: var RlpWriter, data: openArray[char]) =
   appendBlob(self, data.toOpenArrayByte(0, data.high), BLOB_START_MARKER)
 
-proc appendInt(self: var RlpWriter, i: Integer) =
+proc appendInt(self: var RlpWriter, i: SomeUnsignedInt) =
   # this is created as a separate proc as an extra precaution against
   # any overloading resolution problems when matching the IntLike concept.
   type IntType = type(i)
 
   if i == IntType(0):
     self.output.add BLOB_START_MARKER
-  elif i < BLOB_START_MARKER.Integer:
+  elif i < BLOB_START_MARKER.SomeUnsignedInt:
     self.output.add byte(i)
   else:
     let bytesNeeded = i.bytesNeeded
@@ -137,16 +135,7 @@ proc appendInt(self: var RlpWriter, i: Integer) =
 
   self.maybeClosePendingLists()
 
-proc appendFloat(self: var RlpWriter, data: float64) =
-  # This is not covered in the RLP spec, but Geth uses Go's
-  # `math.Float64bits`, which is defined here:
-  # https://github.com/gopherjs/gopherjs/blob/master/compiler/natives/src/math/math.go
-  var uint32Words: array[2, uint32]
-  copyMem(addr uint32Words[0], unsafeAddr data, sizeof(uint32Words))
-  let uint64bits = (uint64(uint32Words[1]) shl 32) or uint64(uint32Words[0])
-  self.appendInt(uint64bits)
-
-template appendImpl(self: var RlpWriter, i: Integer) =
+template appendImpl(self: var RlpWriter, i: SomeUnsignedInt) =
   appendInt(self, i)
 
 template appendImpl(self: var RlpWriter, e: enum) =
@@ -310,11 +299,11 @@ proc appendImpl(self: var RlpWriter, data: tuple) {.inline.} =
 # We define a single `append` template with a pretty low specificity
 # score in order to facilitate easier overloading with user types:
 template append*[T](w: var RlpWriter; data: T) =
-  when data is float64:
-    # XXX: This works around an overloading bug.
-    # Apparently, integer literals will be converted to `float64`
-    # values with higher precedence than the generic match to Integer
-    appendFloat(w, data)
+  when data is (SomeSignedInt|enum|bool):
+    # TODO potentially remove signed integer support - we should never make it
+    #      this far!
+    {.warning: "Signed integers cannot reliably be encoded using RLP".}
+    appendImpl(w, uint64(data))
   else:
     appendImpl(w, data)
 
@@ -333,7 +322,7 @@ proc encode*[T](v: T): seq[byte] =
   writer.append(v)
   return writer.finish
 
-proc encodeInt*(i: Integer): seq[byte] =
+proc encodeInt*(i: SomeUnsignedInt): seq[byte] =
   var writer = initRlpWriter()
   writer.appendInt(i)
   return writer.finish
