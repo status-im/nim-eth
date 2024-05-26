@@ -5,7 +5,6 @@ import
   ./test_examples,
   ./test_hexary_trie,
   ./test_json_suite,
-  ./test_sparse_binary_trie,
   ./test_transaction_db,
   ./test_trie_bitseq,
   ./test_hexary_proof
