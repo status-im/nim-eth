@@ -38,39 +38,11 @@ proc expectHash(r: Rlp): seq[byte] =
     raise newException(RlpTypeMismatch,
       "RLP expected to be a Keccak hash value, but has an incorrect length")
 
-type MissingNodeError* = ref object of AssertionDefect
-  path*: NibblesSeq
-  nodeHashBytes*: seq[byte]
-
-proc dbGet(db: DB, data: openArray[byte]): seq[byte]
-  {.gcsafe, raises: [].} =
-  db.get(data)
-
-proc dbGet(db: DB, key: Rlp): seq[byte] =
-  dbGet(db, key.expectHash)
-
 proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey
   {.gcsafe, raises: [].}
 
-# For stateless mode, it's possible for nodes to be missing from the DB,
-# and we need the higher-level code to be able to find out the *path* to
-# the missing node. So here we need the path to be passed in, and if the
-# node is missing we'll raise an exception to get that information up to
-# where it's needed.
-proc getPossiblyMissingNode(db: DB, data: openArray[byte], fullPath: NibblesSeq, pathIndex: int): seq[byte]
-  {.gcsafe, raises: [Defect].} =
-  # FIXME-Adam: This causes some tests to fail in nimbus-eth1; I'm not
-  # sure why. I need to figure it out, though, because we need this
-  # behaviour.
-  #
-  # if db.contains(data):
-  #   db.get(data)
-  # else:
-  #   raise MissingNodeError(path: fullPath.slice(0, pathIndex), nodeHashBytes: @data)
-  db.get(data)
-
-proc getPossiblyMissingNode(db: DB, key: Rlp, fullPath: NibblesSeq, pathIndex: int): seq[byte] =
-  getPossiblyMissingNode(db, key.expectHash, fullPath, pathIndex)
+template get(db: DB, key: Rlp): seq[byte] =
+  db.get(key.expectHash)
 
 converter toTrieNodeKey(hash: KeccakHash): TrieNodeKey =
   result.hash = hash
@@ -113,21 +85,27 @@ proc getLocalBytes(x: TrieNodeKey): seq[byte] =
 
 template keyToLocalBytes(db: DB, k: TrieNodeKey): seq[byte] =
   if k.len < 32: k.getLocalBytes
-  else: dbGet(db, k.asDbKey)
+  else: db.get(k.asDbKey)
 
 template extensionNodeKey(r: Rlp): auto =
   hexPrefixDecode r.listElem(0).toBytes
 
-proc getLookup(db: DB, elem: Rlp, fullPath: NibblesSeq, pathIndex: int): Rlp =
-  if elem.isList: elem
-  else: rlpFromBytes(getPossiblyMissingNode(db, elem.expectHash, fullPath, pathIndex))
+proc getAux(db: DB, nodeRlp: Rlp, path: NibblesSeq): seq[byte]
+  {.gcsafe, raises: [RlpError].}
 
-proc getAux(db: DB, nodeRlp: Rlp, fullPath: NibblesSeq, pathIndex: int): seq[byte]
+proc getAuxByHash(db: DB, node: TrieNodeKey, path: NibblesSeq): seq[byte] =
+  var nodeRlp = rlpFromBytes keyToLocalBytes(db, node)
+  return getAux(db, nodeRlp, path)
+
+template getLookup(elem: untyped): untyped =
+  if elem.isList: elem
+  else: rlpFromBytes(get(db, elem.expectHash))
+
+proc getAux(db: DB, nodeRlp: Rlp, path: NibblesSeq): seq[byte]
     {.gcsafe, raises: [RlpError].} =
   if not nodeRlp.hasData or nodeRlp.isEmpty:
     return
 
-  let path = fullPath.slice(pathIndex)
   case nodeRlp.listLen
   of 2:
     let (isLeaf, k) = nodeRlp.extensionNodeKey
@@ -138,8 +116,8 @@ proc getAux(db: DB, nodeRlp: Rlp, fullPath: NibblesSeq, pathIndex: int): seq[byt
       if sharedNibbles == path.len and isLeaf:
         return value.toBytes
       elif not isLeaf:
-        let nextLookup = getLookup(db, value, fullPath, pathIndex + sharedNibbles)
-        return getAux(db, nextLookup, fullPath, pathIndex + sharedNibbles)
+        let nextLookup = value.getLookup
+        return getAux(db, nextLookup, path.slice(sharedNibbles))
 
     return
   of 17:
@@ -149,18 +127,14 @@ proc getAux(db: DB, nodeRlp: Rlp, fullPath: NibblesSeq, pathIndex: int): seq[byt
     if branch.isEmpty:
       return
     else:
-      let nextLookup = getLookup(db, branch, fullPath, pathIndex + 1)
-      return getAux(db, nextLookup, fullPath, pathIndex + 1)
+      let nextLookup = branch.getLookup
+      return getAux(db, nextLookup, path.slice(1))
   else:
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
-proc getAuxByHash(db: DB, node: TrieNodeKey, fullPath: NibblesSeq, pathIndex: int): seq[byte] =
-  var nodeRlp = rlpFromBytes keyToLocalBytes(db, node)
-  return getAux(db, nodeRlp, fullPath, pathIndex)
-
 proc get*(self: HexaryTrie; key: openArray[byte]): seq[byte] =
-  return getAuxByHash(self.db, self.root, initNibbleRange(key), 0)
+  return getAuxByHash(self.db, self.root, initNibbleRange(key))
 
 proc getKeysAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesSeq]]): seq[byte] =
   while stack.len > 0:
@@ -180,15 +154,15 @@ proc getKeysAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesSeq]]): 
       else:
         let
           value = nodeRlp.listElem(1)
-          nextLookup = getLookup(db, value, key, key.len)
+          nextLookup = value.getLookup
         stack.add((nextLookup, key))
     of 17:
       for i in 0 ..< 16:
         var branch = nodeRlp.listElem(i)
         if not branch.isEmpty:
+          let nextLookup = branch.getLookup
           var key = path.cloneAndReserveNibble()
           key.replaceLastNibble(i.byte)
-          let nextLookup = getLookup(db, branch, key, key.len)
           stack.add((nextLookup, key))
 
       var lastElem = nodeRlp.listElem(16)
@@ -206,33 +180,29 @@ iterator keys*(self: HexaryTrie): seq[byte] =
   while stack.len > 0:
     yield getKeysAux(self.db, stack)
 
-proc getValuesAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesSeq]]): seq[byte] =
+proc getValuesAux(db: DB, stack: var seq[Rlp]): seq[byte] =
   while stack.len > 0:
-    let (nodeRlp, path) = stack.pop()
+    let nodeRlp = stack.pop()
     if not nodeRlp.hasData or nodeRlp.isEmpty:
       continue
 
     case nodeRlp.listLen
     of 2:
       let
-        (isLeaf, k) = nodeRlp.extensionNodeKey
-        key = path & k
+        (isLeaf, _) = nodeRlp.extensionNodeKey
         value = nodeRlp.listElem(1)
 
       if isLeaf:
-        doAssert(key.len mod 2 == 0)
         return value.toBytes
       else:
-        let nextLookup = getLookup(db, value, key, key.len)
-        stack.add((nextLookup, key))
+        let nextLookup = value.getLookup
+        stack.add(nextLookup)
     of 17:
       for i in 0 ..< 16:
         var branch = nodeRlp.listElem(i)
         if not branch.isEmpty:
-          var key = path.cloneAndReserveNibble()
-          key.replaceLastNibble(i.byte)
-          let nextLookup = getLookup(db, branch, key, key.len)
-          stack.add((nextLookup, key))
+          let nextLookup = branch.getLookup
+          stack.add(nextLookup)
 
       var lastElem = nodeRlp.listElem(16)
       if not lastElem.isEmpty:
@@ -244,7 +214,7 @@ proc getValuesAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesSeq]])
 iterator values*(self: HexaryTrie): seq[byte] =
   var
     nodeRlp = rlpFromBytes keyToLocalBytes(self.db, self.root)
-    stack = @[(nodeRlp, initNibbleRange([]))]
+    stack = @[nodeRlp]
   while stack.len > 0:
     yield getValuesAux(self.db, stack)
 
@@ -265,15 +235,15 @@ proc getPairsAux(db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesSeq]]):
         doAssert(key.len mod 2 == 0)
         return (key.getBytes, value.toBytes)
       else:
-        let nextLookup = getLookup(db, value, key, key.len)
+        let nextLookup = value.getLookup
         stack.add((nextLookup, key))
     of 17:
       for i in 0 ..< 16:
         var branch = nodeRlp.listElem(i)
         if not branch.isEmpty:
+          let nextLookup = branch.getLookup
           var key = path.cloneAndReserveNibble()
           key.replaceLastNibble(i.byte)
-          let nextLookup = getLookup(db, branch, key, key.len)
           stack.add((nextLookup, key))
 
       var lastElem = nodeRlp.listElem(16)
@@ -348,15 +318,14 @@ proc getKeys*(self: HexaryTrie): seq[seq[byte]] =
   for k in self.keys:
     result.add k
 
-template getNode(db: DB, elem: Rlp): untyped =
+template getNode(elem: untyped): untyped =
   if elem.isList: @(elem.rawData)
-  else: dbGet(db, elem.expectHash)
+  else: get(db, elem.expectHash)
 
-proc getBranchAux(db: DB, node: openArray[byte], fullPath: NibblesSeq, pathIndex: int, output: var seq[seq[byte]]) =
+proc getBranchAux(db: DB, node: openArray[byte], path: NibblesSeq, output: var seq[seq[byte]]) =
   var nodeRlp = rlpFromBytes node
   if not nodeRlp.hasData or nodeRlp.isEmpty: return
 
-  let path = fullPath.slice(pathIndex)
   case nodeRlp.listLen
   of 2:
     let (isLeaf, k) = nodeRlp.extensionNodeKey
@@ -364,16 +333,16 @@ proc getBranchAux(db: DB, node: openArray[byte], fullPath: NibblesSeq, pathIndex
     if sharedNibbles == k.len:
       let value = nodeRlp.listElem(1)
       if not isLeaf:
-        let nextLookup = getNode(db, value)
+        let nextLookup = value.getNode
         output.add nextLookup
-        getBranchAux(db, nextLookup, fullPath, pathIndex + sharedNibbles, output)
+        getBranchAux(db, nextLookup, path.slice(sharedNibbles), output)
   of 17:
     if path.len != 0:
       var branch = nodeRlp.listElem(path[0].int)
       if not branch.isEmpty:
-        let nextLookup = getNode(db, branch)
+        let nextLookup = branch.getNode
         output.add nextLookup
-        getBranchAux(db, nextLookup, fullPath, pathIndex + 1, output)
+        getBranchAux(db, nextLookup, path.slice(1), output)
   else:
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
@@ -382,7 +351,7 @@ proc getBranch*(self: HexaryTrie; key: openArray[byte]): seq[seq[byte]] =
   result = @[]
   var node = keyToLocalBytes(self.db, self.root)
   result.add node
-  getBranchAux(self.db, node, initNibbleRange(key), 0, result)
+  getBranchAux(self.db, node, initNibbleRange(key), result)
 
 proc dbDel(t: var HexaryTrie, data: openArray[byte]) =
   if data.len >= 32: t.prune(data.keccakHash.data)
@@ -425,9 +394,9 @@ proc replaceValue(data: Rlp, key: NibblesSeq, value: openArray[byte]): seq[byte]
   r.append value
   return r.finish()
 
-proc isTwoItemNode(self: HexaryTrie; r: Rlp, fullPath: NibblesSeq, pathIndex: int): bool =
+proc isTwoItemNode(self: HexaryTrie; r: Rlp): bool =
   if r.isBlob:
-    let resolved = getPossiblyMissingNode(self.db, r, fullPath, pathIndex)
+    let resolved = self.db.get(r)
     let rlp = rlpFromBytes(resolved)
     return rlp.isList and rlp.listLen == 2
   else:
@@ -446,24 +415,18 @@ proc findSingleChild(r: Rlp; childPos: var byte): Rlp =
         return zeroBytesRlp
     inc i
 
-proc deleteAt(self: var HexaryTrie;
-              origRlp: Rlp,
-              fullPath: NibblesSeq,
-              pathIndex: int): seq[byte]
+proc deleteAt(self: var HexaryTrie; origRlp: Rlp, key: NibblesSeq): seq[byte]
   {.gcsafe, raises: [RlpError].}
 
-proc deleteAux(self: var HexaryTrie;
-               rlpWriter: var RlpWriter;
-               origRlp: Rlp;
-               fullPath: NibblesSeq,
-               pathIndex: int): bool =
+proc deleteAux(self: var HexaryTrie; rlpWriter: var RlpWriter;
+               origRlp: Rlp; path: NibblesSeq): bool =
   if origRlp.isEmpty:
     return false
 
   var toDelete = if origRlp.isList: origRlp
-                 else: rlpFromBytes getPossiblyMissingNode(self.db, origRlp, fullPath, pathIndex)
+                 else: rlpFromBytes self.db.get(origRlp)
 
-  let b = self.deleteAt(toDelete, fullPath, pathIndex)
+  let b = self.deleteAt(toDelete, path)
 
   if b.len == 0:
     return false
@@ -471,14 +434,14 @@ proc deleteAux(self: var HexaryTrie;
   rlpWriter.appendAndSave(b, self.db)
   return true
 
-proc graft(self: var HexaryTrie; r: Rlp, fullPath: NibblesSeq, pathIndexToTheParent: int): seq[byte] =
+proc graft(self: var HexaryTrie; r: Rlp): seq[byte] =
   doAssert r.isList and r.listLen == 2
   var (_, origPath) = r.extensionNodeKey
   var value = r.listElem(1)
 
   if not value.isList:
     let nodeKey = value.expectHash
-    var resolvedData = getPossiblyMissingNode(self.db, nodeKey, fullPath, pathIndexToTheParent + origPath.len)
+    var resolvedData = self.db.get(nodeKey)
     self.prune(nodeKey)
     value = rlpFromBytes resolvedData
 
@@ -491,8 +454,6 @@ proc graft(self: var HexaryTrie; r: Rlp, fullPath: NibblesSeq, pathIndexToThePar
   return rlpWriter.finish
 
 proc mergeAndGraft(self: var HexaryTrie;
-                   fullPath: NibblesSeq;
-                   pathIndexToTheParent: int,
                    soleChild: Rlp, childPos: byte): seq[byte] =
   var output = initRlpList(2)
   if childPos == 16:
@@ -503,61 +464,45 @@ proc mergeAndGraft(self: var HexaryTrie;
   output.append(soleChild)
   result = output.finish()
 
-  if self.isTwoItemNode(soleChild, fullPath, pathIndexToTheParent + 1):
-    result = self.graft(rlpFromBytes(result), fullPath, pathIndexToTheParent)
+  if self.isTwoItemNode(soleChild):
+    result = self.graft(rlpFromBytes(result))
 
-# If the key is present, returns the RLP bytes for a node that
-# omits this key. Returns an empty seq if the key is absent.
-proc deleteAt(self: var HexaryTrie; origRlp: Rlp, fullPath: NibblesSeq, pathIndex: int): seq[byte]
+proc deleteAt(self: var HexaryTrie; origRlp: Rlp, key: NibblesSeq): seq[byte]
     {.gcsafe, raises: [RlpError].} =
   if origRlp.isEmpty:
-    # It's empty RLP, so the key is absent, so no change necessary.
     return
 
   doAssert origRlp.isTrieBranch
   let origBytes = @(origRlp.rawData)
-  let path = fullPath.slice(pathIndex)
   if origRlp.listLen == 2:
     let (isLeaf, k) = origRlp.extensionNodeKey
-    if k == path and isLeaf:
-      # This is the leaf for the key we're looking for.
-      # Omitting this key from the leaf means we're
-      # left with empty RLP.
+    if k == key and isLeaf:
       self.dbDel origBytes
       return emptyRlp
 
-    if path.startsWith(k):
-      # This extension node gets us *partway* to the desired
-      # key, but not all the way.
-      let path = origRlp.listElem(0)
-      let value = origRlp.listElem(1)
-      # Create RLP for a new 2-item node that omits the key we're
-      # trying to delete.
-      var rlpWriter = initRlpList(2)
+    if key.startsWith(k):
+      var
+        rlpWriter = initRlpList(2)
+        path = origRlp.listElem(0)
+        value = origRlp.listElem(1)
       rlpWriter.append(path)
-      if not self.deleteAux(rlpWriter, value, fullPath, pathIndex + k.len):
-        # Key is absent in the value, so never mind.
+      if not self.deleteAux(rlpWriter, value, key.slice(k.len)):
         return
-      # We don't need the original node anymore, since we're about to
-      # replace it with a modified one.
       self.dbDel origBytes
       var finalBytes = rlpWriter.finish
       var rlp = rlpFromBytes(finalBytes)
-      # We already knew that *this* node is a 2-item node; now
-      # we check to see if the modified *child* is also a 2-item
-      # node, because if so, we can graft it.
-      if self.isTwoItemNode(rlp.listElem(1), fullPath, pathIndex + k.len):
-        return self.graft(rlp, fullPath, pathIndex)
+      if self.isTwoItemNode(rlp.listElem(1)):
+        return self.graft(rlp)
       return finalBytes
     else:
       return
   else:
-    if path.len == 0 and origRlp.listElem(16).isEmpty:
+    if key.len == 0 and origRlp.listElem(16).isEmpty:
       self.dbDel origBytes
       var foundChildPos: byte
       let singleChild = origRlp.findSingleChild(foundChildPos)
       if singleChild.hasData and foundChildPos != 16:
-        result = self.mergeAndGraft(fullPath, pathIndex + 1, singleChild, foundChildPos)
+        result = self.mergeAndGraft(singleChild, foundChildPos)
       else:
         var rlpRes = initRlpList(17)
         var iter = origRlp
@@ -570,12 +515,12 @@ proc deleteAt(self: var HexaryTrie; origRlp: Rlp, fullPath: NibblesSeq, pathInde
         return rlpRes.finish
     else:
       var rlpWriter = initRlpList(17)
-      let keyHead = int(path[0])
+      let keyHead = int(key[0])
       var i = 0
       var origCopy = origRlp
       for elem in items(origCopy):
         if i == keyHead:
-          if not self.deleteAux(rlpWriter, elem, fullPath, pathIndex + 1):
+          if not self.deleteAux(rlpWriter, elem, key.slice(1)):
             return
         else:
           rlpWriter.append(elem)
@@ -587,48 +532,47 @@ proc deleteAt(self: var HexaryTrie; origRlp: Rlp, fullPath: NibblesSeq, pathInde
       var foundChildPos: byte
       let singleChild = resultRlp.findSingleChild(foundChildPos)
       if singleChild.hasData:
-        result = self.mergeAndGraft(fullPath, pathIndex + 1, singleChild, foundChildPos)
+        result = self.mergeAndGraft(singleChild, foundChildPos)
 
 proc del*(self: var HexaryTrie; key: openArray[byte]) =
   var
     rootBytes = keyToLocalBytes(self.db, self.root)
     rootRlp = rlpFromBytes rootBytes
 
-  var newRootBytes = self.deleteAt(rootRlp, initNibbleRange(key), 0)
+  var newRootBytes = self.deleteAt(rootRlp, initNibbleRange(key))
   if newRootBytes.len > 0:
     if rootBytes.len < 32:
       self.prune(self.root.asDbKey)
     self.root = self.db.dbPut(newRootBytes)
 
 proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
-  fullPath: NibblesSeq, pathIndex: int, value: openArray[byte],
+  key: NibblesSeq, value: openArray[byte],
   isInline = false): seq[byte]
   {.gcsafe, raises: [RlpError].}
 
 proc mergeAt(self: var HexaryTrie, rlp: Rlp,
-             fullPath: NibblesSeq, pathIndex: int, value: openArray[byte],
+             key: NibblesSeq, value: openArray[byte],
              isInline = false): seq[byte] =
-  self.mergeAt(rlp, rlp.rawData.keccakHash, fullPath, pathIndex, value, isInline)
+  self.mergeAt(rlp, rlp.rawData.keccakHash, key, value, isInline)
 
 proc mergeAtAux(self: var HexaryTrie, output: var RlpWriter, orig: Rlp,
-                fullPath: NibblesSeq, pathIndex: int, value: openArray[byte]) =
+                key: NibblesSeq, value: openArray[byte]) =
   var resolved = orig
   var isRemovable = false
   if not (orig.isList or orig.isEmpty):
-    resolved = rlpFromBytes getPossiblyMissingNode(self.db, orig, fullPath, pathIndex)
+    resolved = rlpFromBytes self.db.get(orig)
     isRemovable = true
 
-  let b = self.mergeAt(resolved, fullPath, pathIndex, value, not isRemovable)
+  let b = self.mergeAt(resolved, key, value, not isRemovable)
   output.appendAndSave(b, self.db)
 
 proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
-    fullPath: NibblesSeq, pathIndex: int, value: openArray[byte],
+    key: NibblesSeq, value: openArray[byte],
     isInline = false): seq[byte]
     {.gcsafe, raises: [RlpError].} =
-  let path = fullPath.slice(pathIndex)
   template origWithNewValue: auto =
     self.prune(origHash.data)
-    replaceValue(orig, path, value)
+    replaceValue(orig, key, value)
 
   if orig.isEmpty:
     return origWithNewValue()
@@ -638,15 +582,15 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
     let (isLeaf, k) = orig.extensionNodeKey
     var origValue = orig.listElem(1)
 
-    if k == path and isLeaf:
+    if k == key and isLeaf:
       return origWithNewValue()
 
-    let sharedNibbles = sharedPrefixLen(path, k)
+    let sharedNibbles = sharedPrefixLen(key, k)
 
     if sharedNibbles == k.len and not isLeaf:
       var r = initRlpList(2)
       r.append orig.listElem(0)
-      self.mergeAtAux(r, origValue, fullPath, pathIndex + k.len, value)
+      self.mergeAtAux(r, origValue, key.slice(k.len), value)
       return r.finish
 
     if orig.rawData.len >= 32:
@@ -662,7 +606,7 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
       top.append hexPrefixEncode(k.slice(0, sharedNibbles), false)
       top.appendAndSave(bottom.finish, self.db)
 
-      return self.mergeAt(rlpFromBytes(top.finish), fullPath, pathIndex, value, true)
+      return self.mergeAt(rlpFromBytes(top.finish), key, value, true)
     else:
       # Create a branch node
       var branches = initRlpList(17)
@@ -686,22 +630,22 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
             branches.append ""
         branches.append ""
 
-      return self.mergeAt(rlpFromBytes(branches.finish), fullPath, pathIndex, value, true)
+      return self.mergeAt(rlpFromBytes(branches.finish), key, value, true)
   else:
-    if path.len == 0:
+    if key.len == 0:
       return origWithNewValue()
 
     if isInline:
       self.prune(origHash.data)
 
-    let n = path[0]
+    let n = key[0]
     var i = 0
     var r = initRlpList(17)
 
     var origCopy = orig
     for elem in items(origCopy):
       if i == int(n):
-        self.mergeAtAux(r, elem, fullPath, pathIndex + 1, value)
+        self.mergeAtAux(r, elem, key.slice(1), value)
       else:
         r.append(elem)
       inc i
@@ -711,11 +655,11 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
 proc put*(self: var HexaryTrie; key, value: openArray[byte]) =
   let root = self.root.hash
 
-  var rootBytes = getPossiblyMissingNode(self.db, root.data, NibblesSeq(), 0)
+  var rootBytes = self.db.get(root.data)
   doAssert rootBytes.len > 0
 
   let newRootBytes = self.mergeAt(rlpFromBytes(rootBytes), root,
-                                  initNibbleRange(key), 0, value)
+                                  initNibbleRange(key), value)
   if rootBytes.len < 32:
     self.prune(root.data)
 
@@ -769,6 +713,18 @@ template maybeKeyToLocalBytes(db: DB, k: TrieNodeKey): Option[seq[byte]] =
   else:
     db.maybeGet(k.asDbKey)
 
+proc maybeGetAux(db: DB, nodeRlp: Rlp, path: NibblesSeq): Option[seq[byte]]
+  {.gcsafe, raises: [RlpError, Defect].}
+
+proc maybeGetAuxByHash(db: DB, node: TrieNodeKey, path: NibblesSeq): Option[seq[byte]] =
+  let maybeBytes = maybeKeyToLocalBytes(db, node)
+  if maybeBytes.isNone:
+    return none[seq[byte]]()
+  else:
+    let bytes = maybeBytes.get
+    var nodeRlp = rlpFromBytes(bytes)
+    return maybeGetAux(db, nodeRlp, path)
+
 proc maybeGetLookup(db: DB, elem: Rlp): Option[Rlp] =
   if elem.isList:
     some(elem)
@@ -781,7 +737,7 @@ proc maybeGetLookup(db: DB, elem: Rlp): Option[Rlp] =
       let bytes = maybeBytes.get
       some(rlpFromBytes(bytes))
 
-proc maybeGetAux(db: DB, nodeRlp: Rlp, fullPath: NibblesSeq, pathIndex: int): Option[seq[byte]]
+proc maybeGetAux(db: DB, nodeRlp: Rlp, path: NibblesSeq): Option[seq[byte]]
     {.gcsafe, raises: [RlpError].} =
   # FIXME-Adam: do I need to distinguish between these two cases?
   if not nodeRlp.hasData:
@@ -796,7 +752,6 @@ proc maybeGetAux(db: DB, nodeRlp: Rlp, fullPath: NibblesSeq, pathIndex: int): Op
     return some(zero)
     # return none[seq[byte]]()
 
-  let path = fullPath.slice(pathIndex)
   case nodeRlp.listLen
   of 2:
     let (isLeaf, k) = nodeRlp.extensionNodeKey
@@ -811,7 +766,7 @@ proc maybeGetAux(db: DB, nodeRlp: Rlp, fullPath: NibblesSeq, pathIndex: int): Op
         if maybeNextLookup.isNone:
           return none[seq[byte]]()
         else:
-          return maybeGetAux(db, maybeNextLookup.get, fullPath, pathIndex + sharedNibbles)
+          return maybeGetAux(db, maybeNextLookup.get, path.slice(sharedNibbles))
       else:
         raise newException(RlpError, "isLeaf is true but the shared nibbles didn't exhaust the path?")
     else:
@@ -829,22 +784,13 @@ proc maybeGetAux(db: DB, nodeRlp: Rlp, fullPath: NibblesSeq, pathIndex: int): Op
       if maybeNextLookup.isNone:
         return none[seq[byte]]()
       else:
-        return maybeGetAux(db, maybeNextLookup.get, fullPath, pathIndex + 1)
+        return maybeGetAux(db, maybeNextLookup.get, path.slice(1))
   else:
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
-proc maybeGetAuxByHash(db: DB, node: TrieNodeKey, fullPath: NibblesSeq, pathIndex: int): Option[seq[byte]] =
-  let maybeBytes = maybeKeyToLocalBytes(db, node)
-  if maybeBytes.isNone:
-    return none[seq[byte]]()
-  else:
-    let bytes = maybeBytes.get
-    var nodeRlp = rlpFromBytes(bytes)
-    return maybeGetAux(db, nodeRlp, fullPath, pathIndex)
-
 proc maybeGet*(self: HexaryTrie; key: openArray[byte]): Option[seq[byte]] =
-  return maybeGetAuxByHash(self.db, self.root, initNibbleRange(key), 0)
+  return maybeGetAuxByHash(self.db, self.root, initNibbleRange(key))
 
 proc maybeGet*(self: SecureHexaryTrie; key: openArray[byte]): Option[seq[byte]] =
   return maybeGet(HexaryTrie(self), key.keccakHash.data)
