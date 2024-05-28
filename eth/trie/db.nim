@@ -9,7 +9,7 @@
 {.push raises: [].}
 
 import
-  std/[options, tables, hashes, sets],
+  std/[tables, hashes, sets],
   "."/[trie_defs, db_tracing]
 
 type
@@ -241,15 +241,6 @@ proc contains*(db: TrieDatabaseRef, key: openArray[byte]): bool =
 
   if db.containsProc != nil:
     result = db.containsProc(db.obj, key)
-
-proc maybeGet*(db: TrieDatabaseRef, key: openArray[byte]): Option[seq[byte]] =
-  # FIXME-Adam: Could duplicate the structure of get, but for now let's just
-  # do this (I still don't know whether this overall approach makes any sense
-  # at all.)
-  if db.contains(key):
-    some(db.get(key))
-  else:
-    none[seq[byte]]()
 
 # TransactionID imitate subset of JournalDB behaviour
 # but there is no need to rollback or dispose
