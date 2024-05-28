@@ -195,12 +195,6 @@ type
     else:
       number*: uint64
 
-  BlockHeaderRef* = ref BlockHeader
-  BlockBodyRef* = ref BlockBody
-  ReceiptRef* = ref Receipt
-
-  EthResourceRefs = BlockHeaderRef | BlockBodyRef | ReceiptRef
-
   ValidationResult* {.pure.} = enum
     OK
     Error
@@ -211,7 +205,6 @@ const
   Eip1559Receipt* = TxEip1559
   Eip4844Receipt* = TxEip4844
 
-  # TODO clean these up
   EMPTY_ROOT_HASH* = "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
   EMPTY_UNCLE_HASH* = "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
   EMPTY_CODE_HASH* = "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
@@ -251,20 +244,20 @@ else:
     n
 
 # EIP-1559 conveniences
-func baseFee*(h: BlockHeader | BlockHeaderRef): UInt256 =
+func baseFee*(h: BlockHeader): UInt256 =
   if h.fee.isSome:
     h.fee.get()
   else:
     0.u256
 
-template `baseFee=`*(h: BlockHeader | BlockHeaderRef, data: UInt256) =
+template `baseFee=`*(h: BlockHeader, data: UInt256) =
   h.fee = some(data)
 
 # starting from EIP-4399, `mixHash`/`mixDigest` field will be alled `prevRandao`
-template prevRandao*(h: BlockHeader | BlockHeaderRef): Hash256 =
+template prevRandao*(h: BlockHeader): Hash256 =
   h.mixDigest
 
-template `prevRandao=`*(h: BlockHeader | BlockHeaderRef, hash: Hash256) =
+template `prevRandao=`*(h: BlockHeader, hash: Hash256) =
   h.mixDigest = hash
 
 func toBlockNonce*(n: uint64): BlockNonce =
@@ -317,11 +310,9 @@ func `$`*(x: BlockHashOrNumber): string =
     $x.number
 
 template hasData*(b: Blob): bool = b.len > 0
-template hasData*(r: EthResourceRefs): bool = r != nil
 
 template deref*(b: Blob): auto = b
 template deref*(o: Option): auto = o.get
-template deref*(r: EthResourceRefs): auto = r[]
 
 func `==`*(a, b: NetworkId): bool =
   a.uint == b.uint
