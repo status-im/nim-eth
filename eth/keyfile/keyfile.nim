@@ -12,7 +12,7 @@
 import
   std/[strutils, json],
   nimcrypto/[bcmode, hmac, rijndael, pbkdf2, sha2, sysrand, utils, keccak, scrypt],
-  stew/results,
+  results,
   ../keys,
   ./uuid
 

@@ -9,7 +9,7 @@
 
 import
   std/[tables, hashes, net],
-  stew/results, chronos, chronicles
+  results, chronos, chronicles
 
 export net.IpAddress
 

@@ -9,7 +9,7 @@
 
 import
   std/[algorithm, times, sequtils, bitops, sets],
-  bearssl/rand, stew/results,
+  bearssl/rand, results,
   stint, chronicles, metrics, chronos,
   ../../net/utils,
   "."/[node, random2, enr]

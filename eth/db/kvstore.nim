@@ -13,7 +13,7 @@
 
 import
   std/[tables, hashes, sets],
-  stew/results
+  results
 
 export results
 
