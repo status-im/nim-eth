@@ -10,7 +10,7 @@
 
 import
   std/[sets, options, net],
-  stew/results, chronicles, chronos,
+  results, chronicles, chronos,
   ../../net/utils,
   "."/[node, enr, routing_table]
 

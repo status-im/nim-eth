@@ -9,7 +9,7 @@
 
 import
   std/[tables, options, sequtils],
-  stew/results,
+  results,
   nimcrypto/[keccak, hash],
   ".."/rlp,
   "."/[trie_defs, nibbles, db]

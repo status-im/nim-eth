@@ -83,7 +83,7 @@
 import
   std/[tables, sets, options, math, sequtils, algorithm],
   json_serialization/std/net,
-  stew/results, chronicles, chronos, stint, metrics,
+  results, chronicles, chronos, stint, metrics,
   ".."/../[rlp, keys],
   "."/[messages_encoding, encoding, node, routing_table, enr, random2, sessions,
     ip_vote, nodes_verification]

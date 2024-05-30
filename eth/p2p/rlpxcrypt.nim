@@ -13,7 +13,7 @@
 {.push raises: [].}
 
 import
-  nimcrypto/[bcmode, keccak, rijndael, utils], stew/results
+  nimcrypto/[bcmode, keccak, rijndael, utils], results
 from auth import ConnectionSecret
 
 export results
