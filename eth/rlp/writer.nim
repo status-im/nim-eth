@@ -1,7 +1,10 @@
+{.push raises: [].}
+
 import
   std/options,
-  stew/[shims/macros, results],
-  ./object_serialization, ./priv/defs
+  results,
+  stew/[assign2, shims/macros],
+ ./priv/defs
 
 type
   RlpWriter* = object
@@ -45,12 +48,13 @@ proc writeCount(bytes: var seq[byte], count: int, baseMarker: byte) =
     bytes.writeBigEndian(uint64(count), bytes.len - 1, lenPrefixBytes)
 
 proc initRlpWriter*: RlpWriter =
-  newSeq(result.pendingLists, 0)
-  newSeq(result.output, 0)
+  # Avoid allocations during initial write of small items - since the writer is
+  # expected to be short-lived, it doesn't hurt to allocate this buffer
+  result.output = newSeqOfCap[byte](2000)
 
 proc decRet(n: var int, delta: int): int =
   n -= delta
-  return n
+  n
 
 proc maybeClosePendingLists(self: var RlpWriter) =
   while self.pendingLists.len > 0:
@@ -86,14 +90,15 @@ proc maybeClosePendingLists(self: var RlpWriter) =
       # The currently open list is not finished yet. Nothing to do.
       return
 
-proc appendRawList(self: var RlpWriter, bytes: openArray[byte]) =
-  self.output.writeCount(bytes.len, LIST_START_MARKER)
-  self.output.add(bytes)
+proc appendRawBytes*(self: var RlpWriter, bytes: openArray[byte]) =
+  self.output.setLen(self.output.len + bytes.len)
+  assign(self.output.toOpenArray(
+    self.output.len - bytes.len, self.output.len - 1), bytes)
   self.maybeClosePendingLists()
 
-proc appendRawBytes*(self: var RlpWriter, bytes: openArray[byte]) =
-  self.output.add(bytes)
-  self.maybeClosePendingLists()
+proc appendRawList(self: var RlpWriter, bytes: openArray[byte]) =
+  self.output.writeCount(bytes.len, LIST_START_MARKER)
+  self.appendRawBytes(bytes)
 
 proc startList*(self: var RlpWriter, listSize: int) =
   if listSize == 0:
@@ -104,11 +109,10 @@ proc startList*(self: var RlpWriter, listSize: int) =
 proc appendBlob(self: var RlpWriter, data: openArray[byte], startMarker: byte) =
   if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:
     self.output.add byte(data[0])
+    self.maybeClosePendingLists()
   else:
     self.output.writeCount(data.len, startMarker)
-    self.output.add data
-
-  self.maybeClosePendingLists()
+    self.appendRawBytes(data)
 
 proc appendImpl(self: var RlpWriter, data: string) =
   appendBlob(self, data.toOpenArrayByte(0, data.high), BLOB_START_MARKER)
@@ -321,12 +325,12 @@ proc encode*[T](v: T): seq[byte] =
   mixin append
   var writer = initRlpWriter()
   writer.append(v)
-  return writer.finish
+  move(writer.finish)
 
 proc encodeInt*(i: SomeUnsignedInt): seq[byte] =
   var writer = initRlpWriter()
   writer.appendInt(i)
-  return writer.finish
+  move(writer.finish)
 
 macro encodeList*(args: varargs[untyped]): seq[byte] =
   var
@@ -342,7 +346,7 @@ macro encodeList*(args: varargs[untyped]): seq[byte] =
   result = quote do:
     var `writer` = initRlpList(`listLen`)
     `body`
-    finish(`writer`)
+    move(finish(`writer`))
 
 when false:
   # XXX: Currently fails with a malformed AST error on the args.len expression
