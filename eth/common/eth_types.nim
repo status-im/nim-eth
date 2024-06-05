@@ -10,7 +10,7 @@
 ## from many places
 
 import
-  std/[options, strutils],
+  std/[options, hashes, strutils],
   stew/[byteutils, endians2], stint,
   ./eth_hash, ./eth_times
 
@@ -319,3 +319,20 @@ func `==`*(a, b: NetworkId): bool =
 
 func `$`*(x: NetworkId): string =
   `$`(uint(x))
+
+func `==`*(a, b: EthAddress): bool {.inline.} =
+  equalMem(unsafeAddr a[0], unsafeAddr b[0], a.len)
+
+# TODO https://github.com/nim-lang/Nim/issues/23678
+func hash*(a: EthAddress): Hash {.inline.} =
+  static: doAssert sizeof(a) == 20
+  var a0{.noinit.}, a1 {.noinit.}: uint64
+  var a2{.noinit.}: uint32
+
+  # Addresses are more or less random so we should not need a fancy mixing
+  # function
+  copyMem(addr a0, unsafeAddr a[0], sizeof(a0))
+  copyMem(addr a1, unsafeAddr a[8], sizeof(a1))
+  copyMem(addr a2, unsafeAddr a[16], sizeof(a2))
+
+  cast[Hash](a0 xor a1 xor uint64(a2))
