@@ -1,5 +1,3 @@
-{.push raises: [].}
-
 import
   std/options,
   results,
