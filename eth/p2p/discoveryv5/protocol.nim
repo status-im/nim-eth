@@ -257,7 +257,7 @@ func updateRecord*(
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
-proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async.} =
+proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async: (raises: []).} =
   let ta = initTAddress(a.ip, a.port)
   try:
     await d.transp.sendTo(ta, data)
@@ -504,7 +504,7 @@ proc registerRequest(d: Protocol, n: Node, message: seq[byte],
       d.pendingRequests.del(nonce)
 
 proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
-    Future[Option[Message]] =
+    Future[Option[Message]] {.async: (raw: true, raises: []).} =
   result = newFuture[Option[Message]]("waitMessage")
   let res = result
   let key = (fromNode.id, reqId)
@@ -515,7 +515,7 @@ proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
   d.awaitedMessages[key] = result
 
 proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
-    Future[DiscResult[seq[Record]]] {.async.} =
+    Future[DiscResult[seq[Record]]] {.async: (raises: [CancelledError]).} =
   ## Wait for one or more nodes replies.
   ##
   ## The first reply will hold the total number of replies expected, and based
@@ -560,7 +560,7 @@ proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
   return reqId
 
 proc ping*(d: Protocol, toNode: Node):
-    Future[DiscResult[PongMessage]] {.async.} =
+    Future[DiscResult[PongMessage]] {.async: (raises: [CancelledError]).} =
   ## Send a discovery ping message.
   ##
   ## Returns the received pong message or an error.
@@ -582,7 +582,7 @@ proc ping*(d: Protocol, toNode: Node):
     return err("Pong message not received in time")
 
 proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
-    Future[DiscResult[seq[Node]]] {.async.} =
+    Future[DiscResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
   ## Send a discovery findNode message.
   ##
   ## Returns the received nodes or an error.
@@ -599,7 +599,7 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
     return err(nodes.error)
 
 proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
-    Future[DiscResult[seq[byte]]] {.async.} =
+    Future[DiscResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
   ## Send a discovery talkreq message.
   ##
   ## Returns the received talkresp message or an error.
@@ -633,7 +633,7 @@ func lookupDistances*(target, dest: NodeId): seq[uint16] =
     inc i
 
 proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
-    Future[seq[Node]] {.async.} =
+    Future[seq[Node]] {.async: (raises: [CancelledError]).} =
   let dists = lookupDistances(target, destNode.id)
 
   # Instead of doing max `lookupRequestLimit` findNode requests, make use
@@ -646,7 +646,7 @@ proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
     for n in result:
       discard d.addNode(n)
 
-proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
+proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -677,7 +677,12 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
     if pendingQueries.len == 0:
       break
 
-    let query = await one(pendingQueries)
+    let query =
+      try:
+        await one(pendingQueries)
+      except ValueError:
+        raiseAssert("pendingQueries should not have been empty")
+
     trace "Got discv5 lookup query response"
 
     let index = pendingQueries.find(query)
@@ -686,8 +691,12 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
     else:
       error "Resulting query should have been in the pending queries"
 
-    let nodes = query.read
-    # TODO: Remove node on timed-out query?
+    let nodes =
+      try:
+        query.read
+      except CatchableError:
+        raiseAssert("query should have been successfully completed")
+
     for n in nodes:
       if not seen.containsOrIncl(n.id):
         # If it wasn't seen before, insert node while remaining sorted
@@ -703,7 +712,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async.} =
   return closestNodes
 
 proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
-    {.async.} =
+    {.async: (raises: [CancelledError]).} =
   ## Query k nodes for the given target, returns all nodes found, including the
   ## nodes queried.
   ##
@@ -733,7 +742,12 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     if pendingQueries.len == 0:
       break
 
-    let query = await one(pendingQueries)
+    let query =
+      try:
+        await one(pendingQueries)
+      except ValueError:
+        raiseAssert("pendingQueries should not have been empty")
+
     trace "Got discv5 lookup query response"
 
     let index = pendingQueries.find(query)
@@ -742,8 +756,12 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     else:
       error "Resulting query should have been in the pending queries"
 
-    let nodes = query.read
-    # TODO: Remove node on timed-out query?
+    let nodes =
+      try:
+        query.read
+      except CatchableError:
+        raiseAssert("query should have been completed")
+
     for n in nodes:
       if not seen.containsOrIncl(n.id):
         queryBuffer.add(n)
@@ -751,12 +769,12 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
   d.lastLookup = now(chronos.Moment)
   return queryBuffer
 
-proc queryRandom*(d: Protocol): Future[seq[Node]] =
+proc queryRandom*(d: Protocol): Future[seq[Node]] {.async: (raw: true, raises: [CancelledError]).} =
   ## Perform a query for a random target, return all nodes discovered.
   d.query(NodeId.random(d.rng[]))
 
 proc queryRandom*(d: Protocol, enrField: (string, seq[byte])):
-    Future[seq[Node]] {.async.} =
+    Future[seq[Node]] {.async: (raises: [CancelledError]).} =
   ## Perform a query for a random target, return all nodes discovered which
   ## contain enrField.
   let nodes = await d.queryRandom()
@@ -767,7 +785,7 @@ proc queryRandom*(d: Protocol, enrField: (string, seq[byte])):
 
   return filtered
 
-proc resolve*(d: Protocol, id: NodeId): Future[Opt[Node]] {.async.} =
+proc resolve*(d: Protocol, id: NodeId): Future[Opt[Node]] {.async: (raises: [CancelledError]).} =
   ## Resolve a `Node` based on provided `NodeId`.
   ##
   ## This will first look in the own routing table. If the node is known, it
@@ -807,7 +825,7 @@ proc seedTable*(d: Protocol) =
   # Persistent stored nodes could be added to seed from here
   # See: https://github.com/status-im/nim-eth/issues/189
 
-proc populateTable*(d: Protocol) {.async.} =
+proc populateTable*(d: Protocol) {.async: (raises: [CancelledError]).} =
   ## Do a set of initial lookups to quickly populate the table.
   # start with a self target query (neighbour nodes)
   let selfQuery = await d.query(d.localNode.id)
@@ -821,7 +839,7 @@ proc populateTable*(d: Protocol) {.async.} =
   debug "Total nodes in routing table after populate",
     total = d.routingTable.len()
 
-proc revalidateNode*(d: Protocol, n: Node) {.async.} =
+proc revalidateNode*(d: Protocol, n: Node) {.async: (raises: [CancelledError]).} =
   let pong = await d.ping(n)
 
   if pong.isOk():
@@ -836,7 +854,7 @@ proc revalidateNode*(d: Protocol, n: Node) {.async.} =
     let a = Address(ip: res.ip, port: Port(res.port))
     d.ipVote.insert(n.id, a)
 
-proc revalidateLoop(d: Protocol) {.async.} =
+proc revalidateLoop(d: Protocol) {.async: (raises: []).} =
   ## Loop which revalidates the nodes in the routing table by sending the ping
   ## message.
   try:
@@ -848,7 +866,7 @@ proc revalidateLoop(d: Protocol) {.async.} =
   except CancelledError:
     trace "revalidateLoop canceled"
 
-proc refreshLoop(d: Protocol) {.async.} =
+proc refreshLoop(d: Protocol) {.async: (raises: []).} =
   ## Loop that refreshes the routing table by starting a random query in case
   ## no queries were done since `refreshInterval` or more.
   ## It also refreshes the majority address voted for via pong responses.
@@ -882,7 +900,7 @@ proc updateExternalIp*(d: Protocol, extIp: IpAddress, udpPort: Port): bool =
       previous, newExtIp = extIp, newUdpPort = udpPort, uri = toURI(d.localNode.record)
   return success
 
-proc ipMajorityLoop(d: Protocol) {.async.} =
+proc ipMajorityLoop(d: Protocol) {.async: (raises: []).} =
   ## When `enrAutoUpdate` is enabled, the IP:port combination returned
   ## by the majority will be used to update the local ENR.
   ## This should be safe as long as the routing table is not overwhelmed by
