@@ -150,7 +150,7 @@ proc shutdown*(r: UtpDiscv5Protocol) =
   ## this is up to user)
   r.router.shutdown()
 
-proc shutdownWait*(r: UtpDiscv5Protocol) {.async.} =
+proc shutdownWait*(r: UtpDiscv5Protocol) {.async: (raises: [CancelledError]).} =
   ## Closes all managed utp connections in background (does not close discovery,
   ## this is up to user)
   await r.router.shutdownWait()

@@ -137,7 +137,7 @@ proc new*(
     rng
   )
 
-proc shutdownWait*(p: UtpProtocol): Future[void] {.async.} =
+proc shutdownWait*(p: UtpProtocol): Future[void] {.async: (raises: [CancelledError]).} =
   ## closes all managed utp sockets and then underlying transport
   await p.utpRouter.shutdownWait()
   await p.transport.closeWait()

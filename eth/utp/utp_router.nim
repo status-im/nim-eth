@@ -286,7 +286,7 @@ proc generateNewUniqueSocket[A](
 
   return none[UtpSocket[A]]()
 
-proc innerConnect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async.} =
+proc innerConnect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async: (raises: [CancelledError]).} =
     try:
       await s.startOutgoingSocket()
       utp_success_outgoing.inc()
@@ -350,7 +350,7 @@ proc shutdown*[A](r: UtpRouter[A]) =
   for s in r.allSockets():
     s.destroy()
 
-proc shutdownWait*[A](r: UtpRouter[A]) {.async.} =
+proc shutdownWait*[A](r: UtpRouter[A]) {.async: (raises: [CancelledError]).} =
   var activeSockets: seq[UtpSocket[A]] = @[]
   # stop processing any new packets and close all sockets without
   # notifying remote peers
