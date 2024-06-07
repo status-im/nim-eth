@@ -34,7 +34,6 @@ func keccakHash*(input: openArray[byte]): KeccakHash {.noinit.} =
     # We use the init-update-finish interface to avoid
     # the expensive burning/clearing memory (20~30% perf)
     var ctx: keccak256
-    ctx.init()
     ctx.update(input)
     ctx.finish()
 
