@@ -171,7 +171,7 @@ type
 
   EthBlock* = object
     header*     : BlockHeader
-    txs*        : seq[Transaction]
+    transactions*: seq[Transaction]
     uncles*     : seq[BlockHeader]
     withdrawals*: Option[seq[Withdrawal]]   # EIP-4895
 
@@ -208,6 +208,10 @@ const
   EMPTY_ROOT_HASH* = "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
   EMPTY_UNCLE_HASH* = "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
   EMPTY_CODE_HASH* = "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
+
+template txs*(blk: EthBlock): seq[Transaction] =
+  # Legacy name emulation
+  blk.transactions
 
 when BlockNumber is int64:
   ## The goal of these templates is to make it easier to switch
@@ -336,3 +340,11 @@ func hash*(a: EthAddress): Hash {.inline.} =
   copyMem(addr a2, unsafeAddr a[16], sizeof(a2))
 
   cast[Hash](a0 xor a1 xor uint64(a2))
+
+func init*(T: type EthBlock, header: sink BlockHeader, body: sink BlockBody): T =
+  T(
+    header: move(header),
+    transactions: move(body.transactions),
+    uncles: move(body.uncles),
+    withdrawals: move(body.withdrawals),
+  )
