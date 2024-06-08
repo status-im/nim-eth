@@ -33,7 +33,7 @@ proc loadFile(x: int) =
     let header = r.read(EthHeader).header
     let body   = r.readRecordType(BlockBody, false)
 
-    let blk3 = EthBlock(header: header, txs: body.transactions, uncles: body.uncles)
+    let blk3 = EthBlock(header: header, transactions: body.transactions, uncles: body.uncles)
     let bytes3 = rlp.encode(blk3)
     check blk1 == blk3
     check bytes1 == bytes3
