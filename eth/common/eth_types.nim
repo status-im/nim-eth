@@ -341,10 +341,11 @@ func hash*(a: EthAddress): Hash {.inline.} =
 
   cast[Hash](a0 xor a1 xor uint64(a2))
 
-func init*(T: type EthBlock, header: sink BlockHeader, body: sink BlockBody): T =
+# TODO https://github.com/nim-lang/Nim/issues/23354 - parameters should be sink
+func init*(T: type EthBlock, header: BlockHeader, body: BlockBody): T =
   T(
-    header: move(header),
-    transactions: move(body.transactions),
-    uncles: move(body.uncles),
-    withdrawals: move(body.withdrawals),
+    header: header,
+    transactions: body.transactions,
+    uncles: body.uncles,
+    withdrawals: body.withdrawals,
   )
