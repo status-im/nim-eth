@@ -344,8 +344,8 @@ func hash*(a: EthAddress): Hash {.inline.} =
 # TODO https://github.com/nim-lang/Nim/issues/23354 - parameters should be sink
 func init*(T: type EthBlock, header: BlockHeader, body: BlockBody): T =
   T(
-    header: move(header),
-    transactions: move(body.transactions),
-    uncles: move(body.uncles),
-    withdrawals: move(body.withdrawals),
+    header: header,
+    transactions: body.transactions,
+    uncles: body.uncles,
+    withdrawals: body.withdrawals,
   )
