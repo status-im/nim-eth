@@ -121,7 +121,7 @@ proc new*[A](
     rng = newRng()): UtpRouter[A] =
   doAssert(not(isNil(acceptConnectionCb)))
   UtpRouter[A](
-    sockets: initTable[UtpSocketKey[A], UtpSocket[A]](),
+    sockets: Table[UtpSocketKey[A], UtpSocket[A]](),
     acceptConnection: acceptConnectionCb,
     allowConnection: allowConnectionCb,
     socketConfig: socketConfig,

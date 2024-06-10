@@ -533,7 +533,7 @@ proc randomNodes*(r: RoutingTable, maxAmount: int,
     maxAmount = sz
 
   result = newSeqOfCap[Node](maxAmount)
-  var seen = initHashSet[Node]()
+  var seen = HashSet[Node]()
 
   # This is a rather inefficient way of randomizing nodes from all buckets, but even if we
   # iterate over all nodes in the routing table, the time it takes would still be

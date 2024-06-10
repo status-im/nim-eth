@@ -324,7 +324,8 @@ func update*(
     r: var Record,
     pk: PrivateKey,
     ip: Option[IpAddress],
-    tcpPort, udpPort: Option[Port] = none[Port](),
+    tcpPort: Option[Port] = none[Port](),
+    udpPort: Option[Port] = none[Port](),
     extraFields: openArray[FieldPair] = []):
     EnrResult[void] =
   ## Update a `Record` with given ip address, tcp port, udp port and optional
