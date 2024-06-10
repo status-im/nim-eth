@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -142,21 +142,30 @@ proc completeCmdArg*(T: type Node, val: string): seq[string] =
 
 proc parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =
   try:
-    result = PrivateKey.fromHex(string(p)).tryGet()
+    result = PrivateKey.fromHex(p).tryGet()
   except CatchableError:
     raise newException(ValueError, "Invalid private key")
 
 proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
 
-proc discover(d: discv5_protocol.Protocol, psFile: string) {.async.} =
+proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [CancelledError]).} =
   info "Starting peer-discovery in Ethereum - persisting peers at: ", psFile
 
   var ethNodes: HashSet[seq[byte]]
 
-  let ps = open(psFile, fmWrite)
+  let ps =
+    try:
+      open(psFile, fmWrite)
+    except IOError as e:
+      fatal "Failed to open file for writing", file = psFile, error = e.msg
+      quit QuitFailure
   defer: ps.close()
-  ps.write("pubkey,node_id,fork_digest,ip:port,attnets,attnets_number\n")
+  try:
+    ps.writeLine("pubkey,node_id,fork_digest,ip:port,attnets,attnets_number")
+  except IOError as e:
+    fatal "Failed to write to file", file = psFile, error = e.msg
+    quit QuitFailure
 
   while true:
     let iTime = now(chronos.Moment)
@@ -179,10 +188,17 @@ proc discover(d: discv5_protocol.Protocol, psFile: string) {.async.} =
       for byt in attnets.get():
         bits.inc(countOnes(byt.uint))
 
-      let str = "$#,$#,$#,$#,$#,$#\n"
-      let newLine = str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits]
-
-      ps.write(newLine)
+      let str = "$#,$#,$#,$#,$#,$#"
+      let newLine =
+        try:
+          str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits]
+        except ValueError as e:
+          raiseAssert e.msg
+      try:
+        ps.writeLine(newLine)
+      except IOError as e:
+        fatal "Failed to write to file", file = psFile, error = e.msg
+        quit QuitFailure
     await sleepAsync(1.seconds) # 1 sec of delay
 
 
