@@ -65,11 +65,11 @@ suite "BlockHashOrNumber":
 
   test "EIP-4788 parentBeaconBlockRoot field":
     let header = BlockHeader(
-      fee: some(0.u256),
-      withdrawalsRoot: some(testHash),
-      blobGasUsed: some(1'u64),
-      excessBlobGas: some(2'u64),
-      parentBeaconBlockRoot: some(testHash),
+      baseFeePerGas: Opt.some(0.u256),
+      withdrawalsRoot: Opt.some(testHash),
+      blobGasUsed: Opt.some(1'u64),
+      excessBlobGas: Opt.some(2'u64),
+      parentBeaconBlockRoot: Opt.some(testHash),
     )
     let rlpBytes = rlp.encode(header)
     let dh = rlp.decode(rlpBytes, BlockHeader)

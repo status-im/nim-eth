@@ -50,7 +50,7 @@ proc append*(rlpWriter: var RlpWriter, value: StUint) =
     rlpWriter.append bytes.toOpenArray(bytes.len - nonZeroBytes,
                                        bytes.len - 1)
   else:
-    rlpWriter.append(value.truncate(int))
+    rlpWriter.append(value.truncate(uint))
 
 proc read*(rlp: var Rlp, T: type StInt): T {.inline.} =
   # The Ethereum Yellow Paper defines the RLP serialization only
@@ -64,7 +64,7 @@ proc append*(rlpWriter: var RlpWriter, value: StInt) =
   {.fatal: "RLP serialization of signed integers is not allowed".}
   discard
 
-proc append*[T](w: var RlpWriter, val: Option[T]) =
+proc append*[T](w: var RlpWriter, val: Opt[T]) =
   if val.isSome:
     w.append(val.get())
   else:
@@ -100,8 +100,8 @@ proc appendTxEip1559(w: var RlpWriter, tx: Transaction) =
   w.startList(12)
   w.append(tx.chainId.uint64)
   w.append(tx.nonce)
-  w.append(tx.maxPriorityFee)
-  w.append(tx.maxFee)
+  w.append(tx.maxPriorityFeePerGas)
+  w.append(tx.maxFeePerGas)
   w.append(tx.gasLimit)
   w.append(tx.to)
   w.append(tx.value)
@@ -115,8 +115,8 @@ proc appendTxEip4844(w: var RlpWriter, tx: Transaction) =
   w.startList(14)
   w.append(tx.chainId.uint64)
   w.append(tx.nonce)
-  w.append(tx.maxPriorityFee)
-  w.append(tx.maxFee)
+  w.append(tx.maxPriorityFeePerGas)
+  w.append(tx.maxFeePerGas)
   w.append(tx.gasLimit)
   w.append(tx.to)
   w.append(tx.value)
@@ -161,9 +161,9 @@ proc append*(w: var RlpWriter, tx: PooledTransaction) =
 template read[T](rlp: var Rlp, val: var T) =
   val = rlp.read(type val)
 
-proc read[T](rlp: var Rlp, val: var Option[T]) =
+proc read[T](rlp: var Rlp, val: var Opt[T]) =
   if rlp.blobLen != 0:
-    val = some(rlp.read(T))
+    val = Opt.some(rlp.read(T))
   else:
     rlp.skipElem
 
@@ -200,8 +200,8 @@ proc readTxEip1559(rlp: var Rlp, tx: var Transaction) =
   rlp.tryEnterList()
   tx.chainId = rlp.read(uint64).ChainId
   rlp.read(tx.nonce)
-  rlp.read(tx.maxPriorityFee)
-  rlp.read(tx.maxFee)
+  rlp.read(tx.maxPriorityFeePerGas)
+  rlp.read(tx.maxFeePerGas)
   rlp.read(tx.gasLimit)
   rlp.read(tx.to)
   rlp.read(tx.value)
@@ -216,8 +216,8 @@ proc readTxEip4844(rlp: var Rlp, tx: var Transaction) =
   rlp.tryEnterList()
   tx.chainId = rlp.read(uint64).ChainId
   rlp.read(tx.nonce)
-  rlp.read(tx.maxPriorityFee)
-  rlp.read(tx.maxFee)
+  rlp.read(tx.maxPriorityFeePerGas)
+  rlp.read(tx.maxFeePerGas)
   rlp.read(tx.gasLimit)
   rlp.read(tx.to)
   rlp.read(tx.value)
@@ -378,7 +378,7 @@ proc append*(
 
 proc append*(w: var RlpWriter, rec: Receipt) =
   if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt}:
-    w.append(rec.receiptType.int)
+    w.append(rec.receiptType.uint)
 
   w.startList(4)
   if rec.isHash:
@@ -387,7 +387,7 @@ proc append*(w: var RlpWriter, rec: Receipt) =
     w.append(rec.status.uint8)
 
   w.append(rec.cumulativeGasUsed)
-  w.append(rec.bloom)
+  w.append(rec.logsBloom)
   w.append(rec.logs)
 
 proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) =
@@ -404,7 +404,7 @@ proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) =
       "HashOrStatus expected, but the source RLP is not a blob of right size.")
 
   rlp.read(receipt.cumulativeGasUsed)
-  rlp.read(receipt.bloom)
+  rlp.read(receipt.logsBloom)
   rlp.read(receipt.logs)
 
 proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) =
@@ -443,7 +443,7 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) =
       "HashOrStatus expected, but the source RLP is not a blob of right size.")
 
   rlp.read(receipt.cumulativeGasUsed)
-  rlp.read(receipt.bloom)
+  rlp.read(receipt.logsBloom)
   rlp.read(receipt.logs)
 
 proc read*(rlp: var Rlp, T: type Receipt): T =
