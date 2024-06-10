@@ -654,7 +654,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async: (raises: [
   var closestNodes = d.routingTable.neighbours(target, BUCKET_SIZE,
     seenOnly = false)
 
-  var asked, seen = initHashSet[NodeId]()
+  var asked, seen = HashSet[NodeId]()
   asked.incl(d.localNode.id) # No need to ask our own node
   seen.incl(d.localNode.id) # No need to discover our own node
   for node in closestNodes:
@@ -717,7 +717,7 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
   ## the routing table, nodes returned by the first queries will be used.
   var queryBuffer = d.routingTable.neighbours(target, k, seenOnly = false)
 
-  var asked, seen = initHashSet[NodeId]()
+  var asked, seen = HashSet[NodeId]()
   asked.incl(d.localNode.id) # No need to ask our own node
   seen.incl(d.localNode.id) # No need to discover our own node
   for node in queryBuffer:
