@@ -660,7 +660,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async: (raises: [
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
+  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
 
   while true:
     var i = 0
@@ -691,12 +691,8 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async: (raises: [
     else:
       error "Resulting query should have been in the pending queries"
 
-    let nodes =
-      try:
-        query.read
-      except CatchableError:
-        raiseAssert("query should have been successfully completed")
-
+    # future.read is possible here but await is recommended (avoids also FuturePendingError)
+    let nodes = await query
     for n in nodes:
       if not seen.containsOrIncl(n.id):
         # If it wasn't seen before, insert node while remaining sorted
@@ -727,7 +723,7 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
   for node in queryBuffer:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
+  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
 
   while true:
     var i = 0
@@ -756,12 +752,8 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     else:
       error "Resulting query should have been in the pending queries"
 
-    let nodes =
-      try:
-        query.read
-      except CatchableError:
-        raiseAssert("query should have been completed")
-
+    # future.read is possible here but await is recommended (avoids also FuturePendingError)
+    let nodes = await query
     for n in nodes:
       if not seen.containsOrIncl(n.id):
         queryBuffer.add(n)
