@@ -33,6 +33,8 @@ type
   ConnectionDirection = enum
    Outgoing, Incoming
 
+  ConnectionError* = object of CatchableError
+
   UtpSocketKey*[A] = object
     remoteAddress*: A
     rcvId*: uint16
@@ -163,7 +165,7 @@ type
 
     # Should be completed after successful connection to remote host or after
     # timeout for the first SYN packet.
-    connectionFuture: Future[void]
+    connectionFuture: Future[void].Raising([ConnectionError, CancelledError])
 
     # The number of packets in the send queue. Packets that haven't
     # been sent yet and packets marked as needing to be resend count.
@@ -301,15 +303,8 @@ type
   # i.e reaches the destroy state
   SocketCloseCallback* = proc (): void {.gcsafe, raises: [].}
 
-  ConnectionError* = object of CatchableError
-
-  OutgoingConnectionErrorType* = enum
+  OutgoingConnectionError* = enum
     SocketAlreadyExists, ConnectionTimedOut
-
-  OutgoingConnectionError* = object
-    case kind*: OutgoingConnectionErrorType
-    of SocketAlreadyExists, ConnectionTimedOut:
-      discard
 
   ConnectionResult*[A] = Result[UtpSocket[A], OutgoingConnectionError]
 
@@ -586,8 +581,8 @@ proc checkTimeouts(socket: UtpSocket) =
         if socket.state == SynSent and (not socket.connectionFuture.finished()):
           # Note: The socket connect code will already call socket.destroy when
           # ConnectionError gets raised, no need to do it here.
-          socket.connectionFuture.fail(newException(
-            ConnectionError, "Connection to peer timed out"))
+          socket.connectionFuture.fail(
+            (ref ConnectionError)(msg: "Connection to peer timed out"))
         else:
           socket.destroy()
 
@@ -647,12 +642,16 @@ proc checkTimeouts(socket: UtpSocket) =
 
     # TODO: add sending keep alives when necessary
 
-proc checkTimeoutsLoop(s: UtpSocket) {.async.} =
+proc checkTimeoutsLoop(s: UtpSocket) {.async: (raises: [CancelledError]).} =
   ## Loop that check timeouts in the socket.
   try:
     while true:
       await sleepAsync(checkTimeoutsLoopInterval)
-      s.eventQueue.putNoWait(SocketEvent(kind: CheckTimeouts))
+      try:
+        s.eventQueue.putNoWait(SocketEvent(kind: CheckTimeouts))
+      except AsyncQueueFullError as e:
+        # this should not happen as the write queue is unbounded
+        raiseAssert e.msg
   except CancelledError as exc:
     # checkTimeoutsLoop is the last running future managed by the socket, when
     # it's cancelled the closeEvent can be fired.
@@ -745,7 +744,7 @@ proc destroy*(s: UtpSocket) =
   # someone will try run `eventQueue.put`. Without `eventQueue.put` , eventLoop
   # future shows as cancelled, but handler for CancelledError is not run
 
-proc destroyWait*(s: UtpSocket) {.async.} =
+proc destroyWait*(s: UtpSocket) {.async: (raises: [CancelledError]).} =
   ## Moves socket to destroy state and clean all resources and wait for all
   ## registered callbacks to fire,
   ## Remote is not notified in any way about socket end of life.
@@ -753,7 +752,7 @@ proc destroyWait*(s: UtpSocket) {.async.} =
   await s.closeEvent.wait()
   await allFutures(s.closeCallbacks)
 
-proc setCloseCallback(s: UtpSocket, cb: SocketCloseCallback) {.async.} =
+proc setCloseCallback(s: UtpSocket, cb: SocketCloseCallback) {.async: (raises: []).} =
   ## Set callback which will be called whenever the socket is permanently closed
   try:
     await s.closeEvent.wait()
@@ -1634,7 +1633,7 @@ proc onRead(socket: UtpSocket, readReq: var ReadReq): ReadResult =
 
       return ReadNotFinished
 
-proc eventLoop(socket: UtpSocket) {.async.} =
+proc eventLoop(socket: UtpSocket) {.async: (raises: [CancelledError]).} =
   try:
     while true:
       let socketEvent = await socket.eventQueue.get()
@@ -1801,7 +1800,7 @@ proc close*(socket: UtpSocket) =
       # destroy the socket.
       socket.destroy()
 
-proc closeWait*(socket: UtpSocket) {.async.} =
+proc closeWait*(socket: UtpSocket) {.async: (raises: [CancelledError]).} =
   ## Gracefully close the connection (send FIN) if the socket is in the
   ## connected state and wait for the socket to be closed.
   ## Warning: if the FIN packet is lost, then the socket might get closed due to
@@ -1968,7 +1967,7 @@ proc new[A](
     connectionIdSnd: sndId,
     seqNr: initialSeqNr,
     ackNr: initialAckNr,
-    connectionFuture: newFuture[void](),
+    connectionFuture: Future[void].Raising([ConnectionError, CancelledError]).init(),
     outBuffer: GrowableCircularBuffer[OutgoingPacket].init(),
     outBufferBytes: 0,
     currentWindow: 0,
@@ -2069,7 +2068,7 @@ proc startIncomingSocket*(socket: UtpSocket) =
   socket.startEventLoop()
   socket.startTimeoutLoop()
 
-proc startOutgoingSocket*(socket: UtpSocket): Future[void] =
+proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async: (raw: true, raises: [ConnectionError, CancelledError]).} =
   doAssert(socket.state == SynSent)
   let packet =
     synPacket(socket.seqNr, socket.connectionIdRcv, socket.getRcvWindowSize())

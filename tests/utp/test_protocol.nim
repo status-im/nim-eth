@@ -212,7 +212,7 @@ procSuite "uTP over UDP protocol":
 
     check socketResult.isErr()
     let connectionError = socketResult.error()
-    check connectionError.kind == ConnectionTimedOut
+    check connectionError == ConnectionTimedOut
 
     await waitUntil(proc (): bool = utpProto1.openSockets() == 0)
 
@@ -463,7 +463,7 @@ procSuite "uTP over UDP protocol":
       allowedSocketRes.isOk()
       notAllowedSocketRes.isErr()
       # remote did not allow this connection and it timed out
-      notAllowedSocketRes.error().kind == ConnectionTimedOut
+      notAllowedSocketRes.error() == ConnectionTimedOut
 
     let clientSocket = allowedSocketRes.get()
     let serverSocket = await server3Sockets.get()

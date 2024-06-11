@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -137,16 +137,20 @@ proc new*(
     rng
   )
 
-proc shutdownWait*(p: UtpProtocol): Future[void] {.async.} =
-  ## closes all managed utp sockets and then underlying transport
+proc shutdownWait*(p: UtpProtocol): Future[void] {.async: (raises: []).} =
+  ## Closes all managed utp sockets and then underlying transport
   await p.utpRouter.shutdownWait()
   await p.transport.closeWait()
 
-proc connectTo*(r: UtpProtocol, address: TransportAddress): Future[ConnectionResult[TransportAddress]] =
-  return r.utpRouter.connectTo(address)
+proc connectTo*(
+    r: UtpProtocol, address: TransportAddress
+): Future[ConnectionResult[TransportAddress]] {.async: (raw: true, raises: [CancelledError]).} =
+  r.utpRouter.connectTo(address)
 
-proc connectTo*(r: UtpProtocol, address: TransportAddress, connectionId: uint16): Future[ConnectionResult[TransportAddress]] =
-  return r.utpRouter.connectTo(address, connectionId)
+proc connectTo*(
+    r: UtpProtocol, address: TransportAddress, connectionId: uint16
+): Future[ConnectionResult[TransportAddress]] {.async: (raw: true, raises: [CancelledError]).} =
+  r.utpRouter.connectTo(address, connectionId)
 
 proc openSockets*(r: UtpProtocol): int =
   len(r.utpRouter)

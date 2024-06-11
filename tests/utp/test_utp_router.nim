@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -315,7 +315,7 @@ procSuite "uTP router unit":
 
     check:
       duplicatedConnectionResult.isErr()
-      duplicatedConnectionResult.error().kind == SocketAlreadyExists
+      duplicatedConnectionResult.error() == SocketAlreadyExists
 
   asyncTest "Router should fail connect when socket syn will not be acked":
     let q = newAsyncQueue[UtpSocket[int]]()
@@ -336,7 +336,7 @@ procSuite "uTP router unit":
 
     check:
       connectResult.isErr()
-      connectResult.error().kind == ConnectionTimedOut
+      connectResult.error() == ConnectionTimedOut
       router.len() == 0
 
   asyncTest "Router should clear all resources when connection future is cancelled":
@@ -376,7 +376,7 @@ procSuite "uTP router unit":
     check:
       connectResult.isErr()
       # even though send is failing we will just finish with timeout,
-      connectResult.error().kind == ConnectionTimedOut
+      connectResult.error() == ConnectionTimedOut
       router.len() == 0
 
   asyncTest "Router should clear closed outgoing connections":
