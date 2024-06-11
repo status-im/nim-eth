@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -137,12 +137,14 @@ proc new*(
     socketConfig
   )
 
-proc connectTo*(r: UtpDiscv5Protocol, address: NodeAddress):
-    Future[ConnectionResult[NodeAddress]] =
+proc connectTo*(
+    r: UtpDiscv5Protocol, address: NodeAddress
+): Future[ConnectionResult[NodeAddress]] {.async: (raw: true, raises: [CancelledError]).} =
   return r.router.connectTo(address)
 
-proc connectTo*(r: UtpDiscv5Protocol, address: NodeAddress, connectionId: uint16):
-    Future[ConnectionResult[NodeAddress]] =
+proc connectTo*(
+    r: UtpDiscv5Protocol, address: NodeAddress, connectionId: uint16
+): Future[ConnectionResult[NodeAddress]] {.async: (raw: true, raises: [CancelledError]).} =
   return r.router.connectTo(address, connectionId)
 
 proc shutdown*(r: UtpDiscv5Protocol) =
@@ -150,7 +152,7 @@ proc shutdown*(r: UtpDiscv5Protocol) =
   ## this is up to user)
   r.router.shutdown()
 
-proc shutdownWait*(r: UtpDiscv5Protocol) {.async: (raises: [CancelledError]).} =
+proc shutdownWait*(r: UtpDiscv5Protocol) {.async: (raises: []).} =
   ## Closes all managed utp connections in background (does not close discovery,
   ## this is up to user)
   await r.router.shutdownWait()

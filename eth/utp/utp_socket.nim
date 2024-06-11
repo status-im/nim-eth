@@ -303,13 +303,8 @@ type
   # i.e reaches the destroy state
   SocketCloseCallback* = proc (): void {.gcsafe, raises: [].}
 
-  OutgoingConnectionErrorType* = enum
+  OutgoingConnectionError* = enum
     SocketAlreadyExists, ConnectionTimedOut
-
-  OutgoingConnectionError* = object
-    case kind*: OutgoingConnectionErrorType
-    of SocketAlreadyExists, ConnectionTimedOut:
-      discard
 
   ConnectionResult*[A] = Result[UtpSocket[A], OutgoingConnectionError]
 

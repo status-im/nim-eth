@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -270,7 +270,7 @@ proc processIncomingBytes*[A](
       warn "Failed to decode packet from address", address = sender, msg = err
 
 proc generateNewUniqueSocket[A](
-    r: UtpRouter[A], address: A):Option[UtpSocket[A]] =
+    r: UtpRouter[A], address: A): Opt[UtpSocket[A]] =
   ## Try to generate unique socket, give up after maxSocketGenerationTries tries
   var tryCount = 0
 
@@ -280,80 +280,64 @@ proc generateNewUniqueSocket[A](
       address, r.sendCb, r.socketConfig, rcvId, r.rng[])
 
     if r.registerIfAbsent(socket):
-      return some(socket)
+      return Opt.some(socket)
 
     inc tryCount
 
-  return none[UtpSocket[A]]()
+  return Opt.none(UtpSocket[A])
 
-proc innerConnect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async: (raises: [CancelledError]).} =
-    try:
-      await s.startOutgoingSocket()
-      utp_success_outgoing.inc()
-      debug "Outgoing connection successful", dst = s.socketKey
-      return ok(s)
-    except ConnectionError:
-      utp_failed_outgoing.inc()
-      debug "Outgoing connection timed-out", dst = s.socketKey
-      s.destroy()
-      return err(OutgoingConnectionError(kind: ConnectionTimedOut))
-    except CancelledError as exc:
-      s.destroy()
-      debug "Connection cancelled", dst = s.socketKey
-      raise exc
-
-proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] =
+proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async: (raises: [CancelledError]).} =
   debug "Initiating connection", dst = s.socketKey
+  try:
+    await s.startOutgoingSocket()
+    utp_success_outgoing.inc()
+    debug "Outgoing connection successful", dst = s.socketKey
+    return ok(s)
+  except ConnectionError:
+    utp_failed_outgoing.inc()
+    debug "Outgoing connection timed-out", dst = s.socketKey
+    s.destroy()
+    return err(ConnectionTimedOut)
+  except CancelledError as exc:
+    s.destroy()
+    debug "Connection cancelled", dst = s.socketKey
+    raise exc
 
-  s.innerConnect()
-
-proc socketAlreadyExists[A](): ConnectionResult[A] =
-  return err(OutgoingConnectionError(kind: SocketAlreadyExists))
-
-proc socketAlreadyExistsFut[A](): Future[ConnectionResult[A]] =
-  let fut = newFuture[ConnectionResult[A]]()
-  fut.complete(socketAlreadyExists[A]())
-  return fut
-
-# Connect to provided address
-# Reference implementation:
-# https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
 proc connectTo*[A](
-    r: UtpRouter[A], address: A): Future[ConnectionResult[A]] =
-  let maybeSocket = r.generateNewUniqueSocket(address)
+      r: UtpRouter[A], address: A
+  ): Future[ConnectionResult[A]] {.async: (raises: [CancelledError]).} =
+  ## Connect to the provided address
+  ## Reference implementation:
+  ## https://github.com/bittorrent/libutp/blob/master/utp_internal.cpp#L2732
+  let socket = (r.generateNewUniqueSocket(address)).valueOr:
+    return err(SocketAlreadyExists)
 
-  if (maybeSocket.isNone()):
-    return socketAlreadyExistsFut[A]()
-  else:
-    let socket = maybeSocket.unsafeGet()
-    let connFut = socket.connect()
-    return connFut
+  await socket.connect()
 
-# Connect to provided address with provided connection id. If the socket with
-# this id and address already exists, return error
 proc connectTo*[A](
-    r: UtpRouter[A], address: A, connectionId: uint16):
-    Future[ConnectionResult[A]] =
+     r: UtpRouter[A], address: A, connectionId: uint16
+  ): Future[ConnectionResult[A]] {.async: (raises: [CancelledError]).} =
+  ## Connect to address with provided connection id. If a socket with this id
+  ## id and address already exists, return SocketAlreadyExists error.
   let socket = newOutgoingSocket[A](
     address, r.sendCb, r.socketConfig, connectionId, r.rng[])
 
   if (r.registerIfAbsent(socket)):
-    let connFut = socket.connect()
-    return connFut
+    await socket.connect()
   else:
-    return socketAlreadyExistsFut[A]()
+    err(SocketAlreadyExists)
 
 proc shutdown*[A](r: UtpRouter[A]) =
-  # stop processing any new packets and close all sockets in background without
-  # notifying remote peers
+  ## Stop processing any new packets and close all sockets in background without
+  ## notifying remote peers.
   r.closed = true
   for s in r.allSockets():
     s.destroy()
 
-proc shutdownWait*[A](r: UtpRouter[A]) {.async: (raises: [CancelledError]).} =
+proc shutdownWait*[A](r: UtpRouter[A]) {.async: (raises: []).} =
   var activeSockets: seq[UtpSocket[A]] = @[]
-  # stop processing any new packets and close all sockets without
-  # notifying remote peers
+  ## Stop processing any new packets and close all sockets without notifying
+  ## remote peers.
   r.closed = true
 
   # Need to make a copy as calling socket.destroyWait() removes the socket from
@@ -363,4 +347,4 @@ proc shutdownWait*[A](r: UtpRouter[A]) {.async: (raises: [CancelledError]).} =
     activeSockets.add(s)
 
   for s in activeSockets:
-    await s.destroyWait()
+    await noCancel(s.destroyWait())
