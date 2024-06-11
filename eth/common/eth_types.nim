@@ -10,12 +10,18 @@
 ## from many places
 
 import
-  std/[options, hashes, strutils],
-  stew/[byteutils, endians2], stint,
-  ./eth_hash, ./eth_times
+  std/[hashes, strutils],
+  stew/[byteutils, endians2],
+  stint,
+  results,
+  ./eth_hash,
+  ./eth_times
 
 export
-  options, stint, eth_hash, eth_times
+  results,
+  stint,
+  eth_hash,
+  eth_times
 
 type
   Hash256* = MDigest[256]
@@ -28,7 +34,7 @@ type
   EthAddress* = array[20, byte]
 
   DifficultyInt* = UInt256
-  GasInt* = int64
+  GasInt* = uint64
   ## Type alias used for gas computation
   # For reference - https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
 
@@ -38,7 +44,7 @@ type
   ForkID* = tuple[crc: uint32, nextFork: uint64]
   # EIP 2364/2124
 
-  BlockNumber* = UInt256
+  BlockNumber* = uint64
   StorageKey* = array[32, byte]
 
   # beware that although in some cases
@@ -85,16 +91,16 @@ type
     chainId*       : ChainId              # EIP-2930
     nonce*         : AccountNonce
     gasPrice*      : GasInt
-    maxPriorityFee*: GasInt               # EIP-1559
-    maxFee*        : GasInt               # EIP-1559
+    maxPriorityFeePerGas*: GasInt         # EIP-1559
+    maxFeePerGas*  : GasInt               # EIP-1559
     gasLimit*      : GasInt
-    to*            : Option[EthAddress]
+    to*            : Opt[EthAddress]
     value*         : UInt256
     payload*       : Blob
     accessList*    : AccessList           # EIP-2930
     maxFeePerBlobGas*: UInt256            # EIP-4844
     versionedHashes*: VersionedHashes     # EIP-4844
-    V*             : int64
+    V*             : uint64
     R*, S*         : UInt256
 
   PooledTransaction* = object
@@ -125,27 +131,26 @@ type
     coinbase*:        EthAddress
     stateRoot*:       Hash256
     txRoot*:          Hash256
-    receiptRoot*:     Hash256
-    bloom*:           BloomFilter
+    receiptsRoot*:    Hash256
+    logsBloom*:       BloomFilter
     difficulty*:      DifficultyInt
-    blockNumber*:     BlockNumber
+    number*:          BlockNumber
     gasLimit*:        GasInt
     gasUsed*:         GasInt
     timestamp*:       EthTime
     extraData*:       Blob
-    mixDigest*:       Hash256
+    mixHash*:         Hash256
     nonce*:           BlockNonce
-    # `baseFee` is the get/set of `fee`
-    fee*:             Option[UInt256]   # EIP-1559
-    withdrawalsRoot*: Option[Hash256]   # EIP-4895
-    blobGasUsed*:     Option[uint64]    # EIP-4844
-    excessBlobGas*:   Option[uint64]    # EIP-4844
-    parentBeaconBlockRoot*: Option[Hash256] # EIP-4788
+    baseFeePerGas*:   Opt[UInt256]   # EIP-1559
+    withdrawalsRoot*: Opt[Hash256]   # EIP-4895
+    blobGasUsed*:     Opt[uint64]    # EIP-4844
+    excessBlobGas*:   Opt[uint64]    # EIP-4844
+    parentBeaconBlockRoot*: Opt[Hash256] # EIP-4788
 
   BlockBody* = object
     transactions*:  seq[Transaction]
     uncles*:        seq[BlockHeader]
-    withdrawals*:   Option[seq[Withdrawal]]   # EIP-4895
+    withdrawals*:   Opt[seq[Withdrawal]]   # EIP-4895
 
   Log* = object
     address*:       EthAddress
@@ -166,14 +171,14 @@ type
     status*           : bool          # EIP-658
     hash*             : Hash256
     cumulativeGasUsed*: GasInt
-    bloom*            : BloomFilter
+    logsBloom*        : BloomFilter
     logs*             : seq[Log]
 
   EthBlock* = object
     header*     : BlockHeader
     transactions*: seq[Transaction]
     uncles*     : seq[BlockHeader]
-    withdrawals*: Option[seq[Withdrawal]]   # EIP-4895
+    withdrawals*: Opt[seq[Withdrawal]]   # EIP-4895
 
   BlobsBundle* = object
     commitments*: seq[KzgCommitment]
@@ -213,56 +218,12 @@ template txs*(blk: EthBlock): seq[Transaction] =
   # Legacy name emulation
   blk.transactions
 
-when BlockNumber is int64:
-  ## The goal of these templates is to make it easier to switch
-  ## the block number type to a different representation
-  template vmWordToBlockNumber*(word: VMWord): BlockNumber =
-    BlockNumber(word.toInt)
-
-  template blockNumberToVmWord*(n: BlockNumber): VMWord =
-    u256(n)
-
-  template toBlockNumber*(n: SomeInteger): BlockNumber =
-    int64(n)
-
-  template toBlockNumber*(n: UInt256): BlockNumber =
-    n.toInt
-
-  template toInt*(n: BlockNumber): int =
-    int(n)
-
-else:
-  template vmWordToBlockNumber*(word: VMWord): BlockNumber =
-    word
-
-  template blockNumberToVmWord*(n: BlockNumber): VMWord =
-    n
-
-  template toBlockNumber*(n: SomeInteger): BlockNumber =
-    u256(n)
-
-  template toBlockNumber*(n: UInt256): BlockNumber =
-    n
-
-  template u256*(n: BlockNumber): UInt256 =
-    n
-
-# EIP-1559 conveniences
-func baseFee*(h: BlockHeader): UInt256 =
-  if h.fee.isSome:
-    h.fee.get()
-  else:
-    0.u256
-
-template `baseFee=`*(h: BlockHeader, data: UInt256) =
-  h.fee = some(data)
-
 # starting from EIP-4399, `mixHash`/`mixDigest` field will be alled `prevRandao`
 template prevRandao*(h: BlockHeader): Hash256 =
-  h.mixDigest
+  h.mixHash
 
 template `prevRandao=`*(h: BlockHeader, hash: Hash256) =
-  h.mixDigest = hash
+  h.mixHash = hash
 
 func toBlockNonce*(n: uint64): BlockNonce =
   n.toBytesBE()
@@ -316,7 +277,7 @@ func `$`*(x: BlockHashOrNumber): string =
 template hasData*(b: Blob): bool = b.len > 0
 
 template deref*(b: Blob): auto = b
-template deref*(o: Option): auto = o.get
+template deref*(o: Opt): auto = o.get
 
 func `==`*(a, b: NetworkId): bool =
   a.uint == b.uint

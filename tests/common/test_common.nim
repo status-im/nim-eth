@@ -110,17 +110,17 @@ proc suite2() =
       doTest h
 
       # EIP-1559
-      h.fee = some 1234.u256
+      h.baseFeePerGas = Opt.some 1234.u256
       doTest h
 
       # EIP-4895
-      h.withdrawalsRoot = some Hash256.fromHex(
+      h.withdrawalsRoot = Opt.some Hash256.fromHex(
         "0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588")
       doTest h
 
       # EIP-4844
-      h.blobGasUsed = some 1234'u64
-      h.excessBlobGas = some 1234'u64
+      h.blobGasUsed = Opt.some 1234'u64
+      h.excessBlobGas = Opt.some 1234'u64
       doTest h
 
     test "Receipts EIP-2718 + EIP-2976 encoding":

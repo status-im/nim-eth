@@ -12,7 +12,8 @@
 
 import
   std/[os, strutils],
-  stew/[io2, results],
+  stew/io2,
+  results,
   unittest2,
   ../../eth/[rlp, common]
 
@@ -63,20 +64,20 @@ suite "BlockHeader roundtrip test":
     roundTrip(h)
 
   test "Header + some(baseFee)":
-    let h = BlockHeader(fee: some(1.u256))
+    let h = BlockHeader(baseFeePerGas: Opt.some(1.u256))
     roundTrip(h)
 
   test "Header + none(baseFee) + some(withdrawalsRoot)":
-    let h = BlockHeader(withdrawalsRoot: some(Hash256()))
+    let h = BlockHeader(withdrawalsRoot: Opt.some(Hash256()))
     expect AssertionDefect:
       roundTrip(h)
 
   test "Header + none(baseFee) + some(withdrawalsRoot) + " &
       "some(blobGasUsed) + some(excessBlobGas)":
     let h = BlockHeader(
-      withdrawalsRoot: some(Hash256()),
-      blobGasUsed: some(1'u64),
-      excessBlobGas: some(1'u64)
+      withdrawalsRoot: Opt.some(Hash256()),
+      blobGasUsed: Opt.some(1'u64),
+      excessBlobGas: Opt.some(1'u64)
     )
     expect AssertionDefect:
       roundTrip(h)
@@ -84,8 +85,8 @@ suite "BlockHeader roundtrip test":
   test "Header + none(baseFee) + none(withdrawalsRoot) + " &
       "some(blobGasUsed) + some(excessBlobGas)":
     let h = BlockHeader(
-      blobGasUsed: some(1'u64),
-      excessBlobGas: some(1'u64)
+      blobGasUsed: Opt.some(1'u64),
+      excessBlobGas: Opt.some(1'u64)
     )
     expect AssertionDefect:
       roundTrip(h)
@@ -93,27 +94,27 @@ suite "BlockHeader roundtrip test":
   test "Header + some(baseFee) + none(withdrawalsRoot) + " &
       "some(blobGasUsed) + some(excessBlobGas)":
     let h = BlockHeader(
-      fee: some(2.u256),
-      blobGasUsed: some(1'u64),
-      excessBlobGas: some(1'u64)
+      baseFeePerGas: Opt.some(2.u256),
+      blobGasUsed: Opt.some(1'u64),
+      excessBlobGas: Opt.some(1'u64)
     )
     expect AssertionDefect:
       roundTrip(h)
 
   test "Header + some(baseFee) + some(withdrawalsRoot)":
     let h = BlockHeader(
-      fee: some(2.u256),
-      withdrawalsRoot: some(Hash256())
+      baseFeePerGas: Opt.some(2.u256),
+      withdrawalsRoot: Opt.some(Hash256())
     )
     roundTrip(h)
 
   test "Header + some(baseFee) + some(withdrawalsRoot) + " &
       "some(blobGasUsed) + some(excessBlobGas)":
     let h = BlockHeader(
-      fee: some(2.u256),
-      withdrawalsRoot: some(Hash256()),
-      blobGasUsed: some(1'u64),
-      excessBlobGas: some(1'u64)
+      baseFeePerGas: Opt.some(2.u256),
+      withdrawalsRoot: Opt.some(Hash256()),
+      blobGasUsed: Opt.some(1'u64),
+      excessBlobGas: Opt.some(1'u64)
     )
     roundTrip(h)
 
@@ -140,7 +141,7 @@ template genTest(TT) =
       roundTrip(blk)
 
     test TTS & " with withdrawals":
-      let blk = TT(withdrawals: some(@[Withdrawal()]))
+      let blk = TT(withdrawals: Opt.some(@[Withdrawal()]))
       roundTrip(blk)
 
     test "2 " & TTS & " none(Withdrawal)+none(Withdrawal)":
@@ -151,20 +152,20 @@ template genTest(TT) =
 
     test "2 " & TTS & " none(Withdrawal)+some(Withdrawal)":
       let blk1 = TT()
-      let blk2 = TT(withdrawals: some(@[Withdrawal()]))
+      let blk2 = TT(withdrawals: Opt.some(@[Withdrawal()]))
       roundTrip2(blk1, blk2):
         check b1.withdrawals.isNone
         check b2.withdrawals.isSome
 
     test "2 " & TTS & " some(Withdrawal)+none(Withdrawal)":
       let blk1 = TT()
-      let blk2 = TT(withdrawals: some(@[Withdrawal()]))
+      let blk2 = TT(withdrawals: Opt.some(@[Withdrawal()]))
       roundTrip2(blk2, blk1):
         check b1.withdrawals.isSome
         check b2.withdrawals.isNone
 
     test "2 " & TTS & " some(Withdrawal)+some(Withdrawal)":
-      let blk = TT(withdrawals: some(@[Withdrawal()]))
+      let blk = TT(withdrawals: Opt.some(@[Withdrawal()]))
       roundTrip2(blk, blk):
         check b1.withdrawals.isSome
         check b2.withdrawals.isSome
