@@ -38,7 +38,7 @@ type
   # ``server`` - UtpProtocol object.
   # ``client`` - accepted client utp socket.
   AcceptConnectionCallback*[A] = proc(server: UtpRouter[A],
-    client: UtpSocket[A]): Future[void] {.gcsafe, raises: [].}
+    client: UtpSocket[A]): Future[void] {.gcsafe, async: (raw: true, raises: []).}
 
   # Callback to act as firewall for incoming peers. Should return true if peer
   # is allowed to connect.

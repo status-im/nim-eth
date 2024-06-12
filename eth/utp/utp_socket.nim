@@ -1810,10 +1810,10 @@ proc closeWait*(socket: UtpSocket) {.async: (raises: [CancelledError]).} =
   socket.close()
   await socket.closeEvent.wait()
 
-proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] =
+proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] {.async: (raw: true, raises: [CancelledError]).} =
   debug "Write data", dst = socket.socketKey, length = len(data)
 
-  let retFuture = newFuture[WriteResult]("UtpSocket.write")
+  let retFuture = Future[WriteResult].Raising([CancelledError]).init("utp_socket.write")
 
   if (socket.state != Connected):
     let res = WriteResult.err(
@@ -1842,13 +1842,13 @@ proc write*(socket: UtpSocket, data: seq[byte]): Future[WriteResult] =
     # this should not happen as out write queue is unbounded
     raiseAssert e.msg
 
-  return retFuture
+  retFuture
 
-proc read*(socket: UtpSocket, n: Natural): Future[seq[byte]] =
-  ## Read all bytes from socket ``socket``.
+proc read*(socket: UtpSocket, n: Natural): Future[seq[byte]] {.async: (raw: true, raises: [CancelledError]).} =
+  ## Read n bytes from socket ``socket``.
   ##
   ## This procedure allocates buffer seq[byte] and return it as result.
-  let fut = newFuture[seq[uint8]]()
+  let fut = Future[seq[uint8]].Raising([CancelledError]).init("utp_socket.read")
 
   if socket.readingClosed():
     fut.complete(newSeq[uint8]())
@@ -1864,16 +1864,16 @@ proc read*(socket: UtpSocket, n: Natural): Future[seq[byte]] =
           reader: fut))
     )
   except AsyncQueueFullError as e:
-        # should not happen as our write queue is unbounded
-        raiseAssert e.msg
+    # should not happen as our write queue is unbounded
+    raiseAssert e.msg
 
-  return fut
+  fut
 
-proc read*(socket: UtpSocket): Future[seq[byte]] =
+proc read*(socket: UtpSocket): Future[seq[byte]] {.async: (raw: true, raises: [CancelledError]).} =
   ## Read all bytes from socket ``socket``.
   ##
   ## This procedure allocates buffer seq[byte] and return it as result.
-  let fut = newFuture[seq[uint8]]()
+  let fut = Future[seq[uint8]].Raising([CancelledError]).init("utp_socket.read")
 
   if socket.readingClosed():
     fut.complete(newSeq[uint8]())
@@ -1892,7 +1892,7 @@ proc read*(socket: UtpSocket): Future[seq[byte]] =
         # should not happen as our write queue is unbounded
         raiseAssert e.msg
 
-  return fut
+  fut
 
 # Check how many packets are still in the out going buffer, usefully for tests
 # or debugging.

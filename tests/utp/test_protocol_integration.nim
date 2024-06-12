@@ -1,4 +1,4 @@
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -32,12 +32,14 @@ proc buildAcceptConnection(
     t: ref Table[UtpSocketKey[TransportAddress], UtpSocket[TransportAddress]]
   ): AcceptConnectionCallback[TransportAddress] =
   return (
-    proc (server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] =
-      let fut = newFuture[void]()
+    proc (
+        server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]
+    ): Future[void] {.async: (raw: true, raises: []).} =
+      let fut = noCancel Future[void].Raising([CancelledError]).init("test.AcceptConnectionCallback")
       let key = client.socketKey
       t[key] = client
       fut.complete()
-      return fut
+      fut
   )
 
 proc getServerSocket(

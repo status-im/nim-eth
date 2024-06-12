@@ -19,8 +19,10 @@ proc setAcceptedCallback(
     event: AsyncEvent
   ): AcceptConnectionCallback[TransportAddress] =
   return (
-    proc(server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] =
-      let fut = newFuture[void]()
+    proc(
+        server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]
+    ): Future[void] {.async: (raw: true, raises: []).} =
+      let fut = noCancel Future[void].Raising([CancelledError]).init("test.AcceptConnectionCallback")
       event.fire()
       fut.complete()
       fut
@@ -30,8 +32,10 @@ proc registerIncomingSocketCallback(
     serverSockets: AsyncQueue
   ): AcceptConnectionCallback[TransportAddress] =
   return (
-    proc(server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]): Future[void] =
-      serverSockets.addLast(client)
+    proc(
+        server: UtpRouter[TransportAddress], client: UtpSocket[TransportAddress]
+    ): Future[void]  {.async: (raw: true, raises: []).}=
+      noCancel serverSockets.addLast(client)
   )
 
 proc allowOneIdCallback(
@@ -165,9 +169,9 @@ procSuite "uTP over UDP protocol":
   asyncTest "Connect to remote host: test udata pointer and use it in callback":
     proc cbUserData(
         server: UtpRouter[TransportAddress],
-        client: UtpSocket[TransportAddress]): Future[void] =
+        client: UtpSocket[TransportAddress]): Future[void] {.async: (raw: true, raises: []).} =
       let q = getUserData[TransportAddress, AsyncQueue[UtpSocket[TransportAddress]]](server)
-      q.addLast(client)
+      noCancel q.addLast(client)
 
     let
       incomingConnections1 = newAsyncQueue[UtpSocket[TransportAddress]]()
@@ -565,20 +569,20 @@ procSuite "uTP over UDP protocol":
     proc handleIncomingConnection(
         server: UtpRouter[TransportAddress],
         client: UtpSocket[TransportAddress]
-      ): Future[void] =
+      ): Future[void] {.async: (raw: true, raises: []).} =
       readFutures.add(client.readAndCheck())
 
       var fut = newFuture[void]("test.AcceptConnectionCallback")
       fut.complete()
-      return fut
+      noCancel fut
 
     proc handleIncomingConnectionDummy(
         server: UtpRouter[TransportAddress],
         client: UtpSocket[TransportAddress]
-      ): Future[void] =
+      ): Future[void] {.async: (raw: true, raises: []).} =
         var fut = newFuture[void]("test.AcceptConnectionCallback")
         fut.complete()
-        return fut
+        noCancel fut
 
     let
       address1 = initTAddress("127.0.0.1", 9079)

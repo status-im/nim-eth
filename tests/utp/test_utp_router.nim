@@ -33,8 +33,8 @@ procSuite "uTP router unit":
 
   proc registerIncomingSocketCallback(serverSockets: AsyncQueue): AcceptConnectionCallback[int] =
     return (
-      proc(server: UtpRouter[int], client: UtpSocket[int]): Future[void] =
-        serverSockets.addLast(client)
+      proc(server: UtpRouter[int], client: UtpSocket[int]): Future[void] {.async: (raw: true, raises: []).} =
+        noCancel serverSockets.addLast(client)
     )
 
   proc testSend(to: int, bytes: seq[byte]) =
