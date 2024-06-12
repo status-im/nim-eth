@@ -460,7 +460,7 @@ proc mergeAndGraft(self: var HexaryTrie;
     output.append hexPrefixEncode(NibblesSeq(), true)
   else:
     doAssert(not soleChild.isEmpty)
-    output.append int(hexPrefixEncodeByte(childPos))
+    output.append uint(hexPrefixEncodeByte(childPos))
   output.append(soleChild)
   result = output.finish()
 

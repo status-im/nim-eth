@@ -1000,7 +1000,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       var `rlpWriter` = `initRlpWriter`()
       const `perProtocolMsgIdVar` {.used.} = `msgId`
       let `perPeerMsgIdVar` = `perPeerMsgIdValue`
-      `append`(`rlpWriter`, `perPeerMsgIdVar`)
+      `append`(`rlpWriter`, `perPeerMsgIdVar`.uint)
 
     when tracingEnabled:
       appendParams.add logSentMsgFields(peerVar, protocol, msgId, paramsToWrite)
@@ -1031,6 +1031,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
                    newLit(protocol.rlpxName),
                    newLit(protocol.version),
                    protocol.peerInit, protocol.netInit)
+
 
 p2pProtocol DevP2P(version = 5, rlpxName = "p2p"):
   proc hello(peer: Peer,
