@@ -52,7 +52,7 @@ proc append*(w: var RlpWriter, a: IpAddress) =
   of IpAddressFamily.IPv4:
     w.append(a.address_v4)
 
-proc append(w: var RlpWriter, p: Port) = w.append(p.int)
+proc append(w: var RlpWriter, p: Port) = w.append(p.uint)
 proc append(w: var RlpWriter, pk: PublicKey) = w.append(pk.toRaw())
 proc append(w: var RlpWriter, h: MDigest[256]) = w.append(h.data)
 
@@ -110,11 +110,11 @@ proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) =
           debug "Discovery send failed", msg = f.readError.msg
         except FutureError as exc:
           error "Failed to get discovery send future error", msg=exc.msg
-          
+
   f.addCallback cb
 
 proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] =
-  let payload = rlp.encode((PROTO_VERSION, d.address, n.node.address,
+  let payload = rlp.encode((PROTO_VERSION.uint, d.address, n.node.address,
                             expiration()))
   let msg = pack(cmdPing, payload, d.privKey)
   result = msg[0 ..< MAC_SIZE]
