@@ -25,8 +25,10 @@ procSuite "uTP over discovery v5 protocol":
 
   proc registerIncomingSocketCallback(serverSockets: AsyncQueue): AcceptConnectionCallback[NodeAddress] =
     return (
-      proc(server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]): Future[void] =
-        serverSockets.addLast(client)
+      proc(
+          server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]
+      ): Future[void] {.async: (raw: true, raises: []).} =
+        noCancel serverSockets.addLast(client)
     )
 
   proc allowOneIdCallback(allowedId: uint16): AllowConnectionCallback[NodeAddress] =
@@ -67,9 +69,11 @@ procSuite "uTP over discovery v5 protocol":
     await node1.closeWait()
     await node2.closeWait()
 
-  proc cbUserData(server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]): Future[void] =
+  proc cbUserData(
+      server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]
+  ): Future[void] {.async: (raw: true, raises: []).} =
     let queue = rt.getUserData[NodeAddress, AsyncQueue[UtpSocket[NodeAddress]]](server)
-    queue.addLast(client)
+    noCancel queue.addLast(client)
 
   asyncTest "Provide user data pointer and use it in callback":
     let
@@ -249,20 +253,20 @@ procSuite "uTP over discovery v5 protocol":
     proc handleIncomingConnection(
         server: UtpRouter[NodeAddress],
         client: UtpSocket[NodeAddress]
-      ): Future[void] =
+      ): Future[void] {.async: (raw: true, raises: []).} =
       readFutures.add(client.readAndCheck())
 
       var fut = newFuture[void]("test.AcceptConnectionCallback")
       fut.complete()
-      return fut
+      noCancel fut
 
     proc handleIncomingConnectionDummy(
         server: UtpRouter[NodeAddress],
         client: UtpSocket[NodeAddress]
-      ): Future[void] =
+      ): Future[void] {.async: (raw: true, raises: []).} =
         var fut = newFuture[void]("test.AcceptConnectionCallback")
         fut.complete()
-        return fut
+        noCancel fut
 
     let
       address1 = localAddress(20302)
