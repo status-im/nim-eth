@@ -1000,6 +1000,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       var `rlpWriter` = `initRlpWriter`()
       const `perProtocolMsgIdVar` {.used.} = `msgId`
       let `perPeerMsgIdVar` = `perPeerMsgIdValue`
+      # TODO: rlpx should error if perPeerMsgIdVar is signed
       `append`(`rlpWriter`, `perPeerMsgIdVar`)
 
     when tracingEnabled:
