@@ -11,7 +11,8 @@
 
 import
   std/net,
-  stew/[arrayops, results],
+  stew/arrayops,
+  results,
   ../../rlp,
   "."/[messages, enr]
 

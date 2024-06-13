@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,7 +12,8 @@
 import
   faststreams,
   chronos,
-  stew/[endians2, results, objects],
+  stew/[endians2, objects],
+  results,
   ../p2p/discoveryv5/random2
 
 export results, random2

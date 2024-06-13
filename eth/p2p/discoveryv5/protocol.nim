@@ -504,15 +504,15 @@ proc registerRequest(d: Protocol, n: Node, message: seq[byte],
       d.pendingRequests.del(nonce)
 
 proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
-    Future[Option[Message]] {.async: (raw: true, raises: []).} =
-  result = newFuture[Option[Message]]("waitMessage")
-  let res = result
+    Future[Option[Message]] {.async: (raw: true, raises: [CancelledError]).} =
+  let retFuture = Future[Option[Message]].Raising([CancelledError]).init("discv5.waitMessage")
   let key = (fromNode.id, reqId)
   sleepAsync(d.responseTimeout).addCallback() do(data: pointer):
     d.awaitedMessages.del(key)
-    if not res.finished:
-      res.complete(none(Message))
-  d.awaitedMessages[key] = result
+    if not retFuture.finished:
+      retFuture.complete(none(Message))
+  d.awaitedMessages[key] = retFuture
+  retFuture
 
 proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
     Future[DiscResult[seq[Record]]] {.async: (raises: [CancelledError]).} =

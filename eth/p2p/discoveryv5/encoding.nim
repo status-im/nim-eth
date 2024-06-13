@@ -16,7 +16,8 @@
 import
   std/[tables, options, hashes, net],
   nimcrypto/[bcmode, rijndael, sha2], stint, chronicles,
-  stew/[results, byteutils, endians2], metrics,
+  stew/[byteutils, endians2], metrics,
+  results,
   ".."/../[rlp, keys],
   "."/[messages_encoding, node, enr, hkdf, sessions]
 

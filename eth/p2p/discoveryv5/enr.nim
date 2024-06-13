@@ -13,7 +13,8 @@
 import
   std/[strutils, macros, algorithm, options, net],
   nimcrypto/[keccak, utils],
-  stew/[base64, results],
+  stew/base64,
+  results,
   chronicles,
   ".."/../[rlp, keys],
   ../../net/utils

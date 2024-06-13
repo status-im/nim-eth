@@ -9,7 +9,8 @@
 import
   std/[sugar, deques],
   chronos, chronicles, metrics,
-  stew/[results, bitops2],
+  stew/bitops2,
+  results,
   ./growable_buffer,
   ./packets,
   ./ledbat_congestion_control,
@@ -18,7 +19,7 @@ import
   ./clock_drift_calculator
 
 export
-  chronicles
+  chronicles, results
 
 logScope:
   topics = "eth utp utp_socket"
