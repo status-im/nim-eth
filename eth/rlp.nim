@@ -4,7 +4,8 @@
 
 import
   std/[strutils, options],
-  stew/[byteutils, shims/macros, results],
+  stew/[byteutils, shims/macros],
+  results,
   ./rlp/[writer, object_serialization],
   ./rlp/priv/defs
 

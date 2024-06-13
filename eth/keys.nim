@@ -1,5 +1,5 @@
 # Nim Ethereum Keys
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 # - Apache License, version 2.0, (LICENSE-APACHEv2)
 # - MIT license (LICENSE-MIT)
@@ -17,7 +17,8 @@
 import
   std/strformat,
   secp256k1, bearssl/hash as bhash, bearssl/rand,
-  stew/[byteutils, objects, results, ptrops],
+  stew/[byteutils, objects, ptrops],
+  results,
   ./common/eth_hash
 
 from nimcrypto/utils import burnMem
