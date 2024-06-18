@@ -96,7 +96,7 @@ proc new*(
     socketConfig: SocketConfig = SocketConfig.init(),
     allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
     sendCallbackBuilder: SendCallbackBuilder = nil,
-    rng = newRng()): UtpProtocol {.raises: [CatchableError].} =
+    rng = newRng()): UtpProtocol {.raises: [TransportOsError].} =
 
   doAssert(not(isNil(acceptConnectionCb)))
 
@@ -125,7 +125,7 @@ proc new*(
     socketConfig: SocketConfig = SocketConfig.init(),
     allowConnectionCb: AllowConnectionCallback[TransportAddress] = nil,
     sendCallbackBuilder: SendCallbackBuilder = nil,
-    rng = newRng()): UtpProtocol {.raises: [CatchableError].} =
+    rng = newRng()): UtpProtocol {.raises: [TransportOsError].} =
   GC_ref(udata)
   UtpProtocol.new(
     acceptConnectionCb,

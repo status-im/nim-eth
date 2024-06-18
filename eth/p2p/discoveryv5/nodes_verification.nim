@@ -9,7 +9,7 @@
 {.push raises: [].}
 
 import
-  std/[sets, options, net],
+  std/[sets, net],
   results, chronicles, chronos,
   ../../net/utils,
   "."/[node, enr, routing_table]
@@ -32,7 +32,7 @@ func validIp(sender, address: IpAddress): bool =
 
 proc verifyNodesRecords(
     enrs: openArray[Record], src: Node, nodesLimit: int,
-    distances: Option[seq[uint16]]): seq[Node] =
+    distances: Opt[seq[uint16]]): seq[Node] =
   ## Verify and convert ENRs to a sequence of nodes. Only ENRs that pass
   ## verification will be added. ENRs are verified for duplicates, invalid
   ## addresses and invalid distances if those are specified.
@@ -86,9 +86,9 @@ proc verifyNodesRecords(
 
 proc verifyNodesRecords*(
     enrs: openArray[Record], src: Node, nodesLimit: int): seq[Node] =
-  verifyNodesRecords(enrs, src, nodesLimit, none[seq[uint16]]())
+  verifyNodesRecords(enrs, src, nodesLimit, Opt.none(seq[uint16]))
 
 proc verifyNodesRecords*(
     enrs: openArray[Record], src: Node, nodesLimit: int,
     distances: seq[uint16]): seq[Node] =
-  verifyNodesRecords(enrs, src, nodesLimit, some[seq[uint16]](distances))
+  verifyNodesRecords(enrs, src, nodesLimit, Opt.some(distances))

@@ -23,15 +23,15 @@ proc initDiscoveryNode*(
     address: Address,
     bootstrapRecords: openArray[Record] = [],
     localEnrFields: openArray[(string, seq[byte])] = [],
-    previousRecord = none[enr.Record]()):
+    previousRecord = Opt.none(enr.Record)):
     discv5_protocol.Protocol =
   # set bucketIpLimit to allow bucket split
   let config = DiscoveryConfig.init(1000, 24, 5)
 
   let protocol = newProtocol(
     privKey,
-    some(address.ip),
-    some(address.port), some(address.port),
+    Opt.some(address.ip),
+    Opt.some(address.port), Opt.some(address.port),
     bindPort = address.port,
     bootstrapRecords = bootstrapRecords,
     localEnrFields = localEnrFields,
@@ -51,8 +51,8 @@ func generateNode*(privKey: PrivateKey, port: int = 20302,
     ip: IpAddress = parseIpAddress("127.0.0.1"),
     localEnrFields: openArray[FieldPair] = []): Node =
   let port = Port(port)
-  let enr = enr.Record.init(1, privKey, some(ip),
-    some(port), some(port), localEnrFields).expect("Properly initialized private key")
+  let enr = enr.Record.init(1, privKey, Opt.some(ip),
+    Opt.some(port), Opt.some(port), localEnrFields).expect("Properly initialized private key")
   result = newNode(enr).expect("Properly initialized node")
 
 proc generateNRandomNodes*(rng: var HmacDrbgContext, n: int): seq[Node] =

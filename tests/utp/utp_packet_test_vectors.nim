@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -7,7 +7,6 @@
 {.used.}
 
 import
-  std/options,
   stew/byteutils,
   unittest2,
   ../../eth/utp/packets,
@@ -27,7 +26,7 @@ suite "uTP packets test vectors":
         seqNr: 11884,
         ackNr: 0
       ),
-      eack: none[SelectiveAckExtension](),
+      eack: Opt.none(SelectiveAckExtension),
       payload: @[]
     )
 
@@ -51,7 +50,7 @@ suite "uTP packets test vectors":
         seqNr: 16807,
         ackNr: 11885
       ),
-      eack: none[SelectiveAckExtension](),
+      eack: Opt.none(SelectiveAckExtension),
       payload: @[]
     )
 
@@ -78,7 +77,7 @@ suite "uTP packets test vectors":
         seqNr: 16807,
         ackNr: 11885
       ),
-      eack: some(SelectiveAckExtension(
+      eack: Opt.some(SelectiveAckExtension(
         acks: bitMask
       )),
       payload: @[]
@@ -104,7 +103,7 @@ suite "uTP packets test vectors":
         seqNr: 8334,
         ackNr: 16806
       ),
-      eack: none[SelectiveAckExtension](),
+      eack: Opt.none(SelectiveAckExtension),
       payload: @[0'u8, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     )
 
@@ -128,7 +127,7 @@ suite "uTP packets test vectors":
         seqNr: 41050,
         ackNr: 16806
       ),
-      eack: none[SelectiveAckExtension](),
+      eack: Opt.none(SelectiveAckExtension),
       payload: @[]
     )
 
@@ -152,7 +151,7 @@ suite "uTP packets test vectors":
         seqNr: 55413,
         ackNr: 16807
       ),
-      eack: none[SelectiveAckExtension](),
+      eack: Opt.none(SelectiveAckExtension),
       payload: @[]
     )
 

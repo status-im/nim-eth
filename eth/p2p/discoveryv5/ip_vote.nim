@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -18,11 +18,12 @@
 {.push raises: [].}
 
 import
-  std/[tables, options],
+  std/tables,
+  results,
   chronos,
   ./node
 
-export options
+export results
 
 const IpVoteTimeout = 5.minutes ## Duration until a vote expires
 
@@ -45,7 +46,7 @@ proc insert*(ipvote: var IpVote, key: NodeId, address: Address) =
   ## can only hold 1 vote.
   ipvote.votes[key] = (address, now(chronos.Moment) + IpVoteTimeout)
 
-proc majority*(ipvote: var IpVote): Option[Address] =
+proc majority*(ipvote: var IpVote): Opt[Address] =
   ## Get the majority of votes on an address. Pruning of votes older than
   ## `IpVoteTime` will be done before the majority count.
   ## Note: When there is a draw the selected "majority" will depend on whichever
@@ -66,11 +67,11 @@ proc majority*(ipvote: var IpVote): Option[Address] =
     ipvote.votes.del(id)
 
   if ipCount.len <= 0:
-    return none(Address)
+    return Opt.none(Address)
 
   let (address, count) = ipCount.largest()
 
   if uint(count) >= ipvote.threshold:
-    some(address)
+    Opt.some(address)
   else:
-    none(Address)
+    Opt.none(Address)

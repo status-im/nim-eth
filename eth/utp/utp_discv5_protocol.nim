@@ -9,11 +9,12 @@
 import
   std/[hashes, sugar],
   chronos, chronicles,
+  results,
   ../p2p/discoveryv5/[protocol, messages_encoding, encoding],
   ./utp_router,
   ../keys
 
-export utp_router, protocol
+export utp_router, protocol, results
 
 logScope:
   topics = "eth utp utp_discv5_protocol"
@@ -30,7 +31,7 @@ type
 proc init*(T: type NodeAddress, nodeId: NodeId, address: Address): NodeAddress =
   NodeAddress(nodeId: nodeId, address: address)
 
-proc init*(T: type NodeAddress, node: Node): Option[NodeAddress] =
+proc init*(T: type NodeAddress, node: Node): Opt[NodeAddress] =
   node.address.map((address: Address) =>
     NodeAddress(nodeId: node.id, address: address))
 

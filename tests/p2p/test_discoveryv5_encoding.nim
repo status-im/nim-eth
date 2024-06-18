@@ -265,13 +265,13 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
       privKeyB = PrivateKey.fromHex(nodeBKey)[] # receive -> decode
 
       enrRecA = enr.Record.init(1, privKeyA,
-        some(parseIpAddress("127.0.0.1")), some(Port(9000)),
-        some(Port(9000))).expect("Properly initialized private key")
+        Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
+        Opt.some(Port(9000))).expect("Properly initialized private key")
       nodeA = newNode(enrRecA).expect("Properly initialized record")
 
       enrRecB = enr.Record.init(1, privKeyB,
-        some(parseIpAddress("127.0.0.1")), some(Port(9000)),
-        some(Port(9000))).expect("Properly initialized private key")
+        Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
+        Opt.some(Port(9000))).expect("Properly initialized private key")
       nodeB = newNode(enrRecB).expect("Properly initialized record")
 
     var
@@ -358,7 +358,7 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
         idNonce: hexToByteArray[idNonceSize](whoareyouIdNonce),
         recordSeq: whoareyouEnrSeq,
         challengeData: hexToSeqByte(whoareyouChallengeData))
-      pubkey = some(privKeyA.toPublicKey())
+      pubkey = Opt.some(privKeyA.toPublicKey())
       challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey)
       key = HandshakeKey(nodeId: nodeA.id, address: nodeA.address.get())
 
@@ -408,7 +408,7 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
         idNonce: hexToByteArray[idNonceSize](whoareyouIdNonce),
         recordSeq: whoareyouEnrSeq,
         challengeData: hexToSeqByte(whoareyouChallengeData))
-      pubkey = none(PublicKey)
+      pubkey = Opt.none(PublicKey)
       challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey)
       key = HandshakeKey(nodeId: nodeA.id, address: nodeA.address.get())
 
@@ -486,13 +486,13 @@ suite "Discovery v5.1 Additional Encode/Decode":
       privKeyB = PrivateKey.random(rng[]) # receiver -> decode
 
       enrRecA = enr.Record.init(1, privKeyA,
-        some(parseIpAddress("127.0.0.1")), some(Port(9000)),
-        some(Port(9000))).expect("Properly initialized private key")
+        Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
+        Opt.some(Port(9000))).expect("Properly initialized private key")
       nodeA = newNode(enrRecA).expect("Properly initialized record")
 
       enrRecB = enr.Record.init(1, privKeyB,
-        some(parseIpAddress("127.0.0.1")), some(Port(9000)),
-        some(Port(9000))).expect("Properly initialized private key")
+        Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
+        Opt.some(Port(9000))).expect("Properly initialized private key")
       nodeB = newNode(enrRecB).expect("Properly initialized record")
 
     var
@@ -520,7 +520,7 @@ suite "Discovery v5.1 Additional Encode/Decode":
     let recordSeq = 0'u64
 
     let data = encodeWhoareyouPacket(rng[], codecA, nodeB.id,
-      nodeB.address.get(), requestNonce, recordSeq, none(PublicKey))
+      nodeB.address.get(), requestNonce, recordSeq, Opt.none(PublicKey))
 
     let decoded = codecB.decodePacket(nodeA.address.get(), data)
 
@@ -542,7 +542,7 @@ suite "Discovery v5.1 Additional Encode/Decode":
       m = PingMessage(enrSeq: 0)
       reqId = RequestId.init(rng[])
       message = encodeMessage(m, reqId)
-      pubkey = some(privKeyA.toPublicKey())
+      pubkey = Opt.some(privKeyA.toPublicKey())
 
     # Encode/decode whoareyou packet to get the handshake stored and the
     # whoareyou data returned. It's either that or construct the header for the
@@ -572,7 +572,7 @@ suite "Discovery v5.1 Additional Encode/Decode":
       m = PingMessage(enrSeq: 0)
       reqId = RequestId.init(rng[])
       message = encodeMessage(m, reqId)
-      pubkey = none(PublicKey)
+      pubkey = Opt.none(PublicKey)
 
     # Encode/decode whoareyou packet to get the handshake stored and the
     # whoareyou data returned. It's either that or construct the header for the

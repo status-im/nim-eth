@@ -81,7 +81,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, sets, options, math, sequtils, algorithm],
+  std/[tables, sets, math, sequtils, algorithm],
   json_serialization/std/net,
   results, chronicles, chronos, stint, metrics,
   ".."/../[rlp, keys],
@@ -89,7 +89,7 @@ import
     ip_vote, nodes_verification]
 
 export
-  options, results, node, enr, encoding.maxDiscv5PacketSize
+  results, node, enr, encoding.maxDiscv5PacketSize
 
 declareCounter discovery_message_requests_outgoing,
   "Discovery protocol outgoing message requests", labels = ["response"]
@@ -141,7 +141,7 @@ type
     pendingRequests: Table[AESGCMNonce, PendingRequest]
     routingTable*: RoutingTable
     codec*: Codec
-    awaitedMessages: Table[(NodeId, RequestId), Future[Option[Message]]]
+    awaitedMessages: Table[(NodeId, RequestId), Future[Opt[Message]]]
     refreshLoop: Future[void]
     revalidateLoop: Future[void]
     ipMajorityLoop: Future[void]
@@ -178,8 +178,8 @@ const
     responseTimeout: defaultResponseTimeout
   )
 
-chronicles.formatIt(Option[Port]): $it
-chronicles.formatIt(Option[IpAddress]): $it
+chronicles.formatIt(Opt[Port]): $it
+chronicles.formatIt(Opt[IpAddress]): $it
 
 proc addNode*(d: Protocol, node: Node): bool =
   ## Add `Node` to discovery routing table.
@@ -383,9 +383,9 @@ proc handleMessage(
     trace "Received unimplemented message kind", kind = message.kind,
       origin = fromAddr
   else:
-    var waiter: Future[Option[Message]]
+    var waiter: Future[Opt[Message]]
     if d.awaitedMessages.take((srcId, message.reqId), waiter):
-      waiter.complete(some(message))
+      waiter.complete(Opt.some(message))
     else:
       discovery_unsolicited_messages.inc()
       trace "Timed out or unrequested message", kind = message.kind,
@@ -404,10 +404,12 @@ proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
   let key = HandshakeKey(nodeId: toId, address: a)
   if not d.codec.hasHandshake(key):
     let
-      recordSeq = if node.isSome(): node.get().record.seqNum
-                  else: 0
-      pubkey = if node.isSome(): some(node.get().pubkey)
-              else: none(PublicKey)
+      recordSeq =
+        if node.isSome():
+          node.get().record.seqNum
+        else:
+          0
+      pubkey = node.map(proc(node: Node): PublicKey = node.pubkey)
 
     let data = encodeWhoareyouPacket(d.rng[], d.codec, toId, a, requestNonce,
       recordSeq, pubkey)
@@ -504,13 +506,13 @@ proc registerRequest(d: Protocol, n: Node, message: seq[byte],
       d.pendingRequests.del(nonce)
 
 proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
-    Future[Option[Message]] {.async: (raw: true, raises: [CancelledError]).} =
-  let retFuture = Future[Option[Message]].Raising([CancelledError]).init("discv5.waitMessage")
+    Future[Opt[Message]] {.async: (raw: true, raises: [CancelledError]).} =
+  let retFuture = Future[Opt[Message]].Raising([CancelledError]).init("discv5.waitMessage")
   let key = (fromNode.id, reqId)
   sleepAsync(d.responseTimeout).addCallback() do(data: pointer):
     d.awaitedMessages.del(key)
     if not retFuture.finished:
-      retFuture.complete(none(Message))
+      retFuture.complete(Opt.none(Message))
   d.awaitedMessages[key] = retFuture
   retFuture
 
@@ -881,7 +883,7 @@ proc updateExternalIp*(d: Protocol, extIp: IpAddress, udpPort: Port): bool =
   let
     previous = d.localNode.address
     res = d.localNode.update(d.privateKey,
-      ip = some(extIp), udpPort = some(udpPort))
+      ip = Opt.some(extIp), udpPort = Opt.some(udpPort))
 
   if res.isErr:
     warn "Failed updating ENR with newly discovered external address",
@@ -967,11 +969,11 @@ func init*(
 
 proc newProtocol*(
     privKey: PrivateKey,
-    enrIp: Option[IpAddress],
-    enrTcpPort, enrUdpPort: Option[Port],
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
     localEnrFields: openArray[(string, seq[byte])] = [],
     bootstrapRecords: openArray[Record] = [],
-    previousRecord = none[enr.Record](),
+    previousRecord = Opt.none(enr.Record),
     bindPort: Port,
     bindIp = IPv4_any(),
     enrAutoUpdate = false,
@@ -1028,11 +1030,11 @@ proc newProtocol*(
 
 proc newProtocol*(
     privKey: PrivateKey,
-    enrIp: Option[IpAddress],
-    enrTcpPort, enrUdpPort: Option[Port],
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
     localEnrFields: openArray[(string, seq[byte])] = [],
     bootstrapRecords: openArray[Record] = [],
-    previousRecord = none[enr.Record](),
+    previousRecord = Opt.none(enr.Record),
     bindPort: Port,
     bindIp: Opt[IpAddress],
     enrAutoUpdate = false,

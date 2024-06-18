@@ -7,8 +7,9 @@
 {.push raises: [].}
 
 import
-  std/[tables, options, sugar],
+  std/tables,
   chronos, chronicles, metrics,
+  results,
   ../keys,
   ./utp_socket,
   ./packets
@@ -67,18 +68,18 @@ const
 # This should probably be in standard lib, it allows lazy composition of options
 # i.e one can write: O1 orElse O2 orElse O3, and chain will be evaluated to
 # first option which isSome()
-template orElse[A](a: Option[A], b: Option[A]): Option[A] =
+template orElse[A](a: Opt[A], b: Opt[A]): Opt[A] =
   if (a.isSome()):
     a
   else:
     b
 
-proc getUtpSocket[A](s: UtpRouter[A], k: UtpSocketKey[A]): Option[UtpSocket[A]] =
+proc getUtpSocket[A](s: UtpRouter[A], k: UtpSocketKey[A]): Opt[UtpSocket[A]] =
   let s = s.sockets.getOrDefault(k)
   if s == nil:
-    none[UtpSocket[A]]()
+    Opt.none(UtpSocket[A])
   else:
-    some(s)
+    Opt.some(s)
 
 proc deRegisterUtpSocket[A](s: UtpRouter[A], socket: UtpSocket[A]) =
   s.sockets.del(socket.socketKey)
@@ -164,7 +165,7 @@ proc getUserData*[A, T](router: UtpRouter[A]): T =
 # There are different possibilities on how the connection got established, need
 # to check every case.
 proc getSocketOnReset[A](
-    r: UtpRouter[A], sender: A, id: uint16): Option[UtpSocket[A]] =
+    r: UtpRouter[A], sender: A, id: uint16): Opt[UtpSocket[A]] =
   # id is our recv id
   let recvKey = UtpSocketKey[A].init(sender, id)
 
@@ -176,8 +177,8 @@ proc getSocketOnReset[A](
   let sendNoInitKey = UtpSocketKey[A].init(sender, id + 1)
 
   r.getUtpSocket(recvKey)
-  .orElse(r.getUtpSocket(sendInitKey).filter(s => s.connectionIdSnd == id))
-  .orElse(r.getUtpSocket(sendNoInitKey).filter(s => s.connectionIdSnd == id))
+  .orElse(r.getUtpSocket(sendInitKey).filter(proc(s: UtpSocket[A]): bool = s.connectionIdSnd == id))
+  .orElse(r.getUtpSocket(sendNoInitKey).filter(proc(s: UtpSocket[A]): bool = s.connectionIdSnd == id))
 
 proc shouldAllowConnection[A](
     r: UtpRouter[A], remoteAddress: A, connectionId: uint16): bool =

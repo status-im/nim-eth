@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, options, hashes, net],
+  std/[tables, hashes, net],
   nimcrypto/[bcmode, rijndael, sha2], stint, chronicles,
   stew/[byteutils, endians2], metrics,
   results,
@@ -23,7 +23,7 @@ import
 
 from stew/objects import checkedEnumAssign
 
-export keys
+export keys, results
 
 declareCounter discovery_session_lru_cache_hits, "Session LRU cache hits"
 declareCounter discovery_session_lru_cache_misses, "Session LRU cache misses"
@@ -68,7 +68,7 @@ type
 
   Challenge* = object
     whoareyouData*: WhoareyouData
-    pubkey*: Option[PublicKey]
+    pubkey*: Opt[PublicKey]
 
   StaticHeader* = object
     flag: Flag
@@ -87,7 +87,7 @@ type
   Packet* = object
     case flag*: Flag
     of OrdinaryMessage:
-      messageOpt*: Option[Message]
+      messageOpt*: Opt[Message]
       requestNonce*: AESGCMNonce
       srcId*: NodeId
     of Whoareyou:
@@ -163,10 +163,10 @@ proc encryptGCM*(key: AesKey, nonce, pt, authData: openArray[byte]): seq[byte] =
   ectx.clear()
 
 proc decryptGCM*(key: AesKey, nonce, ct, authData: openArray[byte]):
-    Option[seq[byte]] =
+    Opt[seq[byte]] =
   if ct.len <= gcmTagSize:
     debug "cipher is missing tag", len = ct.len
-    return
+    return Opt.none(seq[byte])
 
   var dctx: GCM[aes128]
   dctx.init(key, nonce, authData)
@@ -177,9 +177,9 @@ proc decryptGCM*(key: AesKey, nonce, ct, authData: openArray[byte]):
   dctx.clear()
 
   if tag != ct.toOpenArray(ct.len - gcmTagSize, ct.high):
-    return
+    return Opt.none(seq[byte])
 
-  return some(res)
+  Opt.some(res)
 
 proc encryptHeader*(id: NodeId, iv, header: openArray[byte]): seq[byte] =
   var ectx: CTR[aes128]
@@ -247,7 +247,7 @@ proc encodeMessagePacket*(rng: var HmacDrbgContext, c: var Codec,
 
 proc encodeWhoareyouPacket*(rng: var HmacDrbgContext, c: var Codec,
     toId: NodeId, toAddr: Address, requestNonce: AESGCMNonce, recordSeq: uint64,
-    pubkey: Option[PublicKey]): seq[byte] =
+    pubkey: Opt[PublicKey]): seq[byte] =
   let
     idNonce = rng.generate(IdNonce)
 
@@ -414,7 +414,7 @@ proc decodeMessagePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   let message = ? decodeMessage(pt.get())
 
   return ok(Packet(flag: Flag.OrdinaryMessage,
-    messageOpt: some(message), requestNonce: nonce, srcId: srcId))
+    messageOpt: Opt.some(message), requestNonce: nonce, srcId: srcId))
 
 proc decodeWhoareyouPacket(c: var Codec, nonce: AESGCMNonce,
     iv, header, ct: openArray[byte]): DecodeResult[Packet] =
@@ -473,13 +473,13 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
     ephKeyRaw = authdata[ephKeyPos..<ephKeyPos + int(ephKeySize)]
     ephKey = ? PublicKey.fromRaw(ephKeyRaw)
 
-  var record: Option[enr.Record]
+  var record: Opt[enr.Record]
   let recordPos = ephKeyPos + int(ephKeySize)
   if authdata.len() > recordPos:
     # There is possibly an ENR still
     try:
       # Signature check of record happens in decode.
-      record = some(rlp.decode(authdata.toOpenArray(recordPos, authdata.high),
+      record = Opt.some(rlp.decode(authdata.toOpenArray(recordPos, authdata.high),
         enr.Record))
     except RlpError, ValueError:
       return err("Invalid encoded ENR")

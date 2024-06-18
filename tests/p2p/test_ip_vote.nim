@@ -31,7 +31,7 @@ suite "IP vote":
     votes.insert(NodeId.random(rng[]), addr3);
     votes.insert(NodeId.random(rng[]), addr3);
 
-    check votes.majority() == some(addr2)
+    check votes.majority() == Opt.some(addr2)
 
   test "Votes below threshold":
     const threshold = 10
@@ -67,7 +67,7 @@ suite "IP vote":
     for i in 0..<(threshold):
       votes.insert(NodeId.random(rng[]), addr3);
 
-    check votes.majority() == some(addr3)
+    check votes.majority() == Opt.some(addr3)
 
   test "Double votes with same address":
     const threshold = 2
@@ -85,7 +85,7 @@ suite "IP vote":
     votes.insert(NodeId.random(rng[]), addr2);
     votes.insert(NodeId.random(rng[]), addr2);
 
-    check votes.majority() == some(addr2)
+    check votes.majority() == Opt.some(addr2)
 
   test "Double votes with different address":
     const threshold = 2
@@ -105,4 +105,4 @@ suite "IP vote":
     votes.insert(NodeId.random(rng[]), addr2);
     votes.insert(NodeId.random(rng[]), addr3);
 
-    check votes.majority() == some(addr3)
+    check votes.majority() == Opt.some(addr3)
