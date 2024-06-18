@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2023 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,10 +9,12 @@
 {.push raises: [].}
 
 import
-  std/[options, os, strutils, times],
+  std/[os, strutils, times],
   results, nat_traversal/[miniupnpc, natpmp],
   chronicles, json_serialization/std/net, chronos,
   ../common/utils, ./utils as netutils
+
+export results
 
 type
   NatStrategy* = enum
@@ -47,7 +49,7 @@ logScope:
 
 ## Also does threadvar initialisation.
 ## Must be called before redirectPorts() in each thread.
-proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] =
+proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Opt[IpAddress] =
   var externalIP: IpAddress
 
   if natStrategy == NatAny or natStrategy == NatUpnp:
@@ -83,7 +85,7 @@ proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] 
           try:
             externalIP = parseIpAddress(ires.value)
             strategy = NatUpnp
-            return some(externalIP)
+            return Opt.some(externalIP)
           except ValueError as e:
             error "parseIpAddress() exception", err = e.msg
             return
@@ -102,7 +104,7 @@ proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] 
         try:
           externalIP = parseIpAddress($(nires.value))
           strategy = NatPmp
-          return some(externalIP)
+          return Opt.some(externalIP)
         except ValueError as e:
           error "parseIpAddress() exception", err = e.msg
           return
@@ -113,7 +115,7 @@ proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Option[IpAddress] 
 # Further more, we check if the bind address (user provided, or a "0.0.0.0"
 # default) is a public IP. That's a long shot, because code paths involving a
 # user-provided bind address are not supposed to get here.
-proc getRoutePrefSrc(bindIp: IpAddress): (Option[IpAddress], PrefSrcStatus) =
+proc getRoutePrefSrc(bindIp: IpAddress): (Opt[IpAddress], PrefSrcStatus) =
   let bindAddress = initTAddress(bindIp, Port(0))
 
   if bindAddress.isAnyLocal():
@@ -122,20 +124,20 @@ proc getRoutePrefSrc(bindIp: IpAddress): (Option[IpAddress], PrefSrcStatus) =
       # No route was found, log error and continue without IP.
       error "No routable IP address found, check your network connection",
         error = ip.error
-      return (none(IpAddress), NoRoutingInfo)
+      return (Opt.none(IpAddress), NoRoutingInfo)
     elif ip.get().isGlobalUnicast():
-      return (some(ip.get()), PrefSrcIsPublic)
+      return (Opt.some(ip.get()), PrefSrcIsPublic)
     else:
-      return (none(IpAddress), PrefSrcIsPrivate)
+      return (Opt.none(IpAddress), PrefSrcIsPrivate)
   elif bindAddress.isGlobalUnicast():
-    return (some(bindIp), BindAddressIsPublic)
+    return (Opt.some(bindIp), BindAddressIsPublic)
   else:
-    return (none(IpAddress), BindAddressIsPrivate)
+    return (Opt.none(IpAddress), BindAddressIsPrivate)
 
 # Try to detect a public IP assigned to this host, before trying NAT traversal.
 proc getPublicRoutePrefSrcOrExternalIP*(
     natStrategy: NatStrategy, bindIp: IpAddress, quiet = true):
-    Option[IpAddress] =
+    Opt[IpAddress] =
   let (prefSrcIp, prefSrcStatus) = getRoutePrefSrc(bindIp)
 
   case prefSrcStatus:
@@ -144,9 +146,9 @@ proc getPublicRoutePrefSrcOrExternalIP*(
     of PrefSrcIsPrivate, BindAddressIsPrivate:
       let extIp = getExternalIP(natStrategy, quiet)
       if extIp.isSome:
-        return some(extIp.get)
+        return Opt.some(extIp.get)
 
-proc doPortMapping(tcpPort, udpPort: Port, description: string): Option[(Port, Port)] {.gcsafe.} =
+proc doPortMapping(tcpPort, udpPort: Port, description: string): Opt[(Port, Port)] {.gcsafe.} =
   var
     extTcpPort: Port
     extUdpPort: Port
@@ -196,7 +198,7 @@ proc doPortMapping(tcpPort, udpPort: Port, description: string): Option[(Port, P
             extTcpPort = extPort
           of NatPmpProtocol.UDP:
             extUdpPort = extPort
-  return some((extTcpPort, extUdpPort))
+  return Opt.some((extTcpPort, extUdpPort))
 
 type PortMappingArgs = tuple[tcpPort, udpPort: Port, description: string]
 var
@@ -274,7 +276,7 @@ proc stopNatThread() {.noconv.} =
         else:
           debug "NAT-PMP: deleted port mapping", externalPort = eport, internalPort = iport, protocol = protocol
 
-proc redirectPorts*(tcpPort, udpPort: Port, description: string): Option[(Port, Port)] =
+proc redirectPorts*(tcpPort, udpPort: Port, description: string): Opt[(Port, Port)] =
   result = doPortMapping(tcpPort, udpPort, description)
   if result.isSome:
     (externalTcpPort, externalUdpPort) = result.get()
@@ -294,7 +296,7 @@ proc redirectPorts*(tcpPort, udpPort: Port, description: string): Option[(Port, 
 
 proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
     clientId: string):
-    tuple[ip: Option[IpAddress], tcpPort, udpPort: Option[Port]] =
+    tuple[ip: Opt[IpAddress], tcpPort, udpPort: Opt[Port]] =
   ## Setup NAT port mapping and get external IP address.
   ## If any of this fails, we don't return any IP address but do return the
   ## original ports as best effort.
@@ -308,13 +310,13 @@ proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
                     description = clientId))
     if extPorts.isSome:
       let (extTcpPort, extUdpPort) = extPorts.get()
-      (ip: some(ip), tcpPort: some(extTcpPort), udpPort: some(extUdpPort))
+      (ip: Opt.some(ip), tcpPort: Opt.some(extTcpPort), udpPort: Opt.some(extUdpPort))
     else:
       warn "UPnP/NAT-PMP available but port forwarding failed"
-      (ip: none(IpAddress), tcpPort: some(tcpPort), udpPort: some(udpPort))
+      (ip: Opt.none(IpAddress), tcpPort: Opt.some(tcpPort), udpPort: Opt.some(udpPort))
   else:
     warn "UPnP/NAT-PMP not available"
-    (ip: none(IpAddress), tcpPort: some(tcpPort), udpPort: some(udpPort))
+    (ip: Opt.none(IpAddress), tcpPort: Opt.some(tcpPort), udpPort: Opt.some(udpPort))
 
 type
   NatConfig* = object
@@ -349,7 +351,7 @@ func completeCmdArg*(T: type NatConfig, val: string): seq[string] =
 
 proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress,
     tcpPort, udpPort: Port, clientId: string):
-    tuple[ip: Option[IpAddress], tcpPort, udpPort: Option[Port]]
+    tuple[ip: Opt[IpAddress], tcpPort, udpPort: Opt[Port]]
     {.gcsafe.} =
   ## Set-up of the external address via any of the ways as configured in
   ## `NatConfig`. In case all fails an error is logged and the bind ports are
@@ -359,7 +361,7 @@ proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress,
 
   if natConfig.hasExtIp:
     # any required port redirection must be done by hand
-    return (some(natConfig.extIp), some(tcpPort), some(udpPort))
+    return (Opt.some(natConfig.extIp), Opt.some(tcpPort), Opt.some(udpPort))
 
   case natConfig.nat:
     of NatAny:
@@ -367,7 +369,7 @@ proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress,
 
       case prefSrcStatus:
         of NoRoutingInfo, PrefSrcIsPublic, BindAddressIsPublic:
-          return (prefSrcIp, some(tcpPort), some(udpPort))
+          return (prefSrcIp, Opt.some(tcpPort), Opt.some(udpPort))
         of PrefSrcIsPrivate, BindAddressIsPrivate:
           return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
     of NatNone:
@@ -375,12 +377,12 @@ proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress,
 
       case prefSrcStatus:
         of NoRoutingInfo, PrefSrcIsPublic, BindAddressIsPublic:
-          return (prefSrcIp, some(tcpPort), some(udpPort))
+          return (prefSrcIp, Opt.some(tcpPort), Opt.some(udpPort))
         of PrefSrcIsPrivate:
           error "No public IP address found. Should not use --nat:none option"
-          return (none(IpAddress), some(tcpPort), some(udpPort))
+          return (Opt.none(IpAddress), Opt.some(tcpPort), Opt.some(udpPort))
         of BindAddressIsPrivate:
           error "Bind IP is not a public IP address. Should not use --nat:none option"
-          return (none(IpAddress), some(tcpPort), some(udpPort))
+          return (Opt.none(IpAddress), Opt.some(tcpPort), Opt.some(udpPort))
     of NatUpnp, NatPmp:
       return setupNat(natConfig.nat, tcpPort, udpPort, clientId)

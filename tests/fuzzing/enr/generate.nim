@@ -10,8 +10,8 @@ proc generate() =
   let
     rng = newRng()
     privKey = PrivateKey.random(rng[])
-    ip = some(parseIpAddress("127.0.0.1"))
-    port = some(Port(20301))
+    ip = Opt.some(parseIpAddress("127.0.0.1"))
+    port = Opt.some(Port(20301))
 
   block:
     let record = enr.Record.init(1, privKey, ip, port, port)[]

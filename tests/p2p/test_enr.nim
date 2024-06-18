@@ -7,7 +7,7 @@
 {.used.}
 
 import
-  std/[options, sequtils, net],
+  std/[sequtils, net],
   unittest2,
   ../../eth/p2p/discoveryv5/enr, ../../eth/[keys, rlp]
 
@@ -68,9 +68,9 @@ suite "ENR":
     let
       keypair = KeyPair.random(rng[])
       ip = parseIpAddress("10.20.30.40")
-      port = some(Port(9000))
+      port = Opt.some(Port(9000))
       enr = Record.init(
-        100, keypair.seckey, some(ip), port, port,@[])[]
+        100, keypair.seckey, Opt.some(ip), port, port,@[])[]
       typedEnr = get enr.toTypedRecord()
 
     check:
@@ -89,9 +89,9 @@ suite "ENR":
   test "ENR without address":
     let
       keypair = KeyPair.random(rng[])
-      port = none(Port)
+      port = Opt.none(Port)
       enr = Record.init(
-        100, keypair.seckey, none(IpAddress), port, port)[]
+        100, keypair.seckey, Opt.none(IpAddress), port, port)[]
       typedEnr = get enr.toTypedRecord()
 
     check:
@@ -122,7 +122,7 @@ suite "ENR":
       pk = PrivateKey.fromHex(
         "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
       newField = toFieldPair("test", 123'u)
-    var r = Record.init(1, pk, none(IpAddress), none(Port), none(Port))[]
+    var r = Record.init(1, pk, Opt.none(IpAddress), Opt.none(Port), Opt.none(Port))[]
 
     block: # Insert new k:v pair, update of seqNum should occur.
       let updated = r.update(pk, [newField])
@@ -189,12 +189,12 @@ suite "ENR":
     let
       pk = PrivateKey.fromHex(
         "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
-    var r = Record.init(1, pk, none(IpAddress),
-      some(Port(9000)), some(Port(9000)))[]
+    var r = Record.init(1, pk, Opt.none(IpAddress),
+      Opt.some(Port(9000)), Opt.some(Port(9000)))[]
 
     block:
-      let updated = r.update(pk, none(IpAddress),
-        some(Port(9000)), some(Port(9000)))
+      let updated = r.update(pk, Opt.none(IpAddress),
+        Opt.some(Port(9000)), Opt.some(Port(9000)))
       check updated.isOk()
       check:
         r.tryGet("ip", uint).isNone()
@@ -203,8 +203,8 @@ suite "ENR":
         r.seqNum == 1
 
     block:
-      let updated = r.update(pk, none(IpAddress),
-        some(Port(9001)), some(Port(9002)))
+      let updated = r.update(pk, Opt.none(IpAddress),
+        Opt.some(Port(9001)), Opt.some(Port(9002)))
       check updated.isOk()
       check:
         r.tryGet("ip", uint).isNone()
@@ -213,8 +213,8 @@ suite "ENR":
         r.seqNum == 2
 
     block:
-      let updated = r.update(pk, some(parseIpAddress("10.20.30.40")),
-        some(Port(9000)), some(Port(9000)))
+      let updated = r.update(pk, Opt.some(parseIpAddress("10.20.30.40")),
+        Opt.some(Port(9000)), Opt.some(Port(9000)))
       check updated.isOk()
 
       let typedEnr = r.toTypedRecord().get()
@@ -232,8 +232,8 @@ suite "ENR":
         r.seqNum == 3
 
     block:
-      let updated = r.update(pk, some(parseIpAddress("10.20.30.40")),
-        some(Port(9001)), some(Port(9001)))
+      let updated = r.update(pk, Opt.some(parseIpAddress("10.20.30.40")),
+        Opt.some(Port(9001)), Opt.some(Port(9001)))
       check updated.isOk()
 
       let typedEnr = r.toTypedRecord().get()

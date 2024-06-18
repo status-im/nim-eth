@@ -51,7 +51,7 @@ type
 
   Packet* = object
     header*: PacketHeaderV1
-    eack*: Option[SelectiveAckExtension]
+    eack*: Opt[SelectiveAckExtension]
     payload*: seq[uint8]
 
   TimeStampInfo* = object
@@ -169,7 +169,7 @@ func decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
 
       return ok(Packet(
         header: header,
-        eack: none[SelectiveAckExtension](),
+        eack: Opt.none(SelectiveAckExtension),
         payload: payload))
     else:
       # packet with the selective ack extension
@@ -200,7 +200,7 @@ func decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
         else:
           bytes[minimalHeaderSizeWithSelectiveAck..^1]
 
-      return ok(Packet(header: header, eack: some(extension), payload: payload))
+      return ok(Packet(header: header, eack: Opt.some(extension), payload: payload))
 
 proc modifyTimeStampAndAckNr*(
     packetBytes: var seq[byte], newTimestamp: uint32, newAckNr: uint16) =
@@ -229,7 +229,7 @@ proc synPacket*(
     ackNr: 0'u16 # At start, no acks have been received
   )
 
-  Packet(header: h, eack: none[SelectiveAckExtension](), payload: @[])
+  Packet(header: h, eack: Opt.none(SelectiveAckExtension), payload: @[])
 
 proc ackPacket*(
     seqNr: uint16,
@@ -237,14 +237,14 @@ proc ackPacket*(
     ackNr: uint16,
     bufferSize: uint32,
     timestampDiff: uint32,
-    acksBitmask: Option[array[4, byte]] = none[array[4, byte]]()
+    acksBitmask: Opt[array[4, byte]] = Opt.none(array[4, byte])
   ): Packet =
 
   let (extensionByte, extensionData) =
     if acksBitmask.isSome():
-      (1'u8, some(SelectiveAckExtension(acks: acksBitmask.unsafeGet())))
+      (1'u8, Opt.some(SelectiveAckExtension(acks: acksBitmask.unsafeGet())))
     else:
-      (0'u8, none[SelectiveAckExtension]())
+      (0'u8, Opt.none(SelectiveAckExtension))
 
   let h = PacketHeaderV1(
     pType: ST_STATE,
@@ -280,7 +280,7 @@ proc dataPacket*(
     ackNr: ackNr
   )
 
-  Packet(header: h, eack: none[SelectiveAckExtension](), payload: payload)
+  Packet(header: h, eack: Opt.none(SelectiveAckExtension), payload: payload)
 
 proc resetPacket*(
     seqNr: uint16, sndConnectionId: uint16, ackNr: uint16): Packet =
@@ -298,7 +298,7 @@ proc resetPacket*(
     ackNr: ackNr
   )
 
-  Packet(header: h, eack: none[SelectiveAckExtension](), payload: @[])
+  Packet(header: h, eack: Opt.none(SelectiveAckExtension), payload: @[])
 
 proc finPacket*(
   seqNr: uint16,
@@ -319,4 +319,4 @@ proc finPacket*(
     ackNr: ackNr
   )
 
-  Packet(header: h, eack: none[SelectiveAckExtension](), payload: @[])
+  Packet(header: h, eack: Opt.none(SelectiveAckExtension), payload: @[])

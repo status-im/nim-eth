@@ -211,7 +211,7 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
       config.listenAddress, udpPort, udpPort, "dcli")
 
   let d = newProtocol(config.nodeKey,
-          extIp, none(Port), extUdpPort,
+          extIp, Opt.none(Port), extUdpPort,
           bootstrapRecords = config.bootnodes,
           bindIp = bindIp, bindPort = udpPort,
           enrAutoUpdate = config.enrAutoUpdate)

@@ -1,6 +1,6 @@
 #
 #                  Ethereum KeyFile
-#                 (c) Copyright 2018
+#                 (c) Copyright 2018-2024
 #         Status Research & Development GmbH
 #
 #              Licensed under either of
@@ -18,7 +18,7 @@
 
 {.push raises: [].}
 
-import stew/[byteutils, endians2, results]
+import stew/[byteutils, endians2], results
 
 from nimcrypto/utils import stripSpaces
 

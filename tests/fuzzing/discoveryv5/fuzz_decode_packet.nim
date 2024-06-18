@@ -13,13 +13,13 @@ init:
     privKeyB = PrivateKey.fromHex(nodeBKey)[] # receive -> decode
 
     enrRecA = enr.Record.init(1, privKeyA,
-      some(parseIpAddress("127.0.0.1")), some(Port(9000)),
-      some(Port(9000))).expect("Properly initialized private key")
+      Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
+      Opt.some(Port(9000))).expect("Properly initialized private key")
     nodeA = newNode(enrRecA).expect("Properly initialized record")
 
     enrRecB = enr.Record.init(1, privKeyB,
-      some(parseIpAddress("127.0.0.1")), some(Port(9000)),
-      some(Port(9000))).expect("Properly initialized private key")
+      Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
+      Opt.some(Port(9000))).expect("Properly initialized private key")
     nodeB = newNode(enrRecB).expect("Properly initialized record")
 
   var codecB = Codec(localNode: nodeB, privKey: privKeyB,

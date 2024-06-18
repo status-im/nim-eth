@@ -12,7 +12,7 @@
 {.push raises: [].}
 
 import
-  std/[options, net],
+  std/net,
   stint, stew/endians2,
   node, lru
 

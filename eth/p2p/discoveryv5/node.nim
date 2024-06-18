@@ -9,11 +9,11 @@
 
 import
   std/[hashes, net],
-  nimcrypto/keccak, stint, chronos, chronicles,
+  nimcrypto/keccak, stint, chronos, chronicles, results,
   ../../keys, ../../net/utils,
   ./enr
 
-export stint
+export stint, results
 
 type
   NodeId* = UInt256
@@ -25,7 +25,7 @@ type
   Node* = ref object
     id*: NodeId
     pubkey*: PublicKey
-    address*: Option[Address]
+    address*: Opt[Address]
     record*: Record
     seen*: bool ## Indicates if there was at least one successful
     ## request-response with this node.
@@ -52,29 +52,29 @@ func newNode*(r: Record): Result[Node, cstring] =
   if tr.ip.isSome() and tr.udp.isSome():
     let a = Address(ip: ipv4(tr.ip.get()), port: Port(tr.udp.get()))
 
-    ok(Node(id: pk.get().toNodeId(), pubkey: pk.get() , record: r,
-       address: some(a)))
+    ok(Node(id: pk.get().toNodeId(), pubkey: pk.get(), record: r,
+       address: Opt.some(a)))
   else:
     ok(Node(id: pk.get().toNodeId(), pubkey: pk.get(), record: r,
-       address: none(Address)))
+       address: Opt.none(Address)))
 
-func update*(n: Node, pk: PrivateKey, ip: Option[IpAddress],
-    tcpPort: Option[Port] = none[Port](),
-    udpPort: Option[Port] = none[Port](),
+func update*(n: Node, pk: PrivateKey, ip: Opt[IpAddress],
+    tcpPort: Opt[Port] = Opt.none(Port),
+    udpPort: Opt[Port] = Opt.none(Port),
     extraFields: openArray[FieldPair] = []): Result[void, cstring] =
   ? n.record.update(pk, ip, tcpPort, udpPort, extraFields)
 
   if ip.isSome():
     if udpPort.isSome():
       let a = Address(ip: ip.get(), port: udpPort.get())
-      n.address = some(a)
+      n.address = Opt.some(a)
     elif n.address.isSome():
       let a = Address(ip: ip.get(), port: n.address.get().port)
-      n.address = some(a)
+      n.address = Opt.some(a)
     else:
-      n.address = none(Address)
+      n.address = Opt.none(Address)
   else:
-    n.address = none(Address)
+    n.address = Opt.none(Address)
 
   ok()
 

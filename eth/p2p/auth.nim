@@ -1,6 +1,6 @@
 #
 #                 Ethereum P2P
-#              (c) Copyright 2018-2023
+#              (c) Copyright 2018-2024
 #       Status Research & Development GmbH
 #
 #            Licensed under either of
@@ -14,7 +14,8 @@
 
 import
   nimcrypto/[rijndael, keccak, utils],
-  stew/[arrayops, byteutils, endians2, objects, results],
+  stew/[arrayops, byteutils, endians2, objects],
+  results,
   ".."/[keys, rlp],
   ./ecies
 

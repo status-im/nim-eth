@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -72,7 +72,7 @@ suite "uTP packet encoding":
   test "Encode/decode ACK packet: with extensions":
     let
       bitMask: array[4, byte] = [1'u8, 2, 3, 4]
-      ackPacket = ackPacket(5, 10, 20, 30, 40, some(bitMask))
+      ackPacket = ackPacket(5, 10, 20, 30, 40, Opt.some(bitMask))
       encoded = encodePacket(ackPacket)
       decoded = decodePacket(encoded)
 
@@ -88,7 +88,7 @@ suite "uTP packet encoding":
 
   test "Fail to decode packet with malformed extensions":
     let bitMask: array[4, byte] = [1'u8, 2, 3, 4]
-    let ackPacket = ackPacket(5, 10, 20, 30, 40, some(bitMask))
+    let ackPacket = ackPacket(5, 10, 20, 30, 40, Opt.some(bitMask))
 
     block: # nextExtension to non zero
       var encoded = encodePacket(ackPacket)

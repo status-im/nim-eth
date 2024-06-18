@@ -1,5 +1,5 @@
 # nim-eth
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,9 @@
 
 {.push raises: [].}
 
-import std/[tables, lists, options]
+import std/[tables, lists], results
+
+export results
 
 type
   LRUCache*[K, V] = object of RootObj
@@ -19,14 +21,14 @@ type
 func init*[K, V](T: type LRUCache[K, V], capacity: int): LRUCache[K, V] =
   LRUCache[K, V](capacity: capacity) # Table and list init is done default
 
-func get*[K, V](lru: var LRUCache[K, V], key: K): Option[V] =
+func get*[K, V](lru: var LRUCache[K, V], key: K): Opt[V] =
   let node = lru.table.getOrDefault(key, nil)
   if node.isNil:
-    return none(V)
+    return Opt.none(V)
 
   lru.list.remove(node)
   lru.list.prepend(node)
-  return some(node.value[1])
+  return Opt.some(node.value[1])
 
 func put*[K, V](lru: var LRUCache[K, V], key: K, value: V) =
   let node = lru.table.getOrDefault(key, nil)

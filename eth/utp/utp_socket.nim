@@ -78,6 +78,8 @@ type
     # to move the socket in `Connected` state.
     # If set to none, the incoming socket will immediately be set to `Connected`
     # state and will be able to transfer data.
+    # TODO: Move to Opt but need to figure out current compile error:
+    # cannot instantiate: 'Opt[T]'; Maybe generic arguments are missing
     incomingSocketReceiveTimeout*: Option[Duration]
 
     # Timeout after which the send window will be reset to its minimal value
@@ -260,7 +262,7 @@ type
     eventLoop: Future[void]
 
     # timer which is started when peer max window drops below current packet size
-    zeroWindowTimer: Option[Moment]
+    zeroWindowTimer: Opt[Moment]
 
     # last measured delay between current local timestamp and remote sent
     # timestamp, in microseconds.
@@ -552,7 +554,7 @@ proc checkTimeouts(socket: UtpSocket) =
         let remoteWindow = 2 * socket.socketConfig.payloadSize
         socket.maxRemoteWindow = remoteWindow
         debug "Reset remote window to minimal value", remoteWindow
-      socket.zeroWindowTimer = none[Moment]()
+      socket.zeroWindowTimer = Opt.none(Moment)
 
     if (currentTime > socket.rtoTimeout):
       debug "CheckTimeouts rto timeout",
@@ -1086,9 +1088,9 @@ proc generateSelectiveAckBitMask*(socket: UtpSocket): array[4, byte] =
 proc generateAckPacket*(socket: UtpSocket): Packet =
     let bitmask =
       if (socket.reorderCount != 0 and (not socket.reachedFin)):
-        some(socket.generateSelectiveAckBitMask())
+        Opt.some(socket.generateSelectiveAckBitMask())
       else:
-        none[array[4, byte]]()
+        Opt.none(array[4, byte])
 
     let bufferSize = socket.getRcvWindowSize()
 
@@ -1319,7 +1321,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
     # when zeroWindowTimer is hit and maxRemoteWindow still is equal
     # to 0 then it will be reset to the minimal value
     socket.zeroWindowTimer =
-      some(timestampInfo.moment + socket.socketConfig.remoteWindowResetTimeout)
+      Opt.some(timestampInfo.moment + socket.socketConfig.remoteWindowResetTimeout)
 
     debug "Remote window size dropped below packet size",
       currentTime = timestampInfo.moment,
@@ -1988,7 +1990,7 @@ proc new[A](
     closeCallbacks: newSeq[Future[void]](),
     pendingWrites: initDeque[WriteRequest](),
     eventQueue: newAsyncQueue[SocketEvent](),
-    zeroWindowTimer: none[Moment](),
+    zeroWindowTimer: Opt.none(Moment),
     socketKey: UtpSocketKey.init(to, rcvId),
     slowStart: true,
     fastTimeout: false,

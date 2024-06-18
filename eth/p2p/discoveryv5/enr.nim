@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[strutils, macros, algorithm, options, net],
+  std/[strutils, macros, algorithm, net],
   nimcrypto/[keccak, utils],
   stew/base64,
   results,
@@ -38,13 +38,13 @@ type
 
   TypedRecord* = object
     id*: string
-    secp256k1*: Option[array[33, byte]]
-    ip*: Option[array[4, byte]]
-    ip6*: Option[array[16, byte]]
-    tcp*: Option[int]
-    udp*: Option[int]
-    tcp6*: Option[int]
-    udp6*: Option[int]
+    secp256k1*: Opt[array[33, byte]]
+    ip*: Opt[array[4, byte]]
+    ip6*: Opt[array[16, byte]]
+    tcp*: Opt[int]
+    udp*: Opt[int]
+    tcp6*: Opt[int]
+    udp6*: Opt[int]
 
   FieldKind = enum
     kString,
@@ -168,8 +168,8 @@ template toFieldPair*(key: string, value: auto): FieldPair =
 
 func addAddress(
     fields: var seq[FieldPair],
-    ip: Option[IpAddress],
-    tcpPort, udpPort: Option[Port]) =
+    ip: Opt[IpAddress],
+    tcpPort, udpPort: Opt[Port]) =
   ## Add address information in new fields. Incomplete address
   ## information is allowed (example: Port but not IP) as that information
   ## might be already in the ENR or added later.
@@ -193,8 +193,8 @@ func addAddress(
 func init*(
     T: type Record,
     seqNum: uint64, pk: PrivateKey,
-    ip: Option[IpAddress],
-    tcpPort, udpPort: Option[Port],
+    ip: Opt[IpAddress],
+    tcpPort, udpPort: Opt[Port],
     extraFields: openArray[FieldPair] = []):
     EnrResult[T] =
   ## Initialize a `Record` with given sequence number, private key, optional
@@ -260,24 +260,24 @@ func get*(r: Record, key: string, T: type): EnrResult[T] =
   else:
     err("Key not found in ENR")
 
-func get*(r: Record, T: type PublicKey): Option[T] =
+func get*(r: Record, T: type PublicKey): Opt[T] =
   ## Get the `PublicKey` from provided `Record`. Return `none` when there is
   ## no `PublicKey` in the record.
   var pubkeyField: Field
   if r.getField("secp256k1", pubkeyField) and pubkeyField.kind == kBytes:
     let pk = PublicKey.fromRaw(pubkeyField.bytes)
     if pk.isOk:
-      return some pk[]
-  none(T)
+      return Opt.some(pk[])
+  Opt.none(T)
 
-func find(r: Record, key: string): Option[int] =
+func find(r: Record, key: string): Opt[int] =
   ## Search for key in record key:value pairs.
   ##
   ## Returns some(index of key) if key is found in record. Else return none.
   for i, (k, v) in r.pairs:
     if k == key:
-      return some(i)
-  none(int)
+      return Opt.some(i)
+  Opt.none(int)
 
 func update*(
     record: var Record, pk: PrivateKey,
@@ -324,9 +324,9 @@ func update*(
 func update*(
     r: var Record,
     pk: PrivateKey,
-    ip: Option[IpAddress],
-    tcpPort: Option[Port] = none[Port](),
-    udpPort: Option[Port] = none[Port](),
+    ip: Opt[IpAddress],
+    tcpPort: Opt[Port] = Opt.none(Port),
+    udpPort: Opt[Port] = Opt.none(Port),
     extraFields: openArray[FieldPair] = []):
     EnrResult[void] =
   ## Update a `Record` with given ip address, tcp port, udp port and optional
@@ -345,15 +345,11 @@ func update*(
   fields.add extraFields
   r.update(pk, fields)
 
-func tryGet*(r: Record, key: string, T: type): Option[T] =
+func tryGet*(r: Record, key: string, T: type): Opt[T] =
   ## Get the value from the provided key.
   ## Return `none` if the key does not exist or if the value is invalid
   ## according to type `T`.
-  let val = get(r, key, T)
-  if val.isOk():
-    some(val.get())
-  else:
-    none(T)
+  get(r, key, T).optValue()
 
 func toTypedRecord*(r: Record): EnrResult[TypedRecord] =
   let id = r.tryGet("id", string)
