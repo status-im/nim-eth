@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[strutils, macros, algorithm, net],
+  std/[strutils, sequtils, macros, algorithm, net],
   nimcrypto/[keccak, utils],
   stew/base64,
   results,
@@ -19,33 +19,17 @@ import
   ".."/../[rlp, keys],
   ../../net/utils
 
-export options, results, keys
+export results, rlp, keys
 
 const
   maxEnrSize = 300  ## Maximum size of an encoded node record, in bytes.
   minRlpListLen = 4 ## Minimum node record RLP list has: signature, seqId,
   ## "id" key and value.
+  PreDefinedKeys = ["id", "secp256k1", "ip", "ip6", "tcp", "tcp6", "udp", "udp6"]
+  ## Predefined keys in the ENR spec, these have specific constraints on the
+  ## type of the associated value.
 
 type
-  FieldPair* = (string, Field)
-
-  Record* = object
-    seqNum*: uint64
-    raw*: seq[byte] # RLP encoded record
-    pairs: seq[FieldPair] # sorted list of all key/value pairs
-
-  EnrUri* = distinct string
-
-  TypedRecord* = object
-    id*: string
-    secp256k1*: Opt[array[33, byte]]
-    ip*: Opt[array[4, byte]]
-    ip6*: Opt[array[16, byte]]
-    tcp*: Opt[int]
-    udp*: Opt[int]
-    tcp6*: Opt[int]
-    udp6*: Opt[int]
-
   FieldKind = enum
     kString,
     kNum,
@@ -63,6 +47,28 @@ type
     of kList:
       listRaw: seq[byte] ## Differently from the other kinds, this is is stored
       ## as raw (encoded) RLP data, and thus treated as such further on.
+
+  FieldPair* = (string, Field)
+
+  Record* = object
+    seqNum*: uint64 ## ENR sequence number
+    pairs*: seq[FieldPair] ## List of all key:value pairs. List must have
+    ## at least the id k:v pair and the secp256k1 k:v pair. The list of pairs
+    ## must remain sorted and without duplicate keys. Use the insert func to
+    ## ensure this.
+    raw*: seq[byte] ## RLP encoded record
+
+  EnrUri* = distinct string
+
+  TypedRecord* = object
+    id*: string
+    secp256k1*: Opt[array[33, byte]]
+    ip*: Opt[array[4, byte]]
+    ip6*: Opt[array[16, byte]]
+    tcp*: Opt[int]
+    udp*: Opt[int]
+    tcp6*: Opt[int]
+    udp6*: Opt[int]
 
   EnrResult*[T] = Result[T, cstring]
 
@@ -94,7 +100,44 @@ func `==`(a, b: Field): bool =
   else:
     false
 
+template toFieldPair*(key: string, value: auto): FieldPair =
+  (key, toField(value))
+
 func cmp(a, b: FieldPair): int = cmp(a[0], b[0])
+
+func hasPredefinedKey(pair: FieldPair): bool =
+  PreDefinedKeys.contains(pair[0])
+
+func hasPredefinedKey(pairs: openArray[FieldPair]): bool =
+  for pair in pairs:
+    if hasPredefinedKey(pair):
+      return true
+  false
+
+func find(pairs: openArray[FieldPair], key: string): Opt[int] =
+  ## Search for key in key:value pairs.
+  ##
+  ## Returns some(index of key) if key is found. Else returns none.
+  for i, (k, v) in pairs:
+    if k == key:
+      return Opt.some(i)
+  Opt.none(int)
+
+func insert(pairs: var seq[FieldPair], item: FieldPair) =
+  ## Insert item in key:value pairs.
+  ##
+  ## If a FieldPair with key is already present, the value is updated, otherwise
+  ## the pair is inserted in the correct position to keep the pairs sorted.
+  let index = find(pairs, item[0])
+  if index.isSome():
+    pairs[index.get()] = item
+  else:
+    pairs.insert(item, pairs.lowerBound(item, cmp))
+
+func insert(pairs: var seq[FieldPair], b: openArray[FieldPair]) =
+  ## Insert all items in key:value pairs.
+  for item in b:
+    pairs.insert(item)
 
 func makeEnrRaw(
     seqNum: uint64, pk: PrivateKey,
@@ -112,16 +155,18 @@ func makeEnrRaw(
       of kList: w.appendRawBytes(v.listRaw) # No encoding needs to happen
     w.finish()
 
-  let toSign = block:
-    var w = initRlpList(pairs.len * 2 + 1)
-    w.append(seqNum, pairs)
+  let content =
+    block:
+      var w = initRlpList(pairs.len * 2 + 1)
+      w.append(seqNum, pairs)
 
-  let sig = signNR(pk, toSign)
+  let signature = signNR(pk, content)
 
-  var raw = block:
-    var w = initRlpList(pairs.len * 2 + 2)
-    w.append(sig.toRaw())
-    w.append(seqNum, pairs)
+  let raw =
+    block:
+      var w = initRlpList(pairs.len * 2 + 2)
+      w.append(signature.toRaw())
+      w.append(seqNum, pairs)
 
   if raw.len > maxEnrSize:
     err("Record exceeds maximum size")
@@ -129,7 +174,7 @@ func makeEnrRaw(
     ok(raw)
 
 func makeEnrAux(
-    seqNum: uint64, pk: PrivateKey,
+    seqNum: uint64, id: string, pk: PrivateKey,
     pairs: openArray[FieldPair]): EnrResult[Record] =
   var record: Record
   record.pairs = @pairs
@@ -137,76 +182,70 @@ func makeEnrAux(
 
   let pubkey = pk.toPublicKey()
 
-  record.pairs.add(("id", Field(kind: kString, str: "v4")))
-  record.pairs.add(("secp256k1",
+  record.pairs.insert(("id", Field(kind: kString, str: id)))
+  record.pairs.insert(("secp256k1",
     Field(kind: kBytes, bytes: @(pubkey.toRawCompressed()))))
-
-  # Sort by key
-  record.pairs.sort(cmp)
-  # TODO: Should deduplicate on keys here also. Should we error on that or just
-  # deal with it?
 
   record.raw = ? makeEnrRaw(seqNum, pk, record.pairs)
   ok(record)
 
 macro initRecord*(
     seqNum: uint64, pk: PrivateKey,
-    pairs: untyped{nkTableConstr}): untyped =
+    pairs: untyped{nkTableConstr}): untyped {.deprecated: "Please use Record.init instead".} =
   ## Initialize a `Record` with given sequence number, private key and k:v
   ## pairs.
   ##
   ## Can fail in case the record exceeds the `maxEnrSize`.
+  # Note: Deprecated as it is flawed. It allows for any type to be stored in the
+  # predefined keys. It also allows for duplicate keys (which could be fixed)
+  # and no longer sorts the pairs. It can however be moved and used for testing
+  # purposes.
+
   for c in pairs:
     c.expectKind(nnkExprColonExpr)
     c[1] = newCall(bindSym"toField", c[1])
 
   result = quote do:
-    makeEnrAux(`seqNum`, `pk`, `pairs`)
+    makeEnrAux(`seqNum`, "v4", `pk`, `pairs`)
 
-template toFieldPair*(key: string, value: auto): FieldPair =
-  (key, toField(value))
-
-func addAddress(
+func insertAddress(
     fields: var seq[FieldPair],
     ip: Opt[IpAddress],
     tcpPort, udpPort: Opt[Port]) =
-  ## Add address information in new fields. Incomplete address
-  ## information is allowed (example: Port but not IP) as that information
-  ## might be already in the ENR or added later.
+  ## Insert address data.
+  ## Incomplete address information is allowed (example: Port but not IP) as
+  ## that information might be already in the ENR or added later.
   if ip.isSome():
-    let
-      ipExt = ip.get()
-      isV6 = ipExt.family == IPv6
+    case ip.value.family
+    of IPv4:
+      fields.insert(("ip", ip.value.address_v4.toField))
+    of IPv6:
+      fields.insert(("ip6", ip.value.address_v6.toField))
 
-    fields.add(if isV6: ("ip6", ipExt.address_v6.toField)
-               else: ("ip", ipExt.address_v4.toField))
-    if tcpPort.isSome():
-      fields.add(((if isV6: "tcp6" else: "tcp"), tcpPort.get().uint16.toField))
-    if udpPort.isSome():
-      fields.add(((if isV6: "udp6" else: "udp"), udpPort.get().uint16.toField))
-  else:
-    if tcpPort.isSome():
-      fields.add(("tcp", tcpPort.get().uint16.toField))
-    if udpPort.isSome():
-      fields.add(("udp", udpPort.get().uint16.toField))
+  if tcpPort.isSome():
+    fields.insert(("tcp", tcpPort.get().uint16.toField))
+  if udpPort.isSome():
+    fields.insert(("udp", udpPort.get().uint16.toField))
 
 func init*(
     T: type Record,
     seqNum: uint64, pk: PrivateKey,
-    ip: Opt[IpAddress],
-    tcpPort, udpPort: Opt[Port],
+    ip: Opt[IpAddress] = Opt.none(IpAddress),
+    tcpPort: Opt[Port] = Opt.none(Port),
+    udpPort: Opt[Port] = Opt.none(Port),
     extraFields: openArray[FieldPair] = []):
     EnrResult[T] =
   ## Initialize a `Record` with given sequence number, private key, optional
   ## ip address, tcp port, udp port, and optional custom k:v pairs.
   ##
   ## Can fail in case the record exceeds the `maxEnrSize`.
+  doAssert(not hasPredefinedKey(extraFields), "Predefined key in custom pairs")
+
   var fields = newSeq[FieldPair]()
 
-  # TODO: Allow for initializing ENR with both ip4 and ipv6 address.
-  fields.addAddress(ip, tcpPort, udpPort)
-  fields.add extraFields
-  makeEnrAux(seqNum, pk, fields)
+  fields.insertAddress(ip, tcpPort, udpPort)
+  fields.insert extraFields
+  makeEnrAux(seqNum, "v4", pk, fields)
 
 func getField(r: Record, name: string, field: var Field): bool =
   # It might be more correct to do binary search,
@@ -270,61 +309,10 @@ func get*(r: Record, T: type PublicKey): Opt[T] =
       return Opt.some(pk[])
   Opt.none(T)
 
-func find(r: Record, key: string): Opt[int] =
-  ## Search for key in record key:value pairs.
-  ##
-  ## Returns some(index of key) if key is found in record. Else return none.
-  for i, (k, v) in r.pairs:
-    if k == key:
-      return Opt.some(i)
-  Opt.none(int)
-
 func update*(
-    record: var Record, pk: PrivateKey,
-    fieldPairs: openArray[FieldPair]): EnrResult[void] =
-  ## Update a `Record` k:v pairs.
-  ##
-  ## In case any of the k:v pairs is updated or added (new), the sequence number
-  ## of the `Record` will be incremented and a new signature will be applied.
-  ##
-  ## Can fail in case of wrong `PrivateKey`, if the size of the resulting record
-  ## exceeds `maxEnrSize` or if maximum sequence number is reached. The `Record`
-  ## will not be altered in these cases.
-  var r = record
-
-  let pubkey = r.get(PublicKey)
-  if pubkey.isNone() or pubkey.get() != pk.toPublicKey():
-    return err("Public key does not correspond with given private key")
-
-  var updated = false
-  for fieldPair in fieldPairs:
-    let index = r.find(fieldPair[0])
-    if(index.isSome()):
-      if r.pairs[index.get()][1] == fieldPair[1]:
-        # Exact k:v pair is already in record, nothing to do here.
-        continue
-      else:
-        # Need to update the value.
-        r.pairs[index.get()] = fieldPair
-        updated = true
-    else:
-      # Add new k:v pair.
-      r.pairs.insert(fieldPair, lowerBound(r.pairs, fieldPair, cmp))
-      updated = true
-
-  if updated:
-    if r.seqNum == high(type r.seqNum): # highly unlikely
-      return err("Maximum sequence number reached")
-    r.seqNum.inc()
-    r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
-    record = r
-
-  ok()
-
-func update*(
-    r: var Record,
+    record: var Record,
     pk: PrivateKey,
-    ip: Opt[IpAddress],
+    ip: Opt[IpAddress] = Opt.none(IpAddress),
     tcpPort: Opt[Port] = Opt.none(Port),
     udpPort: Opt[Port] = Opt.none(Port),
     extraFields: openArray[FieldPair] = []):
@@ -332,18 +320,35 @@ func update*(
   ## Update a `Record` with given ip address, tcp port, udp port and optional
   ## custom k:v pairs.
   ##
-  ## In case any of the k:v pairs is updated or added (new), the sequence number
-  ## of the `Record` will be incremented and a new signature will be applied.
+  ## If none of the k:v pairs are changed, the sequence number of the `Record`
+  ## will still be incremented and a new signature will be applied.
+  ##
+  ## Providing an `Opt.none` for `ip`, `tcpPort` or `udpPort` will leave the
+  ## corresponding field untouched.
   ##
   ## Can fail in case of wrong `PrivateKey`, if the size of the resulting record
   ## exceeds `maxEnrSize` or if maximum sequence number is reached. The `Record`
   ## will not be altered in these cases.
-  var fields = newSeq[FieldPair]()
+  # TODO: deprecate this call and have individual functions for updating?
+  doAssert(not hasPredefinedKey(extraFields), "Predefined key in custom pairs")
 
-  # TODO: Make updating of both ipv4 and ipv6 address in ENR more convenient.
-  fields.addAddress(ip, tcpPort, udpPort)
-  fields.add extraFields
-  r.update(pk, fields)
+  var r = record
+
+  let pubkey = r.get(PublicKey)
+  if pubkey.isNone() or pubkey.get() != pk.toPublicKey():
+    return err("Public key does not correspond with given private key")
+
+  r.pairs.insertAddress(ip, tcpPort, udpPort)
+  r.pairs.insert extraFields
+
+  if r.seqNum == high(type r.seqNum): # highly unlikely
+    return err("Maximum sequence number reached")
+  r.seqNum.inc()
+
+  r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
+  record = r
+
+  ok()
 
 func tryGet*(r: Record, key: string, T: type): Opt[T] =
   ## Get the value from the provided key.
@@ -548,7 +553,7 @@ func read*(
     rlp: var Rlp, T: type Record):
     T {.raises: [RlpError, ValueError].} =
   var res: T
-  if not rlp.hasData() or not res.fromBytes(rlp.rawData):
+  if not rlp.hasData() or not res.fromBytes(rlp.rawData()):
     # TODO: This could also just be an invalid signature, would be cleaner to
     # split of RLP deserialisation errors from this.
     raise newException(ValueError, "Could not deserialize")

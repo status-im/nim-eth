@@ -437,9 +437,9 @@ suite "Discovery v5 Tests":
         previousRecord = Opt.some(updatesNode.getRecord()))
     check:
       node.getRecord().seqNum == 1
-      noUpdatesNode.getRecord().seqNum == 1
-      updatesNode.getRecord().seqNum == 2
-      moreUpdatesNode.getRecord().seqNum == 3
+      noUpdatesNode.getRecord().seqNum == 2
+      updatesNode.getRecord().seqNum == 3
+      moreUpdatesNode.getRecord().seqNum == 4
 
     # Defect (for now?) on incorrect key use
     expect ResultDefect:
