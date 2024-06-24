@@ -8,85 +8,156 @@
 
 import
   std/[sequtils, net],
+  stew/byteutils,
   unittest2,
   ../../eth/p2p/discoveryv5/enr, ../../eth/[keys, rlp]
 
 let rng = newRng()
 
-suite "ENR":
-  test "Serialization":
-    var pk = PrivateKey.fromHex(
-      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
-    var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8]})[]
-    check($r == """(123, id: "v4", ip: 5.6.7.8, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
-    let uri = r.toURI()
-    var r2: Record
-    let sigValid = r2.fromURI(uri)
-    check(sigValid)
-    check($r2 == $r)
-    check(r2.raw == r.raw)
+proc testRlpEncodingLoop*(r: enr.Record): bool =
+  let encoded = rlp.encode(r)
+  let decoded = rlp.decode(encoded, enr.Record)
+  decoded == r
 
+suite "ENR test vector tests":
+  # Tests using the test vector from:
+  # https://github.com/ethereum/devp2p/blob/master/enr.md#test-vectors
+  const
+    uri = "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8"
+    pk = "b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291"
+    seqNum = 1
+    id = "v4"
+    ip = "7f000001"
+    secp256k1 = "03ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138"
+    udp = 0x765f
+
+  test "Test vector full encode loop":
+    var r: Record
+    let valid = r.fromURI(uri)
+    check valid
+    let res = toTypedRecord(r)
+    check res.isOk()
+    let typedRecord = res.value
+    check:
+      r.seqNum == seqNum
+      typedRecord.id == id
+      typedRecord.ip.value() == array[4, byte].fromHex(ip)
+      typedRecord.secp256k1.value() == array[33, byte].fromHex(secp256k1)
+      typedRecord.udp.value() == udp
+      typedRecord.tcp.isNone()
+
+      $r == """(1, id: "v4", ip: 127.0.0.1, secp256k1: 0x03CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258CD3138, udp: 30303)"""
+
+      r.toURI() == uri
+
+  test "Test vector Record.init":
+    let privKey = PrivateKey.fromHex(
+      pk).expect("valid private key")
+
+    var r = Record.init(1, privKey,
+      Opt.some(IpAddress(family: IPv4, address_v4: array[4, byte].fromHex(ip))),
+      Opt.none(Port), Opt.some(Port(udp)))
+
+    check:
+      r.isOk()
+      r.value.seqNum == seqNum
+      r.value.toURI() == uri
+
+suite "ENR encoding tests":
   test "RLP serialisation":
-    var pk = PrivateKey.fromHex(
-      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
-    var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8]})[]
-    check($r == """(123, id: "v4", ip: 5.6.7.8, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
-    let encoded = rlp.encode(r)
-    let decoded = rlp.decode(encoded, enr.Record)
-    check($decoded == $r)
-    check(decoded.raw == r.raw)
+    let
+      keypair = KeyPair.random(rng[])
+      ip = parseIpAddress("1.2.3.4")
+      port = Opt.some(Port(9000))
+      enr = Record.init(
+        100, keypair.seckey, Opt.some(ip), port, port)
 
-  test "RLP deserialisation without data":
+    check:
+      enr.isOk()
+      testRlpEncodingLoop(enr.value)
+
+  test "Empty RLP":
     expect ValueError:
-      let decoded = rlp.decode([], enr.Record)
+      let _ = rlp.decode([], enr.Record)
 
     var r: Record
     check not fromBytes(r, [])
 
-  test "Base64 deserialisation without data":
-    var r: Record
-    let sigValid = r.fromURI("enr:")
-    check(not sigValid)
+  test "Invalid RLP":
+    expect RlpError:
+      let _ = rlp.decode([byte 0xf7], enr.Record)
 
-  test "Parsing":
     var r: Record
-    let sigValid = r.fromBase64("-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8")
-    check(sigValid)
-    check($r == """(1, id: "v4", ip: 127.0.0.1, secp256k1: 0x03CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258CD3138, udp: 30303)""")
+    check not fromBytes(r, [byte 0xf7])
 
-  test "Bad base64":
+  test "No RLP list":
+    expect ValueError:
+      let _ = rlp.decode([byte 0x7f], enr.Record)
+
     var r: Record
-    let sigValid = r.fromURI("enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnhMHcBFZntXNFrdv*jX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8")
-    check(not sigValid)
+    check not fromBytes(r, [byte 0x7f])
 
-  test "Bad rlp":
-    var r: Record
-    let sigValid = r.fromBase64("-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOOnrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8")
-    check(not sigValid)
+  test "ENR with RLP list value":
+    type
+      RlpTestList = object
+        number: uint16
+        data: seq[byte]
+        text: string
 
-  test "Create from ENode address":
     let
-      keypair = KeyPair.random(rng[])
-      ip = parseIpAddress("10.20.30.40")
-      port = Opt.some(Port(9000))
+      rlpList = RlpTestList(number: 72, data: @[byte 0x0, 0x1, 0x2], text: "Hi there")
+      pk = PrivateKey.fromHex(
+        "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d").expect("valid private key")
+      ip = parseIpAddress("5.6.7.8")
+      port = Opt.some(Port(1234))
+      customPairs = [toFieldPair("some_list", rlpList)]
       enr = Record.init(
-        100, keypair.seckey, Opt.some(ip), port, port,@[])[]
-      typedEnr = get enr.toTypedRecord()
+        123, pk, Opt.some(ip), Opt.none(Port), port, customPairs)
 
     check:
-      typedEnr.secp256k1.isSome()
-      typedEnr.secp256k1.get == keypair.pubkey.toRawCompressed()
+      enr.isOk()
+      $enr.value == """(123, id: "v4", ip: 5.6.7.8, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, some_list: (Raw RLP list) 0xCE4883000102884869207468657265, udp: 1234)"""
+      testRlpEncodingLoop(enr.value)
 
-      typedEnr.ip.isSome()
-      typedEnr.ip.get() == [byte 10, 20, 30, 40]
+  test "Base64 encode loop":
+    const encodedBase64 = "-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8"
+    var r: Record
+    check:
+      r.fromBase64(encodedBase64)
+      toBase64(r) == encodedBase64
 
-      typedEnr.tcp.isSome()
-      typedEnr.tcp.get() == 9000
+  test "Invalid base64":
+    var r: Record
+    let valid = r.fromBase64("-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnhMHcBFZntXNFrdv*jX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8")
+    check not valid
 
-      typedEnr.udp.isSome()
-      typedEnr.udp.get() == 9000
+  test "URI encode loop":
+    let
+      keypair = KeyPair.random(rng[])
+      ip = parseIpAddress("1.2.3.4")
+      port = Opt.some(Port(9000))
+      res = Record.init(
+        100, keypair.seckey, Opt.some(ip), port, port)
+    check res.isOk()
+    let enr = res.value()
+    let uri = enr.toURI()
+    var enr2: Record
+    let valid = enr2.fromURI(uri)
+    check(valid)
+    check(enr == enr2)
 
-  test "ENR without address":
+  test "Invalid URI: empty":
+    var r: Record
+    let valid = r.fromURI("")
+    check not valid
+
+  test "Invalid URI: no payload":
+    var r: Record
+    let valid = r.fromURI("enr:")
+    check not valid
+
+suite "ENR init tests":
+  test "Record.init minimum fields":
     let
       keypair = KeyPair.random(rng[])
       port = Opt.none(Port)
@@ -95,6 +166,8 @@ suite "ENR":
       typedEnr = get enr.toTypedRecord()
 
     check:
+      testRlpEncodingLoop(enr)
+
       typedEnr.secp256k1.isSome()
       typedEnr.secp256k1.get() == keypair.pubkey.toRawCompressed()
 
@@ -106,17 +179,113 @@ suite "ENR":
       typedEnr.tcp6.isNone()
       typedEnr.udp6.isNone()
 
-  test "ENR init size too big":
-    let pk = PrivateKey.fromHex(
-      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
+  test "Record.init only ipv4":
+    let
+      keypair = KeyPair.random(rng[])
+      ip = parseIpAddress("1.2.3.4")
+      port = Opt.some(Port(9000))
+      enr = Record.init(
+        100, keypair.seckey, Opt.some(ip), port, port)[]
+      typedEnr = get enr.toTypedRecord()
+
+    check:
+      typedEnr.ip.isSome()
+      typedEnr.ip.get() == [byte 1, 2, 3, 4]
+
+      typedEnr.tcp.isSome()
+      typedEnr.tcp.get() == 9000
+
+      typedEnr.udp.isSome()
+      typedEnr.udp.get() == 9000
+
+  test "Record.init only ipv6":
+    let
+      keypair = KeyPair.random(rng[])
+      ip = parseIpAddress("::1")
+      port = Opt.some(Port(9000))
+      enr = Record.init(
+        100, keypair.seckey, Opt.some(ip), port, port)[]
+      typedEnr = get enr.toTypedRecord()
+
+    check:
+      typedEnr.ip.isNone()
+      typedEnr.tcp.isSome()
+      typedEnr.tcp.value() == 9000
+      typedEnr.udp.isSome()
+      typedEnr.udp.value() == 9000
+
+      typedEnr.ip6.isSome()
+      typedEnr.ip6.get() == [byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+
+      typedEnr.tcp6.isNone()
+      typedEnr.udp6.isNone()
+
+  test "Record.init max ENR size":
+    let
+      pk = PrivateKey.fromHex(
+      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d").expect("valid private key")
     block: # This gives ENR of 300 bytes encoded
-      let r = initRecord(1, pk, {"maxvalue": repeat(byte 2, 169),})
+      let r = Record.init(
+        1, pk, extraFields = [toFieldPair("maxvalue", repeat(byte 2, 169))]
+      )
       check r.isOk()
 
     block: # This gives ENR of 301 bytes encoded
-      let r = initRecord(1, pk, {"maxplus1": repeat(byte 2, 170),})
+      let r = Record.init(
+        1, pk, extraFields = [toFieldPair("maxplus1", repeat(byte 2, 170))]
+      )
       check r.isErr()
 
+  test "PreDefinedKeys in custom pairs":
+    let
+      keypair = KeyPair.random(rng[])
+      customPairs = [toFieldPair("ip", @[byte 1, 1, 1, 1])]
+
+    expect AssertionDefect:
+      let _ = Record.init(
+        1, keypair.seckey, extraFields = customPairs)
+
+  test "Duplicate key":
+    # With duplicate key, the last one should be used (insert)
+    let
+      keypair = KeyPair.random(rng[])
+      customPairs = [
+        toFieldPair("test1", @[byte 1, 1, 1, 1]),
+        toFieldPair("test2", "abc"),
+        toFieldPair("test1", "1.2.3.4")
+      ]
+
+    let res = Record.init(
+        1, keypair.seckey, extraFields = customPairs)
+
+    check: res.isOk()
+    let
+      enr = res.value
+      test1Field = enr.get("test1", string)
+      test2Field = enr.get("test2", string)
+    check:
+      test1Field.isOk()
+      test2Field.isOk()
+      test1Field.value == "1.2.3.4"
+      test2Field.value == "abc"
+
+  test "Record.init sorted":
+    let
+      pk = PrivateKey.fromHex(
+        "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d").expect("valid private key")
+      customPairs = [
+        toFieldPair("abc", 1234'u),
+        toFieldPair("z", [byte 0]),
+        toFieldPair("123", "abc"),
+        toFieldPair("a12", 1'u)
+      ]
+      r = Record.init(123, pk, extraFields = customPairs)
+
+    check:
+      r.isOk()
+      $r.value == """(123, 123: "abc", a12: 1, abc: 1234, id: "v4", secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, z: 0x00)"""
+
+suite "ENR update tests":
   test "ENR update":
     let
       pk = PrivateKey.fromHex(
@@ -125,67 +294,81 @@ suite "ENR":
     var r = Record.init(1, pk, Opt.none(IpAddress), Opt.none(Port), Opt.none(Port))[]
 
     block: # Insert new k:v pair, update of seqNum should occur.
-      let updated = r.update(pk, [newField])
+      let updated = r.update(pk, extraFields = [newField])
       check updated.isOk()
       check:
         r.get("test", uint).get() == 123
         r.seqNum == 2
 
-    block: # Insert same k:v pair, no update of seqNum should occur.
-      let updated = r.update(pk, [newField])
+    block: # Insert same k:v pair, update of seqNum still occurs.
+      let updated = r.update(pk, extraFields = [newField])
       check updated.isOk()
       check:
         r.get("test", uint).get() == 123
-        r.seqNum == 2
+        r.seqNum == 3
 
     block: # Insert k:v pair with changed value, update of seqNum should occur.
       let updatedField = toFieldPair("test", 1234'u)
-      let updated = r.update(pk, [updatedField])
+      let updated = r.update(pk, extraFields = [updatedField])
       check updated.isOk()
       check:
         r.get("test", uint).get() == 1234
-        r.seqNum == 3
+        r.seqNum == 4
 
   test "ENR update sorted":
-    let pk = PrivateKey.fromHex(
-      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
-    var r = initRecord(123, pk, {"abc": 1234'u,
-                                 "z": [byte 0],
-                                 "123": "abc",
-                                 "a12": 1'u})[]
+    let
+      pk = PrivateKey.fromHex(
+        "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d").expect("valid private key")
+      customPairs = [
+        toFieldPair("abc", 1234'u),
+        toFieldPair("z", [byte 0]),
+        toFieldPair("123", "abc"),
+        toFieldPair("a12", 1'u)
+      ]
+      res = Record.init(123, pk, extraFields = customPairs)
+
+    check res.isOk()
+    var r = res.value
+
     check $r == """(123, 123: "abc", a12: 1, abc: 1234, id: "v4", secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, z: 0x00)"""
 
     let newField = toFieldPair("test", 123'u)
     let newField2 = toFieldPair("zzz", 123'u)
-    let updated = r.update(pk, [newField, newField2])
+    let updated = r.update(pk, extraFields = [newField, newField2])
     check updated.isOk()
     check $r == """(124, 123: "abc", a12: 1, abc: 1234, id: "v4", secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, test: 123, z: 0x00, zzz: 123)"""
 
-  test "ENR update size too big":
-    let pk = PrivateKey.fromHex(
-      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
+  test "ENR update too large":
+    let
+      pk = PrivateKey.fromHex(
+        "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d").expect("valid private key")
+      customPairs = [toFieldPair("maxvalue", repeat(byte 2, 169))]
 
-    var r = initRecord(1, pk, {"maxvalue": repeat(byte 2, 169),})
-    check r.isOk()
+      res = Record.init(123, pk, extraFields = customPairs)
+
+    check res.isOk()
+    var r = res.value
 
     let newField = toFieldPair("test", 123'u)
-    let updated = r[].update(pk, [newField])
+    let updated = r.update(pk, extraFields = [newField])
     check updated.isErr()
 
-  test "ENR update invalid key":
-    let pk = PrivateKey.fromHex(
-      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
+  test "ENR update with wrong private key":
+    let
+      pk = PrivateKey.fromHex(
+        "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d").expect("valid private key")
 
-    var r = initRecord(1, pk, {"abc": 1'u,})
-    check r.isOk()
+      res = Record.init(123, pk)
+    check res.isOk()
+    var r = res.value
 
     let
       wrongPk = PrivateKey.random(rng[])
       newField = toFieldPair("test", 123'u)
-      updated = r[].update(wrongPk, [newField])
+      updated = r.update(wrongPk, extraFields = [newField])
     check updated.isErr()
 
-  test "ENR update address":
+  test "ENR update addresses":
     let
       pk = PrivateKey.fromHex(
         "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
@@ -200,7 +383,7 @@ suite "ENR":
         r.tryGet("ip", uint).isNone()
         r.tryGet("tcp", uint).isSome()
         r.tryGet("udp", uint).isSome()
-        r.seqNum == 1
+        r.seqNum == 2
 
     block:
       let updated = r.update(pk, Opt.none(IpAddress),
@@ -210,7 +393,7 @@ suite "ENR":
         r.tryGet("ip", uint).isNone()
         r.tryGet("tcp", uint).isSome()
         r.tryGet("udp", uint).isSome()
-        r.seqNum == 2
+        r.seqNum == 3
 
     block:
       let updated = r.update(pk, Opt.some(parseIpAddress("10.20.30.40")),
@@ -229,10 +412,10 @@ suite "ENR":
         typedEnr.udp.isSome()
         typedEnr.udp.get() == 9000
 
-        r.seqNum == 3
+        r.seqNum == 4
 
     block:
-      let updated = r.update(pk, Opt.some(parseIpAddress("10.20.30.40")),
+      let updated = r.update(pk, Opt.some(parseIpAddress("1.2.3.4")),
         Opt.some(Port(9001)), Opt.some(Port(9001)))
       check updated.isOk()
 
@@ -240,7 +423,7 @@ suite "ENR":
 
       check:
         typedEnr.ip.isSome()
-        typedEnr.ip.get() == [byte 10, 20, 30, 40]
+        typedEnr.ip.get() == [byte 1, 2, 3, 4]
 
         typedEnr.tcp.isSome()
         typedEnr.tcp.get() == 9001
@@ -248,71 +431,4 @@ suite "ENR":
         typedEnr.udp.isSome()
         typedEnr.udp.get() == 9001
 
-        r.seqNum == 4
-
-  test "ENR with RLP list value":
-    type
-      RlpTestList = object
-        number: uint16
-        data: seq[byte]
-        text: string
-
-    let rlpList =
-      RlpTestList(number: 72, data: @[byte 0x0, 0x1, 0x2], text: "Hi there")
-
-    let pk = PrivateKey.fromHex(
-      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
-    var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8],
-      "some_list": rlpList})[]
-
-    check($r == """(123, id: "v4", ip: 5.6.7.8, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, some_list: (Raw RLP list) 0xCE4883000102884869207468657265, udp: 1234)""")
-
-    let encoded = rlp.encode(r)
-    let decoded = rlp.decode(encoded, enr.Record)
-    check($decoded == $r)
-    check(decoded.raw == r.raw)
-
-  test "ENR IP addresses ":
-    let pk = PrivateKey.fromHex(
-      "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
-    block: # valid ipv4
-      var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8]})[]
-
-      check($r == """(123, id: "v4", ip: 5.6.7.8, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
-
-      let encoded = rlp.encode(r)
-      let decoded = rlp.decode(encoded, enr.Record)
-      check($decoded == $r)
-      check(decoded.raw == r.raw)
-
-    block: # invalid ipv4
-      var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7]})[]
-
-      check($r == """(123, id: "v4", ip: (Invalid) 0x050607, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
-
-      let encoded = rlp.encode(r)
-      let decoded = rlp.decode(encoded, enr.Record)
-      check($decoded == $r)
-      check(decoded.raw == r.raw)
-
-    block: # valid ipv4 + ipv6
-      var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8],
-        "ip6": [byte 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6]})[]
-
-      check($r == """(123, id: "v4", ip: 5.6.7.8, ip6: 102::102:304:506, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
-
-      let encoded = rlp.encode(r)
-      let decoded = rlp.decode(encoded, enr.Record)
-      check($decoded == $r)
-      check(decoded.raw == r.raw)
-
-    block: # invalid ipv4 + ipv6
-      var r = initRecord(123, pk, {"udp": 1234'u, "ip": [byte 5, 6, 7, 8, 9],
-        "ip6": [byte 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5]})[]
-
-      check($r == """(123, id: "v4", ip: (Invalid) 0x0506070809, ip6: (Invalid) 0x010200000000000000000102030405, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, udp: 1234)""")
-
-      let encoded = rlp.encode(r)
-      let decoded = rlp.decode(encoded, enr.Record)
-      check($decoded == $r)
-      check(decoded.raw == r.raw)
+        r.seqNum == 5

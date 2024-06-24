@@ -253,7 +253,7 @@ func updateRecord*(
     d: Protocol, enrFields: openArray[(string, seq[byte])]): DiscResult[void] =
   ## Update the ENR of the local node with provided `enrFields` k:v pairs.
   let fields = mapIt(enrFields, toFieldPair(it[0], it[1]))
-  d.localNode.record.update(d.privateKey, fields)
+  d.localNode.record.update(d.privateKey, extraFields = fields)
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
@@ -992,6 +992,8 @@ proc newProtocol*(
   var record: Record
   if previousRecord.isSome():
     record = previousRecord.get()
+    # TODO: this is faulty in case the intent is to remove a field with
+    # opt.none
     record.update(privKey, enrIp, enrTcpPort, enrUdpPort,
       customEnrFields).expect("Record within size limits and correct key")
   else:
@@ -1045,6 +1047,8 @@ proc newProtocol*(
     record =
       if previousRecord.isSome():
         var res = previousRecord.get()
+        # TODO: this is faulty in case the intent is to remove a field with
+        # opt.none
         res.update(privKey, enrIp, enrTcpPort, enrUdpPort,
           customEnrFields).expect("Record within size limits and correct key")
         res
