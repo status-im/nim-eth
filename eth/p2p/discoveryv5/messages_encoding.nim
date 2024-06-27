@@ -14,7 +14,7 @@ import
   stew/arrayops,
   results,
   ../../rlp,
-  "."/[messages, enr]
+  "."/messages
 
 from stew/objects import checkedEnumAssign
 
@@ -94,7 +94,7 @@ func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
       return err("Invalid request-id")
 
     func decode[T](rlp: var Rlp, v: var T)
-        {.nimcall, raises: [RlpError, ValueError].} =
+        {.nimcall, raises: [RlpError].} =
       for k, v in v.fieldPairs:
         v = rlp.read(typeof(v))
 
