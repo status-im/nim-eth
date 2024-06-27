@@ -1,5 +1,5 @@
 import
-  std/[os, strutils, options, net],
+  std/[os, strutils, net],
   ../../../eth/keys, ../../../eth/p2p/discoveryv5/enr,
   ../fuzzing_helpers
 

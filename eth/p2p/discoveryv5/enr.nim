@@ -57,9 +57,14 @@ type
     ## must remain sorted and without duplicate keys. Use the insert func to
     ## ensure this.
     raw*: seq[byte] ## RLP encoded record
+    publicKey: PublicKey ## Public key of the record
 
   EnrUri* = distinct string
 
+  # TODO: I think it makes more sense to have the directly usable types for the
+  # fields here because in its current for you might as well just access the
+  # pairs in a Record directly. This would break the current API unless the type
+  # gets renamed.
   TypedRecord* = object
     id*: string
     secp256k1*: Opt[array[33, byte]]
@@ -356,26 +361,20 @@ func tryGet*(r: Record, key: string, T: type): Opt[T] =
   ## according to type `T`.
   get(r, key, T).optValue()
 
-func toTypedRecord*(r: Record): EnrResult[TypedRecord] =
-  let id = r.tryGet("id", string)
-  if id.isSome:
-    var tr: TypedRecord
-    tr.id = id.get
+func fromRecord*(T: type TypedRecord, r: Record): T =
+  TypedRecord(
+    id: r.get("id", string).expect("Record must always have id field"),
+    secp256k1: r.tryGet("secp256k1", array[33, byte]),
+    ip: r.tryGet("ip", array[4, byte]),
+    ip6: r.tryGet("ip6", array[16, byte]),
+    tcp: r.tryGet("tcp", int),
+    tcp6: r.tryGet("tcp6", int),
+    udp: r.tryGet("udp", int),
+    udp6: r.tryGet("udp6", int)
+  )
 
-    template readField(fieldName: untyped) {.dirty.} =
-      tr.fieldName = tryGet(r, astToStr(fieldName), type(tr.fieldName.get))
-
-    readField secp256k1
-    readField ip
-    readField ip6
-    readField tcp
-    readField tcp6
-    readField udp
-    readField udp6
-
-    ok(tr)
-  else:
-    err("Record without id field")
+func toTypedRecord*(r: Record): EnrResult[TypedRecord] {.deprecated: "Please use TypedRecord.fromRecord instead".} =
+  ok(TypedRecord.fromRecord(r))
 
 func contains*(r: Record, fp: (string, seq[byte])): bool =
   # TODO: use FieldPair for this, but that is a bit cumbersome. Perhaps the
@@ -387,118 +386,161 @@ func contains*(r: Record, fp: (string, seq[byte])): bool =
   false
 
 func verifySignatureV4(
-    r: Record, sigData: openArray[byte], content: seq[byte]): bool =
-  let publicKey = r.get(PublicKey)
-  if publicKey.isNone():
-    return false
-
-  let sig = SignatureNR.fromRaw(sigData)
-  if sig.isOk():
-    var h = keccak256.digest(content)
-    verify(sig[], SkMessage(h.data), publicKey.get)
+    publicKey: PublicKey, sigData: openArray[byte], content: openArray[byte]): EnrResult[void] =
+  ## Verify the signature for the "v4" identity scheme
+  let signature = ?SignatureNR.fromRaw(sigData)
+  let hash = keccak256.digest(content)
+  if verify(signature, SkMessage(hash.data), publicKey):
+    ok()
   else:
-    false
+    err("Signature verfication failed")
 
-func verifySignature(r: Record): bool {.raises: [RlpError].} =
-  var rlp = rlpFromBytes(r.raw)
-  let sz = rlp.listLen
-  if not rlp.enterList:
-    return false
-  let sigData = rlp.read(seq[byte])
+template rlpResult(body: untyped): auto =
+  try:
+    body
+  except RlpError:
+    return err("Invalid RLP list")
+
+func buildRlpContent(bytes: openArray[byte]): EnrResult[seq[byte]] =
+  ## Rebuild the encoded RLP content without the signature. This is used to
+  ## verify the signature.
+  var rlp = rlpFromBytes(bytes)
+  let listLen = rlpResult rlp.listLen
+  doAssert rlp.enterList()
+
+  # skip signature
+  rlpResult rlp.skipElem()
+
   let content = block:
-    var writer = initRlpList(sz - 1)
-    var reader = rlp
-    for i in 1 ..< sz:
-      writer.appendRawBytes(reader.rawData)
-      reader.skipElem
+    var writer = initRlpList(listLen - 1)
+    for i in 1 ..< listLen:
+      rlpResult:
+        writer.appendRawBytes(rlp.rawData)
+        rlp.skipElem()
     writer.finish()
 
-  var id: Field
-  if r.getField("id", id) and id.kind == kString:
-    case id.str
-    of "v4":
-      verifySignatureV4(r, sigData, content)
-    else:
-      # Unknown Identity Scheme
-      false
-  else:
-    # No Identity Scheme provided
-    false
+  ok(content)
 
-func fromBytesAux(r: var Record): bool {.raises: [RlpError].} =
-  if r.raw.len > maxEnrSize:
-    return false
+func fromBytesAux(T: type Record, s: openArray[byte]): EnrResult[T] =
+  ## Creates ENR from rlp-encoded bytes and verifies the signature.
+  if s.len > maxEnrSize:
+    return err("Record exceeds maximum size")
 
-  var rlp = rlpFromBytes(r.raw)
+  var rlp = rlpFromBytes(s)
   if not rlp.isList:
-    return false
+    return err("Record does not contain valid RLP list")
 
-  let sz = rlp.listLen
+  let sz = rlpResult rlp.listLen
   if sz < minRlpListLen or sz mod 2 != 0:
-    # Wrong rlp object
-    return false
+    return err("Wrong RLP list length")
 
   # We already know we are working with a list
   doAssert rlp.enterList()
-  rlp.skipElem() # Skip signature
 
-  r.seqNum = rlp.read(uint64)
+  let
+    signatureRaw = rlpResult rlp.read(seq[byte])
+    seqNum = rlpResult rlp.read(uint64)
+    numPairs = (sz - 2) div 2
 
-  let numPairs = (sz - 2) div 2
+  var
+    pairs = newSeqOfCap[FieldPair](numPairs)
+    id: string = ""
+    pkRaw = Opt.none(seq[byte])
 
   for i in 0 ..< numPairs:
-    let k = rlp.read(string)
+    let k = rlpResult rlp.read(string)
     case k
     of "id":
-      let id = rlp.read(string)
-      r.pairs.add((k, Field(kind: kString, str: id)))
+      id = rlpResult rlp.read(string)
+      pairs.add((k, Field(kind: kString, str: id)))
     of "secp256k1":
-      let pubkeyData = rlp.read(seq[byte])
-      r.pairs.add((k, Field(kind: kBytes, bytes: pubkeyData)))
+      pkRaw = Opt.some rlpResult rlp.read(seq[byte])
+      pairs.add((k, Field(kind: kBytes, bytes: pkRaw.value())))
     of "tcp", "udp", "tcp6", "udp6":
-      let v = rlp.read(uint16)
-      r.pairs.add((k, Field(kind: kNum, num: v)))
+      let v = rlpResult rlp.read(uint16)
+      pairs.add((k, Field(kind: kNum, num: v)))
     else:
       # Don't know really what this is supposed to represent so drop it in
       # `kBytes` field pair when a single byte or blob.
       if rlp.isSingleByte() or rlp.isBlob():
-        r.pairs.add((k, Field(kind: kBytes, bytes: rlp.read(seq[byte]))))
+        let bytes = rlpResult rlp.read(seq[byte])
+        pairs.add((k, Field(kind: kBytes, bytes: bytes)))
       elif rlp.isList():
         # Not supporting decoding lists as value (especially unknown ones),
         # just drop the raw RLP value in there.
-        r.pairs.add((k, Field(kind: kList, listRaw: @(rlp.rawData()))))
+        pairs.add((k, Field(kind: kList, listRaw: @(rlpResult rlp.rawData()))))
         # Need to skip the element still.
-        rlp.skipElem()
+        rlpResult rlp.skipElem()
 
-  verifySignature(r)
+  # Storing the PublicKey in the Record as `fromRaw` is relatively expensive.
+  let pk: PublicKey =
+    case id
+      of "":
+        return err("No id k:v pair in the ENR")
+      of "v4":
+        let content = ?buildRlpContent(s)
+        if pkRaw.isNone():
+          return err("No secp256k1 k:v pair in the ENR")
+        let pk = ?PublicKey.fromRaw(pkRaw.value())
+        ?verifySignatureV4(pk, signatureRaw, content)
+        pk
+      else:
+        return err("Unknown Identity Scheme")
 
-func fromBytes*(r: var Record, s: openArray[byte]): bool =
-  ## Loads ENR from rlp-encoded bytes, and validates the signature.
-  r.raw = @s
-  try:
-    fromBytesAux(r)
-  except RlpError:
-    false
+  ok(Record(
+    seqNum: seqNum,
+    pairs: pairs,
+    raw: @s,
+    publicKey: pk
+  ))
 
-func fromBase64*(r: var Record, s: string): bool =
-  ## Loads ENR from base64-encoded rlp-encoded bytes, and validates the
+func fromBytes*(T: type Record, s: openArray[byte]): EnrResult[T] =
+  ## Creates ENR from rlp-encoded bytes and verifies the signature.
+  Record.fromBytesAux(s)
+
+func fromBytes*(r: var Record, s: openArray[byte]): bool {.deprecated: "Use the Result[Record] version instead".} =
+  ## Loads ENR from rlp-encoded bytes and verifies the signature.
+  r = Record.fromBytes(s).valueOr:
+    return false
+  true
+
+
+func fromBase64*(T: type Record, s: string): EnrResult[T] =
+  ## Creates ENR from base64-encoded rlp-encoded bytes and verifies the
   ## signature.
-  try:
-    r.raw = Base64Url.decode(s)
-    fromBytesAux(r)
-  except RlpError, Base64Error:
-    false
+  let rlpRaw =
+    try:
+      Base64Url.decode(s)
+    except Base64Error:
+      return err("Base64 decoding error")
 
-func fromURI*(r: var Record, s: string): bool =
-  ## Loads ENR from its text encoding: base64-encoded rlp-encoded bytes,
-  ## prefixed with "enr:". Validates the signature.
+  Record.fromBytesAux(rlpRaw)
+
+func fromBase64*(r: var Record, s: string): bool {.deprecated: "Use the Result[Record] version instead".} =
+  ## Loads ENR from base64-encoded rlp-encoded bytes and verifies the
+  ## signature.
+  r = Record.fromBase64(s).valueOr:
+    return false
+  true
+
+func fromURI*(T: type Record, s: string): EnrResult[T] =
+  ## Creates ENR from its URI encoding: base64-encoded rlp-encoded bytes,
+  ## prefixed with "enr:". Verifies the signature.
   const prefix = "enr:"
   if s.startsWith(prefix):
-    r.fromBase64(s[prefix.len .. ^1])
+    Record.fromBase64(s[prefix.len .. ^1])
   else:
-    false
+    err("Invalid URI prefix")
 
-template fromURI*(r: var Record, url: EnrUri): bool =
+
+func fromURI*(r: var Record, s: string): bool {.deprecated: "Use the Result[Record] version instead".} =
+  ## Loads ENR from its URI encoding: base64-encoded rlp-encoded bytes,
+  ## prefixed with "enr:". Verifies the signature.
+  r = Record.fromURI(s).valueOr:
+    return false
+  true
+
+template fromURI*(r: var Record, url: EnrUri): bool {.deprecated: "Use the Result[Record] version instead".} =
   fromURI(r, string(url))
 
 func toBase64*(r: Record): string =
@@ -551,15 +593,17 @@ func `==`*(a, b: Record): bool = a.raw == b.raw
 
 func read*(
     rlp: var Rlp, T: type Record):
-    T {.raises: [RlpError, ValueError].} =
-  var res: T
-  if not rlp.hasData() or not res.fromBytes(rlp.rawData()):
-    # TODO: This could also just be an invalid signature, would be cleaner to
-    # split of RLP deserialisation errors from this.
-    raise newException(ValueError, "Could not deserialize")
+    T {.raises: [RlpError].} =
+  if not rlp.hasData():
+    raise newException(RlpError, "Empty RLP data")
+
+  let res = T.fromBytes(rlp.rawData())
+  if res.isErr:
+    raise newException(RlpError, $res.error)
+
   rlp.skipElem()
 
-  res
+  res.value
 
 func append*(rlpWriter: var RlpWriter, value: Record) =
   rlpWriter.appendRawBytes(value.raw)

@@ -32,12 +32,10 @@ suite "ENR test vector tests":
     udp = 0x765f
 
   test "Test vector full encode loop":
-    var r: Record
-    let valid = r.fromURI(uri)
-    check valid
-    let res = toTypedRecord(r)
+    let res = Record.fromURI(uri)
     check res.isOk()
-    let typedRecord = res.value
+    let r = res.value()
+    let typedRecord = TypedRecord.fromRecord(r)
     check:
       r.seqNum == seqNum
       typedRecord.id == id
@@ -77,25 +75,22 @@ suite "ENR encoding tests":
       testRlpEncodingLoop(enr.value)
 
   test "Empty RLP":
-    expect ValueError:
+    expect RlpError:
       let _ = rlp.decode([], enr.Record)
 
-    var r: Record
-    check not fromBytes(r, [])
+    check Record.fromBytes([]).isErr()
 
   test "Invalid RLP":
     expect RlpError:
       let _ = rlp.decode([byte 0xf7], enr.Record)
 
-    var r: Record
-    check not fromBytes(r, [byte 0xf7])
+    check Record.fromBytes([byte 0xf7]).isErr()
 
   test "No RLP list":
-    expect ValueError:
+    expect RlpError:
       let _ = rlp.decode([byte 0x7f], enr.Record)
 
-    var r: Record
-    check not fromBytes(r, [byte 0x7f])
+    check Record.fromBytes([byte 0x7f]).isErr()
 
   test "ENR with RLP list value":
     type
@@ -121,15 +116,14 @@ suite "ENR encoding tests":
 
   test "Base64 encode loop":
     const encodedBase64 = "-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8"
-    var r: Record
+    let res = Record.fromBase64(encodedBase64)
     check:
-      r.fromBase64(encodedBase64)
-      toBase64(r) == encodedBase64
+      res.isOk()
+      toBase64(res.value) == encodedBase64
 
   test "Invalid base64":
-    var r: Record
-    let valid = r.fromBase64("-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnhMHcBFZntXNFrdv*jX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8")
-    check not valid
+    let res = Record.fromBase64("-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnhMHcBFZntXNFrdv*jX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8")
+    check res.isErr()
 
   test "URI encode loop":
     let
@@ -141,20 +135,16 @@ suite "ENR encoding tests":
     check res.isOk()
     let enr = res.value()
     let uri = enr.toURI()
-    var enr2: Record
-    let valid = enr2.fromURI(uri)
-    check(valid)
-    check(enr == enr2)
+    let res2 = Record.fromURI(uri)
+    check:
+      res2.isOk()
+      enr == res2.value()
 
   test "Invalid URI: empty":
-    var r: Record
-    let valid = r.fromURI("")
-    check not valid
+    check Record.fromURI("").isErr()
 
   test "Invalid URI: no payload":
-    var r: Record
-    let valid = r.fromURI("enr:")
-    check not valid
+    check Record.fromURI("enr:").isErr()
 
 suite "ENR init tests":
   test "Record.init minimum fields":
@@ -163,7 +153,7 @@ suite "ENR init tests":
       port = Opt.none(Port)
       enr = Record.init(
         100, keypair.seckey, Opt.none(IpAddress), port, port)[]
-      typedEnr = get enr.toTypedRecord()
+      typedEnr = TypedRecord.fromRecord(enr)
 
     check:
       testRlpEncodingLoop(enr)
@@ -186,7 +176,7 @@ suite "ENR init tests":
       port = Opt.some(Port(9000))
       enr = Record.init(
         100, keypair.seckey, Opt.some(ip), port, port)[]
-      typedEnr = get enr.toTypedRecord()
+      typedEnr = TypedRecord.fromRecord(enr)
 
     check:
       typedEnr.ip.isSome()
@@ -205,7 +195,7 @@ suite "ENR init tests":
       port = Opt.some(Port(9000))
       enr = Record.init(
         100, keypair.seckey, Opt.some(ip), port, port)[]
-      typedEnr = get enr.toTypedRecord()
+      typedEnr = TypedRecord.fromRecord(enr)
 
     check:
       typedEnr.ip.isNone()
@@ -400,7 +390,7 @@ suite "ENR update tests":
         Opt.some(Port(9000)), Opt.some(Port(9000)))
       check updated.isOk()
 
-      let typedEnr = r.toTypedRecord().get()
+      let typedEnr = TypedRecord.fromRecord(r)
 
       check:
         typedEnr.ip.isSome()
@@ -419,7 +409,7 @@ suite "ENR update tests":
         Opt.some(Port(9001)), Opt.some(Port(9001)))
       check updated.isOk()
 
-      let typedEnr = r.toTypedRecord().get()
+      let typedEnr = TypedRecord.fromRecord(r)
 
       check:
         typedEnr.ip.isSome()

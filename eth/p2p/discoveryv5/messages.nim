@@ -15,6 +15,8 @@ import
   std/[hashes, net],
   ./enr
 
+export enr
+
 type
   MessageKind* = enum
     # Note:
