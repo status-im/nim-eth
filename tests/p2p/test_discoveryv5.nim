@@ -520,7 +520,7 @@ suite "Discovery v5 Tests":
       srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
         Opt.some(parseIpAddress("11.12.13.14")),
         Opt.some(port), Opt.some(port))[]
-      srcNode = newNode(srcRecord)[]
+      srcNode = Node.fromRecord(srcRecord)
       pk = PrivateKey.random(rng[])
       targetDistance = @[logDistance(srcNode.id, pk.toPublicKey().toNodeId())]
       limit = 16
@@ -603,7 +603,7 @@ suite "Discovery v5 Tests":
       srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
         Opt.some(parseIpAddress("127.0.0.0")),
         Opt.some(port), Opt.some(port))[]
-      srcNode = newNode(srcRecord)[]
+      srcNode = Node.fromRecord(srcRecord)
       pk = PrivateKey.random(rng[])
       targetDistance = @[logDistance(srcNode.id, pk.toPublicKey().toNodeId())]
       limit = 16
@@ -630,7 +630,7 @@ suite "Discovery v5 Tests":
       srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
         Opt.some(parseIpAddress("192.168.1.1")),
         Opt.some(port), Opt.some(port))[]
-      srcNode = newNode(srcRecord)[]
+      srcNode = Node.fromRecord(srcRecord)
       pk = PrivateKey.random(rng[])
       targetDistance = @[logDistance(srcNode.id, pk.toPublicKey().toNodeId())]
       limit = 16
@@ -693,7 +693,7 @@ suite "Discovery v5 Tests":
         enrRec = enr.Record.init(1, privKey,
           Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
           Opt.some(Port(9000))).expect("Properly initialized private key")
-        sendNode = newNode(enrRec).expect("Properly initialized record")
+        sendNode = Node.fromRecord(enrRec)
       var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 
       let (packet, _) = encodeMessagePacket(rng[], codec,
@@ -722,7 +722,7 @@ suite "Discovery v5 Tests":
       enrRec = enr.Record.init(1, privKey,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      sendNode = newNode(enrRec).expect("Properly initialized record")
+      sendNode = Node.fromRecord(enrRec)
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
     for i in 0 ..< 5:
       let a = localAddress(20303 + i)
@@ -753,7 +753,7 @@ suite "Discovery v5 Tests":
       enrRec = enr.Record.init(1, privKey,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      sendNode = newNode(enrRec).expect("Properly initialized record")
+      sendNode = Node.fromRecord(enrRec)
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 
     var firstRequestNonce: AESGCMNonce

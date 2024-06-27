@@ -196,19 +196,17 @@ proc addNode*(d: Protocol, r: Record): bool =
   ##
   ## Returns false only if no valid `Node` can be created from the `Record` or
   ## on the conditions of `addNode` from a `Node`.
-  let node = newNode(r)
-  if node.isOk():
-    return d.addNode(node[])
+  d.addNode(Node.fromRecord(r))
 
-proc addNode*(d: Protocol, enr: EnrUri): bool =
+proc addNode*(d: Protocol, uri: string): bool =
   ## Add `Node` from a ENR URI to discovery routing table.
   ##
   ## Returns false if no valid ENR URI, or on the conditions of `addNode` from
   ## an `Record`.
-  var r: Record
-  let res = r.fromURI(enr)
-  if res:
-    return d.addNode(r)
+  let r = enr.Record.fromURI(uri).valueOr:
+    return false
+
+  d.addNode(r)
 
 func getNode*(d: Protocol, id: NodeId): Opt[Node] =
   ## Get the node with id from the routing table.
@@ -1010,7 +1008,7 @@ proc newProtocol*(
     else:
       warn "No external IP provided for the ENR, this node will not be discoverable"
 
-  let node = newNode(record).expect("Properly initialized record")
+  let node = Node.fromRecord(record)
 
   # TODO Consider whether this should be a Defect
   doAssert rng != nil, "RNG initialization failed"
@@ -1069,7 +1067,7 @@ proc newProtocol*(
       warn "No external IP provided for the ENR, this node will not be " &
            "discoverable"
 
-  let node = newNode(record).expect("Properly initialized record")
+  let node = Node.fromRecord(record)
 
   doAssert not(isNil(rng)), "RNG initialization failed"
 
