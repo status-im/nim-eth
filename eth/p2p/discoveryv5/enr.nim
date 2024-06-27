@@ -57,7 +57,7 @@ type
     ## must remain sorted and without duplicate keys. Use the insert func to
     ## ensure this.
     raw*: seq[byte] ## RLP encoded record
-    publicKey: PublicKey ## Public key of the record
+    publicKey*: PublicKey ## Public key of the record
 
   EnrUri* = distinct string
 
@@ -67,7 +67,7 @@ type
   # gets renamed.
   TypedRecord* = object
     id*: string
-    secp256k1*: Opt[array[33, byte]]
+    secp256k1*: Opt[array[33, byte]] # compressed secp256k1 public key
     ip*: Opt[array[4, byte]]
     ip6*: Opt[array[16, byte]]
     tcp*: Opt[int]
@@ -192,6 +192,7 @@ func makeEnrAux(
     Field(kind: kBytes, bytes: @(pubkey.toRawCompressed()))))
 
   record.raw = ? makeEnrRaw(seqNum, pk, record.pairs)
+  record.publicKey = pubkey
   ok(record)
 
 macro initRecord*(

@@ -481,7 +481,7 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
       # Signature check of record happens in decode.
       record = Opt.some(rlp.decode(authdata.toOpenArray(recordPos, authdata.high),
         enr.Record))
-    except RlpError, ValueError:
+    except RlpError:
       return err("Invalid encoded ENR")
 
   var pubkey: PublicKey
@@ -490,7 +490,7 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   # need the pubkey and the nodeid
   if record.isSome():
     # Node returned might not have an address or not a valid address.
-    let node = ? newNode(record.get())
+    let node = Node.fromRecord(record.value)
     if node.id != srcId:
       return err("Invalid node id: does not match node id of ENR")
 

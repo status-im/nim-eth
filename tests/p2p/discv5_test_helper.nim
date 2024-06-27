@@ -53,7 +53,7 @@ func generateNode*(privKey: PrivateKey, port: int = 20302,
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, Opt.some(ip),
     Opt.some(port), Opt.some(port), localEnrFields).expect("Properly initialized private key")
-  result = newNode(enr).expect("Properly initialized node")
+  result = Node.fromRecord(enr)
 
 proc generateNRandomNodes*(rng: var HmacDrbgContext, n: int): seq[Node] =
   var res = newSeq[Node]()

@@ -131,14 +131,11 @@ proc parseCmdArg*(T: type Node, p: string): T {.raises: [ValueError].} =
   if res.isErr:
     raise newException(ValueError, "Invalid ENR:" & $res.error)
 
-  let n = newNode(res.value)
-  if n.isErr:
-    raise newException(ValueError, $n.error)
-
-  if n.value.address.isNone():
+  let n = Node.fromRecord(res.value)
+  if n.address.isNone():
     raise newException(ValueError, "ENR without address")
 
-  n.value
+  n
 
 proc completeCmdArg*(T: type Node, val: string): seq[string] =
   return @[]
@@ -225,12 +222,18 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
     let
       address = config.metricsAddress
       port = config.metricsPort
-    notice "Starting metrics HTTP server",
       url = "http://" & $address & ":" & $port & "/metrics"
+      server = MetricsHttpServerRef.new($address, port).valueOr:
+        error "Could not instantiate metrics HTTP server", url, error
+        quit QuitFailure
+
+    info "Starting metrics HTTP server", url
     try:
-      chronos_httpserver.startMetricsHttpServer($address, port)
-    except CatchableError as exc: raise exc
-    except Exception as exc: raiseAssert exc.msg # TODO fix metrics
+      waitFor server.start()
+    except MetricsError as exc:
+      fatal "Could not start metrics HTTP server",
+        url, error_msg = exc.msg, error_name = exc.name
+      quit QuitFailure
 
   case config.cmd
   of ping:

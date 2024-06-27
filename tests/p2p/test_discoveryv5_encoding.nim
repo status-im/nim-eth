@@ -96,10 +96,14 @@ suite "Discovery v5.1 Protocol Message Encodings":
       message.nodes.enrs.len() == 0
 
   test "Nodes Response (multiple)":
-    var e1, e2: Record
-    check e1.fromURI("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg")
-    check e2.fromURI("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU")
+    let res1 = Record.fromURI("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg")
+    let res2 = Record.fromURI("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU")
+    check:
+      res1.isOk()
+      res2.isOk()
     let
+      e1 = res1.value
+      e2 = res2.value
       total = 0x1'u32
       n = NodesMessage(total: total, enrs: @[e1, e2])
       reqId = RequestId(id: @[1.byte])
@@ -267,12 +271,12 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
       enrRecA = enr.Record.init(1, privKeyA,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      nodeA = newNode(enrRecA).expect("Properly initialized record")
+      nodeA = Node.fromRecord(enrRecA)
 
       enrRecB = enr.Record.init(1, privKeyB,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      nodeB = newNode(enrRecB).expect("Properly initialized record")
+      nodeB = Node.fromRecord(enrRecB)
 
     var
       codecA {.used.} = Codec(localNode: nodeA, privKey: privKeyA,
@@ -488,12 +492,12 @@ suite "Discovery v5.1 Additional Encode/Decode":
       enrRecA = enr.Record.init(1, privKeyA,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      nodeA = newNode(enrRecA).expect("Properly initialized record")
+      nodeA = Node.fromRecord(enrRecA)
 
       enrRecB = enr.Record.init(1, privKeyB,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      nodeB = newNode(enrRecB).expect("Properly initialized record")
+      nodeB = Node.fromRecord(enrRecB)
 
     var
       codecA = Codec(localNode: nodeA, privKey: privKeyA, sessions: Sessions.init(5))

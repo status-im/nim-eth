@@ -56,33 +56,31 @@ proc verifyNodesRecords(
 
     count.inc()
 
-    let node = newNode(r)
-    if node.isOk():
-      let n = node.get()
-      # Check for duplicates in the nodes reply. Duplicates are checked based
-      # on node id.
-      if n in seen:
-        trace "Duplicate node ids", record = n.record.toURI, id = n.id
+    let n = Node.fromRecord(r)
+    # Check for duplicates in the nodes reply. Duplicates are checked based
+    # on node id.
+    if n in seen:
+      trace "Duplicate node ids", record = n.record.toURI, id = n.id
+      continue
+    # Check if the node has an address and if the address is public or from
+    # the same local network or lo network as the sender. The latter allows
+    # for local testing.
+    if not n.address.isSome() or not
+        validIp(src.address.get().ip, n.address.get().ip):
+      trace "Invalid ip-address", record = n.record.toURI, node = n
+      continue
+    # Check if returned node has one of the requested distances.
+    if distances.isSome():
+      # TODO: This is incorrect for custom distances
+      if (not distances.get().contains(logDistance(n.id, src.id))):
+        debug "Incorrect distance", record = n.record.toURI
         continue
-      # Check if the node has an address and if the address is public or from
-      # the same local network or lo network as the sender. The latter allows
-      # for local testing.
-      if not n.address.isSome() or not
-          validIp(src.address.get().ip, n.address.get().ip):
-        trace "Invalid ip-address", record = n.record.toURI, node = n
-        continue
-      # Check if returned node has one of the requested distances.
-      if distances.isSome():
-        # TODO: This is incorrect for custom distances
-        if (not distances.get().contains(logDistance(n.id, src.id))):
-          debug "Incorrect distance", record = n.record.toURI
-          continue
 
-      # No check on UDP port and thus any port is allowed, also the so called
-      # "well-known" ports.
+    # No check on UDP port and thus any port is allowed, also the so called
+    # "well-known" ports.
 
-      seen.incl(n)
-      result.add(n)
+    seen.incl(n)
+    result.add(n)
 
 proc verifyNodesRecords*(
     enrs: openArray[Record], src: Node, nodesLimit: int): seq[Node] =

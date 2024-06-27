@@ -34,29 +34,24 @@ func toNodeId*(pk: PublicKey): NodeId =
   ## Convert public key to a node identifier.
   # Keccak256 hash is used as defined in ENR spec for scheme v4:
   # https://github.com/ethereum/devp2p/blob/master/enr.md#v4-identity-scheme
+  # The raw key used is the uncompressed public key.
   readUintBE[256](keccak256.digest(pk.toRaw()).data)
 
-func newNode*(r: Record): Result[Node, cstring] =
+func fromRecord*(T: type Node, r: Record): T =
   ## Create a new `Node` from a `Record`.
-  # TODO: Handle IPv6
-
-  let pk = r.get(PublicKey)
-  # This check is redundant for a properly created record as the deserialization
-  # of a record will fail at `verifySignature` if there is no public key.
-  if pk.isNone():
-    return err("Could not recover public key from ENR")
-
-  # Also this can not fail for a properly created record as id is checked upon
-  # deserialization.
-  let tr = ? r.toTypedRecord()
+  let tr = TypedRecord.fromRecord(r)
   if tr.ip.isSome() and tr.udp.isSome():
     let a = Address(ip: ipv4(tr.ip.get()), port: Port(tr.udp.get()))
 
-    ok(Node(id: pk.get().toNodeId(), pubkey: pk.get(), record: r,
-       address: Opt.some(a)))
+    Node(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
+       address: Opt.some(a))
   else:
-    ok(Node(id: pk.get().toNodeId(), pubkey: pk.get(), record: r,
-       address: Opt.none(Address)))
+    Node(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
+       address: Opt.none(Address))
+
+func newNode*(r: Record): Result[Node, cstring] {.deprecated: "Use TypedRecord.fromRecord instead".} =
+  ## Create a new `Node` from a `Record`.
+  ok(Node.fromRecord(r))
 
 func update*(n: Node, pk: PrivateKey, ip: Opt[IpAddress],
     tcpPort: Opt[Port] = Opt.none(Port),
