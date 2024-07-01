@@ -23,6 +23,11 @@ export
   eth_hash,
   eth_times
 
+const
+  DEPOSIT_REQUEST_TYPE* = 0x00'u8  # EIP-6110
+  WITHDRAWAL_REQUEST_TYPE* = 0x01'u8  # EIP-7002
+  CONSOLIDATION_REQUEST_TYPE* = 0x02'u8  # EIP-7251
+
 type
   Hash256* = MDigest[256]
   VMWord* = UInt256
@@ -124,6 +129,23 @@ type
     address*       : EthAddress
     amount*        : uint64
 
+  DepositRequest* = object  # EIP-6110
+    pubkey*               : array[48, byte]
+    withdrawalCredentials*: array[32, byte]
+    amount*               : uint64
+    signature*            : array[96, byte]
+    index*                : uint64
+
+  WithdrawalRequest* = object  # EIP-7002
+    sourceAddress*  : array[20, byte]
+    validatorPubkey*: array[48, byte]
+    amount*         : uint64
+
+  ConsolidationRequest* = object  # EIP-7251
+    sourceAddress*: array[20, byte]
+    sourcePubkey* : array[48, byte]
+    targetPubkey* : array[48, byte]
+
   # https://eips.ethereum.org/EIPS/eip-4844#header-extension
   BlockHeader* = object
     parentHash*:      Hash256
@@ -146,6 +168,7 @@ type
     blobGasUsed*:     Opt[uint64]    # EIP-4844
     excessBlobGas*:   Opt[uint64]    # EIP-4844
     parentBeaconBlockRoot*: Opt[Hash256] # EIP-4788
+    requestsRoot*:    Opt[Hash256]  # EIP-7685
 
   BlockBody* = object
     transactions*:  seq[Transaction]
