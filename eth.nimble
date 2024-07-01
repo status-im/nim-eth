@@ -32,56 +32,50 @@ let cfg =
   " --skipUserCfg --nimcache:build/nimcache -f" &
   " --warning[ObservableStores]:off -d:nimOldCaseObjects" &
   " -d:chronicles_log_level=TRACE" &
-  " --threads:on"
+  " --threads:on -d:release"
 
-# Windows CI releaseMode="-d:debug" or releaseMode=""
-# will cause mysterious crash
-let releaseMode = "-d:release"
 
 proc build(args, path, outdir: string) =
   exec nimc & " " & lang & " " & cfg & " " & flags & " " & args &
     " --outdir:build/" & outdir & " " & path
 
-proc run(args, path, outdir: string) =
-  build args & " -r", path, outdir
+proc run(path, outdir: string) =
+  build "--mm:refc -r", path, outdir
   if (NimMajor, NimMinor) > (1, 6):
-    build args & " --mm:refc -r", path, outdir
+    build "--mm:orc -r", path, outdir
 
 task test_keyfile, "Run keyfile tests":
-  run "-d:release", "tests/keyfile/all_tests", "keyfile"
+  run "tests/keyfile/all_tests", "keyfile"
 
 task test_keys, "Run keys tests":
-  run "-d:release", "tests/keys/all_tests", "keys"
+  run "tests/keys/all_tests", "keys"
 
 task test_discv5, "Run discovery v5 tests":
-  run "-d:release", "tests/p2p/all_discv5_tests", "p2p"
+  run "tests/p2p/all_discv5_tests", "p2p"
 
 task test_discv4, "Run discovery v4 tests":
-  run "-d:release", "tests/p2p/test_discovery", "p2p"
+  run "tests/p2p/test_discovery", "p2p"
 
 task test_p2p, "Run p2p tests":
-  run releaseMode, "tests/p2p/all_tests", "p2p"
+  run "tests/p2p/all_tests", "p2p"
 
 task test_rlp, "Run rlp tests":
-  run releaseMode, "tests/rlp/all_tests", "rlp"
+  run "tests/rlp/all_tests", "rlp"
 
 task test_trie, "Run trie tests":
-  run "-d:release", "tests/trie/all_tests", "trie"
+  run "tests/trie/all_tests", "trie"
 
 task test_db, "Run db tests":
-  run "-d:release", "tests/db/all_tests", "db"
+  run "tests/db/all_tests", "db"
 
 task test_utp, "Run utp tests":
-  run "-d:release", "tests/utp/all_utp_tests", "utp"
+  run "tests/utp/all_utp_tests", "utp"
 
 task test_common, "Run common tests":
-  run "-d:release", "tests/common/all_tests", "common"
+  run "tests/common/all_tests", "common"
 
 task test, "Run all tests":
-  for filename in [
-      "test_bloom",
-    ]:
-    run "-d:release", "tests/" & filename, ""
+  run "tests/test_bloom", ""
 
   test_keyfile_task()
   test_keys_task()
@@ -98,7 +92,7 @@ task test_discv5_full, "Run discovery v5 and its dependencies tests":
   test_discv5_task()
 
 task build_dcli, "Build dcli":
-  build "-d:release", "tools/dcli",""
+  build "", "tools/dcli", ""
 
 import os, strutils
 
