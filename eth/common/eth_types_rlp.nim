@@ -557,14 +557,14 @@ proc append*(rlpWriter: var RlpWriter, request: WithdrawalRequest) =
 
 proc read*(rlp: var Rlp, T: type WithdrawalRequest): T =
   if not rlp.hasData:
-    raise newException(MalformedRlpError,
+    raise (ref MalformedRlpError)(msg:
       "WITHDRAWAL_REQUEST_TYPE expected but source RLP is empty")
   if not rlp.isSingleByte:
-    raise newException(MalformedRlpError,
+    raise (ref MalformedRlpError)(msg:
       "WITHDRAWAL_REQUEST_TYPE out of range")
   let reqType = rlp.getByteValue
   if reqType != WITHDRAWAL_REQUEST_TYPE:
-    raise newException(UnsupportedRlpError,
+    raise (ref UnsupportedRlpError)(msg:
       "Unexpected WITHDRAWAL_REQUEST_TYPE: " & $reqType)
   rlp.position += 1
 
@@ -586,14 +586,14 @@ proc append*(rlpWriter: var RlpWriter, request: ConsolidationRequest) =
 
 proc read*(rlp: var Rlp, T: type ConsolidationRequest): T =
   if not rlp.hasData:
-    raise newException(MalformedRlpError,
+    raise (ref MalformedRlpError)(msg: 
       "CONSOLIDATION_REQUEST_TYPE expected but source RLP is empty")
   if not rlp.isSingleByte:
-    raise newException(MalformedRlpError,
+    raise (ref MalformedRlpError)(msg: 
       "CONSOLIDATION_REQUEST_TYPE out of range")
   let reqType = rlp.getByteValue
   if reqType != CONSOLIDATION_REQUEST_TYPE:
-    raise newException(UnsupportedRlpError,
+    raise (ref UnsupportedRlpError)(msg: 
       "Unexpected CONSOLIDATION_REQUEST_TYPE: " & $reqType)
   rlp.position += 1
 
