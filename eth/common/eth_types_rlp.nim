@@ -516,7 +516,7 @@ proc append*(rlpWriter: var RlpWriter, t: EthTime) {.inline.} =
   rlpWriter.append(t.uint64)
 
 proc append*(rlpWriter: var RlpWriter, request: DepositRequest) =
-  rlpWriter.append(DEPOSIT_REQUEST_TYPE)
+  rlpWriter.appendRawBytes([DEPOSIT_REQUEST_TYPE])
   rlpWriter.startList(5)
   rlpWriter.append(request.pubkey)
   rlpWriter.append(request.withdrawalCredentials)
@@ -528,14 +528,10 @@ proc read*(rlp: var Rlp, T: type DepositRequest): T =
   if not rlp.hasData:
     raise (ref MalformedRlpError)(msg:
       "DEPOSIT_REQUEST_TYPE expected but source RLP is empty")
-  if not rlp.isSingleByte:
-    raise (ref MalformedRlpError)(msg:
-      "DEPOSIT_REQUEST_TYPE out of range")
-  let reqType = rlp.getByteValue
+  let reqType = rlp.readRawByte()
   if reqType != DEPOSIT_REQUEST_TYPE:
     raise (ref UnsupportedRlpError)(msg:
       "Unexpected DEPOSIT_REQUEST_TYPE: " & $reqType)
-  rlp.position += 1
 
   var res: DepositRequest
   rlp.tryEnterList()
@@ -549,7 +545,7 @@ proc read*(rlp: var Rlp, T: type DepositRequest): T =
   res
 
 proc append*(rlpWriter: var RlpWriter, request: WithdrawalRequest) =
-  rlpWriter.append(WITHDRAWAL_REQUEST_TYPE)
+  rlpWriter.appendRawBytes([WITHDRAWAL_REQUEST_TYPE])
   rlpWriter.startList(3)
   rlpWriter.append(request.sourceAddress)
   rlpWriter.append(request.validatorPubkey)
@@ -559,14 +555,10 @@ proc read*(rlp: var Rlp, T: type WithdrawalRequest): T =
   if not rlp.hasData:
     raise (ref MalformedRlpError)(msg:
       "WITHDRAWAL_REQUEST_TYPE expected but source RLP is empty")
-  if not rlp.isSingleByte:
-    raise (ref MalformedRlpError)(msg:
-      "WITHDRAWAL_REQUEST_TYPE out of range")
-  let reqType = rlp.getByteValue
+  let reqType = rlp.readRawByte()
   if reqType != WITHDRAWAL_REQUEST_TYPE:
     raise (ref UnsupportedRlpError)(msg:
       "Unexpected WITHDRAWAL_REQUEST_TYPE: " & $reqType)
-  rlp.position += 1
 
   var res: WithdrawalRequest
   rlp.tryEnterList()
@@ -578,7 +570,7 @@ proc read*(rlp: var Rlp, T: type WithdrawalRequest): T =
   res
 
 proc append*(rlpWriter: var RlpWriter, request: ConsolidationRequest) =
-  rlpWriter.append(CONSOLIDATION_REQUEST_TYPE)
+  rlpWriter.appendRawBytes([CONSOLIDATION_REQUEST_TYPE])
   rlpWriter.startList(3)
   rlpWriter.append(request.sourceAddress)
   rlpWriter.append(request.sourcePubkey)
@@ -586,16 +578,12 @@ proc append*(rlpWriter: var RlpWriter, request: ConsolidationRequest) =
 
 proc read*(rlp: var Rlp, T: type ConsolidationRequest): T =
   if not rlp.hasData:
-    raise (ref MalformedRlpError)(msg: 
+    raise (ref MalformedRlpError)(msg:
       "CONSOLIDATION_REQUEST_TYPE expected but source RLP is empty")
-  if not rlp.isSingleByte:
-    raise (ref MalformedRlpError)(msg: 
-      "CONSOLIDATION_REQUEST_TYPE out of range")
-  let reqType = rlp.getByteValue
+  let reqType = rlp.readRawByte()
   if reqType != CONSOLIDATION_REQUEST_TYPE:
-    raise (ref UnsupportedRlpError)(msg: 
+    raise (ref UnsupportedRlpError)(msg:
       "Unexpected CONSOLIDATION_REQUEST_TYPE: " & $reqType)
-  rlp.position += 1
 
   var res: ConsolidationRequest
   rlp.tryEnterList()

@@ -217,6 +217,14 @@ func getByteValue*(self: Rlp): byte =
   doAssert self.isSingleByte()
   self.bytes[self.position]
 
+func readRawByte*(self: var Rlp): byte =
+  ### Read a raw byte that is not RLP encoded
+  ### This is sometimes used to communicate union type information
+  doAssert self.hasData
+  let res = self.bytes[self.position]
+  inc self.position
+  res
+
 func blobLen*(self: Rlp): int =
   if self.isBlob():
     self.item().payload.len()
