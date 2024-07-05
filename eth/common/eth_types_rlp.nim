@@ -70,18 +70,6 @@ proc append*[T](w: var RlpWriter, val: Opt[T]) =
   else:
     w.append("")
 
-proc read*(rlp: var Rlp, T: type GasInt): T {.inline.} =
-  var res: uint64
-  rlp.read(res)
-  if res > GasInt.high.uint64:
-    raise (ref MalformedRlpError)(msg:
-      "GasInt value too large: " & $res)
-  res.GasInt
-
-proc append*(w: var RlpWriter, value: GasInt) =
-  doAssert value >= 0
-  w.append(value.uint64)
-
 proc appendTxLegacy(w: var RlpWriter, tx: Transaction) =
   w.startList(9)
   w.append(tx.nonce)

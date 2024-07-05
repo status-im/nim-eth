@@ -39,7 +39,7 @@ type
   EthAddress* = array[20, byte]
 
   DifficultyInt* = UInt256
-  GasInt* = int64
+  GasInt* = uint64
   ## Type alias used for gas computation
   # For reference - https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
 
