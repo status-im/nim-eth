@@ -7,7 +7,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, sugar],
   chronos, chronicles, metrics,
   results,
   ../keys,
@@ -177,8 +177,8 @@ proc getSocketOnReset[A](
   let sendNoInitKey = UtpSocketKey[A].init(sender, id + 1)
 
   r.getUtpSocket(recvKey)
-  .orElse(r.getUtpSocket(sendInitKey).filter(proc(s: UtpSocket[A]): bool = s.connectionIdSnd == id))
-  .orElse(r.getUtpSocket(sendNoInitKey).filter(proc(s: UtpSocket[A]): bool = s.connectionIdSnd == id))
+  .orElse(r.getUtpSocket(sendInitKey).filter(s => s.connectionIdSnd == id))
+  .orElse(r.getUtpSocket(sendNoInitKey).filter(s => s.connectionIdSnd == id))
 
 proc shouldAllowConnection[A](
     r: UtpRouter[A], remoteAddress: A, connectionId: uint16): bool =
