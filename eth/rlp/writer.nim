@@ -302,7 +302,7 @@ proc appendImpl(self: var RlpWriter, data: tuple) {.inline.} =
 # score in order to facilitate easier overloading with user types:
 template append*[T](w: var RlpWriter; data: T) =
   when data is (SomeSignedInt|enum|bool):
-    when data is SomeSignedInt:
+    when false and data is SomeSignedInt:
       # TODO potentially remove signed integer support - we should never make it
       #      this far!
       {.warning: "Signed integers cannot reliably be encoded using RLP".}
@@ -314,7 +314,6 @@ proc initRlpList*(listSize: int): RlpWriter =
   result = initRlpWriter()
   startList(result, listSize)
 
-# TODO: This should return a lent value
 template finish*(self: RlpWriter): seq[byte] =
   doAssert self.pendingLists.len == 0, "Insufficient number of elements written to a started list"
   self.output
