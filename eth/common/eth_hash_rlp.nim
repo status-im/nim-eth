@@ -10,8 +10,8 @@ import
 
 export eth_hash, rlp
 
-proc read*(rlp: var Rlp, T: typedesc[Hash256]): T =
+proc read*(rlp: var Rlp, T: typedesc[KeccakHash]): T =
   result.data = rlp.read(type(result.data))
 
-proc append*(rlpWriter: var RlpWriter, a: Hash256) =
+proc append*(rlpWriter: var RlpWriter, a: KeccakHash) =
   rlpWriter.append(a.data)
