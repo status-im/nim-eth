@@ -48,7 +48,7 @@ func keccakHash*(a, b: openArray[byte]): KeccakHash =
     h.update a
     h.update b
 
-func `$`*(v: KeccakHash): string =
+func `$`*(v: KeccakHash, dummy = false): string =
   var res = newString((len(v.data) shl 1))
   discard bytesToHex(v.data, res, {HexFlags.LowerCase})
   res
@@ -60,7 +60,7 @@ template hash*(x: KeccakHash): Hash =
   copyMem(addr h, unsafeAddr x.data[0], static(sizeof(Hash)))
   h
 
-func `==`*(a, b: KeccakHash): bool =
+func `==`*(a, b: KeccakHash, dummy = false): bool =
   when nimvm:
     a.data == b.data
   else:
