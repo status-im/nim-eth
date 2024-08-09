@@ -17,8 +17,6 @@ import
   ./eth_hash,
   ./eth_times
 
-from nimcrypto/hash import MDigest
-
 export
   results,
   stint,

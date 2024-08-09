@@ -9,19 +9,16 @@
 ## keccak256 is used across ethereum as the "default" hash function and this
 ## module provides a type and some helpers to produce such hashes
 
-import std/hashes
-import nimcrypto/[keccak, utils]
-import nimcrypto/hash except `$`
-
-from nimcrypto/utils import bytesToHex
+import
+  nimcrypto/[keccak, hash]
 
 export
-  keccak.update, keccak.finish, hash.fromHex, hash.toDigest, hashes.Hash
+  keccak.update, keccak.finish, hash
 
 type
   KeccakHash* = MDigest[256]
     ## A hash value computed using keccak256
-    ## note: this aliases Eth2Digest too, which uses a different hash function!
+    ## note: this aliases Eth2Digest too, which uses a different hash!
 
 template withKeccakHash*(body: untyped): KeccakHash =
   ## This little helper will init the hash function and return the sliced
@@ -47,23 +44,3 @@ func keccakHash*(a, b: openArray[byte]): KeccakHash =
   withKeccakHash:
     h.update a
     h.update b
-
-func `$`*(v: KeccakHash, dummy = false): string =
-  var res = newString((len(v.data) shl 1))
-  discard bytesToHex(v.data, res, {HexFlags.LowerCase})
-  res
-
-template hash*(x: KeccakHash): Hash =
-  ## Hash for digests for Nim hash tables
-  # digests are already good hashes
-  var h {.noinit.}: Hash
-  copyMem(addr h, unsafeAddr x.data[0], static(sizeof(Hash)))
-  h
-
-func `==`*(a, b: KeccakHash, dummy = false): bool =
-  when nimvm:
-    a.data == b.data
-  else:
-    # nimcrypto uses a constant-time comparison for all MDigest types which for
-    # KeccakHash is unnecessary - the type should never hold a secret!
-    equalMem(unsafeAddr a.data[0], unsafeAddr b.data[0], sizeof(a.data))
