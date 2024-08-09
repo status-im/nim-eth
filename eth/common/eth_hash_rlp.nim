@@ -10,8 +10,8 @@ import
 
 export eth_hash, rlp
 
-proc read*(rlp: var Rlp, T: typedesc[KeccakHash]): T =
+proc read*(rlp: var Rlp, T: typedesc[MDigest]): T =
   result.data = rlp.read(type(result.data))
 
-proc append*(rlpWriter: var RlpWriter, a: KeccakHash) =
+proc append*(rlpWriter: var RlpWriter, a: MDigest) =
   rlpWriter.append(a.data)
