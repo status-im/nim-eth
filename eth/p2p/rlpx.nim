@@ -13,17 +13,6 @@ import
   ".."/[rlp, common, keys, async_utils],
   ./private/p2p_types, "."/[kademlia, auth, rlpxcrypt, enode, p2p_protocol_dsl]
 
-const
-  # Insane kludge for supporting chunked messages when syncing against clients
-  # like Nethermind.
-  #
-  # The original specs which are now obsoleted can be found here:
-  # github.com/ethereum/devp2p/commit/6504d410bc4b8dda2b43941e1cb48c804b90cf22.
-  #
-  # The current requirement is stated at
-  # github.com/ethereum/devp2p/blob/master/rlpx.md#framing
-  allowObsoletedChunkedMessages = defined(chunked_rlpx_enabled)
-
 # TODO: This doesn't get enabled currently in any of the builds, so we send a
 # devp2p protocol handshake message with version. Need to check if some peers
 # drop us because of this.
@@ -510,42 +499,6 @@ proc resolveResponseFuture(peer: Peer, msgId: int, msg: pointer, reqId: int) =
 
     debug "late or duplicate reply for a RLPx request"
 
-proc getRlpxHeaderData(header: RlpxHeader): (int,int,int) =
-  ## Helper for `recvMsg()`
-  # This is insane. Some clients like Nethermind use the now obsoleted
-  # chunked message frame protocol, see
-  # github.com/ethereum/devp2p/commit/6504d410bc4b8dda2b43941e1cb48c804b90cf22.
-  result = (-1, -1, 0)
-  proc datagramSize: int =
-    # For logging only
-    (header[0].int shl 16) or (header[1].int shl 8) or header[1].int
-  try:
-    let optsLen = max(0, header[3].int - 0xc0)
-    var hdrData = header[4 ..< 4 + optsLen].rlpFromBytes
-    result[0] = hdrData.read(int)   # capability ID
-    result[1] = hdrData.read(int)   # context ID
-    if hdrData.isBlob:
-      result[2] = hdrData.read(int) # total packet size
-      trace "RLPx message first chunked header-data",
-        capabilityId = result[0],
-        contextId = result[1],
-        totalPacketSize = result[2],
-        datagramSize = datagramSize()
-    #[
-    elif 0 < result[1]:
-      # This should be all zero according to latest specs
-      trace "RLPx message chunked next header-data",
-        capabilityId = result[0],
-        contextId = result[1],
-        datagramSize = datagramSize()
-    ]#
-  except:
-    error "RLPx message header-data options, parse error",
-      capabilityId = result[0],
-      contextId = result[1],
-      totalPacketSize = result[2],
-      datagramSize = datagramSize()
-    result = (-1, -1, -1)
 
 proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
   ##  This procs awaits the next complete RLPx message in the TCP stream
@@ -594,19 +547,18 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
                                       "Snappy uncompress encountered malformed data")
 
   # Check embedded header-data for start of an obsoleted chunked message.
+  # Note that the check should come *before* the `msgId` is read. For
+  # instance, if this is a malformed packet, then the `msgId` might be
+  # random which in turn might try to access a `peer.dispatcher.messages[]`
+  # slot with a `nil` entry.
   #
-  # The current RLPx requirements need all triple entries <= 0, see
+  # The current RLPx requirements need both tuuple entries be zero, see
   # github.com/ethereum/devp2p/blob/master/rlpx.md#framing
-  let (capaId, ctxId, totalMsgSize) = msgHeader.getRlpxHeaderData
-
-  when not allowObsoletedChunkedMessages:
-    # Note that the check should come *before* the `msgId` is read. For
-    # instance, if this is a malformed packet, then the `msgId` might be
-    # random which in turn might try to access a `peer.dispatcher.messages[]`
-    # slot with a `nil` entry.
-    if 0 < capaId or 0 < ctxId or 0 < totalMsgSize:
-      await peer.disconnectAndRaise(
-        BreachOfProtocol, "Rejected obsoleted chunked message header")
+  #
+  if (msgHeader[4] and 127) != 0 or # capability-id, now required to be zero
+     (msgHeader[5] and 127) != 0:   # context-id, now required to be zero
+    await peer.disconnectAndRaise(
+      BreachOfProtocol, "Rejected obsoleted chunked message header")
 
   var rlp = rlpFromBytes(decryptedBytes)
 
@@ -618,76 +570,6 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
   except RlpError:
     await peer.disconnectAndRaise(BreachOfProtocol,
                                   "Cannot read RLPx message id")
-
-  # Handle chunked messages
-  when allowObsoletedChunkedMessages:
-    # Snappy with obsolete chunked RLPx message datagrams is unsupported here
-    when useSnappy:
-      if peer.snappyEnabled:
-        return
-
-    # This also covers totalMessageSize <= 0
-    if totalMsgSize <= msgSize:
-      return
-
-    # Loop over chunked RLPx datagram fragments
-    var moreData = totalMsgSize - msgSize
-    while 0 < moreData:
-
-      # Load and parse next header
-      block:
-        await peer.transport.readExactly(addr headerBytes[0], 32)
-        if decryptHeaderAndGetMsgSize(peer.secretsState,
-                                      headerBytes, msgSize, msgHeader).isErr():
-          trace "RLPx next chunked header-data failed",
-            peer, msgId, ctxId, maxSize = moreData
-          await peer.disconnectAndRaise(
-            BreachOfProtocol, "Cannot decrypt next chunked RLPx header")
-
-      # Verify that this is really the next chunk
-      block:
-        let (_, ctyId, totalSize) = msgHeader.getRlpxHeaderData
-        if ctyId != ctxId or 0 < totalSize:
-          trace "Malformed RLPx next chunked header-data",
-            peer, msgId, msgSize, ctxtId = ctyId, expCtxId = ctxId, totalSize
-          await peer.disconnectAndRaise(
-            BreachOfProtocol, "Malformed next chunked RLPx header")
-
-      # Append payload to `decryptedBytes` collector
-      block:
-        var encBytes = newSeq[byte](msgSize.encryptedLength - 32)
-        await peer.transport.readExactly(addr encBytes[0], encBytes.len)
-        var
-          dcrBytes = newSeq[byte](msgSize.decryptedLength)
-          dcrBytesCount = 0
-        # TODO: This should be improved by passing a reference into
-        # `decryptedBytes` where to append the data.
-        if decryptBody(peer.secretsState, encBytes, msgSize,
-                       dcrBytes, dcrBytesCount).isErr():
-          await peer.disconnectAndRaise(
-            BreachOfProtocol, "Cannot decrypt next chunked RLPx frame body")
-        decryptedBytes.add dcrBytes[0 ..< dcrBytesCount]
-        moreData -= msgSize
-        #[
-        trace "RLPx next chunked datagram fragment",
-          peer, msgId = result[0], ctxId, msgSize, moreData, totalMsgSize,
-          dcrBytesCount, payloadSoFar = decryptedBytes.len
-        ]#
-
-      # End While
-
-    if moreData != 0:
-      await peer.disconnectAndRaise(
-        BreachOfProtocol, "Malformed assembly of chunked RLPx message")
-
-    # Pass back extended message (first entry remains `msgId`)
-    result[1] = decryptedBytes.rlpFromBytes
-    result[1].position = rlp.position
-
-    trace "RLPx chunked datagram payload",
-      peer, msgId, ctxId, totalMsgSize, moreData, payload = decryptedBytes.len
-
-    # End `allowObsoletedChunkedMessages`
 
 
 proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type):
