@@ -668,7 +668,7 @@ proc dispatchMessages*(peer: Peer) {.async.} =
         msg = peer.getMsgName(msgId)
       await peer.disconnect(BreachOfProtocol, true)
       return
-    except CatchableError as e:
+    except EthP2PError as e:
       warn "Error while handling RLPx message", peer,
         msg = peer.getMsgName(msgId), err = e.msg
 
