@@ -653,6 +653,12 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
     return r.finish
 
 proc put*(self: var HexaryTrie; key, value: openArray[byte]) =
+  if value.len == 0:
+    # Empty nodes are not allowed as `[]` is not a valid RLP encoding
+    # https://github.com/ethereum/py-trie/pull/109
+    self.del key
+    return
+
   let root = self.root.hash
 
   var rootBytes = self.db.get(root.data)
