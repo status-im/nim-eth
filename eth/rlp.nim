@@ -67,8 +67,9 @@ func toString(self: Rlp, item: RlpItem): string =
   if item.typ != rlpBlob:
     raiseExpectedBlob()
 
-  result = newString(item.payload.len)
-  copyMem(addr result[0], self.bytes.view(item.payload)[0].getPtr, result.len)
+  if 0 < item.payload.len:
+    result = newString(item.payload.len)
+    copyMem(addr result[0], self.bytes.view(item.payload)[0].getPtr, result.len)
 
 func decodeInteger(input: openArray[byte]): uint64 =
   # For a positive integer, it is converted to the the shortest byte array whose
