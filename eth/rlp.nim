@@ -517,13 +517,13 @@ template readRecordType*(rlp: var Rlp, T: type, wrappedInList: bool): auto =
 
 template decode*(bytes: openArray[byte], T: type): untyped =
   mixin read
-  var rlp = rlpFromBytes(bytes)
-  rlp.read(T)
+  var r = rlpFromBytes(bytes)
+  r.read(T)
 
 template decode*(bytes: seq[byte], T: type): untyped =
   mixin read
-  var rlp = rlpFromBytes(bytes)
-  rlp.read(T)
+  var r = rlpFromBytes(bytes)
+  r.read(T)
 
 template rawData*(self: Rlp): openArray[byte] =
   self.bytes.toOpenArray(self.position, self.currentElemEnd - 1)
