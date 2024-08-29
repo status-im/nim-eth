@@ -153,7 +153,7 @@ proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
         else:
           doAssert false, "trying to resolve a timed out request with a value"
       except CatchableError as e:
-        debug "Exception in requestResolver()", exc = e.name, err = e.msg
+        debug "Exception in requestResolver()", err = e.msg, errName = e.name
     else:
       try:
         if not f.read.isSome:
@@ -163,11 +163,11 @@ proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
       # broken pipe
       except TransportOsError as e:
         # E.g. broken pipe
-        trace "TransportOsError during request", err = e.msg
+        trace "TransportOsError during request", err = e.msg, errName = e.name
       except TransportError:
         trace "Transport got closed during request"
       except CatchableError as e:
-        debug "Exception in requestResolver()", exc = e.name, err = e.msg
+        debug "Exception in requestResolver()", err = e.msg, errName = e.name
 
 proc linkSendFailureToReqFuture[S, R](sendFut: Future[S], resFut: Future[R]) =
   sendFut.addCallback() do (arg: pointer):
@@ -439,10 +439,13 @@ proc registerRequest(peer: Peer,
   discard setTimer(timeoutAt, timeoutExpired, nil)
 
 proc resolveResponseFuture(peer: Peer, msgId: uint, msg: pointer) =
-  ## Split off from the non request ID version from the originally combined
-  ## `resolveResponseFuture()` function. This seems cleaner to handle with macros
-  ## than a `int` or `Opt[uint]` request ID argument (yes, there is a second part
-  ## below.).
+  ## This function is a split off from the previously combined version with
+  ## the same name using optional request ID arguments. This here is the
+  ## version without a request ID (there is the other part below.).
+  ##
+  ## Optional arguments for macro helpers seem easier to handle with
+  ## polymorphic functions (than a `Opt[]` prototype argument.)
+  ##
   logScope:
     msg = peer.dispatcher.messages[msgId].name
     msgContents = peer.dispatcher.messages[msgId].printer(msg)
@@ -478,7 +481,7 @@ proc resolveResponseFuture(peer: Peer, msgId: uint, msg: pointer) =
       let oldestReq = outstandingReqs.popFirst
       resolve oldestReq.future
     else:
-      trace "late or duplicate reply for a RLPx request"
+      trace "late or dup RPLx reply ignored", msgId
 
 proc resolveResponseFuture(peer: Peer, msgId: uint, msg: pointer, reqId: uint) =
   ## Variant of `resolveResponseFuture()` for request ID argument.
@@ -504,7 +507,7 @@ proc resolveResponseFuture(peer: Peer, msgId: uint, msg: pointer, reqId: uint) =
     # types of requests). Alternatively, we can assign a separate interval in
     # the `reqId` space for each type of response.
     if peer.lastReqId.isNone or reqId > peer.lastReqId.value:
-      warn "RLPx response without a matching request"
+      debug "RLPx response without matching request", msgId, reqId
       return
 
     var idx = 0
@@ -536,7 +539,7 @@ proc resolveResponseFuture(peer: Peer, msgId: uint, msg: pointer, reqId: uint) =
 
       inc idx
 
-    debug "late or duplicate reply for a RLPx request"
+    trace "late or dup RPLx reply ignored"
 
 
 proc recvMsg*(peer: Peer): Future[tuple[msgId: uint, msgData: Rlp]] {.async.} =
@@ -622,8 +625,9 @@ proc checkedRlpRead(peer: Peer, r: var Rlp, MsgType: type):
       debug "Failed rlp.read",
             peer = peer,
             dataType = MsgType.name,
-            exception = e.msg
-            # rlpData = r.inspect -- don't use (might crash)
+            err = e.msg,
+            errName = e.name
+            #, rlpData = r.inspect -- don't use (might crash)
 
       raise e
 
@@ -649,8 +653,8 @@ proc waitSingleMsg(peer: Peer, MsgType: type): Future[MsgType] {.async.} =
       trace "disconnect message received in waitSingleMsg", reason, peer
       raisePeerDisconnected("Unexpected disconnect", reason)
     else:
-      warn "Dropped RLPX message",
-           msg = peer.dispatcher.messages[nextMsgId].name
+      debug "Dropped RLPX message",
+        msg = peer.dispatcher.messages[nextMsgId].name
       # TODO: This is breach of protocol?
 
 proc nextMsg*(peer: Peer, MsgType: type): Future[MsgType] =
@@ -702,14 +706,14 @@ proc dispatchMessages*(peer: Peer) {.async.} =
 
     try:
       await peer.invokeThunk(msgId, msgData)
-    except RlpError:
+    except RlpError as e:
       debug "RlpError, ending dispatchMessages loop", peer,
-        msg = peer.getMsgName(msgId)
+        msg = peer.getMsgName(msgId), err = e.msg, errName = e.name
       await peer.disconnect(BreachOfProtocol, true)
       return
     except EthP2PError as e:
-      warn "Error while handling RLPx message", peer,
-        msg = peer.getMsgName(msgId), err = e.msg
+      debug "Error while handling RLPx message", peer,
+        msg = peer.getMsgName(msgId), err = e.msg, errName = e.name
 
     # TODO: Hmm, this can be safely moved into the message handler thunk.
     # The documentation will need to be updated, explaining the fact that
@@ -725,7 +729,7 @@ proc dispatchMessages*(peer: Peer) {.async.} =
         # They also are supposed to be handled at the call-site where
         # `nextMsg` is used.
         debug "nextMsg resolver failed, ending dispatchMessages loop", peer,
-               err = e.msg
+          msg = peer.getMsgName(msgId), err = e.msg
         await peer.disconnect(BreachOfProtocol, true)
         return
       peer.awaitedMessages[msgId] = nil
@@ -1038,8 +1042,9 @@ proc disconnect*(peer: Peer, reason: DisconnectionReason,
 
       try:
         await peer.sendDisconnectMsg(DisconnectionReasonList(value: reason))
-      except CatchableError as exc:
-        debug "Failed to deliver disconnect message", peer, msg=exc.msg
+      except CatchableError as e:
+        trace "Failed to deliver disconnect message", peer,
+          err = e.msg, errName = e.name
 
       # Give the peer a chance to disconnect
       traceAsyncErrors peer.waitAndClose(2.seconds)
@@ -1198,7 +1203,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node):
       return err(TransportConnectError)
     except CatchableError as e:
       # Aside from TransportOsError, seems raw CatchableError can also occur?
-      debug "TCP connect with peer failed", err = $e.name, errMsg = $e.msg
+      trace "TCP connect with peer failed", err = $e.name, errMsg = $e.msg
       return err(TransportConnectError)
 
   # RLPx initial handshake
@@ -1246,7 +1251,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node):
     # TODO: Bullet 1 of https://github.com/status-im/nim-eth/issues/559
     let res = handshake.decodeAckMessage(ackMsg)
     if res.isErr():
-      debug "rlpxConnect handshake error", error = res.error
+      trace "rlpxConnect handshake error", error = res.error
       return err(RlpxHandshakeError)
 
   peer.setSnappySupport(node, handshake)
@@ -1294,7 +1299,7 @@ proc rlpxConnect*(node: EthereumNode, remote: Node):
         raiseAssert($e.name & " " & $e.msg)
 
   if not validatePubKeyInHello(response, remote.node.pubkey):
-    warn "Wrong devp2p identity in Hello message"
+    trace "Wrong devp2p identity in Hello message"
     return err(InvalidIdentityError)
 
   trace "DevP2P handshake completed", peer = remote,
@@ -1394,7 +1399,7 @@ proc rlpxAccept*(
     trace "Received Hello", version=response.version, id=response.clientId
 
     if not validatePubKeyInHello(response, handshake.remoteHPubkey):
-      warn "A Remote nodeId is not its public key" # XXX: Do we care?
+      trace "A Remote nodeId is not its public key" # XXX: Do we care?
 
     let remote = transport.remoteAddress()
     let address = Address(ip: remote.address, tcpPort: remote.port,
@@ -1421,9 +1426,9 @@ proc rlpxAccept*(
   except PeerDisconnected as e:
     case e.reason
       of AlreadyConnected, TooManyPeers, MessageTimeout:
-        trace "Disconnect during rlpxAccept", reason = e.reason, peer = peer.remote
+        trace "RLPx disconnect", reason = e.reason, peer = peer.remote
       else:
-        debug "Unexpected disconnect during rlpxAccept", reason = e.reason,
+        debug "RLPx disconnect unexpected", reason = e.reason,
           msg = e.msg, peer = peer.remote
 
     rlpx_accept_failure.inc(labelValues = [$e.reason])
@@ -1436,16 +1441,17 @@ proc rlpxAccept*(
   except RlpTypeMismatch as e:
     # Some peers report capabilities with names longer than 3 chars. We ignore
     # those for now. Maybe we should allow this though.
-    debug "Rlp error in rlpxAccept", err = e.msg, errName = e.name
+    trace "Rlp error in rlpxAccept", err = e.msg, errName = e.name
     rlpx_accept_failure.inc(labelValues = [$RlpTypeMismatch])
   except TransportOsError as e:
-    trace "TransportOsError", err = e.msg, errName = e.name
     if e.code == OSErrorCode(110):
+      trace "RLPx timeout", err = e.msg, errName = e.name
       rlpx_accept_failure.inc(labelValues = ["tcp_timeout"])
     else:
+      trace "TransportOsError", err = e.msg, errName = e.name
       rlpx_accept_failure.inc(labelValues = [$e.name])
   except CatchableError as e:
-    error "Unexpected exception in rlpxAccept", exc = e.name, err = e.msg
+    trace "RLPx error", err = e.msg, errName = e.name
     rlpx_accept_failure.inc(labelValues = [$e.name])
 
   if not ok:
