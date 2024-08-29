@@ -1,7 +1,30 @@
+# nim-eth
+# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at
+#     https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at
+#     https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+## This module defines a DSL for constructing communication message packet
+## drivers to support the ones as defined with the Ethereum p2p protocols
+## (see `devp2p <https://github.com/ethereum/devp2p/tree/master>`_.)
+##
+## Particular restictions apply to intrinsic message entities as message
+## ID and request/response ID. Both must be unsigned. This is a consequence
+## of message packets being serialised using RLP which is defined for
+## non-negative scalar values only, see
+## `Yellow Paper <https://ethereum.github.io/yellowpaper/paper.pdf#appendix.B>`_,
+## Appx B, clauses (195) ff. and (199).)
+
+
 {.push raises: [].}
 
 import
   std/[options, sequtils, macrocache],
+  results,
   stew/shims/macros, chronos, faststreams/outputs
 
 type
@@ -12,7 +35,7 @@ type
     msgResponse
 
   Message* = ref object
-    id*: int
+    id*: Opt[uint]
     ident*: NimNode
     kind*: MessageKind
     procDef*: NimNode
@@ -126,7 +149,7 @@ let
   # Variable names affecting the public interface of the library:
   reqIdVar*             {.compileTime.} = ident "reqId"
   # XXX: Binding the int type causes instantiation failure for some reason
-  ReqIdType*            {.compileTime.} = ident "int"
+  ReqIdType*            {.compileTime.} = ident "uint"
   peerVar*              {.compileTime.} = ident "peer"
   responseVar*          {.compileTime.} = ident "response"
   streamVar*            {.compileTime.} = ident "stream"
@@ -322,14 +345,14 @@ proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
   assert(not result.backend.implementProtocolInit.isNil)
 
   if result.backend.ReqIdType.isNil:
-    result.backend.ReqIdType = ident "int"
+    result.backend.ReqIdType = ident "uint"
 
   result.processProtocolBody body
 
   if not result.backend.afterProtocolInit.isNil:
     result.backend.afterProtocolInit(result)
 
-proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
+proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = Opt.none(uint)) =
   ## This procs adds a set of common helpers available in all messages handlers
   ## (e.g. `perProtocolMsgId`, `peer.state`, etc).
 
@@ -363,7 +386,8 @@ proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = -1) =
   prelude.add quote do:
     type `currentProtocolSym` {.used.} = `protocolNameIdent`
 
-  if msgId >= 0 and p.isRlpx:
+  if msgId.isSome and p.isRlpx:
+    let msgId = msgId.value
     prelude.add quote do:
       const `perProtocolMsgIdVar` {.used.} = `msgId`
 
@@ -422,7 +446,7 @@ proc ResponderType(msg: Message): NimNode =
 proc needsSingleParamInlining(msg: Message): bool =
   msg.recBody.kind == nnkDistinctTy
 
-proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
+proc newMsg(protocol: P2PProtocol, kind: MessageKind, msgId: uint,
             procDef: NimNode, response: Message = nil): Message =
 
   if procDef[0].kind == nnkPostfix:
@@ -454,7 +478,7 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
     recBody = newTree(nnkDistinctTy, recName)
 
   result = Message(protocol: protocol,
-                   id: id,
+                   id: Opt.some(msgId),
                    ident: msgIdent,
                    kind: kind,
                    procDef: procDef,
@@ -466,7 +490,7 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
   if procDef.body.kind != nnkEmpty:
     var userHandler = copy procDef
 
-    protocol.augmentUserHandler userHandler, id
+    protocol.augmentUserHandler userHandler, Opt.some(msgId)
     userHandler.name = ident(msgName & "UserHandler")
 
     # Request and Response handlers get an extra `reqId` parameter if the
@@ -504,7 +528,7 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, id: int,
 proc isVoid(t: NimNode): bool =
   t.kind == nnkEmpty or eqIdent(t, "void")
 
-proc addMsg(p: P2PProtocol, id: int, procDef: NimNode) =
+proc addMsg(p: P2PProtocol, msgId: uint, procDef: NimNode) =
   var
     returnType = procDef.params[0]
     hasReturnValue = not isVoid(returnType)
@@ -520,7 +544,7 @@ proc addMsg(p: P2PProtocol, id: int, procDef: NimNode) =
     let
       responseIdent = ident($procDef.name & "Response")
       response = Message(protocol: p,
-                         id: -1, # TODO: Implement the message IDs in RLPx-specific way
+                         id: Opt.none(uint),
                          ident: responseIdent,
                          kind: msgResponse,
                          recName: returnType,
@@ -529,10 +553,10 @@ proc addMsg(p: P2PProtocol, id: int, procDef: NimNode) =
                          outputParamDef: outputParam)
 
     p.messages.add response
-    let msg = p.newMsg(msgRequest, id, procDef, response = response)
+    let msg = p.newMsg(msgRequest, msgId, procDef, response = response)
     p.requests.add Request(queries: @[msg], response: response)
   else:
-    p.notifications.add p.newMsg(msgNotification, id, procDef)
+    p.notifications.add p.newMsg(msgNotification, msgId, procDef)
 
 proc identWithExportMarker*(msg: Message): NimNode =
   newTree(nnkPostfix, ident("*"), msg.ident)
@@ -847,7 +871,7 @@ proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode) =
   ##
   ## All messages will have properly computed numeric IDs
   ##
-  var nextId = 0
+  var nextId = 0u
 
   for n in protocolBody:
     case n.kind
@@ -856,7 +880,7 @@ proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode) =
         # By default message IDs are assigned in increasing order
         # `nextID` can be used to skip some of the numeric slots
         if n.len == 2 and n[1].kind == nnkIntLit:
-          nextId = n[1].intVal.int
+          nextId = n[1].intVal.uint
         else:
           error("nextID expects a single int value", n)
 
@@ -871,10 +895,10 @@ proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode) =
           error "requestResponse expects a block with at least two proc definitions"
 
         var queries = newSeq[Message]()
-        let responseMsg = p.newMsg(msgResponse, nextId + procs.len - 1, procs[^1])
+        let responseMsg = p.newMsg(msgResponse, nextId + procs.len.uint - 1, procs[^1])
 
         for i in 0 .. procs.len - 2:
-          queries.add p.newMsg(msgRequest, nextId + i, procs[i], response = responseMsg)
+          queries.add p.newMsg(msgRequest, nextId + i.uint, procs[i], response = responseMsg)
 
         p.requests.add Request(queries: queries, response: responseMsg)
 
@@ -942,8 +966,11 @@ proc genTypeSection*(p: P2PProtocol): NimNode =
     if msg.procDef == nil:
       continue
 
+    # FIXME: Can `msg.id` be missing, at all?
+    doAssert msg.id.isSome()
+
     let
-      msgId = msg.id
+      msgId = msg.id.value
       msgName = msg.ident
       msgRecName = msg.recName
       msgStrongRecName = msg.strongRecName
@@ -964,7 +991,7 @@ proc genTypeSection*(p: P2PProtocol): NimNode =
 
     if p.isRlpx:
       result.add quote do:
-        template msgId*(`MSG`: type `msgStrongRecName`): int = `msgId`
+        template msgId*(`MSG`: type `msgStrongRecName`): uint = `msgId`
 
 proc genCode*(p: P2PProtocol): NimNode =
   for msg in p.messages:

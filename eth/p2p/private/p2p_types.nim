@@ -1,15 +1,19 @@
 # nim-eth
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
-#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
-#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#   * MIT license (license terms in the root directory or at
+#     https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at
+#     https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
 
 {.push raises: [].}
 
 import
   std/[deques, tables],
   chronos,
+  results,
   ".."/../[rlp, keys], ../../common/eth_types,
   ".."/[enode, kademlia, discovery, rlpxcrypt]
 
@@ -46,12 +50,12 @@ type
     # Private fields:
     transport*: StreamTransport
     dispatcher*: Dispatcher
-    lastReqId*: int
+    lastReqId*: Opt[uint]
     secretsState*: SecretState
     connectionState*: ConnectionState
     protocolStates*: seq[RootRef]
-    outstandingRequests*: seq[Deque[OutstandingRequest]]
-    awaitedMessages*: seq[FutureBase]
+    outstandingRequests*: seq[Deque[OutstandingRequest]] # per `msgId` table
+    awaitedMessages*: seq[FutureBase] # per `msgId` table
     when useSnappy:
       snappyEnabled*: bool
 
@@ -120,7 +124,7 @@ type
     disconnectHandler*: DisconnectionHandler
 
   MessageInfo* = ref object
-    id*: int
+    id*: uint # this is a `msgId` (as opposed to a `reqId`)
     name*: string
 
     # Private fields:
@@ -138,12 +142,12 @@ type
     # protocol. If the other peer also supports the protocol, the stored
     # offset indicates the numeric value of the first message of the protocol
     # (for this particular connection). If the other peer doesn't support the
-    # particular protocol, the stored offset is -1.
+    # particular protocol, the stored offset is `Opt.none(uint)`.
     #
     # `messages` holds a mapping from valid message IDs to their handler procs.
     #
-    protocolOffsets*: seq[int]
-    messages*: seq[MessageInfo]
+    protocolOffsets*: seq[Opt[uint]]
+    messages*: seq[MessageInfo] # per `msgId` table (se above)
     activeProtocols*: seq[ProtocolInfo]
 
   ##
@@ -151,14 +155,14 @@ type
   ##
 
   OutstandingRequest* = object
-    id*: int
+    id*: uint # a `reqId` that may be used for response
     future*: FutureBase
     timeoutAt*: Moment
 
   # Private types:
-  MessageHandlerDecorator* = proc(msgId: int, n: NimNode): NimNode
+  MessageHandlerDecorator* = proc(msgId: uint, n: NimNode): NimNode
 
-  ThunkProc* = proc(x: Peer, msgId: int, data: Rlp): Future[void]
+  ThunkProc* = proc(x: Peer, msgId: uint, data: Rlp): Future[void]
     {.gcsafe, async: (raises: [RlpError, EthP2PError]).}
 
   MessageContentPrinter* = proc(msg: pointer): string

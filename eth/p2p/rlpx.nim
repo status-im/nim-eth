@@ -1,9 +1,26 @@
 # nim-eth
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
-#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
-#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#   * MIT license (license terms in the root directory or at
+#     https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at
+#     https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+## This module implements the `RLPx` Transport Protocol defined at
+## `RLPx <https://github.com/ethereum/devp2p/blob/master/rlpx.md>`_.
+##
+## Use NIM command line optipn `-d:p2pProtocolDebug` for dumping the
+## generated driver code (just to have it stored somewhere lest one forgets.)
+##
+## Both, the message ID and the request/response ID are now unsigned. This goes
+## along with the RLPx specs (see above) and the sub-protocol specs at
+## `sub-proto <https://github.com/ethereum/devp2p/tree/master/caps>`_ plus the
+## fact that RLP is defined for non-negative integers smaller than 2^64 only at
+## `Yellow Paper <https://ethereum.github.io/yellowpaper/paper.pdf#appendix.B>`_,
+## Appx B, clauses (195) ff and (199).
+##
 
 {.push raises: [].}
 
@@ -47,7 +64,7 @@ logScope:
 type
   ResponderWithId*[MsgType] = object
     peer*: Peer
-    reqId*: int
+    reqId*: uint
 
   ResponderWithoutId*[MsgType] = distinct Peer
 
@@ -107,13 +124,14 @@ when tracingEnabled:
     init, writeValue, getOutput
 
 proc init*[MsgName](T: type ResponderWithId[MsgName],
-                    peer: Peer, reqId: int): T =
+                    peer: Peer, reqId: uint): T =
   T(peer: peer, reqId: reqId)
 
 proc init*[MsgName](T: type ResponderWithoutId[MsgName], peer: Peer): T =
   T(peer)
 
 chronicles.formatIt(Peer): $(it.remote)
+chronicles.formatIt(Opt[uint]): (if it.isSome(): $it.value else: "-1")
 
 include p2p_backends_helpers
 
@@ -227,9 +245,9 @@ proc getDispatcher(node: EthereumNode,
 
   new result
   newSeq(result.protocolOffsets, protocolCount())
-  result.protocolOffsets.fill -1
+  result.protocolOffsets.fill Opt.none(uint)
 
-  var nextUserMsgId = 0x10
+  var nextUserMsgId = 0x10u
 
   for localProtocol in node.protocols:
     let idx = localProtocol.index
@@ -237,8 +255,8 @@ proc getDispatcher(node: EthereumNode,
       for remoteCapability in otherPeerCapabilities:
         if localProtocol.name == remoteCapability.name and
            localProtocol.version == remoteCapability.version:
-          result.protocolOffsets[idx] = nextUserMsgId
-          nextUserMsgId += localProtocol.messages.len
+          result.protocolOffsets[idx] = Opt.some(nextUserMsgId)
+          nextUserMsgId += localProtocol.messages.len.uint
           break findMatchingProtocol
 
   template copyTo(src, dest; index: int) =
@@ -250,14 +268,14 @@ proc getDispatcher(node: EthereumNode,
 
   for localProtocol in node.protocols:
     let idx = localProtocol.index
-    if result.protocolOffsets[idx] != -1:
+    if result.protocolOffsets[idx].isSome:
       result.activeProtocols.add localProtocol
       localProtocol.messages.copyTo(result.messages,
-                                    result.protocolOffsets[idx])
+                                    result.protocolOffsets[idx].value.int)
 
-proc getMsgName*(peer: Peer, msgId: int): string =
+proc getMsgName*(peer: Peer, msgId: uint): string =
   if not peer.dispatcher.isNil and
-     msgId < peer.dispatcher.messages.len and
+     msgId < peer.dispatcher.messages.len.uint and
      not peer.dispatcher.messages[msgId].isNil:
     return peer.dispatcher.messages[msgId].name
   else:
@@ -268,20 +286,20 @@ proc getMsgName*(peer: Peer, msgId: int): string =
            of 3: "pong"
            else: $msgId
 
-proc getMsgMetadata*(peer: Peer, msgId: int): (ProtocolInfo, MessageInfo) =
+proc getMsgMetadata*(peer: Peer, msgId: uint): (ProtocolInfo, MessageInfo) =
   doAssert msgId >= 0
 
   let dpInfo = devp2pInfo()
   if msgId <= dpInfo.messages[^1].id:
     return (dpInfo, dpInfo.messages[msgId])
 
-  if msgId < peer.dispatcher.messages.len:
+  if msgId < peer.dispatcher.messages.len.uint:
     let numProtocol = protocolCount()
     for i in 0 ..< numProtocol:
       let protocol = getProtocol(i)
       let offset = peer.dispatcher.protocolOffsets[i]
-      if offset != -1 and
-         offset + protocol.messages[^1].id >= msgId:
+      if offset.isSome and
+         offset.value + protocol.messages[^1].id >= msgId:
         return (protocol, peer.dispatcher.messages[msgId])
 
 # Protocol info objects
@@ -318,43 +336,45 @@ proc nextMsgResolver[MsgType](msgData: Rlp, future: FutureBase)
     MsgType.rlpFieldsCount > 1)
 
 proc registerMsg(protocol: ProtocolInfo,
-                 id: int, name: string,
+                 msgId: uint,
+                 name: string,
                  thunk: ThunkProc,
                  printer: MessageContentPrinter,
                  requestResolver: RequestResolver,
                  nextMsgResolver: NextMsgResolver) =
-  if protocol.messages.len <= id:
-    protocol.messages.setLen(id + 1)
-  protocol.messages[id] = MessageInfo(id: id,
-                                      name: name,
-                                      thunk: thunk,
-                                      printer: printer,
-                                      requestResolver: requestResolver,
-                                      nextMsgResolver: nextMsgResolver)
+  if protocol.messages.len.uint <= msgId:
+    protocol.messages.setLen(msgId + 1)
+  protocol.messages[msgId] = MessageInfo(
+    id: msgId,
+    name: name,
+    thunk: thunk,
+    printer: printer,
+    requestResolver: requestResolver,
+    nextMsgResolver: nextMsgResolver)
 
 # Message composition and encryption
 #
 
-proc perPeerMsgIdImpl(peer: Peer, proto: ProtocolInfo, msgId: int): int =
+proc perPeerMsgIdImpl(peer: Peer, proto: ProtocolInfo, msgId: uint): uint =
   result = msgId
   if not peer.dispatcher.isNil:
-    result += peer.dispatcher.protocolOffsets[proto.index]
+    result += peer.dispatcher.protocolOffsets[proto.index].value
 
 template getPeer(peer: Peer): auto = peer
 template getPeer(responder: ResponderWithId): auto = responder.peer
 template getPeer(responder: ResponderWithoutId): auto = Peer(responder)
 
 proc supports*(peer: Peer, proto: ProtocolInfo): bool =
-  peer.dispatcher.protocolOffsets[proto.index] != -1
+  peer.dispatcher.protocolOffsets[proto.index].isSome
 
 proc supports*(peer: Peer, Protocol: type): bool =
   ## Checks whether a Peer supports a particular protocol
   peer.supports(Protocol.protocolInfo)
 
-template perPeerMsgId(peer: Peer, MsgType: type): int =
+template perPeerMsgId(peer: Peer, MsgType: type): uint =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
 
-proc invokeThunk*(peer: Peer, msgId: int, msgData: Rlp): Future[void]
+proc invokeThunk*(peer: Peer, msgId: uint, msgData: Rlp): Future[void]
     {.async: (raises: [rlp.RlpError, EthP2PError]).} =
   template invalidIdError: untyped =
     raise newException(UnsupportedMessageError,
@@ -362,7 +382,7 @@ proc invokeThunk*(peer: Peer, msgId: int, msgData: Rlp): Future[void]
       " on a connection supporting " & peer.dispatcher.describeProtocols)
 
   # msgId can be negative as it has int as type and gets decoded from rlp
-  if msgId >= peer.dispatcher.messages.len or msgId < 0: invalidIdError()
+  if msgId >= peer.dispatcher.messages.len.uint: invalidIdError()
   if peer.dispatcher.messages[msgId].isNil: invalidIdError()
 
   let thunk = peer.dispatcher.messages[msgId].thunk
@@ -401,9 +421,9 @@ proc send*[Msg](peer: Peer, msg: Msg): Future[void] =
 proc registerRequest(peer: Peer,
                      timeout: Duration,
                      responseFuture: FutureBase,
-                     responseMsgId: int): int =
-  inc peer.lastReqId
-  result = peer.lastReqId
+                     responseMsgId: uint): uint =
+  result = if peer.lastReqId.isNone: 0u else: peer.lastReqId.value + 1u
+  peer.lastReqId = Opt.some(result)
 
   let timeoutAt = Moment.fromNow(timeout)
   let req = OutstandingRequest(id: result,
@@ -418,11 +438,15 @@ proc registerRequest(peer: Peer,
 
   discard setTimer(timeoutAt, timeoutExpired, nil)
 
-proc resolveResponseFuture(peer: Peer, msgId: int, msg: pointer, reqId: int) =
+proc resolveResponseFuture(peer: Peer, msgId: uint, msg: pointer) =
+  ## Split off from the non request ID version from the originally combined
+  ## `resolveResponseFuture()` function. This seems cleaner to handle with macros
+  ## than a `int` or `Opt[uint]` request ID argument (yes, there is a second part
+  ## below.).
   logScope:
     msg = peer.dispatcher.messages[msgId].name
     msgContents = peer.dispatcher.messages[msgId].printer(msg)
-    receivedReqId = reqId
+    receivedReqId = -1
     remotePeer = peer.remote
 
   template resolve(future) =
@@ -431,7 +455,7 @@ proc resolveResponseFuture(peer: Peer, msgId: int, msg: pointer, reqId: int) =
   template outstandingReqs: auto =
     peer.outstandingRequests[msgId]
 
-  if reqId == -1:
+  block: # no request ID
     # XXX: This is a response from an ETH-like protocol that doesn't feature
     # request IDs. Handling the response is quite tricky here because this may
     # be a late response to an already timed out request or a valid response
@@ -455,7 +479,22 @@ proc resolveResponseFuture(peer: Peer, msgId: int, msg: pointer, reqId: int) =
       resolve oldestReq.future
     else:
       trace "late or duplicate reply for a RLPx request"
-  else:
+
+proc resolveResponseFuture(peer: Peer, msgId: uint, msg: pointer, reqId: uint) =
+  ## Variant of `resolveResponseFuture()` for request ID argument.
+  logScope:
+    msg = peer.dispatcher.messages[msgId].name
+    msgContents = peer.dispatcher.messages[msgId].printer(msg)
+    receivedReqId = reqId
+    remotePeer = peer.remote
+
+  template resolve(future) =
+    (peer.dispatcher.messages[msgId].requestResolver)(msg, future)
+
+  template outstandingReqs: auto =
+    peer.outstandingRequests[msgId]
+
+  block: # have request ID
     # TODO: This is not completely sound because we are still using a global
     # `reqId` sequence (the problem is that we might get a response ID that
     # matches a request ID for a different type of request). To make the code
@@ -464,7 +503,7 @@ proc resolveResponseFuture(peer: Peer, msgId: int, msg: pointer, reqId: int) =
     # correctly (because then, we'll be reusing the same reqIds for different
     # types of requests). Alternatively, we can assign a separate interval in
     # the `reqId` space for each type of response.
-    if reqId > peer.lastReqId:
+    if peer.lastReqId.isNone or reqId > peer.lastReqId.value:
       warn "RLPx response without a matching request"
       return
 
@@ -500,7 +539,7 @@ proc resolveResponseFuture(peer: Peer, msgId: int, msg: pointer, reqId: int) =
     debug "late or duplicate reply for a RLPx request"
 
 
-proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
+proc recvMsg*(peer: Peer): Future[tuple[msgId: uint, msgData: Rlp]] {.async.} =
   ##  This procs awaits the next complete RLPx message in the TCP stream
 
   var headerBytes: array[32, byte]
@@ -562,11 +601,11 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: int, msgData: Rlp]] {.async.} =
 
   var rlp = rlpFromBytes(decryptedBytes)
 
-  var msgId: int32
+  var msgId: uint32
   try:
-    # int32 as this seems more than big enough for the amount of msgIds
-    msgId = rlp.read(int32)
-    result = (msgId.int, rlp)
+    # uint32 as this seems more than big enough for the amount of msgIds
+    msgId = rlp.read(uint32)
+    result = (msgId.uint, rlp)
   except RlpError:
     await peer.disconnectAndRaise(BreachOfProtocol,
                                   "Cannot read RLPx message id")
@@ -635,7 +674,7 @@ proc nextMsg*(peer: Peer, MsgType: type): Future[MsgType] =
 # message handler code as the TODO mentions already.
 proc dispatchMessages*(peer: Peer) {.async.} =
   while peer.connectionState notin {Disconnecting, Disconnected}:
-    var msgId: int
+    var msgId: uint
     var msgData: Rlp
     try:
       (msgId, msgData) = await peer.recvMsg()
@@ -676,7 +715,7 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     # The documentation will need to be updated, explaining the fact that
     # nextMsg will be resolved only if the message handler has executed
     # successfully.
-    if msgId >= 0 and msgId < peer.awaitedMessages.len and
+    if msgId < peer.awaitedMessages.len.uint and
        peer.awaitedMessages[msgId] != nil:
       let msgInfo = peer.dispatcher.messages[msgId]
       try:
@@ -738,12 +777,15 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
                          else: ResponderWithoutId
 
   result.implementMsg = proc (msg: Message) =
+    # FIXME: Or is it already assured that `msgId` is available?
+    doAssert msg.id.isSome
+
     var
-      msgId = msg.id
+      msgIdValue = msg.id.value
       msgIdent = msg.ident
       msgName = $msgIdent
       msgRecName = msg.recName
-      responseMsgId = if msg.response != nil: msg.response.id else: -1
+      responseMsgId = if msg.response.isNil: Opt.none(uint) else: msg.response.id
       hasReqId = msg.hasReqId
       protocol = msg.protocol
 
@@ -764,11 +806,13 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     if hasReqId:
       # Messages using request Ids
       readParams.add quote do:
-        let `reqIdVar` = `read`(`receivedRlp`, int)
+        let `reqIdVar` = `read`(`receivedRlp`, uint)
 
     case msg.kind
     of msgRequest:
-      let reqToResponseOffset = responseMsgId - msgId
+      doAssert responseMsgId.isSome
+
+      let reqToResponseOffset = responseMsgId.value - msgIdValue
       let responseMsgId = quote do: `perPeerMsgIdVar` + `reqToResponseOffset`
 
       # Each request is registered so we can resolve it when the response
@@ -814,14 +858,20 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     when tracingEnabled:
       readParams.add newCall(bindSym"logReceivedMsg", peerVar, receivedMsg)
 
-    let callResolvedResponseFuture = if msg.kind == msgResponse:
-      newCall(resolveResponseFuture,
-              peerVar,
-              newCall(perPeerMsgId, peerVar, msgRecName),
-              newCall("addr", receivedMsg),
-              if hasReqId: reqIdVar else: newLit(-1))
-    else:
-      newStmtList()
+    let callResolvedResponseFuture =
+      if msg.kind != msgResponse:
+        newStmtList()
+      elif hasReqId:
+        newCall(resolveResponseFuture,
+                peerVar,
+                newCall(perPeerMsgId, peerVar, msgRecName),
+                newCall("addr", receivedMsg),
+                reqIdVar)
+      else:
+        newCall(resolveResponseFuture,
+                peerVar,
+                newCall(perPeerMsgId, peerVar, msgRecName),
+                newCall("addr", receivedMsg))
 
     var userHandlerParams = @[peerVar]
     if hasReqId: userHandlerParams.add reqIdVar
@@ -831,7 +881,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       thunkName = ident(msgName & "Thunk")
 
     msg.defineThunk quote do:
-      proc `thunkName`(`peerVar`: `Peer`, _: int, data: Rlp)
+      proc `thunkName`(`peerVar`: `Peer`, _: uint, data: Rlp)
           # Fun error if you just use `RlpError` instead of `rlp.RlpError`:
           # "Error: type expected, but got symbol 'RlpError' of kind 'EnumField'"
           {.async: (raises: [rlp.RlpError, EthP2PError]).} =
@@ -864,9 +914,9 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       quote: return `sendCall`
 
     let perPeerMsgIdValue = if isSubprotocol:
-      newCall(perPeerMsgIdImpl, peerVar, protocol.protocolInfo, newLit(msgId))
+      newCall(perPeerMsgIdImpl, peerVar, protocol.protocolInfo, newLit(msgIdValue))
     else:
-      newLit(msgId)
+      newLit(msgIdValue)
 
     if paramCount > 1:
       # In case there are more than 1 parameter,
@@ -880,9 +930,8 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
 
     let initWriter = quote do:
       var `rlpWriter` = `initRlpWriter`()
-      const `perProtocolMsgIdVar` {.used.} = `msgId`
+      const `perProtocolMsgIdVar` {.used.} = `msgIdValue`
       let `perPeerMsgIdVar` = `perPeerMsgIdValue`
-      # TODO: rlpx should error if perPeerMsgIdVar is signed
       `append`(`rlpWriter`, `perPeerMsgIdVar`)
 
     when tracingEnabled:
@@ -902,7 +951,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     protocol.outProcRegistrations.add(
       newCall(registerMsg,
               protocolVar,
-              newLit(msgId),
+              newLit(msgIdValue),
               newLit(msgName),
               thunkName,
               newTree(nnkBracketExpr, messagePrinter, msgRecName),
@@ -1026,7 +1075,7 @@ proc initPeerState*(peer: Peer, capabilities: openArray[Capability])
   # Similarly, we need a bit of book-keeping data to keep track
   # of the potentially concurrent calls to `nextMsg`.
   peer.awaitedMessages.newSeq(peer.dispatcher.messages.len)
-  peer.lastReqId = 0
+  peer.lastReqId = Opt.some(0u)
   peer.initProtocolStates peer.dispatcher.activeProtocols
 
 proc postHelloSteps(peer: Peer, h: DevP2P.hello) {.async.} =
@@ -1416,10 +1465,10 @@ when isMainModule:
     # are considered GcSafe. The short answer is that they aren't, because
     # they dispatch into user code that might use the GC.
     type
-      GcSafeDispatchMsg = proc (peer: Peer, msgId: int, msgData: var Rlp)
+      GcSafeDispatchMsg = proc (peer: Peer, msgId: uint, msgData: var Rlp)
 
       GcSafeRecvMsg = proc (peer: Peer):
-        Future[tuple[msgId: int, msgData: Rlp]] {.gcsafe.}
+        Future[tuple[msgId: uint, msgData: Rlp]] {.gcsafe.}
 
       GcSafeAccept = proc (transport: StreamTransport, myKeys: KeyPair):
         Future[Peer] {.gcsafe.}
