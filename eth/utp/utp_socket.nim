@@ -1212,9 +1212,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
   # with a todo. Currently the reference implementation is follow and packets
   # are not resend in this case.
 
-  debug "Packet state variables",
-    pastExpected = pastExpected,
-    acks = acks
+  debug "Packet state variables", pastExpected, acks
 
   # If packet is totally off the mark, short-circuit the processing
   if pastExpected >= reorderBufferMaxSize:
@@ -1230,10 +1228,11 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
       pastExpected >= (int(uint16.high) + 1) - reorderBufferMaxSize
 
     if (isPossibleDuplicatedOldPacket and p.header.pType != ST_STATE):
+      debug "Invalid packet sequence number, within reorder buffer",
+        pastExpected
       socket.sendAck()
-
-    debug "Got an invalid packet sequence number, too far off",
-      pastExpected = pastExpected
+    else:
+      debug "Invalid packet sequence number, too far off", pastExpected
     return
 
   var (ackedBytes, minRtt) =
