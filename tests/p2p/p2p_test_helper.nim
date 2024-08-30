@@ -1,3 +1,13 @@
+# nim-eth
+# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at
+#     https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at
+#     https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
 import
   std/strutils,
   chronos,
@@ -28,8 +38,8 @@ proc setupTestNode*(
 
 template sourceDir*: string = currentSourcePath.rsplit(DirSep, 1)[0]
 
-proc recvMsgMock*(msg: openArray[byte]): tuple[msgId: int, msgData: Rlp] =
+proc recvMsgMock*(msg: openArray[byte]): tuple[msgId: uint, msgData: Rlp] =
   var rlp = rlpFromBytes(msg)
 
-  let msgId = rlp.read(int32)
-  return (msgId.int, rlp)
+  let msgId = rlp.read(uint32)
+  return (msgId.uint, rlp)

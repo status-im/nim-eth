@@ -29,6 +29,6 @@ test:
            # because of undeterministic behaviour due to usage of network/async.
     try:
       var (msgId, msgData) = recvMsgMock(payload)
-      waitFor peer.invokeThunk(msgId.int, msgData)
+      waitFor peer.invokeThunk(msgId, msgData)
     except CatchableError as e:
       debug "Test caused CatchableError", exception=e.name, trace=e.repr, msg=e.msg
