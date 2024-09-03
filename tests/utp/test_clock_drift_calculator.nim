@@ -68,3 +68,12 @@ suite "uTP clock drift calculator":
     check:
       calculator1.clockDrift == -calculator2.clockDrift
       calculator1.lastClockDrift == -calculator2.lastClockDrift
+
+  test "Clock drift limits":
+    let currentTime = Moment.now()
+    var calculator = ClockDriftCalculator.init(currentTime)
+
+    for i in 0..6'u32:
+      calculator.addSample(1'u32 + i*i*100_000_000'u32, currentTime + seconds(5 * i))
+
+    calculator.addSample(500_000_000'u32, currentTime + seconds(5 * 7))
