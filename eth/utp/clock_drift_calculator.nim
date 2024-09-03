@@ -38,24 +38,39 @@ proc init*(T: type ClockDriftCalculator, currentTime: Moment): T =
     averageSampleTime: currentTime + averageTime
   )
 
+## This is a port from the clock drift calculation implemented in libutp:
+## https://github.com/bittorrent/libutp/blob/2b364cbb0650bdab64a5de2abb4518f9f228ec44/utp_internal.cpp#L2026
+##
+## We limit actualDelay to int32.max to avoid overflow in calculations later on,
+## more specifically at the drift calculation. This might/will influence the
+## actual result, however, dealing which such high values bears the question
+## if we should not just drop the connection in the first place.
+##
+## It also does not resolve faulty(?) behaviour in the algorithm, where
+## currentDelaySum can go negative even when the actualDelay keeps increasing.
+##
+## TODO: With the above issues in mind and the current complexity of the algorithm,
+## we should reconsider if this is still required and if so, whether a simpler
+## algorithm would suffice.
 proc addSample*(c: var ClockDriftCalculator, actualDelay: uint32, currentTime: Moment) =
   if (actualDelay == 0):
     return
 
+  let delay = min(actualDelay, uint32(int32.high))
   # this is our first sample, initialise our delay base
   if c.averageDelayBase == 0:
-    c.averageDelayBase = actualDelay
+    c.averageDelayBase = delay
 
-  let distDown = c.averageDelayBase - actualDelay
+  let distDown = c.averageDelayBase - delay
 
-  let distUp = actualDelay - c.averageDelayBase
+  let distUp = delay - c.averageDelayBase
 
   let averageDelaySample =
     if (distDown > distUp):
-      # averageDelayBase is smaller that actualDelay, sample should be positive
+      # averageDelayBase is smaller that delay, sample should be positive
       int64(distUp)
     else:
-       # averageDelayBase is bigger or equal to actualDelay, sample should be negative
+       # averageDelayBase is bigger or equal to delay, sample should be negative
       -int64(distDown)
 
   c.currentDelaySum = c.currentDelaySum + averageDelaySample
