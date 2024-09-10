@@ -70,6 +70,8 @@ proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Opt[IpAddress] =
           canContinue = false
         of IGDFound:
           msg = "Internet Gateway Device found."
+        of IGDIpNotRoutable:
+          msg = "Internet Gateway Device found and is connected, but with a reserved or non-routable IP. Trying anyway."
         of IGDNotConnected:
           msg = "Internet Gateway Device found but it's not connected. Trying anyway."
         of NotAnIGD:
