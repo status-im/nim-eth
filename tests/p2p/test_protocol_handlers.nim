@@ -1,6 +1,6 @@
 #
 #                 Ethereum P2P
-#              (c) Copyright 2018
+#              (c) Copyright 2018-2024
 #       Status Research & Development GmbH
 #
 #            Licensed under either of
@@ -10,7 +10,6 @@
 {.used.}
 
 import
-  std/tables,
   chronos, testutils/unittests,
   ../../eth/p2p,
   ../stubloglevel,
