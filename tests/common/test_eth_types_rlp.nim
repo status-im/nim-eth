@@ -13,6 +13,7 @@
 import
   std/[os, strutils],
   stew/io2,
+  stew/byteutils,
   results,
   unittest2,
   ../../eth/[rlp, common]
@@ -245,3 +246,54 @@ template genTestOpt(TT) =
 
 genTestOpt(BlockBodyOpt)
 genTestOpt(EthBlockOpt)
+
+suite "EIP-7865 tests":
+  const reqs = [
+    Request(
+      requestType: DepositRequestType,
+      deposit: DepositRequest(
+        pubkey               : hexToByteArray[48]("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+        withdrawalCredentials: hexToByteArray[32]("0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"),
+        amount               : 1,
+        signature            : hexToByteArray[96]("0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+        index                : 3,
+      )
+    ),
+    Request(
+      requestType: WithdrawalRequestType,
+      withdrawal: WithdrawalRequest(
+        sourceAddress  : hexToByteArray[20]("0xDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"),
+        validatorPubkey: hexToByteArray[48]("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+        amount         : 7,
+      )
+    ),
+    Request(
+      requestType: ConsolidationRequestType,
+      consolidation: ConsolidationRequest(
+        sourceAddress: hexToByteArray[20]("0xEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"),
+        sourcePubkey : hexToByteArray[48]("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+        targetPubkey : hexToByteArray[48]("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"),
+      )
+    )
+  ]
+
+  test "rlp roundtrip":
+    let
+      body = BlockBody(
+        withdrawals: Opt.some(@[Withdrawal()]),
+        requests: Opt.some(@reqs)
+      )
+
+      blk = EthBlock(
+        withdrawals: Opt.some(@[Withdrawal()]),
+        requests: Opt.some(@reqs)
+      )
+
+      encodedBody = rlp.encode(body)
+      encodedBlock = rlp.encode(blk)
+      decodedBody = rlp.decode(encodedBody, BlockBody)
+      decodedBlk = rlp.decode(encodedBlock, EthBlock)
+
+    check decodedBody == body
+    check decodedBlk == blk
+

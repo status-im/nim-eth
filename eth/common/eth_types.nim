@@ -23,11 +23,6 @@ export
   eth_hash,
   eth_times
 
-const
-  DEPOSIT_REQUEST_TYPE* = 0x00'u8  # EIP-6110
-  WITHDRAWAL_REQUEST_TYPE* = 0x01'u8  # EIP-7002
-  CONSOLIDATION_REQUEST_TYPE* = 0x02'u8  # EIP-7251
-
 type
   Hash256* = MDigest[256]
   VMWord* = UInt256
@@ -170,10 +165,26 @@ type
     parentBeaconBlockRoot*: Opt[Hash256] # EIP-4788
     requestsRoot*:    Opt[Hash256]  # EIP-7685
 
+
+  RequestType* = enum
+    DepositRequestType        # EIP-6110
+    WithdrawalRequestType     # EIP-7002
+    ConsolidationRequestType  # EIP-7251
+
+  Request* = object
+    case requestType*: RequestType
+    of DepositRequestType:
+      deposit*: DepositRequest
+    of WithdrawalRequestType:
+      withdrawal*: WithdrawalRequest
+    of ConsolidationRequestType:
+      consolidation*: ConsolidationRequest
+
   BlockBody* = object
     transactions*:  seq[Transaction]
     uncles*:        seq[BlockHeader]
     withdrawals*:   Opt[seq[Withdrawal]]   # EIP-4895
+    requests*:      Opt[seq[Request]]      # EIP-7865
 
   Log* = object
     address*:       EthAddress
@@ -202,6 +213,7 @@ type
     transactions*: seq[Transaction]
     uncles*     : seq[BlockHeader]
     withdrawals*: Opt[seq[Withdrawal]]   # EIP-4895
+    requests*:    Opt[seq[Request]]      # EIP-7865
 
   BlobsBundle* = object
     commitments*: seq[KzgCommitment]
@@ -333,3 +345,15 @@ func init*(T: type EthBlock, header: BlockHeader, body: BlockBody): T =
     uncles: body.uncles,
     withdrawals: body.withdrawals,
   )
+
+func `==`*(a, b: Request): bool =
+  if a.requestType != b.requestType:
+    return false
+
+  case a.requestType
+  of DepositRequestType:
+    a.deposit == b.deposit
+  of WithdrawalRequestType:
+    a.withdrawal == b.withdrawal
+  of ConsolidationRequestType:
+    a.consolidation == b.consolidation
