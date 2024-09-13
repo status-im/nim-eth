@@ -88,7 +88,7 @@ type
     proofs*      : seq[KzgProof]
 
   Authorization* = object
-    chainID*: ChainId
+    chainId*: ChainId
     address*: EthAddress
     nonce*: AccountNonce
     yParity*: uint64
