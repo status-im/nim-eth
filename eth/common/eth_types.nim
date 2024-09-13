@@ -80,11 +80,20 @@ type
     TxEip2930   # 1
     TxEip1559   # 2
     TxEip4844   # 3
+    TxEip7702   # 4
 
   NetworkPayload* = ref object
     blobs*       : seq[NetworkBlob]
     commitments* : seq[KzgCommitment]
     proofs*      : seq[KzgProof]
+
+  Authorization* = object
+    chainID*: ChainId
+    address*: EthAddress
+    nonce*: AccountNonce
+    yParity*: uint64
+    R*: UInt256
+    S*: UInt256
 
   Transaction* = object
     txType*        : TxType               # EIP-2718
@@ -100,6 +109,7 @@ type
     accessList*    : AccessList           # EIP-2930
     maxFeePerBlobGas*: UInt256            # EIP-4844
     versionedHashes*: VersionedHashes     # EIP-4844
+    authorizationList*: seq[Authorization]# EIP-7702
     V*             : uint64
     R*, S*         : UInt256
 
@@ -198,6 +208,7 @@ type
     # Eip2930Receipt = TxEip2930
     # Eip1559Receipt = TxEip1559
     # Eip4844Receipt = TxEip4844
+    # Eip7702Receipt = TxEip7702
 
   Receipt* = object
     receiptType*      : ReceiptType
@@ -244,6 +255,7 @@ const
   Eip2930Receipt* = TxEip2930
   Eip1559Receipt* = TxEip1559
   Eip4844Receipt* = TxEip4844
+  Eip7702Receipt* = TxEip7702
 
   EMPTY_ROOT_HASH* = "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
   EMPTY_UNCLE_HASH* = "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest

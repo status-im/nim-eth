@@ -12,4 +12,5 @@ import
   test_eth_types,
   test_eth_types_rlp,
   test_common,
-  test_eip4844
+  test_eip4844,
+  test_eip7702
