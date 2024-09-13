@@ -145,7 +145,7 @@ proc suite2() =
         let _ = rlp.decode(receiptBytes, Receipt)
 
     test "Receipts EIP-2718 encoding - invalid - unsupported tx type":
-      let receiptBytes: seq[byte] = @[0x04]
+      let receiptBytes: seq[byte] = @[0x05]
       expect UnsupportedRlpError:
         let _ = rlp.decode(receiptBytes, Receipt)
 

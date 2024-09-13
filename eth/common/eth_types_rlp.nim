@@ -128,6 +128,31 @@ proc appendTxEip4844(w: var RlpWriter, tx: Transaction) =
   w.append(tx.R)
   w.append(tx.S)
 
+proc append*(w: var RlpWriter, x: Authorization) =
+  w.startList(6)
+  w.append(x.chainId.uint64)
+  w.append(x.address)
+  w.append(x.nonce)
+  w.append(x.yParity)
+  w.append(x.R)
+  w.append(x.S)
+
+proc appendTxEip7702(w: var RlpWriter, tx: Transaction) =
+  w.startList(13)
+  w.append(tx.chainId.uint64)
+  w.append(tx.nonce)
+  w.append(tx.maxPriorityFeePerGas)
+  w.append(tx.maxFeePerGas)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.append(tx.authorizationList)
+  w.append(tx.V)
+  w.append(tx.R)
+  w.append(tx.S)
+
 proc appendTxPayload(w: var RlpWriter, tx: Transaction) =
   case tx.txType
   of TxLegacy:
@@ -138,6 +163,8 @@ proc appendTxPayload(w: var RlpWriter, tx: Transaction) =
     w.appendTxEip1559(tx)
   of TxEip4844:
     w.appendTxEip4844(tx)
+  of TxEip7702:
+    w.appendTxEip7702(tx)
 
 proc append*(w: var RlpWriter, tx: Transaction) =
   if tx.txType != TxLegacy:
@@ -229,6 +256,32 @@ proc readTxEip4844(rlp: var Rlp, tx: var Transaction) =
   rlp.read(tx.R)
   rlp.read(tx.S)
 
+proc read*(rlp: var Rlp, T: type Authorization): T =
+  rlp.tryEnterList()
+  result.chainId = rlp.read(uint64).ChainId
+  rlp.read(result.address)
+  rlp.read(result.nonce)
+  rlp.read(result.yParity)
+  rlp.read(result.R)
+  rlp.read(result.S)
+
+proc readTxEip7702(rlp: var Rlp, tx: var Transaction) =
+  tx.txType = TxEip7702
+  rlp.tryEnterList()
+  tx.chainId = rlp.read(uint64).ChainId
+  rlp.read(tx.nonce)
+  rlp.read(tx.maxPriorityFeePerGas)
+  rlp.read(tx.maxFeePerGas)
+  rlp.read(tx.gasLimit)
+  rlp.read(tx.to)
+  rlp.read(tx.value)
+  rlp.read(tx.payload)
+  rlp.read(tx.accessList)
+  rlp.read(tx.authorizationList)
+  rlp.read(tx.V)
+  rlp.read(tx.R)
+  rlp.read(tx.S)
+
 proc readTxType(rlp: var Rlp): TxType =
   if rlp.isList:
     raise newException(RlpTypeMismatch,
@@ -271,6 +324,8 @@ proc readTxPayload(rlp: var Rlp, tx: var Transaction, txType: TxType) =
     rlp.readTxEip1559(tx)
   of TxEip4844:
     rlp.readTxEip4844(tx)
+  of TxEip7702:
+    rlp.readTxEip7702(tx)
 
 proc readTxTyped(rlp: var Rlp, tx: var Transaction) =
   let txType = rlp.readTxType()
@@ -377,7 +432,7 @@ proc append*(
       rlpWriter.append(rlp.encode(tx))
 
 proc append*(w: var RlpWriter, rec: Receipt) =
-  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt}:
+  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt}:
     w.append(rec.receiptType.uint)
 
   w.startList(4)
@@ -420,7 +475,7 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) =
   var txVal: ReceiptType
   if checkedEnumAssign(txVal, recType):
     case txVal:
-    of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt:
+    of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt:
       receipt.receiptType = txVal
     of LegacyReceipt:
       # The legacy type should not be used here.

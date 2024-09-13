@@ -78,6 +78,22 @@ func rlpEncodeEip4844(tx: Transaction): auto =
   w.append(tx.versionedHashes)
   w.finish()
 
+func rlpEncodeEip7702(tx: Transaction): auto =
+  var w = initRlpWriter()
+  w.append(TxEip7702)
+  w.startList(10)
+  w.append(tx.chainId.uint64)
+  w.append(tx.nonce)
+  w.append(tx.maxPriorityFeePerGas)
+  w.append(tx.maxFeePerGas)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.append(tx.authorizationList)
+  w.finish()
+
 func rlpEncode*(tx: Transaction): auto =
   case tx.txType
   of TxLegacy:
@@ -91,6 +107,8 @@ func rlpEncode*(tx: Transaction): auto =
     tx.rlpEncodeEip1559
   of TxEip4844:
     tx.rlpEncodeEip4844
+  of TxEip7702:
+    tx.rlpEncodeEip7702
 
 func txHashNoSignature*(tx: Transaction): Hash256 =
   # Hash transaction without signature
