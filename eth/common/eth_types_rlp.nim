@@ -130,7 +130,7 @@ proc appendTxEip4844(w: var RlpWriter, tx: Transaction) =
 
 proc append*(w: var RlpWriter, x: Authorization) =
   w.startList(6)
-  w.append(x.chainID.uint64)
+  w.append(x.chainId.uint64)
   w.append(x.address)
   w.append(x.nonce)
   w.append(x.yParity)
@@ -256,7 +256,7 @@ proc readTxEip4844(rlp: var Rlp, tx: var Transaction) =
   rlp.read(tx.R)
   rlp.read(tx.S)
 
-proc read*(rlp: var Rlp, T: type Authorization): T =  
+proc read*(rlp: var Rlp, T: type Authorization): T =
   rlp.tryEnterList()
   result.chainId = rlp.read(uint64).ChainId
   rlp.read(result.address)
@@ -264,7 +264,7 @@ proc read*(rlp: var Rlp, T: type Authorization): T =
   rlp.read(result.yParity)
   rlp.read(result.R)
   rlp.read(result.S)
-  
+
 proc readTxEip7702(rlp: var Rlp, tx: var Transaction) =
   tx.txType = TxEip7702
   rlp.tryEnterList()
