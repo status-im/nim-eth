@@ -158,6 +158,24 @@ suite "Discovery v5.1 Protocol Message Encodings":
       message.kind == talkResp
       message.talkResp.response == "hi".toBytes()
 
+  test "Talk Response Payload limit":
+    let
+      payload = repeat(5.byte, maxDiscv5TalkRespPayload)
+      tr = TalkRespMessage(response: payload)
+      reqId = RequestId(id: @[1.byte, 2, 3, 4, 5, 6, 7, 8]) # max requestId = 8 bytes
+
+    let encoded = encodeMessage(tr, reqId)
+    check encoded.len() == maxDiscv5TalkRespPayload + discv5TalkRespOverhead
+
+    let decoded = decodeMessage(encoded)
+    check decoded.isOk()
+
+    let message = decoded.get()
+    check:
+      message.reqId == reqId
+      message.kind == talkResp
+      message.talkResp.response == payload
+
   test "Ping with too large RequestId":
     let
       enrSeq = 1'u64
@@ -625,4 +643,31 @@ suite "Discovery v5.1 Additional Encode/Decode":
       decoded.get().messageOpt.get().reqId == reqId
       decoded.get().messageOpt.get().kind == ping
       decoded.get().messageOpt.get().ping.enrSeq == 0
+      decoded[].requestNonce == nonce
+
+  test "Encode / Decode Ordinary Message Packet - TalkResp Payload limit":
+    let
+      payload = repeat(5.byte, maxDiscv5TalkRespPayload)
+      m = TalkRespMessage(response: payload)
+      reqId = RequestId.init(rng[])
+      message = encodeMessage(m, reqId)
+
+    # Need to manually add the secrets that normally get negotiated in the
+    # handshake packet.
+    var secrets: HandshakeSecrets
+    codecA.sessions.store(nodeB.id, nodeB.address.get(), secrets.recipientKey,
+      secrets.initiatorKey)
+    codecB.sessions.store(nodeA.id, nodeA.address.get(), secrets.initiatorKey,
+      secrets.recipientKey)
+
+    let (data, nonce) = encodeMessagePacket(rng[], codecA, nodeB.id,
+      nodeB.address.get(), message)
+
+    check data.len() == maxDiscv5PacketSize
+
+    let decoded = codecB.decodePacket(nodeA.address.get(), data)
+    check:
+      decoded.isOk()
+      decoded[].flag == OrdinaryMessage
+      decoded[].messageOpt.isSome()
       decoded[].requestNonce == nonce
