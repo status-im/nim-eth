@@ -89,7 +89,7 @@ import
     ip_vote, nodes_verification]
 
 export
-  results, node, enr, encoding.maxDiscv5PacketSize
+  results, node, enr, encoding.maxDiscv5PacketSize, encoding.maxDiscv5TalkRespPayload
 
 declareCounter discovery_message_requests_outgoing,
   "Discovery protocol outgoing message requests", labels = ["response"]

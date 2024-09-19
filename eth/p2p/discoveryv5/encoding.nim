@@ -55,6 +55,22 @@ const
   # the UDP payload and the UDP header is not taken into account.
   # https://github.com/ethereum/devp2p/blob/26e380b1f3a57db16fbdd4528dde82104c77fa38/discv5/discv5-wire.md#udp-communication
   maxDiscv5PacketSize* = 1280
+  # Following constants can be used to calculate the overhead of a packet and
+  # thus the maximum size of a payload that can be sent over talkresp.
+  discv5OrdinaryPacketOverhead* = # total 87 bytes
+    16 + # IV size
+    55 + # header size
+    16 # HMAC
+  # talkResp message = msgId + rlp: [request-id, response]
+  discv5TalkRespOverhead* = # total 16 bytes
+    1 + # talkResp msg id
+    3 + # rlp encoding outer list, max length will be encoded in 2 bytes
+    9 + # request id (max = 8) + 1 byte from rlp encoding byte string
+    3 # rlp encoding response byte string, max length in 2 bytes
+  # TalkResp message is a response message so the session is established and a
+  # ordinary discv5 packet is used for size calculation.
+  maxDiscv5TalkRespPayload* = maxDiscv5PacketSize - discv5OrdinaryPacketOverhead -
+    discv5TalkRespOverhead
 
 type
   AESGCMNonce* = array[gcmNonceSize, byte]
