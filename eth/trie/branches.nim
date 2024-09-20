@@ -90,7 +90,7 @@ proc isValidBranch*(branch: seq[seq[byte]], rootHash: seq[byte], key, value: ope
   var db = newMemoryDB()
   for node in branch:
     doAssert(node.len != 0)
-    let nodeHash = keccakHash(node)
+    let nodeHash = keccak256(node)
     db.put(nodeHash.data, node)
 
   var trie = initBinaryTrie(db, rootHash)

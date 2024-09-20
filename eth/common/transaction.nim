@@ -110,6 +110,6 @@ func rlpEncode*(tx: Transaction): auto =
   of TxEip7702:
     tx.rlpEncodeEip7702
 
-func txHashNoSignature*(tx: Transaction): Hash256 =
+func txHashNoSignature*(tx: Transaction): Hash32 =
   # Hash transaction without signature
-  keccakHash(rlpEncode(tx))
+  rlpHash(tx)

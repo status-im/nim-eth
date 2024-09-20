@@ -11,18 +11,10 @@
 
 import
   unittest2,
-  nimcrypto/hash, nimcrypto/keccak, nimcrypto/utils, stew/byteutils,
-  ../../eth/keys
+  nimcrypto/utils, stew/byteutils,
+  ../../eth/[common, keys]
 
 from strutils import toLowerAscii
-
-proc compare(x: openArray[byte], y: openArray[byte]): bool =
-  result = len(x) == len(y)
-  if result:
-    for i in 0..(len(x) - 1):
-      if x[i] != y[i]:
-        result = false
-        break
 
 let message = "message".toBytes()
 let rng = newRng()
@@ -79,7 +71,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
 
   test "test_recover_from_signature_obj":
     var s = PrivateKey.fromHex(pkbytes)[]
-    var mhash = keccak256.digest(message)
+    var mhash = keccak256(message)
     var signature = s.sign(message)
     var p = recover(signature, SkMessage(mhash.data))[]
     check:
@@ -94,8 +86,8 @@ suite "ECC/ECDSA/ECDHE tests suite":
   test "test_to_canonical_address_from_public_key":
     var s = PrivateKey.fromHex(pkbytes)[]
     var chk = s.toPublicKey().toCanonicalAddress()
-    var expect = fromHex(stripSpaces(address))
-    check compare(chk, expect) == true
+    var expect = Address.fromHex(stripSpaces(address))
+    check chk == expect
 
   test "test_to_checksum_address_from_public_key":
     var s = PrivateKey.fromHex(pkbytes)[]
@@ -169,7 +161,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
     # Copied from https://github.com/ethereum/cpp-ethereum/blob/develop/test/unittests/libdevcrypto/crypto.cpp#L394
     var expectm = """
       8ac7e464348b85d9fdfc0a81f2fdc0bbbb8ee5fb3840de6ed60ad9372e718977"""
-    var s = PrivateKey.fromRaw(keccak256.digest("ecdhAgree").data)[]
+    var s = PrivateKey.fromRaw(keccak256("ecdhAgree").data)[]
     var p = s.toPublicKey()
     let expect = fromHex(stripSpaces(expectm))
     let secret = ecdhSharedSecret(s, p)
@@ -191,7 +183,7 @@ suite "ECC/ECDSA/ECDHE tests suite":
     let expect = fromHex(stripSpaces(e0))
     let secret = ecdhSharedSecret(s, p)
     check:
-      compare(expect, secret.data) == true
+      expect == secret.data
 
   test "ECDSA/cpp-ethereum crypto.cpp#L132":
     # ECDSA test vectors
@@ -205,15 +197,15 @@ suite "ECC/ECDSA/ECDHE tests suite":
     var check1 = fromHex(stripSpaces(signature))
     var check2 = fromHex(stripSpaces(pubkey))
 
-    var s = PrivateKey.fromRaw(keccak256.digest("sec").data)[]
-    var m = keccak256.digest("msg")
+    var s = PrivateKey.fromRaw(keccak256("sec").data)[]
+    var m = keccak256("msg")
     var sig = sign(s, SkMessage(m.data))
     var sersig = sig.toRaw()
     var key = recover(sig, SkMessage(m.data))[]
     var serkey = key.toRaw()
     check:
-      compare(sersig, check1) == true
-      compare(serkey, check2) == true
+      sersig == check1
+      serkey == check2
 
   test "ECDSA/100 signatures":
     # signature test

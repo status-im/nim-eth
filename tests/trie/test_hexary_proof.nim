@@ -13,13 +13,11 @@ import
   std/sequtils,
   unittest2,
   stint,
-  nimcrypto/hash,
   stew/byteutils,
   ../../eth/trie/[hexary, db, trie_defs, hexary_proof_verification]
 
 proc getKeyBytes(i: int): seq[byte] =
-  let hash = keccakHash(u256(i).toBytesBE())
-  return toSeq(hash.data)
+  @(u256(i).toBytesBE())
 
 suite "MPT trie proof verification":
   test "Validate proof for existing value":
@@ -53,7 +51,7 @@ suite "MPT trie proof verification":
       trie.put(bytes, bytes)
 
     let
-      nonExistingKey = toSeq(keccakHash(toBytesBE(u256(numValues + 1))).data)
+      nonExistingKey = toSeq(toBytesBE(u256(numValues + 1)))
       proof = trie.getBranch(nonExistingKey)
       root = trie.rootHash()
       res = verifyMptProof(proof, root, nonExistingKey, nonExistingKey)
@@ -72,7 +70,7 @@ suite "MPT trie proof verification":
       res = verifyMptProof(proof, trie.rootHash, "not-exist".toBytes, "not-exist".toBytes)
 
     check:
-      trie.rootHash == keccakHash(emptyRlp)
+      trie.rootHash == keccak256(emptyRlp)
       proof.len() == 1 # Note that the Rust implementation returns an empty list for this scenario
       proof == @[emptyRlp]
       res.kind == InvalidProof

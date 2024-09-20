@@ -78,11 +78,11 @@ Additional APIs are:
    that starts with the same key prefix
  * rootNode() -- get root node
  * rootNode(node) -- replace the root node
- * getRootHash(): `KeccakHash` with `seq[byte]` type
+ * getRootHash(): `Hash32` with `seq[byte]` type
  * getDB(): `DB` -- get flat-db pointer
 
 Constructor API:
- * initBinaryTrie(DB, rootHash[optional]) -- rootHash has `seq[byte]` or KeccakHash type
+ * initBinaryTrie(DB, rootHash[optional]) -- rootHash has `seq[byte]` or Hash32 type
  * init(BinaryTrie, DB, rootHash[optional])
 
 Normally you would not set the rootHash when constructing an empty Binary-trie.

@@ -19,9 +19,9 @@ import
   ../../eth/keys
 
 const
-  recipient = hexToByteArray[20]("095e7baea6a6c7c4c2dfeb977efac326af552d87")
-  zeroG1    = hexToByteArray[48]("0xc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")
-  source    = hexToByteArray[20]("0x0000000000000000000000000000000000000001")
+  recipient = address"095e7baea6a6c7c4c2dfeb977efac326af552d87"
+  zeroG1    = bytes48"0xc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  source    = address"0x0000000000000000000000000000000000000001"
   storageKey= default(StorageKey)
   accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]
   abcdef    = hexToSeqByte("abcdef")

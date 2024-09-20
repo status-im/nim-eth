@@ -48,18 +48,6 @@ proc readValue*(
 ) {.inline, raises: [IOError, SerializationError].} =
   t = fromUnix r.readValue(int)
 
-# TODO: remove this once case object are fully supported
-# by the serialization library
-proc writeValue*(
-    w: var JsonWriter, value: HashOrNum) {.raises: [IOError].} =
-  w.beginRecord(HashOrNum)
-  w.writeField("isHash", value.isHash)
-  if value.isHash:
-    w.writeField("hash", value.hash)
-  else:
-    w.writeField("number", value.number)
-  w.endRecord()
-
 proc writeValue*(
     w: var JsonWriter, value: BlockHashOrNumber) {.raises: [IOError].} =
   w.writeValue $value

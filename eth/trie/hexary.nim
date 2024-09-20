@@ -13,7 +13,7 @@ import
 
 type
   TrieNodeKey = object
-    hash: KeccakHash
+    hash: Hash32
     usedBytes: uint8
 
   DB = TrieDatabaseRef
@@ -44,16 +44,16 @@ proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey
 template get(db: DB, key: Rlp): seq[byte] =
   db.get(key.expectHash)
 
-converter toTrieNodeKey(hash: KeccakHash): TrieNodeKey =
+converter toTrieNodeKey(hash: Hash32): TrieNodeKey =
   result.hash = hash
   result.usedBytes = 32
 
-proc initHexaryTrie*(db: DB, rootHash: KeccakHash, isPruning = true): HexaryTrie =
+proc initHexaryTrie*(db: DB, rootHash: Hash32, isPruning = true): HexaryTrie =
   result.db = db
   result.root = rootHash
   result.isPruning = isPruning
 
-template initSecureHexaryTrie*(db: DB, rootHash: KeccakHash, isPruning = true): SecureHexaryTrie =
+template initSecureHexaryTrie*(db: DB, rootHash: Hash32, isPruning = true): SecureHexaryTrie =
   SecureHexaryTrie initHexaryTrie(db, rootHash, isPruning)
 
 proc initHexaryTrie*(db: DB, isPruning = true): HexaryTrie
@@ -65,7 +65,7 @@ proc initHexaryTrie*(db: DB, isPruning = true): HexaryTrie
 template initSecureHexaryTrie*(db: DB, isPruning = true): SecureHexaryTrie =
   SecureHexaryTrie initHexaryTrie(db, isPruning)
 
-proc rootHash*(t: HexaryTrie): KeccakHash =
+proc rootHash*(t: HexaryTrie): Hash32 =
   t.root.hash
 
 proc rootHashHex*(t: HexaryTrie): string =
@@ -354,11 +354,11 @@ proc getBranch*(self: HexaryTrie; key: openArray[byte]): seq[seq[byte]] =
   getBranchAux(self.db, node, initNibbleRange(key), result)
 
 proc dbDel(t: var HexaryTrie, data: openArray[byte]) =
-  if data.len >= 32: t.prune(data.keccakHash.data)
+  if data.len >= 32: t.prune(data.keccak256.data)
 
 proc dbPut(db: DB, data: openArray[byte]): TrieNodeKey
     {.raises: [].} =
-  result.hash = data.keccakHash
+  result.hash = data.keccak256
   result.usedBytes = 32
   put(db, result.asDbKey, data)
 
@@ -545,7 +545,7 @@ proc del*(self: var HexaryTrie; key: openArray[byte]) =
       self.prune(self.root.asDbKey)
     self.root = self.db.dbPut(newRootBytes)
 
-proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
+proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: Hash32,
   key: NibblesSeq, value: openArray[byte],
   isInline = false): seq[byte]
   {.gcsafe, raises: [RlpError].}
@@ -553,7 +553,7 @@ proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
 proc mergeAt(self: var HexaryTrie, rlp: Rlp,
              key: NibblesSeq, value: openArray[byte],
              isInline = false): seq[byte] =
-  self.mergeAt(rlp, rlp.rawData.keccakHash, key, value, isInline)
+  self.mergeAt(rlp, rlp.rawData.keccak256, key, value, isInline)
 
 proc mergeAtAux(self: var HexaryTrie, output: var RlpWriter, orig: Rlp,
                 key: NibblesSeq, value: openArray[byte]) =
@@ -566,7 +566,7 @@ proc mergeAtAux(self: var HexaryTrie, output: var RlpWriter, orig: Rlp,
   let b = self.mergeAt(resolved, key, value, not isRemovable)
   output.appendAndSave(b, self.db)
 
-proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: KeccakHash,
+proc mergeAt(self: var HexaryTrie, orig: Rlp, origHash: Hash32,
     key: NibblesSeq, value: openArray[byte],
     isInline = false): seq[byte]
     {.gcsafe, raises: [RlpError].} =
@@ -672,15 +672,15 @@ proc put*(self: var HexaryTrie; key, value: openArray[byte]) =
   self.root = self.db.dbPut(newRootBytes)
 
 proc put*(self: var SecureHexaryTrie; key, value: openArray[byte]) =
-  put(HexaryTrie(self), key.keccakHash.data, value)
+  put(HexaryTrie(self), key.keccak256.data, value)
 
 proc get*(self: SecureHexaryTrie; key: openArray[byte]): seq[byte] =
-  return get(HexaryTrie(self), key.keccakHash.data)
+  return get(HexaryTrie(self), key.keccak256.data)
 
 proc del*(self: var SecureHexaryTrie; key: openArray[byte]) =
-  del(HexaryTrie(self), key.keccakHash.data)
+  del(HexaryTrie(self), key.keccak256.data)
 
-proc rootHash*(self: SecureHexaryTrie): KeccakHash {.borrow.}
+proc rootHash*(self: SecureHexaryTrie): Hash32 {.borrow.}
 proc rootHashHex*(self: SecureHexaryTrie): string {.borrow.}
 proc isPruning*(self: SecureHexaryTrie): bool {.borrow.}
 
@@ -689,14 +689,14 @@ template contains*(self: HexaryTrie | SecureHexaryTrie;
   self.get(key).len > 0
 
 # Validates merkle proof against provided root hash
-proc isValidBranch*(branch: seq[seq[byte]], rootHash: KeccakHash, key, value: seq[byte]): bool =
+proc isValidBranch*(branch: seq[seq[byte]], rootHash: Hash32, key, value: seq[byte]): bool =
   # branch must not be empty
   doAssert(branch.len != 0)
 
   var db = newMemoryDB()
   for node in branch:
     doAssert(node.len != 0)
-    let nodeHash = keccakHash(node)
+    let nodeHash = keccak256(node)
     db.put(nodeHash.data, node)
 
   var trie = initHexaryTrie(db, rootHash)

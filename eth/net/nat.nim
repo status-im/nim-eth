@@ -12,7 +12,7 @@ import
   std/[os, strutils, times],
   results, nat_traversal/[miniupnpc, natpmp],
   chronicles, json_serialization/std/net, chronos,
-  ../common/utils, ./utils as netutils
+  ./utils as netutils
 
 export results
 

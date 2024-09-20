@@ -19,7 +19,7 @@ import
   secp256k1, bearssl/hash as bhash, bearssl/rand,
   stew/[byteutils, objects, ptrops],
   results,
-  ./common/eth_hash
+  ./common/[eth_hash, eth_types]
 
 from nimcrypto/utils import burnMem
 
@@ -134,62 +134,26 @@ func fromRaw*(T: type SignatureNR, data: openArray[byte]): SkResult[T] =
 
 func toRaw*(sig: SignatureNR): array[RawSignatureNRSize, byte] {.borrow.}
 
-func toAddress*(pubkey: PublicKey, with0x = true): string =
-  ## Convert public key to hexadecimal string address.
-  var hash = keccakHash(pubkey.toRaw())
-  result = if with0x: "0x" else: ""
-  result.add(toHex(toOpenArray(hash.data, 12, len(hash.data) - 1)))
+func to*(pubkey: PublicKey, _: type Address): Address =
+  ## Convert public key to canonical address.
+  let hash = keccak256(pubkey.toRaw())
+  copyMem(addr result.data[0], addr hash.data[12], 20)
 
-func toChecksumAddress*(pubkey: PublicKey, with0x = true): string =
+func toAddress*(pubkey: PublicKey): string {.deprecated.} =
+  ## Convert public key to hexadecimal string address.
+  pubkey.to(Address).to0xHex()
+
+func toChecksumAddress*(pubkey: PublicKey): string =
   ## Convert public key to checksumable mixed-case address (EIP-55).
-  result = if with0x: "0x" else: ""
-  var hash1 = keccakHash(pubkey.toRaw())
-  var hhash1 = toHex(toOpenArray(hash1.data, 12, len(hash1.data) - 1))
-  var hash2 = keccakHash(hhash1)
-  var hhash2 = toHex(hash2.data)
-  for i in 0..<len(hhash1):
-    if hhash2[i] >= '0' and hhash2[i] <= '7':
-      result.add(hhash1[i])
-    else:
-      if hhash1[i] >= '0' and hhash1[i] <= '9':
-        result.add(hhash1[i])
-      else:
-        let ch = chr(ord(hhash1[i]) - ord('a') + ord('A'))
-        result.add(ch)
+  pubkey.to(Address).toChecksum0xHex()
 
 func validateChecksumAddress*(a: string): bool =
   ## Validate checksumable mixed-case address (EIP-55).
-  var address = ""
-  var check = "0x"
-  if len(a) != 42:
-    return false
-  if a[0] != '0' and a[1] != 'x':
-    return false
-  for i in 2..41:
-    let ch = a[i]
-    if ch in {'0'..'9'} or ch in {'a'..'f'}:
-      address &= ch
-    elif ch in {'A'..'F'}:
-      address &= chr(ord(ch) - ord('A') + ord('a'))
-    else:
-      return false
-  var hash = keccakHash(address)
-  var hexhash = toHex(hash.data)
-  for i in 0..<len(address):
-    if hexhash[i] >= '0' and hexhash[i] <= '7':
-      check.add(address[i])
-    else:
-      if address[i] >= '0' and address[i] <= '9':
-        check.add(address[i])
-      else:
-        let ch = chr(ord(address[i]) - ord('a') + ord('A'))
-        check.add(ch)
-  result = (check == a)
+  Address.hasValidChecksum(a)
 
-func toCanonicalAddress*(pubkey: PublicKey): array[20, byte] =
+template toCanonicalAddress*(pubkey: PublicKey): Address =
   ## Convert public key to canonical address.
-  var hash = keccakHash(pubkey.toRaw())
-  copyMem(addr result[0], addr hash.data[12], 20)
+  pubkey.to(Address)
 
 func `$`*(pubkey: PublicKey): string =
   ## Convert public key to hexadecimal string representation.
@@ -218,28 +182,28 @@ func sign*(seckey: PrivateKey, msg: SkMessage): Signature =
   Signature(signRecoverable(SkSecretKey(seckey), msg))
 
 func sign*(seckey: PrivateKey, msg: openArray[byte]): Signature =
-  let hash = keccakHash(msg)
+  let hash = keccak256(msg)
   sign(seckey, SkMessage(hash.data))
 
 func signNR*(seckey: PrivateKey, msg: SkMessage): SignatureNR =
   SignatureNR(sign(SkSecretKey(seckey), msg))
 
 func signNR*(seckey: PrivateKey, msg: openArray[byte]): SignatureNR =
-  let hash = keccakHash(msg)
+  let hash = keccak256(msg)
   signNR(seckey, SkMessage(hash.data))
 
 func recover*(sig: Signature, msg: SkMessage): SkResult[PublicKey] =
   recover(SkRecoverableSignature(sig), msg).mapConvert(PublicKey)
 
 func recover*(sig: Signature, msg: openArray[byte]): SkResult[PublicKey] =
-  let hash = keccakHash(msg)
+  let hash = keccak256(msg)
   recover(sig, SkMessage(hash.data))
 
 func verify*(sig: SignatureNR, msg: SkMessage, key: PublicKey): bool =
   verify(SkSignature(sig), msg, SkPublicKey(key))
 
 func verify*(sig: SignatureNR, msg: openArray[byte], key: PublicKey): bool =
-  let hash = keccakHash(msg)
+  let hash = keccak256(msg)
   verify(sig, SkMessage(hash.data), key)
 
 proc ecdhSharedSecretHash(output: ptr byte, x32, y32: ptr byte, data: pointer): cint

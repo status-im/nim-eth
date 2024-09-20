@@ -86,7 +86,7 @@ proc suite1() =
       let a = Withdrawal(
         index: 1,
         validatorIndex: 2,
-        address: EthAddress [
+        address: Address [
           0.byte, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
           11, 12, 13, 14, 15, 16, 17, 18, 19],
         amount: 4)
@@ -114,7 +114,7 @@ proc suite2() =
       doTest h
 
       # EIP-4895
-      h.withdrawalsRoot = Opt.some Hash256.fromHex(
+      h.withdrawalsRoot = Opt.some Hash32.fromHex(
         "0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588")
       doTest h
 

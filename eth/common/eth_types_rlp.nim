@@ -8,8 +8,7 @@ import
   "."/[eth_types, eth_hash_rlp],
   ../rlp
 
-from stew/objects
-  import checkedEnumAssign
+from stew/objects import checkedEnumAssign
 
 export
   eth_types, eth_hash_rlp, rlp
@@ -64,7 +63,16 @@ proc append*(rlpWriter: var RlpWriter, value: StInt) =
   {.fatal: "RLP serialization of signed integers is not allowed".}
   discard
 
+proc append*(w: var RlpWriter, val: FixedBytes|Address) =
+  mixin append
+  w.append(val.data())
+
+proc read*[T: FixedBytes|Address](rlp: var Rlp, _: type T): T =
+  result = T(rlp.read(type(result.data)))
+
 proc append*[T](w: var RlpWriter, val: Opt[T]) =
+  mixin append
+
   if val.isSome:
     w.append(val.get())
   else:
@@ -189,6 +197,7 @@ template read[T](rlp: var Rlp, val: var T) =
   val = rlp.read(type val)
 
 proc read[T](rlp: var Rlp, val: var Opt[T]) =
+  mixin read
   if rlp.blobLen != 0:
     val = Opt.some(rlp.read(T))
   else:
@@ -453,7 +462,7 @@ proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) =
     receipt.status = rlp.read(uint8) == 1
   elif rlp.isBlob and rlp.blobLen == 32:
     receipt.isHash = true
-    receipt.hash = rlp.read(Hash256)
+    receipt.hash = rlp.read(Hash32)
   else:
     raise newException(RlpTypeMismatch,
       "HashOrStatus expected, but the source RLP is not a blob of right size.")
@@ -492,7 +501,7 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) =
     receipt.status = rlp.read(uint8) == 1
   elif rlp.isBlob and rlp.blobLen == 32:
     receipt.isHash = true
-    receipt.hash = rlp.read(Hash256)
+    receipt.hash = rlp.read(Hash32)
   else:
     raise newException(RlpTypeMismatch,
       "HashOrStatus expected, but the source RLP is not a blob of right size.")
@@ -554,18 +563,18 @@ proc append*(
 proc read*(rlp: var Rlp, T: type EthTime): T {.inline.} =
   result = EthTime rlp.read(uint64)
 
-proc append*(rlpWriter: var RlpWriter, value: HashOrNum) =
+proc append*(rlpWriter: var RlpWriter, value: BlockHashOrNumber) =
   case value.isHash
   of true:
     rlpWriter.append(value.hash)
   else:
     rlpWriter.append(value.number)
 
-proc read*(rlp: var Rlp, T: type HashOrNum): T =
+proc read*(rlp: var Rlp, T: type BlockHashOrNumber): T =
   if rlp.blobLen == 32:
-    result = HashOrNum(isHash: true, hash: rlp.read(Hash256))
+    BlockHashOrNumber(isHash: true, hash: rlp.read(Hash32))
   else:
-    result = HashOrNum(isHash: false, number: rlp.read(BlockNumber))
+    BlockHashOrNumber(isHash: false, number: rlp.read(BlockNumber))
 
 proc append*(rlpWriter: var RlpWriter, t: EthTime) {.inline.} =
   rlpWriter.append(t.uint64)
@@ -714,13 +723,13 @@ proc read*(
 
   reqs
 
-proc rlpHash*[T](v: T): Hash256 =
-  keccakHash(rlp.encode(v))
+proc rlpHash*[T](v: T): Hash32 =
+  keccak256(rlp.encode(v))
 
-proc rlpHash*(tx: PooledTransaction): Hash256 =
-  keccakHash(rlp.encode(tx.tx))
+proc rlpHash*(tx: PooledTransaction): Hash32 =
+  keccak256(rlp.encode(tx.tx))
 
-func blockHash*(h: BlockHeader): KeccakHash {.inline.} = rlpHash(h)
+func blockHash*(h: BlockHeader): Hash32 {.inline.} = rlpHash(h)
 
 proc append*(rlpWriter: var RlpWriter, id: NetworkId) =
   rlpWriter.append(id.uint)

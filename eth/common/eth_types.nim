@@ -10,28 +10,32 @@
 ## from many places
 
 import
-  std/[hashes, strutils],
+  std/[hashes, strutils, typetraits],
   stew/[byteutils, endians2],
   stint,
   results,
+  nimcrypto/hash,
+  ./base_types,
+  ./eth_address,
   ./eth_hash,
   ./eth_times
 
 export
   results,
   stint,
+  hash,
+  base_types,
+  eth_address,
   eth_hash,
   eth_times
 
 type
-  Hash256* = MDigest[256]
-  VMWord* = UInt256
-  BlockNonce* = array[8, byte]
+  Root* = Hash32
+  BlockNonce* = Bytes8
   AccountNonce* = uint64
   Blob* = seq[byte]
 
-  BloomFilter* = array[256, byte]
-  EthAddress* = array[20, byte]
+  BloomFilter* = Bytes256
 
   DifficultyInt* = UInt256
   GasInt* = uint64
@@ -39,7 +43,7 @@ type
   # For reference - https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
 
   Topic* = array[32, byte]
-  # topic can be Hash256 or zero padded bytes array
+  # topic can be Hash32 or zero padded bytes array
 
   ForkID* = tuple[crc: uint32, nextFork: uint64]
   # EIP 2364/2124
@@ -57,19 +61,19 @@ type
   Account* = object
     nonce*:       AccountNonce
     balance*:     UInt256
-    storageRoot*: Hash256
-    codeHash*:    Hash256
+    storageRoot*: Root
+    codeHash*:    Hash32
 
   AccessPair* = object
-    address*    : EthAddress
+    address*    : Address
     storageKeys*: seq[StorageKey]
 
   AccessList* = seq[AccessPair]
 
-  VersionedHash* = Hash256
+  VersionedHash* = Bytes32
   VersionedHashes* = seq[VersionedHash]
-  KzgCommitment* = array[48, byte]
-  KzgProof* = array[48, byte]
+  KzgCommitment* = Bytes48
+  KzgProof* = Bytes48
 
   # 32 -> UInt256
   # 4096 -> FIELD_ELEMENTS_PER_BLOB
@@ -89,7 +93,7 @@ type
 
   Authorization* = object
     chainId*: ChainId
-    address*: EthAddress
+    address*: Address
     nonce*: AccountNonce
     yParity*: uint64
     R*: UInt256
@@ -103,7 +107,7 @@ type
     maxPriorityFeePerGas*: GasInt         # EIP-1559
     maxFeePerGas*  : GasInt               # EIP-1559
     gasLimit*      : GasInt
-    to*            : Opt[EthAddress]
+    to*            : Opt[Address]
     value*         : UInt256
     payload*       : Blob
     accessList*    : AccessList           # EIP-2930
@@ -131,34 +135,34 @@ type
   Withdrawal* = object  # EIP-4895
     index*         : uint64
     validatorIndex*: uint64
-    address*       : EthAddress
+    address*       : Address
     amount*        : uint64
 
   DepositRequest* = object  # EIP-6110
-    pubkey*               : array[48, byte]
-    withdrawalCredentials*: array[32, byte]
+    pubkey*               : Bytes48
+    withdrawalCredentials*: Bytes32
     amount*               : uint64
-    signature*            : array[96, byte]
+    signature*            : Bytes96
     index*                : uint64
 
   WithdrawalRequest* = object  # EIP-7002
-    sourceAddress*  : array[20, byte]
-    validatorPubkey*: array[48, byte]
+    sourceAddress*  : Address
+    validatorPubkey*: Bytes48
     amount*         : uint64
 
   ConsolidationRequest* = object  # EIP-7251
-    sourceAddress*: array[20, byte]
-    sourcePubkey* : array[48, byte]
-    targetPubkey* : array[48, byte]
+    sourceAddress*: Address
+    sourcePubkey* : Bytes48
+    targetPubkey* : Bytes48
 
-  # https://eips.ethereum.org/EIPS/eip-4844#header-extension
+  # https://github.com/ethereum/execution-specs/blob/51fac24740e662844446439ceeb96a460aae0ba0/src/ethereum/paris/blocks.py#L22
   BlockHeader* = object
-    parentHash*:      Hash256
-    ommersHash*:      Hash256
-    coinbase*:        EthAddress
-    stateRoot*:       Hash256
-    txRoot*:          Hash256
-    receiptsRoot*:    Hash256
+    parentHash*:      Hash32
+    ommersHash*:      Hash32
+    coinbase*:        Address
+    stateRoot*:       Hash32
+    txRoot*:          Hash32
+    receiptsRoot*:    Hash32
     logsBloom*:       BloomFilter
     difficulty*:      DifficultyInt
     number*:          BlockNumber
@@ -166,14 +170,14 @@ type
     gasUsed*:         GasInt
     timestamp*:       EthTime
     extraData*:       Blob
-    mixHash*:         Hash256
+    mixHash*:         Hash32
     nonce*:           BlockNonce
     baseFeePerGas*:   Opt[UInt256]   # EIP-1559
-    withdrawalsRoot*: Opt[Hash256]   # EIP-4895
+    withdrawalsRoot*: Opt[Hash32]   # EIP-4895
     blobGasUsed*:     Opt[uint64]    # EIP-4844
     excessBlobGas*:   Opt[uint64]    # EIP-4844
-    parentBeaconBlockRoot*: Opt[Hash256] # EIP-4788
-    requestsRoot*:    Opt[Hash256]  # EIP-7685
+    parentBeaconBlockRoot*: Opt[Hash32] # EIP-4788
+    requestsRoot*:    Opt[Hash32]  # EIP-7685
 
 
   RequestType* = enum
@@ -197,7 +201,7 @@ type
     requests*:      Opt[seq[Request]]      # EIP-7865
 
   Log* = object
-    address*:       EthAddress
+    address*:       Address
     topics*:        seq[Topic]
     data*:          Blob
 
@@ -214,7 +218,7 @@ type
     receiptType*      : ReceiptType
     isHash*           : bool          # hash or status
     status*           : bool          # EIP-658
-    hash*             : Hash256
+    hash*             : Hash32
     cumulativeGasUsed*: GasInt
     logsBloom*        : BloomFilter
     logs*             : seq[Log]
@@ -231,24 +235,12 @@ type
     proofs*: seq[KzgProof]
     blobs*: seq[NetworkBlob]
 
-  # TODO: Make BlockNumber a uint64 and deprecate either this or BlockHashOrNumber
-  HashOrNum* = object
-    case isHash*: bool
-    of true:
-      hash*: Hash256
-    else:
-      number*: BlockNumber
-
   BlockHashOrNumber* = object
     case isHash*: bool
     of true:
-      hash*: Hash256
+      hash*: Hash32
     else:
-      number*: uint64
-
-  ValidationResult* {.pure.} = enum
-    OK
-    Error
+      number*: BlockNumber
 
 const
   LegacyReceipt*  = TxLegacy
@@ -257,26 +249,26 @@ const
   Eip4844Receipt* = TxEip4844
   Eip7702Receipt* = TxEip7702
 
-  EMPTY_ROOT_HASH* = "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
-  EMPTY_UNCLE_HASH* = "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
-  EMPTY_CODE_HASH* = "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
+  EMPTY_ROOT_HASH* = hash32"56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+  EMPTY_UNCLE_HASH* = hash32"1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+  EMPTY_CODE_HASH* = hash32"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 
 template txs*(blk: EthBlock): seq[Transaction] =
   # Legacy name emulation
   blk.transactions
 
 # starting from EIP-4399, `mixHash`/`mixDigest` field will be alled `prevRandao`
-template prevRandao*(h: BlockHeader): Hash256 =
+template prevRandao*(h: BlockHeader): Hash32 =
   h.mixHash
 
-template `prevRandao=`*(h: BlockHeader, hash: Hash256) =
+template `prevRandao=`*(h: BlockHeader, hash: Hash32) =
   h.mixHash = hash
 
 func toBlockNonce*(n: uint64): BlockNonce =
-  n.toBytesBE()
+  BlockNonce(n.toBytesBE())
 
 func toUint*(n: BlockNonce): uint64 =
-  uint64.fromBytesBE(n)
+  uint64.fromBytesBE(n.data)
 
 func newAccount*(nonce: AccountNonce = 0, balance: UInt256 = 0.u256): Account =
   result.nonce = nonce
@@ -290,18 +282,17 @@ func hasStatus*(rec: Receipt): bool {.inline.} =
 func hasStateRoot*(rec: Receipt): bool {.inline.} =
   rec.isHash == true
 
-func stateRoot*(rec: Receipt): Hash256 {.inline.} =
+func stateRoot*(rec: Receipt): Hash32 {.inline.} =
   doAssert(rec.hasStateRoot)
   rec.hash
 
 template contractCreation*(tx: Transaction): bool =
   tx.to.isNone
 
-func destination*(tx: Transaction): EthAddress =
+func destination*(tx: Transaction): Address =
   # use getRecipient if you also want to get
   # the contract address
-  if tx.to.isSome:
-    return tx.to.get
+  tx.to.valueOr(default(Address))
 
 func init*(T: type BlockHashOrNumber, str: string): T
           {.raises: [ValueError].} =
@@ -331,23 +322,6 @@ func `==`*(a, b: NetworkId): bool =
 
 func `$`*(x: NetworkId): string =
   `$`(uint(x))
-
-func `==`*(a, b: EthAddress): bool {.inline.} =
-  equalMem(unsafeAddr a[0], unsafeAddr b[0], a.len)
-
-# TODO https://github.com/nim-lang/Nim/issues/23678
-func hash*(a: EthAddress): Hash {.inline.} =
-  static: doAssert sizeof(a) == 20
-  var a0{.noinit.}, a1 {.noinit.}: uint64
-  var a2{.noinit.}: uint32
-
-  # Addresses are more or less random so we should not need a fancy mixing
-  # function
-  copyMem(addr a0, unsafeAddr a[0], sizeof(a0))
-  copyMem(addr a1, unsafeAddr a[8], sizeof(a1))
-  copyMem(addr a2, unsafeAddr a[16], sizeof(a2))
-
-  cast[Hash](a0 xor a1 xor uint64(a2))
 
 # TODO https://github.com/nim-lang/Nim/issues/23354 - parameters should be sink
 func init*(T: type EthBlock, header: BlockHeader, body: BlockBody): T =

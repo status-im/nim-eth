@@ -69,14 +69,14 @@ suite "BlockHeader roundtrip test":
     roundTrip(h)
 
   test "Header + none(baseFee) + some(withdrawalsRoot)":
-    let h = BlockHeader(withdrawalsRoot: Opt.some(Hash256()))
+    let h = BlockHeader(withdrawalsRoot: Opt.some(default(Hash32)))
     expect AssertionDefect:
       roundTrip(h)
 
   test "Header + none(baseFee) + some(withdrawalsRoot) + " &
       "some(blobGasUsed) + some(excessBlobGas)":
     let h = BlockHeader(
-      withdrawalsRoot: Opt.some(Hash256()),
+      withdrawalsRoot: Opt.some(default(Hash32)),
       blobGasUsed: Opt.some(1'u64),
       excessBlobGas: Opt.some(1'u64)
     )
@@ -105,7 +105,7 @@ suite "BlockHeader roundtrip test":
   test "Header + some(baseFee) + some(withdrawalsRoot)":
     let h = BlockHeader(
       baseFeePerGas: Opt.some(2.u256),
-      withdrawalsRoot: Opt.some(Hash256())
+      withdrawalsRoot: Opt.some(default(Hash32))
     )
     roundTrip(h)
 
@@ -113,7 +113,7 @@ suite "BlockHeader roundtrip test":
       "some(blobGasUsed) + some(excessBlobGas)":
     let h = BlockHeader(
       baseFeePerGas: Opt.some(2.u256),
-      withdrawalsRoot: Opt.some(Hash256()),
+      withdrawalsRoot: Opt.some(default(Hash32)),
       blobGasUsed: Opt.some(1'u64),
       excessBlobGas: Opt.some(1'u64)
     )
@@ -176,12 +176,12 @@ genTest(BlockBody)
 
 type
   BlockHeaderOpt* = object
-    parentHash*:      Hash256
-    ommersHash*:      Hash256
-    coinbase*:        EthAddress
-    stateRoot*:       Hash256
-    txRoot*:          Hash256
-    receiptRoot*:     Hash256
+    parentHash*:      Hash32
+    ommersHash*:      Hash32
+    coinbase*:        Address
+    stateRoot*:       Hash32
+    txRoot*:          Hash32
+    receiptRoot*:     Hash32
     bloom*:           BloomFilter
     difficulty*:      DifficultyInt
     blockNumber*:     BlockNumber
@@ -189,10 +189,10 @@ type
     gasUsed*:         GasInt
     timestamp*:       EthTime
     extraData*:       Blob
-    mixDigest*:       Hash256
+    mixDigest*:       Hash32
     nonce*:           BlockNonce
     fee*:             Opt[UInt256]
-    withdrawalsRoot*: Opt[Hash256]
+    withdrawalsRoot*: Opt[Hash32]
     blobGasUsed*:     Opt[GasInt]
     excessBlobGas*:   Opt[GasInt]
 
@@ -252,27 +252,27 @@ suite "EIP-7865 tests":
     Request(
       requestType: DepositRequestType,
       deposit: DepositRequest(
-        pubkey               : hexToByteArray[48]("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
-        withdrawalCredentials: hexToByteArray[32]("0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"),
+        pubkey               : bytes48"0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        withdrawalCredentials: bytes32"0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         amount               : 1,
-        signature            : hexToByteArray[96]("0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+        signature            : bytes96"0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         index                : 3,
       )
     ),
     Request(
       requestType: WithdrawalRequestType,
       withdrawal: WithdrawalRequest(
-        sourceAddress  : hexToByteArray[20]("0xDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"),
-        validatorPubkey: hexToByteArray[48]("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+        sourceAddress  : address"0xDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+        validatorPubkey: bytes48"0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         amount         : 7,
       )
     ),
     Request(
       requestType: ConsolidationRequestType,
       consolidation: ConsolidationRequest(
-        sourceAddress: hexToByteArray[20]("0xEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"),
-        sourcePubkey : hexToByteArray[48]("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
-        targetPubkey : hexToByteArray[48]("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"),
+        sourceAddress: address"0xEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+        sourcePubkey : bytes48"0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        targetPubkey : bytes48"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
       )
     )
   ]

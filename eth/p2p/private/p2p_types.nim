@@ -212,6 +212,8 @@ type
     MessageTimeout = 0x0B,
     SubprotocolReason = 0x10
 
+  Address = enode.Address
+
 proc `$`*(peer: Peer): string = $peer.remote
 
 proc toENode*(v: EthereumNode): ENode =

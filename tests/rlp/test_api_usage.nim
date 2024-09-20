@@ -22,7 +22,7 @@ proc test_blockBodyTranscode() =
         Transaction(nonce: 1)]),
     BlockBody(
       uncles: @[
-        BlockHeader(nonce: [0x20u8,0,0,0,0,0,0,0])]),
+        BlockHeader(nonce: BlockNonce([0x20u8,0,0,0,0,0,0,0]))]),
     BlockBody(),
     BlockBody(
       transactions: @[

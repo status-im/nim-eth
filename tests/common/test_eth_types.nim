@@ -1,12 +1,10 @@
 {.used.}
 
 import
-  unittest2,
-  nimcrypto/hash,
+  unittest2, std/strutils,
   serialization/testing/generic_suite,
   ../../eth/common/[eth_types, eth_types_json_serialization],
-  ../../eth/common/eth_types_rlp,
-  ../../eth/rlp
+  ../../eth/common/eth_types_rlp
 
 func `==`*(lhs, rhs: BlockHashOrNumber): bool =
   if lhs.isHash != rhs.isHash:
@@ -18,7 +16,7 @@ func `==`*(lhs, rhs: BlockHashOrNumber): bool =
     lhs.number == rhs.number
 
 const
-  testHash = Hash256.fromHex "0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
+  testHash = hash32"0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
 
 suite "BlockHashOrNumber":
   test "construction":
@@ -49,7 +47,7 @@ suite "BlockHashOrNumber":
       echo "A longer hash should not produce the value ", x
 
   test "serialization":
-    let hash = Hash256.fromHex "0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
+    const hash = hash32"0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
 
     Json.roundtripTest BlockHashOrNumber(isHash: true, hash: hash),
                        "\"0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588\""
@@ -57,6 +55,7 @@ suite "BlockHashOrNumber":
     Json.roundtripTest BlockHashOrNumber(isHash: false, number: 1209231231),
                        "\"1209231231\""
 
+suite "Block encodings":
   test "EIP-4399 prevRandao field":
     var blk: BlockHeader
     blk.prevRandao = testHash
@@ -75,3 +74,27 @@ suite "BlockHashOrNumber":
     let dh = rlp.decode(rlpBytes, BlockHeader)
     check dh.parentBeaconBlockRoot.isSome
     check dh.parentBeaconBlockRoot.get == testHash
+
+suite "Address":
+  test "EIP-55 checksum":
+    let
+      cases = [
+        "0x52908400098527886E0F7030069857D2E4169EE7",
+        "0x8617E340B3D01FA5F11F306F4090FD50E238070D",
+        "0xde709f2102306220921060314715629080e2fb77",
+        "0x27b1fdb04752bbc536007a920d24acb045561c26",
+        "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+        "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
+        "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
+        "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
+      ]
+      fails = cases[4..7]
+
+    # https://eips.ethereum.org/EIPS/eip-55#test-cases
+    for s in cases:
+      check:
+        Address.fromHex(s).toChecksum0xHex() == s
+        Address.hasValidChecksum(s)
+    for s in fails:
+      check:
+        not Address.hasValidChecksum(s.toLowerAscii)

@@ -21,6 +21,8 @@ import
 
 export results
 
+type keccak256 = keccak.keccak256
+
 const
   SupportedRlpxVersion* = 4'u8
 
