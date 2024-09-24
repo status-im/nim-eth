@@ -41,7 +41,7 @@ when useSnappy:
 # "undeclared identifier: 'activeChroniclesStream'", when the code using p2p
 # does not import chronicles. Need to resolve this properly.
 export
-  options, p2pProtocol, rlp, chronicles
+  options, p2pProtocol, rlp, chronicles, metrics
 
 declarePublicGauge rlpx_connected_peers,
   "Number of connected peers in the pool"
