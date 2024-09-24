@@ -47,6 +47,37 @@ var
 logScope:
   topics = "eth net nat"
 
+when defined(posix):
+  import std/posix
+
+# Block all/most signals in the current thread, so we don't interfere with regular signal
+# handling elsewhere.
+proc ignoreSignalsInThread*() =
+  when defined(posix):
+    var signalMask, oldSignalMask: Sigset
+
+    # sigprocmask() doesn't work on macOS, for multithreaded programs
+    if sigfillset(signalMask) != 0:
+      echo osErrorMsg(osLastError())
+      quit(QuitFailure)
+    when defined(boehmgc):
+      # Turns out Boehm GC needs some signals to deal with threads:
+      # https://www.hboehm.info/gc/debugging.html
+      const
+        SIGPWR = 30
+        SIGXCPU = 24
+        SIGSEGV = 11
+        SIGBUS = 7
+      if sigdelset(signalMask, SIGPWR) != 0 or
+        sigdelset(signalMask, SIGXCPU) != 0 or
+        sigdelset(signalMask, SIGSEGV) != 0 or
+        sigdelset(signalMask, SIGBUS) != 0:
+        echo osErrorMsg(osLastError())
+        quit(QuitFailure)
+    if pthread_sigmask(SIG_BLOCK, signalMask, oldSignalMask) != 0:
+      echo osErrorMsg(osLastError())
+      quit(QuitFailure)
+
 ## Also does threadvar initialisation.
 ## Must be called before redirectPorts() in each thread.
 proc getExternalIP*(natStrategy: NatStrategy, quiet = false): Opt[IpAddress] =
