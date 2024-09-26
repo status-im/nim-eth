@@ -164,8 +164,7 @@ type
 func toBlockNonce*(n: uint64): BlockNonce =
   BlockNonce(n.toBytesBE())
 
-func `==`*(a, b: NetworkId): bool =
-  a.uint == b.uint
-
-func `$`*(x: NetworkId): string =
-  `$`(uint(x))
+func `==`*(a, b: NetworkId): bool {.borrow.}
+func `$`*(x: NetworkId): string {.borrow.}
+func `==`*(a, b: ChainId): bool {.borrow.}
+func `$`*(x: ChainId): string {.borrow.}

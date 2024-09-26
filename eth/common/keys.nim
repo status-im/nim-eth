@@ -140,7 +140,7 @@ func toRaw*(sig: SignatureNR): array[RawSignatureNRSize, byte] {.borrow.}
 func to*(pubkey: PublicKey, _: type Address): Address =
   ## Convert public key to canonical address.
   let hash = keccak256(pubkey.toRaw())
-  copyMem(addr result.data[0], addr hash.data[12], 20)
+  hash.to(Address)
 
 func toAddress*(pubkey: PublicKey): string {.deprecated.} =
   ## Convert public key to hexadecimal string address.

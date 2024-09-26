@@ -73,6 +73,11 @@ template hash32*(s: static string): Hash32 =
 template to*(v: MDigest[256], _: type Hash32): Hash32 =
   Hash32(v.data)
 
+template to*(v: Hash32, _: type MDigest[256]): MDigest[256] =
+  var tmp {.noinit.}: MDigest[256]
+  assign(tmp.data, v.data)
+  tmp
+
 const
   emptyHash32* =
     hash32"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
