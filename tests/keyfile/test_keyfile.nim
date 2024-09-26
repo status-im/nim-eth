@@ -12,7 +12,7 @@
 import
   std/[json, os],
   unittest2,
-  ../../eth/keys, ../../eth/keyfile/[keyfile]
+  ../../eth/common/keys, ../../eth/keyfile/[keyfile]
 
 # Test vectors copied from
 # https://github.com/ethereum/tests/blob/develop/KeyStoreTests/basic_tests.json

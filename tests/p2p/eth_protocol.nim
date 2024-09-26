@@ -34,10 +34,10 @@ p2pProtocol eth(version = 63,
 
   requestResponse:
     proc getBlockHeaders(peer: Peer, request: openArray[Hash32]) {.gcsafe.} =
-      var headers: seq[BlockHeader]
+      var headers: seq[Header]
       await response.send(headers)
 
-    proc blockHeaders(p: Peer, headers: openArray[BlockHeader])
+    proc blockHeaders(p: Peer, headers: openArray[Header])
 
   requestResponse:
     proc getBlockBodies(peer: Peer, hashes: openArray[Hash32]) {.gcsafe.} = discard
@@ -47,7 +47,7 @@ p2pProtocol eth(version = 63,
 
   requestResponse:
     proc getNodeData(peer: Peer, hashes: openArray[Hash32]) = discard
-    proc nodeData(peer: Peer, data: openArray[Blob])
+    proc nodeData(peer: Peer, data: openArray[seq[byte]])
 
   requestResponse:
     proc getReceipts(peer: Peer, hashes: openArray[Hash32]) = discard

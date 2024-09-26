@@ -9,14 +9,21 @@
 
 ## Keccak256 hash function use thoughout the ethereum execution specification
 ## https://github.com/ethereum/execution-specs/blob/51fac24740e662844446439ceeb96a460aae0ba0/src/ethereum/crypto/hash.py
-import std/[typetraits, hashes], nimcrypto/keccak, ./base_types
+##
+## The execution spec also declares a Hash64 type of mainly historical interest.
+## Its usage was limited to ethash, the proof-of-work algorithm that has been
+## replaced with proof-of-stake.
+
+import std/[typetraits, hashes], nimcrypto/keccak, ./base
 
 export hashes, keccak.update, keccak.finish
 
-type Hash32* = distinct Bytes32
-  ## https://github.com/ethereum/execution-specs/blob/51fac24740e662844446439ceeb96a460aae0ba0/src/ethereum/crypto/hash.py#L19
+type
+  Hash32* = distinct Bytes32
+    ## https://github.com/ethereum/execution-specs/blob/51fac24740e662844446439ceeb96a460aae0ba0/src/ethereum/crypto/hash.py#L19
+  Root* = Hash32
 
-const zeroHash32* = system.default(Hash32)
+const zeroHash32* = system.default(Hash32) ## Hash32 value consisting of all zeroes
 
 template to*(v: array[32, byte], _: type Hash32): Hash32 =
   Address(v)
@@ -51,6 +58,15 @@ template hash32*(s: static string): Hash32 =
 
 template to*(v: MDigest[256], _: type Hash32): Hash32 =
   Hash32(v.data)
+
+const
+  emptyHash32* =
+    hash32"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+    ## Hash value of `keccak256([])`, ie the empty string
+  emptyRoot* =
+    hash32"56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+    ## Hash value of `keccak256(rlp(null))` which corresponds to the encoding
+    ## of an empty MPT trie
 
 func keccak256*(input: openArray[byte]): Hash32 {.noinit.} =
   var ctx: keccak.keccak256

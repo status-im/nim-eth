@@ -11,7 +11,7 @@
 
 import
   unittest2,
-  ../../eth/keys,
+  ../../eth/common/keys,
   ./config
 
 suite "Testing private -> public key conversion":

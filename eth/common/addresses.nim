@@ -10,7 +10,7 @@
 ## 20-byte ethereum account address, as derived from the keypair controlling it
 ## https://ethereum.org/en/developers/docs/accounts/#account-creation
 
-import std/[typetraits, hashes], "."/[base_types, eth_hash]
+import std/[typetraits, hashes as std_hashes], "."/[base, hashes], stew/assign2
 
 export hashes
 
@@ -25,6 +25,25 @@ const zeroAddress* = system.default(Address)
 
 template to*(v: array[20, byte], _: type Address): Address =
   Address(v)
+
+func copyFrom*(T: type Address, v: openArray[byte], start = 0): T =
+  ## Copy as many bytes as possible from the given openArray, starting at `start`
+  ## and filling any missing bytes with zero
+  ##
+  ## `v` may contain both fewer and more bytes than N.
+  if v.len > 0:
+    assign(result.data, v.toOpenArray(min(start, v.len), min(start + 20, v.len()) - 1))
+
+func to*(s: Bytes32 | Hash32, _: type Address): Address =
+  ## Take the last 20 bytes of the given hash to form an Address - this is a
+  ## lossy conversion which discards the first 12 bytes
+
+  assign(result.data, s.data.toOpenArray(12, 31))
+
+func to*(a: Address, _: type Bytes32): Bytes32 =
+  ## Place the address in the last 20 bytes of the result, filling the rest with 0
+
+  assign(result.data.toOpenArray(12, 31), a.data)
 
 template data*(v: Address): array[20, byte] =
   distinctBase(v)

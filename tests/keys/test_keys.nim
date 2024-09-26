@@ -12,7 +12,7 @@
 import
   unittest2,
   nimcrypto/utils, stew/byteutils,
-  ../../eth/[common, keys]
+  ../../eth/common/[addresses, keys, hashes]
 
 from strutils import toLowerAscii
 

@@ -13,7 +13,7 @@ import
   std/[strutils, json],
   nimcrypto/[bcmode, hmac, rijndael, pbkdf2, sha2, sysrand, utils, keccak, scrypt],
   results,
-  ".."/[keys, common],
+  ".."/common/[addresses, keys],
   ./uuid
 
 export results

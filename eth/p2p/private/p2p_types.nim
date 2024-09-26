@@ -14,10 +14,10 @@ import
   std/[deques, tables],
   chronos,
   results,
-  ".."/../[rlp, keys], ../../common/eth_types,
+  ".."/../[rlp], ../../common/[base, keys],
   ".."/[enode, kademlia, discovery, rlpxcrypt]
 
-export eth_types.NetworkId
+export base.NetworkId
 
 const
   useSnappy* = defined(useSnappy)
