@@ -7,7 +7,6 @@
 
 {.push raises: [].}
 
-
 import "."/hashes, ../rlp
 
 export hashes, rlp

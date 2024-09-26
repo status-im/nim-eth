@@ -35,7 +35,6 @@ type
     sourcePubkey* : Bytes48
     targetPubkey* : Bytes48
 
-
   RequestType* = enum
     DepositRequestType        # EIP-6110
     WithdrawalRequestType     # EIP-7002

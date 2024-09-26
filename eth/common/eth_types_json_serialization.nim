@@ -6,13 +6,9 @@
 
 {.push raises: [].}
 
-import
-  std/[times, net],
-  json_serialization, nimcrypto/[hash, utils],
-  ./eth_types
+import std/[times, net], json_serialization, nimcrypto/[hash, utils], ./eth_types
 
-export
-  json_serialization
+export json_serialization
 
 proc writeValue*(w: var JsonWriter, a: MDigest) {.raises: [IOError].} =
   w.writeValue a.data.toHex(true)
@@ -47,8 +43,7 @@ proc readValue*[N](
   except ValueError:
     raiseUnexpectedValue(r, "Hex string expected")
 
-proc writeValue*(
-    w: var JsonWriter, value: StUint) {.inline, raises: [IOError].} =
+proc writeValue*(w: var JsonWriter, value: StUint) {.inline, raises: [IOError].} =
   w.writeValue $value
 
 proc readValue*(
@@ -70,8 +65,7 @@ proc readValue*(
 ) {.inline, raises: [IOError, SerializationError].} =
   t = fromUnix r.readValue(int)
 
-proc writeValue*(
-    w: var JsonWriter, value: BlockHashOrNumber) {.raises: [IOError].} =
+proc writeValue*(w: var JsonWriter, value: BlockHashOrNumber) {.raises: [IOError].} =
   w.writeValue $value
 
 proc readValue*(
@@ -80,4 +74,6 @@ proc readValue*(
   try:
     value = init(BlockHashOrNumber, r.readValue(string))
   except ValueError:
-    r.raiseUnexpectedValue("A hex-encoded block hash or a decimal block number expected")
+    r.raiseUnexpectedValue(
+      "A hex-encoded block hash or a decimal block number expected"
+    )

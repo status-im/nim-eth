@@ -235,7 +235,7 @@ func txHashNoSignature*(tx: Transaction): Hash32 =
   # Hash transaction without signature
   keccak256(rlp.encode(tx))
 
-proc readTxLegacy(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
+proc readTxLegacy*(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxLegacy
   rlp.tryEnterList()
   rlp.read(tx.nonce)
@@ -375,7 +375,7 @@ proc readTxPayload(
   of TxEip7702:
     rlp.readTxEip7702(tx)
 
-proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
+proc readTxTyped*(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   let txType = rlp.readTxType()
   rlp.readTxPayload(tx, txType)
 
