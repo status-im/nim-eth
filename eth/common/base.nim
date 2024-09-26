@@ -57,15 +57,6 @@ type
 template to*[N: static int](v: array[N, byte], T: type FixedBytes[N]): T =
   T(v)
 
-func copyFrom*[N: static int](T: type FixedBytes[N], v: openArray[byte], start = 0): T =
-  ## Copy up to N bytes from the given openArray, starting at `start` and
-  ## filling any missing bytes with zero.
-  ##
-  ## This is a lenient function in that `v` may contain both fewer and more
-  ## bytes than N and start might be out of bounds.
-  if v.len > 0:
-    assign(result.data, v.toOpenArray(min(start, v.len), min(start + N, v.len()) - 1))
-
 template default*[N](T: type FixedBytes[N]): T =
   # Avoid bad codegen where fixed bytes are zeroed byte-by-byte at call site
   const def = system.default(T)
@@ -73,6 +64,20 @@ template default*[N](T: type FixedBytes[N]): T =
 
 template data*(v: FixedBytes): array =
   distinctBase(v)
+
+template `data=`*[N: static int](a: FixedBytes[N], b: array[N, byte]) =
+  assign(distinctBase(a), b)
+
+func copyFrom*[N: static int](T: type FixedBytes[N], v: openArray[byte], start = 0): T =
+  ## Copy up to N bytes from the given openArray, starting at `start` and
+  ## filling any missing bytes with zero.
+  ##
+  ## This is a lenient function in that `v` may contain both fewer and more
+  ## bytes than N and start might be out of bounds.
+  if v.len > 0:
+    assign(
+      result.data, v.toOpenArray(min(start, v.len), min(start + sizeof(T), v.len()) - 1)
+    )
 
 func `==`*(a, b: FixedBytes): bool {.inline.} =
   equalMem(addr a.data[0], addr b.data[0], a.N)

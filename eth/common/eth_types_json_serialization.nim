@@ -25,6 +25,28 @@ proc readValue*(
   except ValueError:
     raiseUnexpectedValue(r, "Hex string expected")
 
+proc writeValue*(w: var JsonWriter, a: Hash32) {.raises: [IOError].} =
+  w.writeValue a.data.to0xHex()
+
+proc readValue*(
+    r: var JsonReader, a: var Hash32
+) {.inline, raises: [IOError, SerializationError].} =
+  try:
+    a = fromHex(type(a), r.readValue(string))
+  except ValueError:
+    raiseUnexpectedValue(r, "Hex string expected")
+
+proc writeValue*(w: var JsonWriter, a: FixedBytes) {.raises: [IOError].} =
+  w.writeValue a.data.to0xHex()
+
+proc readValue*[N](
+    r: var JsonReader, a: var FixedBytes[N]
+) {.inline, raises: [IOError, SerializationError].} =
+  try:
+    a = fromHex(type(a), r.readValue(string))
+  except ValueError:
+    raiseUnexpectedValue(r, "Hex string expected")
+
 proc writeValue*(
     w: var JsonWriter, value: StUint) {.inline, raises: [IOError].} =
   w.writeValue $value

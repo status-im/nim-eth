@@ -5,14 +5,18 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  "."/[accounts_rlp, addresses_rlp, base_rlp, blocks_rlp, eth_types, hashes_rlp, receipts_rlp, transactions_rlp],
+  "."/[
+    accounts_rlp, addresses_rlp, base_rlp, blocks_rlp, eth_types, hashes_rlp,
+    receipts_rlp, transactions_rlp,
+  ],
   ../rlp
 
 export
-  accounts_rlp, addresses_rlp, base_rlp, blocks_rlp, eth_types, hashes_rlp, receipts_rlp, transactions_rlp, rlp
+  accounts_rlp, addresses_rlp, base_rlp, blocks_rlp, eth_types, hashes_rlp,
+  receipts_rlp, transactions_rlp, rlp
 
-proc read*(rlp: var Rlp, T: type EthTime): T {.inline.} =
-  result = EthTime rlp.read(uint64)
+proc read*(rlp: var Rlp, T: type EthTime): T {.raises: [RlpError].} =
+  EthTime rlp.read(uint64)
 
 proc append*(rlpWriter: var RlpWriter, value: BlockHashOrNumber) =
   case value.isHash
@@ -30,11 +34,11 @@ proc read*(rlp: var Rlp, T: type BlockHashOrNumber): T =
 proc append*(rlpWriter: var RlpWriter, t: EthTime) {.inline.} =
   rlpWriter.append(t.uint64)
 
-
 proc rlpHash*[T](v: T): Hash32 =
   keccak256(rlp.encode(v))
 
 proc rlpHash*(tx: PooledTransaction): Hash32 =
   keccak256(rlp.encode(tx.tx))
 
-func blockHash*(h: BlockHeader): Hash32 {.inline.} = rlpHash(h)
+func blockHash*(h: BlockHeader): Hash32 {.inline.} =
+  rlpHash(h)

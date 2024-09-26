@@ -26,14 +26,6 @@ const zeroAddress* = system.default(Address)
 template to*(v: array[20, byte], _: type Address): Address =
   Address(v)
 
-func copyFrom*(T: type Address, v: openArray[byte], start = 0): T =
-  ## Copy as many bytes as possible from the given openArray, starting at `start`
-  ## and filling any missing bytes with zero
-  ##
-  ## `v` may contain both fewer and more bytes than N.
-  if v.len > 0:
-    assign(result.data, v.toOpenArray(min(start, v.len), min(start + 20, v.len()) - 1))
-
 func to*(s: Bytes32 | Hash32, _: type Address): Address =
   ## Take the last 20 bytes of the given hash to form an Address - this is a
   ## lossy conversion which discards the first 12 bytes
@@ -47,6 +39,20 @@ func to*(a: Address, _: type Bytes32): Bytes32 =
 
 template data*(v: Address): array[20, byte] =
   distinctBase(v)
+
+template `data=`*[N: static int](a: FixedBytes[N], b: array[N, byte]) =
+  assign(distinctBase(a), b)
+
+func copyFrom*(T: type Address, v: openArray[byte], start = 0): T =
+  ## Copy up to N bytes from the given openArray, starting at `start` and
+  ## filling any missing bytes with zero.
+  ##
+  ## This is a lenient function in that `v` may contain both fewer and more
+  ## bytes than N and start might be out of bounds.
+  if v.len > 0:
+    assign(
+      result.data, v.toOpenArray(min(start, v.len), min(start + sizeof(T), v.len()) - 1)
+    )
 
 template default*(_: type Address): Address =
   # Avoid bad codegen where fixed bytes are zeroed byte-by-byte at call site

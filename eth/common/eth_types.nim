@@ -10,11 +10,12 @@
 ## from many places
 
 import
-  stew/byteutils, std/strutils,
-  "."/[accounts, addresses, base, blocks, hashes, receipts,  times, transactions]
+  stew/byteutils,
+  std/strutils,
+  "."/
+    [accounts, addresses, base, blocks, hashes, headers, receipts, times, transactions]
 
-export
-  accounts, addresses, base, blocks, hashes, receipts,  times, transactions
+export accounts, addresses, base, blocks, hashes, headers, receipts, times, transactions
 
 type
   BlockHashOrNumber* = object
@@ -40,21 +41,10 @@ type
   EthReceipt* = Receipt
   EthWithdrawapRequest* = WithdrawalRequest
 
-  # Names that don't appear in the spec and have no particular purpose any more -
-  # just use the underlying type directly
-  BloomFilter* {.deprecated.} = Bloom
-  StorageKey* {.deprecated.} = Bytes32
-  Hash256* {.deprecated.} = Hash32
-  KeccakHash* {.deprecated.} = Hash32
-  Blob* {.deprecated.} = seq[byte]
-  VersionedHashes* {.deprecated.} = seq[VersionedHash]
-
-
 template contractCreation*(tx: Transaction): bool =
   tx.to.isNone
 
-func init*(T: type BlockHashOrNumber, str: string): T
-          {.raises: [ValueError].} =
+func init*(T: type BlockHashOrNumber, str: string): T {.raises: [ValueError].} =
   if str.startsWith "0x":
     if str.len != sizeof(default(T).hash.data) * 2 + 2:
       raise newException(ValueError, "Block hash has incorrect length")
@@ -71,5 +61,21 @@ func `$`*(x: BlockHashOrNumber): string =
   else:
     $x.number
 
-func newAccount*(nonce: AccountNonce = 0, balance: UInt256 = 0.u256): Account {.deprecated: "Account.init".}=
+# Backwards-compatibility section - this will be removed in future versions of
+# this file
+
+import ./eth_hash
+export eth_hash
+
+type
+  # Names that don't appear in the spec and have no particular purpose any more -
+  # just use the underlying type directly
+  BloomFilter* {.deprecated.} = Bloom
+  StorageKey* {.deprecated.} = Bytes32
+  Blob* {.deprecated.} = seq[byte]
+  VersionedHashes* {.deprecated.} = seq[VersionedHash]
+
+func newAccount*(
+    nonce: AccountNonce = 0, balance: UInt256 = 0.u256
+): Account {.deprecated: "Account.init".} =
   Account.init(nonce = nonce, balance = balance)

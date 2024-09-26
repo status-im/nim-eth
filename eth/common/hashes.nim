@@ -1,4 +1,4 @@
-# nimbus
+# eth
 # Copyright (c) 2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -14,7 +14,7 @@
 ## Its usage was limited to ethash, the proof-of-work algorithm that has been
 ## replaced with proof-of-stake.
 
-import std/[typetraits, hashes], nimcrypto/keccak, ./base
+import std/[typetraits, hashes], nimcrypto/keccak, ./base, stew/assign2
 
 export hashes, keccak.update, keccak.finish
 
@@ -30,6 +30,20 @@ template to*(v: array[32, byte], _: type Hash32): Hash32 =
 
 template data*(v: Hash32): array[32, byte] =
   distinctBase(v)
+
+template `data=`*(a: Hash32, b: array[32, byte]) =
+  assign(distinctBase(a), b)
+
+func copyFrom*(T: type Hash32, v: openArray[byte], start = 0): T =
+  ## Copy up to N bytes from the given openArray, starting at `start` and
+  ## filling any missing bytes with zero.
+  ##
+  ## This is a lenient function in that `v` may contain both fewer and more
+  ## bytes than N and start might be out of bounds.
+  if v.len > 0:
+    assign(
+      result.data, v.toOpenArray(min(start, v.len), min(start + sizeof(T), v.len()) - 1)
+    )
 
 template default*(_: type Hash32): Hash32 =
   # Avoid bad codegen where fixed bytes are zeroed byte-by-byte at call site
@@ -63,8 +77,7 @@ const
   emptyHash32* =
     hash32"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
     ## Hash value of `keccak256([])`, ie the empty string
-  emptyRoot* =
-    hash32"56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+  emptyRoot* = hash32"56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
     ## Hash value of `keccak256(rlp(null))` which corresponds to the encoding
     ## of an empty MPT trie
 
