@@ -233,7 +233,7 @@ proc rlpEncode*(tx: Transaction): seq[byte] =
 
 func txHashNoSignature*(tx: Transaction): Hash32 =
   # Hash transaction without signature
-  keccak256(rlp.encode(tx))
+  keccak256(rlpEncode(tx))
 
 proc readTxLegacy*(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxLegacy
