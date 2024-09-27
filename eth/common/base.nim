@@ -32,6 +32,7 @@ type
     ##
     ## This type is specialized to `Bytes4`, `Bytes8` etc below.
     # A distinct array is used to avoid copying on trivial type conversions
+    # to and from other array-based types
 
   ChainId* = distinct uint64
     ## Chain identifier used for transaction signing to guard against replay
@@ -57,12 +58,7 @@ type
 template to*[N: static int](v: array[N, byte], T: type FixedBytes[N]): T =
   T(v)
 
-template default*[N](T: type FixedBytes[N]): T =
-  # Avoid bad codegen where fixed bytes are zeroed byte-by-byte at call site
-  const def = system.default(T)
-  def
-
-template data*(v: FixedBytes): array =
+template data*[N: static int](v: FixedBytes[N]): array[N, byte] =
   distinctBase(v)
 
 template `data=`*[N: static int](a: FixedBytes[N], b: array[N, byte]) =
@@ -78,6 +74,11 @@ func copyFrom*[N: static int](T: type FixedBytes[N], v: openArray[byte], start =
     assign(
       result.data, v.toOpenArray(min(start, v.len), min(start + sizeof(T), v.len()) - 1)
     )
+
+template default*[N](T: type FixedBytes[N]): T =
+  # Avoid bad codegen where fixed bytes are zeroed byte-by-byte at call site
+  const def = system.default(T)
+  def
 
 func `==`*(a, b: FixedBytes): bool {.inline.} =
   equalMem(addr a.data[0], addr b.data[0], a.N)
@@ -116,6 +117,9 @@ template makeFixedBytesN(N: static int) =
   type `Bytes N`* = FixedBytes[N]
 
   const `zeroBytes N`* = system.default(`Bytes N`)
+  template default*(T: type `Bytes N`): `Bytes N` =
+    # reuse single constant for precomputed N
+    `zeroBytes N`
 
   template `bytes N`*(s: static string): `Bytes N` =
     `Bytes N`.fromHex(s)
@@ -128,6 +132,19 @@ makeFixedBytesN(48)
 makeFixedBytesN(64)
 makeFixedBytesN(96)
 makeFixedBytesN(256)
+
+# Ethereum keeps integers as big-endian
+template to*(v: uint32, T: type Bytes4): T =
+  T v.toBytesBE()
+
+template to*(v: Bytes4, T: type uint32): T =
+  T.fromBytesBE(v)
+
+template to*(v: uint64, T: type Bytes8): T =
+  T v.toBytesBE()
+
+template to*(v: Bytes8, T: type uint64): T =
+  T.fromBytesBE(v)
 
 template to*[M, N: static int](v: FixedBytes[M], T: type StUint[N]): T =
   static:
@@ -152,7 +169,6 @@ type
   # In most other cases, code is easier to read and more flexible when it
   # doesn't use these aliases.
   AccountNonce* = uint64
-  BlockNonce* = Bytes8
   BlockNumber* = uint64
   Bloom* = Bytes256
   Bytes* = seq[byte] # TODO distinct?
@@ -160,9 +176,6 @@ type
   KzgProof* = Bytes48
 
   ForkID* = tuple[crc: uint32, nextFork: uint64] ## EIP 2364/2124
-
-func toBlockNonce*(n: uint64): BlockNonce =
-  BlockNonce(n.toBytesBE())
 
 func `==`*(a, b: NetworkId): bool {.borrow.}
 func `$`*(x: NetworkId): string {.borrow.}

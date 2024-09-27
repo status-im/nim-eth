@@ -22,6 +22,7 @@ type
   Hash32* = distinct Bytes32
     ## https://github.com/ethereum/execution-specs/blob/51fac24740e662844446439ceeb96a460aae0ba0/src/ethereum/crypto/hash.py#L19
   Root* = Hash32
+    ## Alias used for MPT roots
 
 const zeroHash32* = system.default(Hash32) ## Hash32 value consisting of all zeroes
 
@@ -52,6 +53,7 @@ template default*(_: type Hash32): Hash32 =
 func `==`*(a, b: Hash32): bool {.borrow.}
 
 func hash*(a: Hash32): Hash {.inline.} =
+  # Hashes are already supposed to be random so we use a faster mixing function
   var tmp {.noinit.}: array[4, uint64]
   copyMem(addr tmp[0], addr a.data[0], sizeof(a))
   cast[Hash](tmp[0] + tmp[1] + tmp[2] + tmp[3])
@@ -79,7 +81,7 @@ template to*(v: Hash32, _: type MDigest[256]): MDigest[256] =
   tmp
 
 const
-  emptyHash32* =
+  emptyKeccak256* =
     hash32"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
     ## Hash value of `keccak256([])`, ie the empty string
   emptyRoot* = hash32"56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"

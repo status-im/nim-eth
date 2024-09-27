@@ -10,6 +10,8 @@
 # Minimal compatibility layer with earlier versions of this file, to be removed
 # when users have upgraded
 
+{.deprecated.}
+
 import ./[addresses, hashes]
 
 export hashes

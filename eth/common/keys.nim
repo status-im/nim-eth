@@ -7,15 +7,12 @@
 
 {.push raises: [].}
 
-
 # This module contains adaptations of the general secp interface to help make
 # working with keys and signatures as they appear in Ethereum in particular:
 #
 # * Public keys as serialized in uncompressed format without the initial byte
 # * Shared secrets are serialized in raw format without the initial byte
 # * distinct types are used to avoid confusion with the "standard" secp types
-
-{.push raises: [].}
 
 import
   std/strformat,

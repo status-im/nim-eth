@@ -21,7 +21,7 @@ type Account* = object
 
 const
   EMPTY_ROOT_HASH* = emptyRoot
-  EMPTY_CODE_HASH* = emptyHash32
+  EMPTY_CODE_HASH* = emptyKeccak256
 
 func init*(
     T: type Account,
