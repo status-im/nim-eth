@@ -39,7 +39,7 @@ type
     ##
     ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-155.md
 
-  NetworkId* = distinct uint
+  NetworkId* = distinct uint64
     ## Network identifier - similar to chain id but used for network
     ## communication to ensure connectivity with peers on the same network.
     ## Often has the same value as ChainId, but not always

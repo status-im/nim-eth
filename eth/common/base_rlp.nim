@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import ./base, ../rlp
+import std/typetraits, ./base, ../rlp
 
 export base, rlp
 
@@ -90,13 +90,13 @@ proc read*[N: static int](
   T(rlp.read(type(result.data)))
 
 proc append*(w: var RlpWriter, id: ChainId) =
-  w.append(id.uint64)
+  w.append(distinctBase id)
 
 proc read*(rlp: var Rlp, T: type ChainId): T {.raises: [RlpError].} =
-  T(rlp.read(uint64))
+  T(rlp.read(distinctBase T))
 
 proc append*(w: var RlpWriter, id: NetworkId) =
-  w.append(id.uint)
+  w.append(distinctBase id)
 
 proc read*(rlp: var Rlp, T: type NetworkId): T {.raises: [RlpError].} =
-  T(rlp.read(uint))
+  T(rlp.read(distinctBase T))
