@@ -18,7 +18,8 @@ import
   nimcrypto/[bcmode, rijndael, sha2], stint, chronicles,
   stew/[byteutils, endians2], metrics,
   results,
-  ".."/../[rlp, keys],
+  ../../rlp,
+  ../../common/keys,
   "."/[messages_encoding, node, enr, hkdf, sessions]
 
 from stew/objects import checkedEnumAssign

@@ -16,7 +16,8 @@ import
   nimcrypto/[rijndael, keccak, utils],
   stew/[arrayops, byteutils, endians2, objects],
   results,
-  ".."/[keys, rlp],
+  ../rlp,
+  ../common/keys,
   ./ecies
 
 export results

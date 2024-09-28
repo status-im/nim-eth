@@ -10,7 +10,7 @@ import
   std/tables,
   chronos, chronicles, metrics,
   results,
-  ../keys,
+  ../common/keys,
   ./utp_socket,
   ./packets
 

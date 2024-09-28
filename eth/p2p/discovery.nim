@@ -11,7 +11,8 @@ import
   std/[times, net],
   chronos, stint, nimcrypto/keccak, chronicles,
   stew/objects, results,
-  ".."/[keys, rlp],
+  ../rlp,
+  ../common/keys,
   "."/[kademlia, enode]
 
 export

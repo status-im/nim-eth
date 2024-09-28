@@ -14,7 +14,6 @@ import
   ../../eth/p2p/discoveryv5/[enr, node, routing_table],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../../eth/utp/utp_discv5_protocol,
-  ../../eth/keys,
   ../../eth/utp/utp_router as rt,
   ../p2p/discv5_test_helper,
   ../stubloglevel

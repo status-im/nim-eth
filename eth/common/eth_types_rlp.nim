@@ -40,5 +40,5 @@ proc rlpHash*[T](v: T): Hash32 =
 proc rlpHash*(tx: PooledTransaction): Hash32 =
   keccak256(rlp.encode(tx.tx))
 
-func blockHash*(h: BlockHeader): Hash32 {.inline.} =
+func blockHash*(h: Header): Hash32 {.inline.} =
   rlpHash(h)

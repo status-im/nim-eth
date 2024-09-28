@@ -14,7 +14,7 @@ import
   ../../eth/utp/utp_router,
   ../../eth/utp/utp_socket,
   ../../eth/utp/packets,
-  ../../eth/keys,
+  ../../eth/common/keys,
   ../stubloglevel
 
 procSuite "uTP socket":

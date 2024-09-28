@@ -12,7 +12,7 @@ import
   testutils/unittests,
   ../../eth/utp/utp_router,
   ../../eth/utp/utp_protocol,
-  ../../eth/keys,
+  ../../eth/common/keys,
   ../../eth/p2p/discoveryv5/random2,
   ../stubloglevel
 

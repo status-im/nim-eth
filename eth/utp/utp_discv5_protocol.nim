@@ -12,7 +12,7 @@ import
   results,
   ../p2p/discoveryv5/[protocol, messages_encoding, encoding],
   ./utp_router,
-  ../keys
+  ../common/keys
 
 export utp_router, protocol, results
 

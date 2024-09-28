@@ -13,7 +13,7 @@
 import
   std/[uri, strutils, net],
   pkg/chronicles,
-  ../keys
+  ../common/keys
 
 export keys
 

@@ -11,7 +11,7 @@ import
   chronos,
   testutils/unittests,
   ./test_utils,
-  ../../eth/keys,
+  ../../eth/common/keys,
   ../../eth/utp/[utp_router, utp_protocol],
   ../stubloglevel
 

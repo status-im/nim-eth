@@ -10,7 +10,7 @@
 import
   std/[hashes, net],
   nimcrypto/keccak, stint, chronos, chronicles, results,
-  ../../keys, ../../net/utils,
+  ../../common/keys, ../../net/utils,
   ./enr
 
 export stint, results

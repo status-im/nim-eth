@@ -9,8 +9,7 @@
 import
   stew/byteutils,
   unittest2,
-  ../../eth/utp/packets,
-  ../../eth/keys
+  ../../eth/utp/packets
 
 suite "uTP packets test vectors":
   test "SYN packet":

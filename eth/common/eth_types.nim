@@ -76,7 +76,7 @@ type
   VersionedHashes* {.deprecated.} = seq[VersionedHash]
   BlockNonce* {.deprecated.} = Bytes8
 
-func toBlockNonce*(n: uint64): BlockNonce =
+func toBlockNonce*(n: uint64): BlockNonce {.deprecated.} =
   n.to(BlockNonce)
 
 func newAccount*(

@@ -10,7 +10,7 @@
 import
   std/net,
   unittest2,
-  ../../eth/keys, ../../eth/p2p/discoveryv5/[node, ip_vote]
+  ../../eth/common/keys, ../../eth/p2p/discoveryv5/[node, ip_vote]
 
 suite "IP vote":
   let rng = newRng()

@@ -10,7 +10,7 @@ import
   std/[tables, options, hashes, math],
   chronos, chronicles,
   ./utp_router,
-  ../keys
+  ../common/keys
 
 logScope:
   topics = "eth utp"

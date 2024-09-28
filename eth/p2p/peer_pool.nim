@@ -13,7 +13,6 @@
 import
   std/[os, tables, times, random, sequtils, options],
   chronos, chronicles,
-  ".."/[keys, common],
   ./private/p2p_types, "."/[discovery, kademlia, rlpx, enode]
 
 logScope:
@@ -220,7 +219,7 @@ proc maybeConnectToMorePeers(p: PeerPool) {.async.} =
   else:
     for n in p.nodesToConnect():
       await p.connQueue.addLast(n)
-    
+
     # The old version of the code (which did all the connection
     # attempts in serial, not parallel) actually *awaited* all
     # the connection attempts before reaching the code at the
@@ -235,7 +234,7 @@ proc maybeConnectToMorePeers(p: PeerPool) {.async.} =
     #
     # --Adam, Dec. 2022
     await sleepAsync(sleepBeforeTryingARandomBootnode)
-  
+
   # In some cases (e.g ROPSTEN or private testnets), the discovery table might
   # be full of bad peers, so if we can't connect to any peers we try a random
   # bootstrap node as well.

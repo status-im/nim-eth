@@ -12,7 +12,7 @@
 import
   unittest2,
   nimcrypto/[utils, sysrand],
-  ../../eth/keys, ../../eth/p2p/[auth, rlpxcrypt]
+  ../../eth/common/keys, ../../eth/p2p/[auth, rlpxcrypt]
 
 const data = [
   ("initiator_private_key",

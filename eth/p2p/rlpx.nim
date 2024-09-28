@@ -27,7 +27,7 @@
 import
   std/[algorithm, deques, options, typetraits, os],
   stew/shims/macros, chronicles, nimcrypto/utils, chronos, metrics,
-  ".."/[rlp, common, keys, async_utils],
+  ".."/[rlp, common, async_utils],
   ./private/p2p_types, "."/[kademlia, auth, rlpxcrypt, enode, p2p_protocol_dsl]
 
 # TODO: This doesn't get enabled currently in any of the builds, so we send a
