@@ -35,16 +35,13 @@ template data*(v: Hash32): array[32, byte] =
 template `data=`*(a: Hash32, b: array[32, byte]) =
   assign(distinctBase(a), b)
 
-func copyFrom*(T: type Hash32, v: openArray[byte], start = 0): T =
+template copyFrom*(T: type Hash32, v: openArray[byte], start = 0): T =
   ## Copy up to N bytes from the given openArray, starting at `start` and
   ## filling any missing bytes with zero.
   ##
   ## This is a lenient function in that `v` may contain both fewer and more
   ## bytes than N and start might be out of bounds.
-  if v.len > 0:
-    assign(
-      result.data, v.toOpenArray(min(start, v.len), min(start + sizeof(T), v.len()) - 1)
-    )
+  Hash32(Bytes32.copyFrom(v, start))
 
 template default*(_: type Hash32): Hash32 =
   # Avoid bad codegen where fixed bytes are zeroed byte-by-byte at call site

@@ -70,10 +70,9 @@ func copyFrom*[N: static int](T: type FixedBytes[N], v: openArray[byte], start =
   ##
   ## This is a lenient function in that `v` may contain both fewer and more
   ## bytes than N and start might be out of bounds.
-  if v.len > 0:
-    assign(
-      result.data, v.toOpenArray(min(start, v.len), min(start + sizeof(T), v.len()) - 1)
-    )
+  if v.len > start:
+    let n = min(N, v.len - start)
+    assign(result.data.toOpenArray(0, n - 1), v.toOpenArray(start, start + n - 1))
 
 template default*[N](T: type FixedBytes[N]): T =
   # Avoid bad codegen where fixed bytes are zeroed byte-by-byte at call site
@@ -97,13 +96,16 @@ func hash*[N: static int](v: FixedBytes[N]): Hash {.inline.} =
       result !& tmp
 
 func toHex*(v: FixedBytes): string =
+  ## Convert to lowercase hex without 0x prefix
   toHex(v.data)
 
 func to0xHex*(v: FixedBytes): string =
+  ## Convert to lowercase hex with 0x prefix
   to0xHex(v.data)
 
 func `$`*(v: FixedBytes): string =
-  # There's a strong tradition of including 0x in the execution layer
+  ## Convert the given value to a string representation suitable for presentation
+  ## To convert to a specific string encoding, use `toHex`, `to0xHex` etc
   to0xHex(v)
 
 func fromHex*(T: type FixedBytes, c: openArray[char]): T {.raises: [ValueError].} =

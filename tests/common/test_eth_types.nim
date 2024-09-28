@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  unittest2, std/strutils,
+  unittest2,
+  std/strutils,
   serialization/testing/generic_suite,
   ../../eth/common/[eth_types, eth_types_json_serialization],
   ../../eth/common/eth_types_rlp
@@ -15,8 +16,8 @@ func `==`*(lhs, rhs: BlockHashOrNumber): bool =
   else:
     lhs.number == rhs.number
 
-const
-  testHash = hash32"0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
+const testHash =
+  hash32"0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
 
 suite "BlockHashOrNumber":
   test "construction":
@@ -47,13 +48,14 @@ suite "BlockHashOrNumber":
       echo "A longer hash should not produce the value ", x
 
   test "serialization":
-    const hash = hash32"0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
+    const hash =
+      hash32"0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
 
     Json.roundtripTest BlockHashOrNumber(isHash: true, hash: hash),
-                       "\"0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588\""
+      "\"0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588\""
 
     Json.roundtripTest BlockHashOrNumber(isHash: false, number: 1209231231),
-                       "\"1209231231\""
+      "\"1209231231\""
 
 suite "Block encodings":
   test "EIP-4399 prevRandao field":
@@ -76,6 +78,14 @@ suite "Block encodings":
     check dh.parentBeaconBlockRoot.get == testHash
 
 suite "Address":
+  test "Bytes conversion":
+    let bytes =
+      bytes32"00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+    check:
+      bytes.to(Address) == address"ccddeeff00112233445566778899aabbccddeeff"
+      bytes.to(Address).to(Bytes32) ==
+        bytes32"000000000000000000000000ccddeeff00112233445566778899aabbccddeeff"
+
   test "EIP-55 checksum":
     let
       cases = [
@@ -88,7 +98,7 @@ suite "Address":
         "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
         "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
       ]
-      fails = cases[4..7]
+      fails = cases[4 .. 7]
 
     # https://eips.ethereum.org/EIPS/eip-55#test-cases
     for s in cases:
@@ -98,3 +108,24 @@ suite "Address":
     for s in fails:
       check:
         not Address.hasValidChecksum(s.toLowerAscii)
+
+suite "Bytes":
+  test "copyFrom":
+    check:
+      Bytes4.copyFrom([]) == default(Bytes4)
+      Bytes4.copyFrom([byte 0]) == default(Bytes4)
+      Bytes4.copyFrom([byte 0, 0, 0, 0, 0]) == default(Bytes4)
+      Bytes4.copyFrom([byte 1, 0], 1) == default(Bytes4)
+      Bytes4.copyFrom([byte 1, 1], 2) == default(Bytes4)
+      Bytes4.copyFrom([byte 1, 1], 20) == default(Bytes4)
+
+  test "toHex":
+    check:
+      bytes4"0xaabbccdd".toHex == "aabbccdd"
+      bytes4"0xaabbccdd".to0xHex == "0xaabbccdd"
+
+suite "Hashes":
+  test "constants":
+    check:
+      emptyKeccak256 == keccak256(default(array[0, byte]))
+      emptyRoot == keccak256([byte 128])

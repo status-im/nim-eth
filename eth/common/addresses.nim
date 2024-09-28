@@ -43,16 +43,13 @@ template data*(v: Address): array[20, byte] =
 template `data=`*[N: static int](a: FixedBytes[N], b: array[N, byte]) =
   assign(distinctBase(a), b)
 
-func copyFrom*(T: type Address, v: openArray[byte], start = 0): T =
+template copyFrom*(T: type Address, v: openArray[byte], start = 0): T =
   ## Copy up to N bytes from the given openArray, starting at `start` and
   ## filling any missing bytes with zero.
   ##
   ## This is a lenient function in that `v` may contain both fewer and more
   ## bytes than N and start might be out of bounds.
-  if v.len > 0:
-    assign(
-      result.data, v.toOpenArray(min(start, v.len), min(start + sizeof(T), v.len()) - 1)
-    )
+  Address(Bytes20.copyFrom(v, start))
 
 template default*(_: type Address): Address =
   # Avoid bad codegen where fixed bytes are zeroed byte-by-byte at call site
