@@ -14,7 +14,7 @@ import
 
 type
   EthHeader = object
-    header: BlockHeader
+    header: Header
 
 proc loadFile(x: int) =
   let fileName = "tests" / "common" / "eip2718" / "acl_block_" & $x & ".json"
@@ -98,13 +98,13 @@ suite "EIP-2718 transaction / receipt":
   for i in 0..<10:
     loadFile(i)
 
-  test "BlockHeader: rlp roundtrip EIP-1559 / EIP-4895 / EIP-4844":
-    proc doTest(h: BlockHeader) =
+  test "Header: rlp roundtrip EIP-1559 / EIP-4895 / EIP-4844":
+    proc doTest(h: Header) =
       let xy = rlp.encode(h)
-      let hh = rlp.decode(xy, BlockHeader)
+      let hh = rlp.decode(xy, Header)
       check h == hh
 
-    var h: BlockHeader
+    var h: Header
     doTest h
 
     # EIP-1559
@@ -112,8 +112,7 @@ suite "EIP-2718 transaction / receipt":
     doTest h
 
     # EIP-4895
-    h.withdrawalsRoot = Opt.some Hash32.fromHex(
-      "0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588")
+    h.withdrawalsRoot = Opt.some hash32"0x7a64245f7f95164f6176d90bd4903dbdd3e5433d555dd1385e81787f9672c588"
     doTest h
 
     # EIP-4844

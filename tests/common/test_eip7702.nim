@@ -15,14 +15,12 @@ import
   unittest2,
   ../../eth/common,
   ../../eth/rlp,
-  ../../eth/common/transaction,
-  ../../eth/keys
+  ../../eth/common/[keys, transactions_rlp]
 
 const
   recipient = address"095e7baea6a6c7c4c2dfeb977efac326af552d87"
-  zeroG1    = bytes48"0xc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
   source    = address"0x0000000000000000000000000000000000000001"
-  storageKey= default(StorageKey)
+  storageKey= default(Bytes32)
   accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]
   abcdef    = hexToSeqByte("abcdef")
   authList  = @[Authorization(
@@ -99,9 +97,7 @@ suite "Transaction EIP-7702 tests":
       tx = tx0(2)
 
     let
-      privateKey = PrivateKey.fromHex(keyHex).valueOr:
-        echo "ERROR: ", error
-        quit(QuitFailure)
+      privateKey = PrivateKey.fromHex(keyHex).expect("valid key")
       rlpTx = rlpEncode(tx)
       sig = sign(privateKey, rlpTx).toRaw
 
