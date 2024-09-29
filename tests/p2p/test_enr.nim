@@ -10,7 +10,7 @@ import
   std/[sequtils, net],
   stew/byteutils,
   unittest2,
-  ../../eth/p2p/discoveryv5/enr, ../../eth/[keys, rlp]
+  ../../eth/p2p/discoveryv5/enr, ../../eth/rlp, ../../eth/common/keys
 
 let rng = newRng()
 

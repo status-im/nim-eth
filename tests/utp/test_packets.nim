@@ -9,8 +9,7 @@
 import
   std/options,
   unittest2,
-  ../../eth/utp/packets,
-  ../../eth/keys
+  ../../eth/utp/packets
 
 suite "uTP packet encoding":
   test "Encode/decode SYN packet":

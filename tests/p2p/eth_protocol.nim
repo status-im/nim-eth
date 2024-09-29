@@ -20,8 +20,8 @@ p2pProtocol eth(version = 63,
     discard await peer.status(63,
                               network.networkId,
                               0.u256,
-                              Hash256(),
-                              Hash256(),
+                              default(Hash32),
+                              default(Hash32),
                               timeout = chronos.seconds(10))
 
   handshake:
@@ -29,26 +29,26 @@ p2pProtocol eth(version = 63,
                 protocolVersion: uint,
                 networkId: NetworkId,
                 totalDifficulty: DifficultyInt,
-                bestHash: KeccakHash,
-                genesisHash: KeccakHash)
+                bestHash: Hash32,
+                genesisHash: Hash32)
 
   requestResponse:
-    proc getBlockHeaders(peer: Peer, request: openArray[KeccakHash]) {.gcsafe.} =
-      var headers: seq[BlockHeader]
+    proc getBlockHeaders(peer: Peer, request: openArray[Hash32]) {.gcsafe.} =
+      var headers: seq[Header]
       await response.send(headers)
 
-    proc blockHeaders(p: Peer, headers: openArray[BlockHeader])
+    proc blockHeaders(p: Peer, headers: openArray[Header])
 
   requestResponse:
-    proc getBlockBodies(peer: Peer, hashes: openArray[KeccakHash]) {.gcsafe.} = discard
+    proc getBlockBodies(peer: Peer, hashes: openArray[Hash32]) {.gcsafe.} = discard
     proc blockBodies(peer: Peer, blocks: openArray[BlockBody])
 
   nextID 13
 
   requestResponse:
-    proc getNodeData(peer: Peer, hashes: openArray[KeccakHash]) = discard
-    proc nodeData(peer: Peer, data: openArray[Blob])
+    proc getNodeData(peer: Peer, hashes: openArray[Hash32]) = discard
+    proc nodeData(peer: Peer, data: openArray[seq[byte]])
 
   requestResponse:
-    proc getReceipts(peer: Peer, hashes: openArray[KeccakHash]) = discard
+    proc getReceipts(peer: Peer, hashes: openArray[Hash32]) = discard
     proc receipts(peer: Peer, receipts: openArray[Receipt])

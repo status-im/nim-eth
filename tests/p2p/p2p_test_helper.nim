@@ -11,7 +11,7 @@
 import
   std/strutils,
   chronos,
-  ../../eth/[keys, p2p], ../../eth/p2p/[discovery, enode]
+  ../../eth/p2p, ../../eth/common/keys, ../../eth/p2p/[discovery, enode]
 
 var nextPort = 30303
 

@@ -13,7 +13,7 @@ import
   ./test_utils,
   ../../eth/utp/utp_router,
   ../../eth/utp/packets,
-  ../../eth/keys,
+  ../../eth/common/keys,
   ../stubloglevel
 
 proc hash*(x: UtpSocketKey[int]): Hash =

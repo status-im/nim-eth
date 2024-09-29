@@ -8,7 +8,7 @@
 
 import
   unittest2,
-  stew/byteutils, nimcrypto/[keccak, hash],
+  stew/byteutils,
   ../../eth/trie/[db, binary, binaries, branches]
 
 suite "examples":
@@ -77,7 +77,7 @@ suite "examples":
     check branchs.len < beforeDeleteLen
 
     var node = branchs[1]
-    let nodeHash = keccak256.digest(node)
+    let nodeHash = keccak256(node)
     var nodes = getTrieNodes(db, @(nodeHash.data))
     check nodes.len == branchs.len - 1
 

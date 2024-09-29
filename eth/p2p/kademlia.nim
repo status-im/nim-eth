@@ -10,7 +10,7 @@
 import
   std/[tables, hashes, times, algorithm, sets, sequtils],
   chronos, chronicles, stint, nimcrypto/keccak, metrics,
-  ../keys, ./discoveryv5/random2,
+  ../common/keys, ./discoveryv5/random2,
   ./enode
 
 export sets # TODO: This should not be needed, but compilation fails otherwise

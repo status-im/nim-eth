@@ -16,10 +16,13 @@ import
   nimcrypto/[rijndael, keccak, utils],
   stew/[arrayops, byteutils, endians2, objects],
   results,
-  ".."/[keys, rlp],
+  ../rlp,
+  ../common/keys,
   ./ecies
 
 export results
+
+type keccak256 = keccak.keccak256
 
 const
   SupportedRlpxVersion* = 4'u8

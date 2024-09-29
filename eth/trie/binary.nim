@@ -70,7 +70,7 @@ proc get*(self: BinaryTrie, key: openArray[byte]): seq[byte] {.inline.} =
   return self.getAux(self.rootHash, keyBits)
 
 proc hashAndSave*(self: BinaryTrie, node: openArray[byte]): TrieNodeKey =
-  result = @(keccakHash(node).data)
+  result = @(keccak256(node).data)
   self.db.put(result, node)
 
 template saveKV(self: BinaryTrie, keyPath: TrieBitSeq | bool, child: openArray[byte]): untyped =

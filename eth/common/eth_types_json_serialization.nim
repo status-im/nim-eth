@@ -6,13 +6,9 @@
 
 {.push raises: [].}
 
-import
-  std/[times, net],
-  json_serialization, nimcrypto/[hash, utils],
-  ./eth_types
+import std/[times, net], json_serialization, nimcrypto/[hash, utils], ./eth_types
 
-export
-  json_serialization
+export json_serialization
 
 proc writeValue*(w: var JsonWriter, a: MDigest) {.raises: [IOError].} =
   w.writeValue a.data.toHex(true)
@@ -25,8 +21,29 @@ proc readValue*(
   except ValueError:
     raiseUnexpectedValue(r, "Hex string expected")
 
-proc writeValue*(
-    w: var JsonWriter, value: StUint) {.inline, raises: [IOError].} =
+proc writeValue*(w: var JsonWriter, a: Hash32) {.raises: [IOError].} =
+  w.writeValue a.data.to0xHex()
+
+proc readValue*(
+    r: var JsonReader, a: var Hash32
+) {.inline, raises: [IOError, SerializationError].} =
+  try:
+    a = fromHex(type(a), r.readValue(string))
+  except ValueError:
+    raiseUnexpectedValue(r, "Hex string expected")
+
+proc writeValue*(w: var JsonWriter, a: FixedBytes) {.raises: [IOError].} =
+  w.writeValue a.data.to0xHex()
+
+proc readValue*[N](
+    r: var JsonReader, a: var FixedBytes[N]
+) {.inline, raises: [IOError, SerializationError].} =
+  try:
+    a = fromHex(type(a), r.readValue(string))
+  except ValueError:
+    raiseUnexpectedValue(r, "Hex string expected")
+
+proc writeValue*(w: var JsonWriter, value: StUint) {.inline, raises: [IOError].} =
   w.writeValue $value
 
 proc readValue*(
@@ -48,20 +65,7 @@ proc readValue*(
 ) {.inline, raises: [IOError, SerializationError].} =
   t = fromUnix r.readValue(int)
 
-# TODO: remove this once case object are fully supported
-# by the serialization library
-proc writeValue*(
-    w: var JsonWriter, value: HashOrNum) {.raises: [IOError].} =
-  w.beginRecord(HashOrNum)
-  w.writeField("isHash", value.isHash)
-  if value.isHash:
-    w.writeField("hash", value.hash)
-  else:
-    w.writeField("number", value.number)
-  w.endRecord()
-
-proc writeValue*(
-    w: var JsonWriter, value: BlockHashOrNumber) {.raises: [IOError].} =
+proc writeValue*(w: var JsonWriter, value: BlockHashOrNumber) {.raises: [IOError].} =
   w.writeValue $value
 
 proc readValue*(
@@ -70,4 +74,6 @@ proc readValue*(
   try:
     value = init(BlockHashOrNumber, r.readValue(string))
   except ValueError:
-    r.raiseUnexpectedValue("A hex-encoded block hash or a decimal block number expected")
+    r.raiseUnexpectedValue(
+      "A hex-encoded block hash or a decimal block number expected"
+    )

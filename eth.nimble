@@ -10,7 +10,7 @@ requires "nim >= 1.6.0",
          "nimcrypto",
          "stint",
          "secp256k1",
-         "chronos#head",
+         "chronos",
          "chronicles",
          "stew",
          "nat_traversal",
@@ -47,9 +47,6 @@ proc run(path, outdir: string) =
 task test_keyfile, "Run keyfile tests":
   run "tests/keyfile/all_tests", "keyfile"
 
-task test_keys, "Run keys tests":
-  run "tests/keys/all_tests", "keys"
-
 task test_discv5, "Run discovery v5 tests":
   run "tests/p2p/all_discv5_tests", "p2p"
 
@@ -78,7 +75,6 @@ task test, "Run all tests":
   run "tests/test_bloom", ""
 
   test_keyfile_task()
-  test_keys_task()
   test_rlp_task()
   test_p2p_task()
   test_trie_task()
@@ -87,7 +83,6 @@ task test, "Run all tests":
   test_common_task()
 
 task test_discv5_full, "Run discovery v5 and its dependencies tests":
-  test_keys_task()
   test_rlp_task()
   test_discv5_task()
 

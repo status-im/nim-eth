@@ -13,10 +13,9 @@
 import
   ./utp/all_utp_tests,
   ./keyfile/all_tests,
-  ./keys/all_tests,
   ./p2p/all_tests,
   ./rlp/all_tests,
   ./trie/all_tests,
-  ./db/all_tests,  
+  ./db/all_tests,
   ./common/all_tests,
   ./test_bloom

@@ -16,7 +16,8 @@ import
   stew/base64,
   results,
   chronicles,
-  ".."/../[rlp, keys],
+  ../../rlp,
+  ../../common/keys,
   ../../net/utils
 
 export results, rlp, keys

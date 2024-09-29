@@ -11,7 +11,8 @@ import
   std/[times, net],
   chronos, stint, nimcrypto/keccak, chronicles,
   stew/objects, results,
-  ".."/[keys, rlp],
+  ../rlp,
+  ../common/keys,
   "."/[kademlia, enode]
 
 export
@@ -42,6 +43,8 @@ type
   DiscProtocolError* = object of CatchableError
 
   DiscResult*[T] = Result[T, cstring]
+
+  keccak256 = keccak.keccak256
 
 const MinListLen: array[CommandId, int] = [4, 3, 2, 2, 1, 2]
 

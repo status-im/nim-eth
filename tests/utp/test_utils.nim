@@ -1,8 +1,7 @@
 import
   chronos,
   ../../eth/utp/utp_socket,
-  ../../eth/utp/packets,
-  ../../eth/keys
+  ../../eth/utp/packets
 
 type AssertionCallback = proc(): bool {.gcsafe, raises: [].}
 

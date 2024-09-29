@@ -25,9 +25,9 @@
 {.push raises: [].}
 
 import
-  std/[tables, algorithm, deques, hashes, options, typetraits, os],
+  std/[algorithm, deques, options, typetraits, os],
   stew/shims/macros, chronicles, nimcrypto/utils, chronos, metrics,
-  ".."/[rlp, common, keys, async_utils],
+  ".."/[rlp, common, async_utils],
   ./private/p2p_types, "."/[kademlia, auth, rlpxcrypt, enode, p2p_protocol_dsl]
 
 # TODO: This doesn't get enabled currently in any of the builds, so we send a
@@ -75,6 +75,8 @@ type
   EmptyList = object
   DisconnectionReasonList = object
     value: DisconnectionReason
+
+  Address = enode.Address
 
 proc read(rlp: var Rlp; T: type DisconnectionReasonList): T
     {.gcsafe, raises: [RlpError].} =

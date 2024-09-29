@@ -13,7 +13,7 @@ import
   std/[strutils, json],
   nimcrypto/[bcmode, hmac, rijndael, pbkdf2, sha2, sysrand, utils, keccak, scrypt],
   results,
-  ../keys,
+  ".."/common/[addresses, keys],
   ./uuid
 
 export results
@@ -170,7 +170,7 @@ proc deriveKey(password: string,
       discard ctx.pbkdf2(password, salt, c, output)
       ok(output)
     of HashKECCAK256:
-      var ctx: HMAC[keccak256]
+      var ctx: HMAC[keccak.keccak256]
       discard ctx.pbkdf2(password, salt, c, output)
       ok(output)
     of HashKECCAK384:
@@ -345,7 +345,7 @@ proc createKeyFileJson*(seckey: PrivateKey,
 
   ok(%*
     {
-      "address": seckey.toPublicKey().toAddress(false),
+      "address": seckey.toPublicKey().to(Address).toHex(),
       "crypto": {
         "cipher": $cryptkind,
         "cipherparams": {

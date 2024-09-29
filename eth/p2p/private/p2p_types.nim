@@ -14,10 +14,10 @@ import
   std/[deques, tables],
   chronos,
   results,
-  ".."/../[rlp, keys], ../../common/eth_types,
+  ".."/../[rlp], ../../common/[base, keys],
   ".."/[enode, kademlia, discovery, rlpxcrypt]
 
-export eth_types.NetworkId
+export base.NetworkId
 
 const
   useSnappy* = defined(useSnappy)
@@ -211,6 +211,8 @@ type
     SelfConnection = 0x0A,
     MessageTimeout = 0x0B,
     SubprotocolReason = 0x10
+
+  Address = enode.Address
 
 proc `$`*(peer: Peer): string = $peer.remote
 

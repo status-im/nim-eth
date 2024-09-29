@@ -186,7 +186,7 @@ proc verifyProof(
 
 proc verifyMptProof*(
     branch: seq[seq[byte]],
-    rootHash: KeccakHash,
+    rootHash: Hash32,
     key: seq[byte],
     value: seq[byte]): MptProofVerificationResult =
   ## Verifies provided proof of inclusion (trie branch) against provided trie
@@ -215,7 +215,7 @@ proc verifyMptProof*(
   for node in branch:
     if len(node) == 0:
       return invalidProof("empty mpt node in proof")
-    let nodeHash = keccakHash(node)
+    let nodeHash = keccak256(node)
     db.put(nodeHash.data, node)
 
   let

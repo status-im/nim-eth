@@ -15,7 +15,7 @@
 import
   stew/endians2, results,
   nimcrypto/[rijndael, bcmode, hash, hmac, sha2, utils],
-  ../keys
+  ../common/keys
 
 export results
 

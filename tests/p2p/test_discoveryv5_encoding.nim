@@ -11,7 +11,6 @@ import
   std/[options, sequtils, tables, net],
   unittest2,
   stint, stew/byteutils,
-  ../../eth/keys,
   ../../eth/p2p/discoveryv5/[messages_encoding, encoding, enr, node, sessions],
   ../stubloglevel
 

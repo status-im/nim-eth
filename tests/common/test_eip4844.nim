@@ -16,11 +16,10 @@ import
   ../../eth/rlp,
   ../../eth/common/transaction
 
-
 const
-  recipient = hexToByteArray[20]("095e7baea6a6c7c4c2dfeb977efac326af552d87")
-  zeroG1    = hexToByteArray[48]("0xc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")
-  source    = hexToByteArray[20]("0x0000000000000000000000000000000000000001")
+  recipient = address"095e7baea6a6c7c4c2dfeb977efac326af552d87"
+  zeroG1    = bytes48"0xc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  source    = address"0x0000000000000000000000000000000000000001"
   storageKey= default(StorageKey)
   accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]
   blob      = default(NetworkBlob)
@@ -95,7 +94,7 @@ proc tx5(i: int): PooledTransaction =
 
 proc tx6(i: int): PooledTransaction =
   const
-    digest = "010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014".toDigest
+    digest = bytes32"010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014"
 
   PooledTransaction(
     tx: Transaction(
@@ -114,7 +113,7 @@ proc tx6(i: int): PooledTransaction =
 
 proc tx7(i: int): PooledTransaction =
   const
-    digest = "01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e".toDigest
+    digest = bytes32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
 
   PooledTransaction(
     tx: Transaction(
@@ -130,7 +129,7 @@ proc tx7(i: int): PooledTransaction =
 
 proc tx8(i: int): PooledTransaction =
   const
-    digest = "01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e".toDigest
+    digest = bytes32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
 
   PooledTransaction(
     tx: Transaction(

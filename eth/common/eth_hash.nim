@@ -1,4 +1,5 @@
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# eth
+# Copyright (c) 2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -6,41 +7,28 @@
 
 {.push raises: [].}
 
-## keccak256 is used across ethereum as the "default" hash function and this
-## module provides a type and some helpers to produce such hashes
+# Minimal compatibility layer with earlier versions of this file, to be removed
+# when users have upgraded
 
-import
-  nimcrypto/[keccak, hash]
+{.deprecated.}
 
-export
-  keccak.update, keccak.finish, hash
+import ./[addresses, hashes]
+
+export hashes
+
+from nimcrypto import MDigest
 
 type
-  KeccakHash* = MDigest[256]
-    ## A hash value computed using keccak256
-    ## note: this aliases Eth2Digest too, which uses a different hash!
+  Hash256* {.deprecated.} = Hash32
+  KeccakHash* {.deprecated.} = Hash32
 
-template withKeccakHash*(body: untyped): KeccakHash =
-  ## This little helper will init the hash function and return the sliced
-  ## hash:
-  ## let hashOfData = withHash: h.update(data)
-  block:
-    var h {.inject.}: keccak256
-    # init(h) # not needed for new instance
-    body
-    finish(h)
+template keccakHash*(v: openArray[byte]): Hash32 {.deprecated.} =
+  keccak256(v)
 
-func keccakHash*(input: openArray[byte]): KeccakHash {.noinit.} =
-    # We use the init-update-finish interface to avoid
-    # the expensive burning/clearing memory (20~30% perf)
-    var ctx: keccak256
-    ctx.update(input)
-    ctx.finish()
+template keccakHash*(v: Address): Hash32 {.deprecated.} =
+  keccak256(v.data)
 
-func keccakHash*(input: openArray[char]): KeccakHash {.noinit.} =
-  keccakHash(input.toOpenArrayByte(0, input.high()))
+from nimcrypto/hash import MDigest
 
-func keccakHash*(a, b: openArray[byte]): KeccakHash =
-  withKeccakHash:
-    h.update a
-    h.update b
+converter toMDigest*(v: Hash32): MDigest[256] {.deprecated.} =
+  MDigest[256](data: v.data)

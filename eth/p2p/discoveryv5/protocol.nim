@@ -84,7 +84,8 @@ import
   std/[tables, sets, math, sequtils, algorithm],
   json_serialization/std/net,
   results, chronicles, chronos, stint, metrics,
-  ".."/../[rlp, keys],
+  ../../rlp,
+  ../../common/keys,
   "."/[messages_encoding, encoding, node, routing_table, enr, random2, sessions,
     ip_vote, nodes_verification]
 

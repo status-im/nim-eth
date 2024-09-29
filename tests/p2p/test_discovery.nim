@@ -11,8 +11,8 @@
 
 import
   std/sequtils,
-  chronos, stew/byteutils, nimcrypto, testutils/unittests,
-  ../../eth/keys, ../../eth/p2p/[discovery, kademlia, enode],
+  chronos, stew/byteutils, nimcrypto/keccak, testutils/unittests,
+  ../../eth/common/keys, ../../eth/p2p/[discovery, kademlia, enode],
   ../stubloglevel
 
 proc localAddress(port: int): Address =

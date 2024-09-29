@@ -260,7 +260,7 @@ suite "hexary trie":
       History = object
         keys: seq[seq[byte]]
         values: seq[seq[byte]]
-        rootHash: KeccakHash
+        rootHash: Hash32
 
     const
       listLength = 30
@@ -334,7 +334,7 @@ suite "hexary trie":
       nonPruningTrie = initHexaryTrie(memdb, false)
       keys = randList(seq[byte], randGen(5, 77), randGen(numKeyVal))
       vals = randList(seq[byte], randGen(1, 57), randGen(numKeyVal))
-      roots = newSeq[KeccakHash](numKeyVal)
+      roots = newSeq[Hash32](numKeyVal)
 
     for i in 0 ..< keys.len:
       nonPruningTrie.put(keys[i], vals[i])
