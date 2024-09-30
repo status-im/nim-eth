@@ -6,15 +6,20 @@
 
 {.push raises: [].}
 
-import std/[times, net], json_serialization, nimcrypto/[hash, utils], ./eth_types
+import std/typetraits, json_serialization, ./eth_types
 
-export json_serialization
+export json_serialization, eth_types
 
-proc writeValue*(w: var JsonWriter, a: MDigest) {.raises: [IOError].} =
-  w.writeValue a.data.toHex(true)
+# This module contains "convenience formatting" for logging `eth_types` - this
+# formatting does not conform to any particular Ethereum-based standard - in
+# particular, it does not conform to the JSON-RPC conventions which instead
+# can be found in `nim-web3`.
+
+proc writeValue*(w: var JsonWriter, a: Address) {.raises: [IOError].} =
+  w.writeValue $a
 
 proc readValue*(
-    r: var JsonReader, a: var MDigest
+    r: var JsonReader, a: var Address
 ) {.inline, raises: [IOError, SerializationError].} =
   try:
     a = fromHex(type(a), r.readValue(string))
@@ -22,7 +27,7 @@ proc readValue*(
     raiseUnexpectedValue(r, "Hex string expected")
 
 proc writeValue*(w: var JsonWriter, a: Hash32) {.raises: [IOError].} =
-  w.writeValue a.data.to0xHex()
+  w.writeValue $a
 
 proc readValue*(
     r: var JsonReader, a: var Hash32
@@ -33,7 +38,7 @@ proc readValue*(
     raiseUnexpectedValue(r, "Hex string expected")
 
 proc writeValue*(w: var JsonWriter, a: FixedBytes) {.raises: [IOError].} =
-  w.writeValue a.data.to0xHex()
+  w.writeValue $a
 
 proc readValue*[N](
     r: var JsonReader, a: var FixedBytes[N]
@@ -51,19 +56,13 @@ proc readValue*(
 ) {.inline, raises: [IOError, SerializationError].} =
   value = parse(r.readValue(string), type(value))
 
-proc writeValue*(w: var JsonWriter, value: StInt) {.raises: [IOError].} =
-  # The Ethereum Yellow Paper defines the RLP serialization only
-  # for unsigned integers:
-  {.error: "RLP serialization of signed integers is not allowed".}
-  discard
-
-proc writeValue*(w: var JsonWriter, t: Time) {.inline, raises: [IOError].} =
-  w.writeValue t.toUnix()
+proc writeValue*(w: var JsonWriter, t: EthTime) {.inline, raises: [IOError].} =
+  w.writeValue distinctBase(t)
 
 proc readValue*(
-    r: var JsonReader, t: var Time
+    r: var JsonReader, t: var EthTime
 ) {.inline, raises: [IOError, SerializationError].} =
-  t = fromUnix r.readValue(int)
+  t = EthTime r.readValue(uint64)
 
 proc writeValue*(w: var JsonWriter, value: BlockHashOrNumber) {.raises: [IOError].} =
   w.writeValue $value
