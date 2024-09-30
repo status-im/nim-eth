@@ -8,15 +8,15 @@ import
 
 type
   Transaction = object
-    amount: int
-    time: Time
+    amount: uint64
+    time: uint64
     sender: string
     receiver: string
 
   Foo = object
     x: uint64
     y: string
-    z: seq[int]
+    z: seq[uint64]
 
   Bar = object
     b: string
@@ -24,7 +24,7 @@ type
 
   CustomSerialized = object
     customFoo {.rlpCustomSerialization.}: Foo
-    ignored {.rlpIgnore.}: int
+    ignored {.rlpIgnore.}: uint64
 
 rlpFields Foo,
   x, y, z
@@ -34,19 +34,19 @@ rlpFields Transaction,
 
 proc append*(rlpWriter: var RlpWriter, holder: CustomSerialized, f: Foo) =
   rlpWriter.append(f.x)
-  rlpWriter.append(f.y.len)
+  rlpWriter.append(uint64 f.y.len)
   rlpWriter.append(holder.ignored)
 
 proc read*(rlp: var Rlp, holder: var CustomSerialized, T: type Foo): Foo =
   result.x = rlp.read(uint64)
-  result.y = newString(rlp.read(int))
-  holder.ignored = rlp.read(int) * 2
+  result.y = newString(rlp.read(uint64))
+  holder.ignored = rlp.read(uint64) * 2
 
 proc suite() =
   suite "object serialization":
     test "encoding and decoding an object":
       var originalBar = Bar(b: "abracadabra",
-                            f: Foo(x: 5'u64, y: "hocus pocus", z: @[100, 200, 300]))
+                            f: Foo(x: 5'u64, y: "hocus pocus", z: @[uint64 100, 200, 300]))
 
       var bytes = encode(originalBar)
       var r = rlpFromBytes(bytes)
@@ -55,13 +55,13 @@ proc suite() =
       check:
         originalBar == restoredBar
 
-      var t1 = Transaction(time: getTime(), amount: 1000, sender: "Alice", receiver: "Bob")
+      var t1 = Transaction(time: 100, amount: 1000, sender: "Alice", receiver: "Bob")
       bytes = encode(t1)
       var t2 = bytes.decode(Transaction)
 
       check:
         bytes.toHex == "cd85416c69636583426f628203e8" # verifies that Alice comes first
-        t2.time == default(Time)
+        t2.time == 0
         t2.sender == "Alice"
         t2.receiver == "Bob"
         t2.amount == 1000

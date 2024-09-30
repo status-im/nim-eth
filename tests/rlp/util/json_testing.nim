@@ -9,9 +9,11 @@ proc append(output: var RlpWriter, js: JsonNode) =
   of JNull, JFloat, JObject:
     raise newException(ValueError, "Unsupported JSON value type " & $js.kind)
   of JBool:
-    output.append js.bval.int
+    output.append js.bval
   of JInt:
-    output.append int(js.num)
+    if js.num < 0:
+      raise  newException(ValueError, "Integer out of range: " & $js.num)
+    output.append uint64(js.num)
   of JString:
     output.append js.str
   of JArray:

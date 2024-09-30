@@ -9,7 +9,7 @@ type
   HelloObj = object
     version*: uint
     clientId*: string
-    capabilities*: seq[(string,int)]
+    capabilities*: seq[(string,uint)]
     listenPort*: uint
     nodeId*: array[64, byte]
 

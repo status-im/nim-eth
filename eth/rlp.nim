@@ -502,10 +502,7 @@ func validate*(self: Rlp) =
 # score in order to facilitate easier overloading with user types:
 template read*(rlp: var Rlp, T: type): auto =
   when T is SomeSignedInt:
-    let value = readImpl(rlp, uint64)
-    if value > uint64(T.high()):
-      raiseIntOutOfBounds()
-    T value
+    {.error "Signed integer encoding is not defined for rlp".}
   else:
     readImpl(rlp, T)
 
