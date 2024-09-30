@@ -64,16 +64,24 @@ suite "test api usage":
 
       MyObj = object
         a: array[3, char]
-        b: int
+        b: uint64
         c: MyEnum
+
+      IntObj = object
+        v: int
 
     var input: MyObj
     input.a = ['e', 't', 'h']
     input.b = 63
     input.c = bar
 
+
     var writer = initRlpWriter()
     writer.append(input)
+
+    check:
+      not compiles(writer.append(default(IntObj)))
+
     let bytes = writer.finish()
     var rlp = rlpFromBytes(bytes)
 
@@ -85,7 +93,7 @@ suite "test api usage":
     var writer = initRlpList(3)
     writer.append "foo"
     writer.append ["bar", "baz"]
-    writer.append [30, 40, 50]
+    writer.append [uint64 30, 40, 50]
 
     var
       bytes = writer.finish
@@ -108,14 +116,14 @@ suite "test api usage":
         }
       """
 
-    bytes = encodeList(6000,
+    bytes = encodeList(uint64 6000,
                       "Lorem ipsum dolor sit amet",
                       "Donec ligula tortor, egestas eu est vitae")
 
     rlp = rlpFromBytes bytes
     check:
       rlp.listLen == 3
-      rlp.listElem(0).toInt(int) == 6000
+      rlp.listElem(0).toInt(uint64) == 6000
       rlp.listElem(1).toString == "Lorem ipsum dolor sit amet"
       rlp.listElem(2).toString == "Donec ligula tortor, egestas eu est vitae"
 
@@ -127,8 +135,8 @@ suite "test api usage":
     check list.toString == "Lorem ipsum dolor sit amet"
     list.skipElem
 
-    check list.toInt(int32) == 6000.int32
-    var intVar: int
+    check list.toInt(uint32) == 6000.uint32
+    var intVar: uint32
     list >> intVar
     check intVar == 6000
 
@@ -146,19 +154,19 @@ suite "test api usage":
       tok.toHex == "40ef02798f211da2e8173d37f255be908871ae65060dbb2f77fb29c0421447f4"
 
   test "nested lists":
-    let listBytes = encode([[1, 2, 3], [5, 6, 7]])
+    let listBytes = encode([[uint64 1, 2, 3], [uint64 5, 6, 7]])
     let listRlp = rlpFromBytes listBytes
     let sublistRlp0 = listRlp.listElem(0)
     let sublistRlp1 = listRlp.listElem(1)
-    check sublistRlp0.listElem(0).toInt(int) == 1
-    check sublistRlp0.listElem(1).toInt(int) == 2
-    check sublistRlp0.listElem(2).toInt(int) == 3
-    check sublistRlp1.listElem(0).toInt(int) == 5
-    check sublistRlp1.listElem(1).toInt(int) == 6
-    check sublistRlp1.listElem(2).toInt(int) == 7
+    check sublistRlp0.listElem(0).toInt(uint64) == 1
+    check sublistRlp0.listElem(1).toInt(uint64) == 2
+    check sublistRlp0.listElem(2).toInt(uint64) == 3
+    check sublistRlp1.listElem(0).toInt(uint64) == 5
+    check sublistRlp1.listElem(1).toInt(uint64) == 6
+    check sublistRlp1.listElem(2).toInt(uint64) == 7
 
   test "encoding length":
-    let listBytes = encode([1,2,3,4,5])
+    let listBytes = encode([uint64 1,2,3,4,5])
     let listRlp = rlpFromBytes listBytes
     check listRlp.listLen == 5
 
@@ -208,8 +216,8 @@ suite "test api usage":
         bar = 0x01
 
     var writer = initRlpWriter()
-    writer.append(1) # valid
-    writer.append(2) # invalid
+    writer.append(byte 1) # valid
+    writer.append(byte 2) # invalid
     writer.append(cast[uint64](-1)) # invalid
     let bytes = writer.finish()
     var rlp = rlpFromBytes(bytes)
@@ -231,10 +239,10 @@ suite "test api usage":
         baz = 0x0100
 
     var writer = initRlpWriter()
-    writer.append(1) # valid
-    writer.append(2) # invalid - enum hole value
-    writer.append(256) # valid
-    writer.append(257) # invalid - too large
+    writer.append(1'u64) # valid
+    writer.append(2'u64) # invalid - enum hole value
+    writer.append(256'u64) # valid
+    writer.append(257'u64) # invalid - too large
     let bytes = writer.finish()
     var rlp = rlpFromBytes(bytes)
 

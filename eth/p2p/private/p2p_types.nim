@@ -40,7 +40,7 @@ type
     protocolStates*: seq[RootRef]
     discovery*: DiscoveryProtocol
     when useSnappy:
-      protocolVersion*: uint
+      protocolVersion*: uint64
     rng*: ref HmacDrbgContext
 
   Peer* = ref object
@@ -50,7 +50,7 @@ type
     # Private fields:
     transport*: StreamTransport
     dispatcher*: Dispatcher
-    lastReqId*: Opt[uint]
+    lastReqId*: Opt[uint64]
     secretsState*: SecretState
     connectionState*: ConnectionState
     protocolStates*: seq[RootRef]
@@ -86,7 +86,7 @@ type
 
   Capability* = object
     name*: string
-    version*: int
+    version*: uint64
 
   EthP2PError* = object of CatchableError
 
@@ -112,7 +112,7 @@ type
 
   ProtocolInfo* = ref object
     name*: string
-    version*: int
+    version*: uint64
     messages*: seq[MessageInfo]
     index*: int # the position of the protocol in the
                 # ordered list of supported protocols
@@ -124,7 +124,7 @@ type
     disconnectHandler*: DisconnectionHandler
 
   MessageInfo* = ref object
-    id*: uint # this is a `msgId` (as opposed to a `reqId`)
+    id*: uint64 # this is a `msgId` (as opposed to a `reqId`)
     name*: string
 
     # Private fields:
@@ -142,11 +142,11 @@ type
     # protocol. If the other peer also supports the protocol, the stored
     # offset indicates the numeric value of the first message of the protocol
     # (for this particular connection). If the other peer doesn't support the
-    # particular protocol, the stored offset is `Opt.none(uint)`.
+    # particular protocol, the stored offset is `Opt.none(uint64)`.
     #
     # `messages` holds a mapping from valid message IDs to their handler procs.
     #
-    protocolOffsets*: seq[Opt[uint]]
+    protocolOffsets*: seq[Opt[uint64]]
     messages*: seq[MessageInfo] # per `msgId` table (se above)
     activeProtocols*: seq[ProtocolInfo]
 
@@ -155,14 +155,14 @@ type
   ##
 
   OutstandingRequest* = object
-    id*: uint # a `reqId` that may be used for response
+    id*: uint64 # a `reqId` that may be used for response
     future*: FutureBase
     timeoutAt*: Moment
 
   # Private types:
-  MessageHandlerDecorator* = proc(msgId: uint, n: NimNode): NimNode
+  MessageHandlerDecorator* = proc(msgId: uint64, n: NimNode): NimNode
 
-  ThunkProc* = proc(x: Peer, msgId: uint, data: Rlp): Future[void]
+  ThunkProc* = proc(x: Peer, msgId: uint64, data: Rlp): Future[void]
     {.gcsafe, async: (raises: [RlpError, EthP2PError]).}
 
   MessageContentPrinter* = proc(msg: pointer): string
