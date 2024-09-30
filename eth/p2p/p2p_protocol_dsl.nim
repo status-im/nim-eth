@@ -870,7 +870,7 @@ proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode) =
   ##
   ## All messages will have properly computed numeric IDs
   ##
-  var nextId = 0u
+  var nextId = 0u64
 
   for n in protocolBody:
     case n.kind
