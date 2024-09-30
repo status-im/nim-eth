@@ -124,7 +124,7 @@ type
     disconnectHandler*: DisconnectionHandler
 
   MessageInfo* = ref object
-    id*: uint # this is a `msgId` (as opposed to a `reqId`)
+    id*: uint64 # this is a `msgId` (as opposed to a `reqId`)
     name*: string
 
     # Private fields:
