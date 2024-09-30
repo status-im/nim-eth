@@ -18,8 +18,6 @@ type
 
   AccessList* = seq[AccessPair]
 
-  VersionedHash* = Bytes32
-
   Authorization* = object
     chainId*: ChainId
     address*: Address

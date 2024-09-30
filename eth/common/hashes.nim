@@ -24,6 +24,11 @@ type
   Root* = Hash32
     ## Alias used for MPT roots
 
+  VersionedHash* = Hash32
+    ## Alias used for blob hashes whose first byte indicates what the payload
+    ## actually is - primarily used with KZG commitments at the time of writing
+    ## https://github.com/ethereum/execution-specs/blob/9b95554a88d2a8485f8180254d0f6a493a593fda/src/ethereum/crypto/kzg.py#L74C1-L74C38
+
 const zeroHash32* = system.default(Hash32) ## Hash32 value consisting of all zeroes
 
 template to*(v: array[32, byte], _: type Hash32): Hash32 =
