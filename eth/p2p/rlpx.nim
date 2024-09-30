@@ -307,7 +307,7 @@ proc getMsgMetadata*(peer: Peer, msgId: uint): (ProtocolInfo, MessageInfo) =
 # Protocol info objects
 #
 
-proc initProtocol(name: string, version: int,
+proc initProtocol(name: string, version: uint64,
                   peerInit: PeerStateInitializer,
                   networkInit: NetworkStateInitializer): ProtocolInfo =
   ProtocolInfo(
@@ -791,7 +791,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       msgIdent = msg.ident
       msgName = $msgIdent
       msgRecName = msg.recName
-      responseMsgId = if msg.response.isNil: Opt.none(uint) else: msg.response.id
+      responseMsgId = if msg.response.isNil: Opt.none(uint64) else: msg.response.id
       hasReqId = msg.hasReqId
       protocol = msg.protocol
 

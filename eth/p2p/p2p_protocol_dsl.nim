@@ -35,7 +35,7 @@ type
     msgResponse
 
   Message* = ref object
-    id*: Opt[uint]
+    id*: Opt[uint64]
     ident*: NimNode
     kind*: MessageKind
     procDef*: NimNode
@@ -83,7 +83,7 @@ type
   P2PProtocol* = ref object
     # Settings
     name*: string
-    version*: int
+    version*: uint64
     timeouts*: int64
     useRequestIds*: bool
     useSingleRecordInlining*: bool
@@ -148,8 +148,7 @@ const
 let
   # Variable names affecting the public interface of the library:
   reqIdVar*             {.compileTime.} = ident "reqId"
-  # XXX: Binding the int type causes instantiation failure for some reason
-  ReqIdType*            {.compileTime.} = ident "uint"
+  ReqIdType*            {.compileTime.} = ident "uint64"
   peerVar*              {.compileTime.} = ident "peer"
   responseVar*          {.compileTime.} = ident "response"
   streamVar*            {.compileTime.} = ident "stream"
@@ -313,7 +312,7 @@ proc verifyStateType(t: NimNode): NimNode =
 proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode)
 
 proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
-           name: string, version: int, body: NimNode,
+           name: string, version: uint64, body: NimNode,
            timeouts: int64, useRequestIds: bool, rlpxName: string,
            outgoingRequestDecorator: NimNode,
            incomingRequestDecorator: NimNode,
@@ -345,14 +344,14 @@ proc init*(T: type P2PProtocol, backendFactory: BackendFactory,
   assert(not result.backend.implementProtocolInit.isNil)
 
   if result.backend.ReqIdType.isNil:
-    result.backend.ReqIdType = ident "uint"
+    result.backend.ReqIdType = ident "uint64"
 
   result.processProtocolBody body
 
   if not result.backend.afterProtocolInit.isNil:
     result.backend.afterProtocolInit(result)
 
-proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = Opt.none(uint)) =
+proc augmentUserHandler(p: P2PProtocol, userHandlerProc: NimNode, msgId = Opt.none(uint64)) =
   ## This procs adds a set of common helpers available in all messages handlers
   ## (e.g. `perProtocolMsgId`, `peer.state`, etc).
 
@@ -446,7 +445,7 @@ proc ResponderType(msg: Message): NimNode =
 proc needsSingleParamInlining(msg: Message): bool =
   msg.recBody.kind == nnkDistinctTy
 
-proc newMsg(protocol: P2PProtocol, kind: MessageKind, msgId: uint,
+proc newMsg(protocol: P2PProtocol, kind: MessageKind, msgId: uint64,
             procDef: NimNode, response: Message = nil): Message =
 
   if procDef[0].kind == nnkPostfix:
@@ -528,7 +527,7 @@ proc newMsg(protocol: P2PProtocol, kind: MessageKind, msgId: uint,
 proc isVoid(t: NimNode): bool =
   t.kind == nnkEmpty or eqIdent(t, "void")
 
-proc addMsg(p: P2PProtocol, msgId: uint, procDef: NimNode) =
+proc addMsg(p: P2PProtocol, msgId: uint64, procDef: NimNode) =
   var
     returnType = procDef.params[0]
     hasReturnValue = not isVoid(returnType)
@@ -544,7 +543,7 @@ proc addMsg(p: P2PProtocol, msgId: uint, procDef: NimNode) =
     let
       responseIdent = ident($procDef.name & "Response")
       response = Message(protocol: p,
-                         id: Opt.none(uint),
+                         id: Opt.none(uint64),
                          ident: responseIdent,
                          kind: msgResponse,
                          recName: returnType,
@@ -880,7 +879,7 @@ proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode) =
         # By default message IDs are assigned in increasing order
         # `nextID` can be used to skip some of the numeric slots
         if n.len == 2 and n[1].kind == nnkIntLit:
-          nextId = n[1].intVal.uint
+          nextId = n[1].intVal.uint64
         else:
           error("nextID expects a single int value", n)
 
@@ -895,10 +894,10 @@ proc processProtocolBody*(p: P2PProtocol, protocolBody: NimNode) =
           error "requestResponse expects a block with at least two proc definitions"
 
         var queries = newSeq[Message]()
-        let responseMsg = p.newMsg(msgResponse, nextId + procs.len.uint - 1, procs[^1])
+        let responseMsg = p.newMsg(msgResponse, nextId + procs.len.uint64 - 1, procs[^1])
 
         for i in 0 .. procs.len - 2:
-          queries.add p.newMsg(msgRequest, nextId + i.uint, procs[i], response = responseMsg)
+          queries.add p.newMsg(msgRequest, nextId + i.uint64, procs[i], response = responseMsg)
 
         p.requests.add Request(queries: queries, response: responseMsg)
 
@@ -991,7 +990,7 @@ proc genTypeSection*(p: P2PProtocol): NimNode =
 
     if p.isRlpx:
       result.add quote do:
-        template msgId*(`MSG`: type `msgStrongRecName`): uint = `msgId`
+        template msgId*(`MSG`: type `msgStrongRecName`): uint64 = `msgId`
 
 proc genCode*(p: P2PProtocol): NimNode =
   for msg in p.messages:
@@ -1027,7 +1026,7 @@ proc genCode*(p: P2PProtocol): NimNode =
 
 macro emitForSingleBackend(
     name: static[string],
-    version: static[int],
+    version: static[uint64],
     backend: static[BackendFactory],
     body: untyped,
     # TODO Nim can't handle a proper duration parameter here

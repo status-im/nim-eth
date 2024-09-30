@@ -86,7 +86,7 @@ type
 
   Capability* = object
     name*: string
-    version*: int
+    version*: uint64
 
   EthP2PError* = object of CatchableError
 
@@ -112,7 +112,7 @@ type
 
   ProtocolInfo* = ref object
     name*: string
-    version*: int
+    version*: uint64
     messages*: seq[MessageInfo]
     index*: int # the position of the protocol in the
                 # ordered list of supported protocols

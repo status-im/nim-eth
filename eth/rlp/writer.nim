@@ -301,14 +301,14 @@ proc appendImpl(self: var RlpWriter, data: tuple) {.inline.} =
 # We define a single `append` template with a pretty low specificity
 # score in order to facilitate easier overloading with user types:
 template append*[T](w: var RlpWriter; data: T) =
-  when data is (SomeSignedInt|enum|bool):
-    when data is SomeSignedInt:
-      # TODO potentially remove signed integer support - we should never make it
-      #      this far!
-      {.warning: "Signed integers cannot reliably be encoded using RLP".}
+  when data is (enum|bool):
+    # TODO detect negative enum values at compile time?
     appendImpl(w, uint64(data))
   else:
     appendImpl(w, data)
+
+template append*(w: var RlpWriter; data: SomeSignedInt) =
+  {.error: "Signed integer encoding is not defined for rlp".}
 
 proc initRlpList*(listSize: int): RlpWriter =
   result = initRlpWriter()
