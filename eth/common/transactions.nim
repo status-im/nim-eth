@@ -7,9 +7,9 @@
 
 {.push raises: [].}
 
-import "."/addresses, base
+import "."/[addresses, base, hashes]
 
-export addresses, base
+export addresses, base, hashes
 
 type
   AccessPair* = object
