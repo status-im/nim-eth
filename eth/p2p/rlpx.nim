@@ -424,7 +424,7 @@ proc registerRequest(peer: Peer,
                      timeout: Duration,
                      responseFuture: FutureBase,
                      responseMsgId: uint64): uint64 =
-  result = if peer.lastReqId.isNone: 0u else: peer.lastReqId.value + 1u
+  result = if peer.lastReqId.isNone: 0u64 else: peer.lastReqId.value + 1u64
   peer.lastReqId = Opt.some(result)
 
   let timeoutAt = Moment.fromNow(timeout)
