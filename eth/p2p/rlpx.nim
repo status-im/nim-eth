@@ -338,13 +338,13 @@ proc nextMsgResolver[MsgType](msgData: Rlp, future: FutureBase)
     MsgType.rlpFieldsCount > 1)
 
 proc registerMsg(protocol: ProtocolInfo,
-                 msgId: uint,
+                 msgId: uint64,
                  name: string,
                  thunk: ThunkProc,
                  printer: MessageContentPrinter,
                  requestResolver: RequestResolver,
                  nextMsgResolver: NextMsgResolver) =
-  if protocol.messages.len.uint <= msgId:
+  if protocol.messages.len.uint64 <= msgId:
     protocol.messages.setLen(msgId + 1)
   protocol.messages[msgId] = MessageInfo(
     id: msgId,
