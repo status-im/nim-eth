@@ -40,7 +40,7 @@ type
     protocolStates*: seq[RootRef]
     discovery*: DiscoveryProtocol
     when useSnappy:
-      protocolVersion*: uint
+      protocolVersion*: uint64
     rng*: ref HmacDrbgContext
 
   Peer* = ref object
@@ -50,7 +50,7 @@ type
     # Private fields:
     transport*: StreamTransport
     dispatcher*: Dispatcher
-    lastReqId*: Opt[uint]
+    lastReqId*: Opt[uint64]
     secretsState*: SecretState
     connectionState*: ConnectionState
     protocolStates*: seq[RootRef]
@@ -155,14 +155,14 @@ type
   ##
 
   OutstandingRequest* = object
-    id*: uint # a `reqId` that may be used for response
+    id*: uint64 # a `reqId` that may be used for response
     future*: FutureBase
     timeoutAt*: Moment
 
   # Private types:
-  MessageHandlerDecorator* = proc(msgId: uint, n: NimNode): NimNode
+  MessageHandlerDecorator* = proc(msgId: uint64, n: NimNode): NimNode
 
-  ThunkProc* = proc(x: Peer, msgId: uint, data: Rlp): Future[void]
+  ThunkProc* = proc(x: Peer, msgId: uint64, data: Rlp): Future[void]
     {.gcsafe, async: (raises: [RlpError, EthP2PError]).}
 
   MessageContentPrinter* = proc(msg: pointer): string

@@ -64,7 +64,7 @@ logScope:
 type
   ResponderWithId*[MsgType] = object
     peer*: Peer
-    reqId*: uint
+    reqId*: uint64
 
   ResponderWithoutId*[MsgType] = distinct Peer
 
@@ -126,14 +126,14 @@ when tracingEnabled:
     init, writeValue, getOutput
 
 proc init*[MsgName](T: type ResponderWithId[MsgName],
-                    peer: Peer, reqId: uint): T =
+                    peer: Peer, reqId: uint64): T =
   T(peer: peer, reqId: reqId)
 
 proc init*[MsgName](T: type ResponderWithoutId[MsgName], peer: Peer): T =
   T(peer)
 
 chronicles.formatIt(Peer): $(it.remote)
-chronicles.formatIt(Opt[uint]): (if it.isSome(): $it.value else: "-1")
+chronicles.formatIt(Opt[uint64]): (if it.isSome(): $it.value else: "-1")
 
 include p2p_backends_helpers
 
@@ -258,7 +258,7 @@ proc getDispatcher(node: EthereumNode,
         if localProtocol.name == remoteCapability.name and
            localProtocol.version == remoteCapability.version:
           result.protocolOffsets[idx] = Opt.some(nextUserMsgId)
-          nextUserMsgId += localProtocol.messages.len.uint
+          nextUserMsgId += localProtocol.messages.len.uint64
           break findMatchingProtocol
 
   template copyTo(src, dest; index: int) =
@@ -275,9 +275,9 @@ proc getDispatcher(node: EthereumNode,
       localProtocol.messages.copyTo(result.messages,
                                     result.protocolOffsets[idx].value.int)
 
-proc getMsgName*(peer: Peer, msgId: uint): string =
+proc getMsgName*(peer: Peer, msgId: uint64): string =
   if not peer.dispatcher.isNil and
-     msgId < peer.dispatcher.messages.len.uint and
+     msgId < peer.dispatcher.messages.len.uint64 and
      not peer.dispatcher.messages[msgId].isNil:
     return peer.dispatcher.messages[msgId].name
   else:
@@ -288,14 +288,14 @@ proc getMsgName*(peer: Peer, msgId: uint): string =
            of 3: "pong"
            else: $msgId
 
-proc getMsgMetadata*(peer: Peer, msgId: uint): (ProtocolInfo, MessageInfo) =
+proc getMsgMetadata*(peer: Peer, msgId: uint64): (ProtocolInfo, MessageInfo) =
   doAssert msgId >= 0
 
   let dpInfo = devp2pInfo()
   if msgId <= dpInfo.messages[^1].id:
     return (dpInfo, dpInfo.messages[msgId])
 
-  if msgId < peer.dispatcher.messages.len.uint:
+  if msgId < peer.dispatcher.messages.len.uint64:
     let numProtocol = protocolCount()
     for i in 0 ..< numProtocol:
       let protocol = getProtocol(i)
@@ -357,7 +357,7 @@ proc registerMsg(protocol: ProtocolInfo,
 # Message composition and encryption
 #
 
-proc perPeerMsgIdImpl(peer: Peer, proto: ProtocolInfo, msgId: uint): uint =
+proc perPeerMsgIdImpl(peer: Peer, proto: ProtocolInfo, msgId: uint64): uint64 =
   result = msgId
   if not peer.dispatcher.isNil:
     result += peer.dispatcher.protocolOffsets[proto.index].value
@@ -373,10 +373,10 @@ proc supports*(peer: Peer, Protocol: type): bool =
   ## Checks whether a Peer supports a particular protocol
   peer.supports(Protocol.protocolInfo)
 
-template perPeerMsgId(peer: Peer, MsgType: type): uint =
+template perPeerMsgId(peer: Peer, MsgType: type): uint64 =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
 
-proc invokeThunk*(peer: Peer, msgId: uint, msgData: Rlp): Future[void]
+proc invokeThunk*(peer: Peer, msgId: uint64, msgData: Rlp): Future[void]
     {.async: (raises: [rlp.RlpError, EthP2PError]).} =
   template invalidIdError: untyped =
     raise newException(UnsupportedMessageError,
@@ -384,7 +384,7 @@ proc invokeThunk*(peer: Peer, msgId: uint, msgData: Rlp): Future[void]
       " on a connection supporting " & peer.dispatcher.describeProtocols)
 
   # msgId can be negative as it has int as type and gets decoded from rlp
-  if msgId >= peer.dispatcher.messages.len.uint: invalidIdError()
+  if msgId >= peer.dispatcher.messages.len.uint64: invalidIdError()
   if peer.dispatcher.messages[msgId].isNil: invalidIdError()
 
   let thunk = peer.dispatcher.messages[msgId].thunk
@@ -423,7 +423,7 @@ proc send*[Msg](peer: Peer, msg: Msg): Future[void] =
 proc registerRequest(peer: Peer,
                      timeout: Duration,
                      responseFuture: FutureBase,
-                     responseMsgId: uint): uint =
+                     responseMsgId: uint64): uint64 =
   result = if peer.lastReqId.isNone: 0u else: peer.lastReqId.value + 1u
   peer.lastReqId = Opt.some(result)
 
@@ -440,7 +440,7 @@ proc registerRequest(peer: Peer,
 
   discard setTimer(timeoutAt, timeoutExpired, nil)
 
-proc resolveResponseFuture(peer: Peer, msgId: uint, msg: pointer) =
+proc resolveResponseFuture(peer: Peer, msgId: uint64, msg: pointer) =
   ## This function is a split off from the previously combined version with
   ## the same name using optional request ID arguments. This here is the
   ## version without a request ID (there is the other part below.).
@@ -485,7 +485,7 @@ proc resolveResponseFuture(peer: Peer, msgId: uint, msg: pointer) =
     else:
       trace "late or dup RPLx reply ignored", msgId
 
-proc resolveResponseFuture(peer: Peer, msgId: uint, msg: pointer, reqId: uint) =
+proc resolveResponseFuture(peer: Peer, msgId: uint64, msg: pointer, reqId: uint64) =
   ## Variant of `resolveResponseFuture()` for request ID argument.
   logScope:
     msg = peer.dispatcher.messages[msgId].name
@@ -544,7 +544,7 @@ proc resolveResponseFuture(peer: Peer, msgId: uint, msg: pointer, reqId: uint) =
     trace "late or dup RPLx reply ignored"
 
 
-proc recvMsg*(peer: Peer): Future[tuple[msgId: uint, msgData: Rlp]] {.async.} =
+proc recvMsg*(peer: Peer): Future[tuple[msgId: uint64, msgData: Rlp]] {.async.} =
   ##  This procs awaits the next complete RLPx message in the TCP stream
 
   var headerBytes: array[32, byte]
@@ -610,7 +610,7 @@ proc recvMsg*(peer: Peer): Future[tuple[msgId: uint, msgData: Rlp]] {.async.} =
   try:
     # uint32 as this seems more than big enough for the amount of msgIds
     msgId = rlp.read(uint32)
-    result = (msgId.uint, rlp)
+    result = (msgId.uint64, rlp)
   except RlpError:
     await peer.disconnectAndRaise(BreachOfProtocol,
                                   "Cannot read RLPx message id")
@@ -680,7 +680,7 @@ proc nextMsg*(peer: Peer, MsgType: type): Future[MsgType] =
 # message handler code as the TODO mentions already.
 proc dispatchMessages*(peer: Peer) {.async.} =
   while peer.connectionState notin {Disconnecting, Disconnected}:
-    var msgId: uint
+    var msgId: uint64
     var msgData: Rlp
     try:
       (msgId, msgData) = await peer.recvMsg()
@@ -721,7 +721,7 @@ proc dispatchMessages*(peer: Peer) {.async.} =
     # The documentation will need to be updated, explaining the fact that
     # nextMsg will be resolved only if the message handler has executed
     # successfully.
-    if msgId < peer.awaitedMessages.len.uint and
+    if msgId < peer.awaitedMessages.len.uint64 and
        peer.awaitedMessages[msgId] != nil:
       let msgInfo = peer.dispatcher.messages[msgId]
       try:
@@ -812,7 +812,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
     if hasReqId:
       # Messages using request Ids
       readParams.add quote do:
-        let `reqIdVar` = `read`(`receivedRlp`, uint)
+        let `reqIdVar` = `read`(`receivedRlp`, uint64)
 
     case msg.kind
     of msgRequest:
@@ -887,7 +887,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
       thunkName = ident(msgName & "Thunk")
 
     msg.defineThunk quote do:
-      proc `thunkName`(`peerVar`: `Peer`, _: uint, data: Rlp)
+      proc `thunkName`(`peerVar`: `Peer`, _: uint64, data: Rlp)
           # Fun error if you just use `RlpError` instead of `rlp.RlpError`:
           # "Error: type expected, but got symbol 'RlpError' of kind 'EnumField'"
           {.async: (raises: [rlp.RlpError, EthP2PError]).} =
@@ -973,7 +973,7 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
 
 p2pProtocol DevP2P(version = 5, rlpxName = "p2p"):
   proc hello(peer: Peer,
-             version: uint,
+             version: uint64,
              clientId: string,
              capabilities: seq[Capability],
              listenPort: uint,
@@ -1082,7 +1082,7 @@ proc initPeerState*(peer: Peer, capabilities: openArray[Capability])
   # Similarly, we need a bit of book-keeping data to keep track
   # of the potentially concurrent calls to `nextMsg`.
   peer.awaitedMessages.newSeq(peer.dispatcher.messages.len)
-  peer.lastReqId = Opt.some(0u)
+  peer.lastReqId = Opt.some(0u64)
   peer.initProtocolStates peer.dispatcher.activeProtocols
 
 proc postHelloSteps(peer: Peer, h: DevP2P.hello) {.async.} =
@@ -1145,10 +1145,10 @@ proc initSecretState(p: Peer, hs: Handshake, authMsg, ackMsg: openArray[byte]) =
 
 template setSnappySupport(peer: Peer, node: EthereumNode, handshake: Handshake) =
   when useSnappy:
-    peer.snappyEnabled = node.protocolVersion >= devp2pSnappyVersion.uint and
-                         handshake.version >= devp2pSnappyVersion.uint
+    peer.snappyEnabled = node.protocolVersion >= devp2pSnappyVersion.uint64 and
+                         handshake.version >= devp2pSnappyVersion.uint64
 
-template getVersion(handshake: Handshake): uint =
+template getVersion(handshake: Handshake): uint64 =
   when useSnappy:
     handshake.version
   else:
@@ -1160,7 +1160,7 @@ template baseProtocolVersion(node: EthereumNode): untyped =
   else:
     devp2pVersion
 
-template baseProtocolVersion(peer: Peer): uint =
+template baseProtocolVersion(peer: Peer): uint64 =
   when useSnappy:
     if peer.snappyEnabled: devp2pSnappyVersion
     else: devp2pVersion
@@ -1473,10 +1473,10 @@ when isMainModule:
     # are considered GcSafe. The short answer is that they aren't, because
     # they dispatch into user code that might use the GC.
     type
-      GcSafeDispatchMsg = proc (peer: Peer, msgId: uint, msgData: var Rlp)
+      GcSafeDispatchMsg = proc (peer: Peer, msgId: uint64, msgData: var Rlp)
 
       GcSafeRecvMsg = proc (peer: Peer):
-        Future[tuple[msgId: uint, msgData: Rlp]] {.gcsafe.}
+        Future[tuple[msgId: uint64, msgData: Rlp]] {.gcsafe.}
 
       GcSafeAccept = proc (transport: StreamTransport, myKeys: KeyPair):
         Future[Peer] {.gcsafe.}
