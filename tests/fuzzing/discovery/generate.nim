@@ -20,7 +20,7 @@ proc generate() =
 
   # valid data for a Ping packet
   block:
-    let payload = rlp.encode((4, fromAddr, toAddr, expiration()))
+    let payload = rlp.encode((uint64 4, fromAddr, toAddr, expiration()))
     let encodedData = @[1.byte] & payload
     debug "Ping", data=byteutils.toHex(encodedData)
 
