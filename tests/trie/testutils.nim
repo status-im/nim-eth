@@ -1,7 +1,6 @@
 import
   std/[random, sets],
-  nimcrypto/[utils, sysrand],
-  ../../eth/trie/trie_bitseq
+  nimcrypto/[utils, sysrand]
 
 type
   RandGen*[T] = object
@@ -77,10 +76,3 @@ proc randKVPair*(keySize = 32): seq[KVPair] =
   result = newSeq[KVPair](listLen)
   for i in 0..<listLen:
     result[i] = KVPair(key: keys[i], value: vals[i])
-
-proc genBitVec*(len: int): TrieBitSeq =
-  let k = ((len + 7) and (not 7)) shr 3
-  var s = newSeq[byte](k)
-  result = bits(s, len)
-  for i in 0..<len:
-    result[i] = rand(2) == 1
