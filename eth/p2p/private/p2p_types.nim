@@ -142,11 +142,11 @@ type
     # protocol. If the other peer also supports the protocol, the stored
     # offset indicates the numeric value of the first message of the protocol
     # (for this particular connection). If the other peer doesn't support the
-    # particular protocol, the stored offset is `Opt.none(uint)`.
+    # particular protocol, the stored offset is `Opt.none(uint64)`.
     #
     # `messages` holds a mapping from valid message IDs to their handler procs.
     #
-    protocolOffsets*: seq[Opt[uint]]
+    protocolOffsets*: seq[Opt[uint64]]
     messages*: seq[MessageInfo] # per `msgId` table (se above)
     activeProtocols*: seq[ProtocolInfo]
 

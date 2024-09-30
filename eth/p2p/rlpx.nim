@@ -247,9 +247,9 @@ proc getDispatcher(node: EthereumNode,
 
   new result
   newSeq(result.protocolOffsets, protocolCount())
-  result.protocolOffsets.fill Opt.none(uint)
+  result.protocolOffsets.fill Opt.none(uint64)
 
-  var nextUserMsgId = 0x10u
+  var nextUserMsgId = 0x10u64
 
   for localProtocol in node.protocols:
     let idx = localProtocol.index
