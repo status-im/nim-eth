@@ -14,7 +14,7 @@ import
   unittest2,
   ../../eth/common,
   ../../eth/rlp,
-  ../../eth/common/transaction
+  ../../eth/common/transactions_rlp
 
 const
   recipient = address"095e7baea6a6c7c4c2dfeb977efac326af552d87"
@@ -94,7 +94,7 @@ proc tx5(i: int): PooledTransaction =
 
 proc tx6(i: int): PooledTransaction =
   const
-    digest = bytes32"010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014"
+    digest = hash32"010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014"
 
   PooledTransaction(
     tx: Transaction(
@@ -113,7 +113,7 @@ proc tx6(i: int): PooledTransaction =
 
 proc tx7(i: int): PooledTransaction =
   const
-    digest = bytes32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
+    digest = hash32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
 
   PooledTransaction(
     tx: Transaction(
@@ -129,7 +129,7 @@ proc tx7(i: int): PooledTransaction =
 
 proc tx8(i: int): PooledTransaction =
   const
-    digest = bytes32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
+    digest = hash32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
 
   PooledTransaction(
     tx: Transaction(

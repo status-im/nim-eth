@@ -7,11 +7,11 @@
 
 {.push raises: [].}
 
-import "."/[addresses_rlp, base_rlp, transactions], ../rlp
+import "."/[addresses_rlp, base_rlp, hashes_rlp, transactions], ../rlp
 
 from stew/objects import checkedEnumAssign
 
-export addresses_rlp, base_rlp, transactions, rlp
+export addresses_rlp, base_rlp, hashes_rlp, transactions, rlp
 
 proc appendTxLegacy(w: var RlpWriter, tx: Transaction) =
   w.startList(9)

@@ -8,7 +8,10 @@
 
 import std/typetraits, json_serialization, ./eth_types
 
-export json_serialization, eth_types
+export json_serialization
+
+export eth_types
+  except BlockHeader, BlockNumber, BlockNonce, BloomFilter, Hash256, StorageKey
 
 # This module contains "convenience formatting" for logging `eth_types` - this
 # formatting does not conform to any particular Ethereum-based standard - in

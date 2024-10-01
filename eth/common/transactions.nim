@@ -7,9 +7,9 @@
 
 {.push raises: [].}
 
-import "."/addresses, base
+import "."/[addresses, base, hashes]
 
-export addresses, base
+export addresses, base, hashes
 
 type
   AccessPair* = object
@@ -17,8 +17,6 @@ type
     storageKeys*: seq[Bytes32]
 
   AccessList* = seq[AccessPair]
-
-  VersionedHash* = Bytes32
 
   Authorization* = object
     chainId*: ChainId

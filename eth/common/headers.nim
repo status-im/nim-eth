@@ -38,8 +38,6 @@ type
     parentBeaconBlockRoot*: Opt[Hash32] # EIP-4788
     requestsRoot*:    Opt[Hash32]  # EIP-7685
 
-  BlockHeader*{.deprecated: "Header".} = Header
-
 # starting from EIP-4399, `mixDigest` field is called `prevRandao`
 template prevRandao*(h: Header): Hash32 =
   h.mixHash

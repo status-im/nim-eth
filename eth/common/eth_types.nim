@@ -70,11 +70,12 @@ export eth_hash
 type
   # Names that don't appear in the spec and have no particular purpose any more -
   # just use the underlying type directly
+  Blob* {.deprecated.} = seq[byte]
+  BlockHeader*{.deprecated: "Header".} = Header
+  BlockNonce* {.deprecated.} = Bytes8
   BloomFilter* {.deprecated.} = Bloom
   StorageKey* {.deprecated.} = Bytes32
-  Blob* {.deprecated.} = seq[byte]
   VersionedHashes* {.deprecated.} = seq[VersionedHash]
-  BlockNonce* {.deprecated.} = Bytes8
 
 func toBlockNonce*(n: uint64): BlockNonce {.deprecated.} =
   n.to(BlockNonce)
