@@ -60,9 +60,9 @@ suite "BlockHashOrNumber":
 suite "Block encodings":
   test "EIP-4399 prevRandao field":
     var blk: BlockHeader
-    blk.prevRandao = testHash
+    blk.prevRandao = Bytes32 testHash
     let res = blk.prevRandao
-    check testHash == res
+    check Bytes32(testHash) == res
 
   test "EIP-4788 parentBeaconBlockRoot field":
     let header = BlockHeader(
