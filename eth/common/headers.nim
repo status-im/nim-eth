@@ -29,7 +29,9 @@ type
     gasUsed*:         GasInt
     timestamp*:       EthTime
     extraData*:       seq[byte]
-    mixHash*:         Hash32
+    mixHash*:         Bytes32
+      ## AKA mix_digest in some specs - Hash32 in the eth API but Bytes32 in
+      ## the execution API and spec!
     nonce*:           Bytes8
     baseFeePerGas*:   Opt[UInt256]   # EIP-1559
     withdrawalsRoot*: Opt[Hash32]   # EIP-4895
@@ -39,10 +41,10 @@ type
     requestsRoot*:    Opt[Hash32]  # EIP-7685
 
 # starting from EIP-4399, `mixDigest` field is called `prevRandao`
-template prevRandao*(h: Header): Hash32 =
+template prevRandao*(h: Header): Bytes32 =
   h.mixHash
 
-template `prevRandao=`*(h: Header, hash: Hash32) =
+template `prevRandao=`*(h: Header, hash: Bytes32) =
   h.mixHash = hash
 
 template txRoot*(h: Header): Root = h.transactionsRoot
