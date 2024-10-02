@@ -55,8 +55,10 @@ type
     ## See also:
     ## * https://github.com/status-im/nimbus-eth1/issues/35
 
-template to*[N: static int](v: array[N, byte], T: type FixedBytes[N]): T =
-  T(v)
+template to*[N: static int](v: array[N, byte], T: type FixedBytes[N]): untyped =
+  # using a typed return here runs into an assortment of generics bugs when the
+  # compiler fails to instantiate N
+  FixedBytes[sizeof(v)](v)
 
 template data*[N: static int](v: FixedBytes[N]): array[N, byte] =
   distinctBase(v)
