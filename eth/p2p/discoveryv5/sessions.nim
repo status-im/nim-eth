@@ -14,9 +14,9 @@
 import
   std/net,
   stint, stew/endians2,
-  node, lru
+  ./node, minilru
 
-export lru
+export minilru
 
 const
   aesKeySize* = 128 div 8
@@ -28,7 +28,7 @@ type
   AesKey* = array[aesKeySize, byte]
   SessionKey* = array[keySize, byte]
   SessionValue* = array[sizeof(AesKey) + sizeof(AesKey), byte]
-  Sessions* = LRUCache[SessionKey, SessionValue]
+  Sessions* = LruCache[SessionKey, SessionValue]
 
 func makeKey(id: NodeId, address: Address): SessionKey =
   var pos = 0
