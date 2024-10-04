@@ -7,16 +7,13 @@
 import
   "."/[
     accounts_rlp, addresses_rlp, base_rlp, blocks_rlp, eth_types, hashes_rlp,
-    receipts_rlp, transactions_rlp,
+    headers_rlp, receipts_rlp, times_rlp, transactions_rlp,
   ],
   ../rlp
 
 export
   accounts_rlp, addresses_rlp, base_rlp, blocks_rlp, eth_types, hashes_rlp,
-  receipts_rlp, transactions_rlp, rlp
-
-proc read*(rlp: var Rlp, T: type EthTime): T {.raises: [RlpError].} =
-  EthTime rlp.read(uint64)
+  headers_rlp, receipts_rlp, times_rlp, transactions_rlp, rlp
 
 proc append*(rlpWriter: var RlpWriter, value: BlockHashOrNumber) =
   case value.isHash
@@ -30,9 +27,6 @@ proc read*(rlp: var Rlp, T: type BlockHashOrNumber): T =
     BlockHashOrNumber(isHash: true, hash: rlp.read(Hash32))
   else:
     BlockHashOrNumber(isHash: false, number: rlp.read(BlockNumber))
-
-proc append*(rlpWriter: var RlpWriter, t: EthTime) {.inline.} =
-  rlpWriter.append(t.uint64)
 
 proc rlpHash*[T](v: T): Hash32 =
   keccak256(rlp.encode(v))
