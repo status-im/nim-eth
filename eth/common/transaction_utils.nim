@@ -15,19 +15,14 @@ proc signature*(tx: Transaction): Opt[Signature] =
   bytes[32 .. 63] = tx.S.toBytesBE()
 
   bytes[64] =
-    case tx.txType
-    of TxLegacy:
-      var v = tx.V
-      if v >= EIP155_CHAIN_ID_OFFSET:
-        v = 28 - (v and 0x01)
-      elif v == 27 or v == 28:
-        discard
-      else:
-        return Opt.none(Signature)
-
-      byte(v - 27)
-    else:
+    if tx.txType != TxLegacy:
       tx.V.byte
+    elif tx.V >= EIP155_CHAIN_ID_OFFSET:
+      byte(1 - (tx.V and 1))
+    elif tx.V == 27 or tx.V == 28:
+      byte(tx.V - 27)
+    else:
+      return Opt.none(Signature)
 
   Signature.fromRaw(bytes).mapConvertErr(void)
 
