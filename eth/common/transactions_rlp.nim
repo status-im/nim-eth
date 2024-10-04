@@ -128,8 +128,6 @@ proc append*(w: var RlpWriter, tx: PooledTransaction) =
   if tx.networkPayload != nil:
     w.append(tx.networkPayload)
 
-const EIP155_CHAIN_ID_OFFSET* = 35'u64
-
 proc rlpEncodeLegacy(tx: Transaction): seq[byte] =
   var w = initRlpWriter()
   w.startList(6)
@@ -142,7 +140,6 @@ proc rlpEncodeLegacy(tx: Transaction): seq[byte] =
   w.finish()
 
 proc rlpEncodeEip155(tx: Transaction): seq[byte] =
-  let chainId = (tx.V - EIP155_CHAIN_ID_OFFSET) div 2
   var w = initRlpWriter()
   w.startList(9)
   w.append(tx.nonce)
@@ -151,7 +148,7 @@ proc rlpEncodeEip155(tx: Transaction): seq[byte] =
   w.append(tx.to)
   w.append(tx.value)
   w.append(tx.payload)
-  w.append(chainId)
+  w.append(tx.chainId)
   w.append(0'u8)
   w.append(0'u8)
   w.finish()
@@ -218,10 +215,12 @@ proc rlpEncodeEip7702(tx: Transaction): seq[byte] =
   w.append(tx.authorizationList)
   w.finish()
 
-proc rlpEncode*(tx: Transaction): seq[byte] =
+proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
+  ## Encode transaction data in preparation for signing or signature checking.
+  ## For signature checking, set `eip155 = tx.isEip155`
   case tx.txType
   of TxLegacy:
-    if tx.V >= EIP155_CHAIN_ID_OFFSET: tx.rlpEncodeEip155 else: tx.rlpEncodeLegacy
+    if eip155: tx.rlpEncodeEip155 else: tx.rlpEncodeLegacy
   of TxEip2930:
     tx.rlpEncodeEip2930
   of TxEip1559:
@@ -231,11 +230,17 @@ proc rlpEncode*(tx: Transaction): seq[byte] =
   of TxEip7702:
     tx.rlpEncodeEip7702
 
-func txHashNoSignature*(tx: Transaction): Hash32 =
-  # Hash transaction without signature
-  keccak256(rlpEncode(tx))
+template rlpEncode*(tx: Transaction): seq[byte] {.deprecated.} =
+  encodeForSigning(tx, tx.isEip155())
 
-proc readTxLegacy*(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
+func rlpHashForSigning*(tx: Transaction, eip155: bool): Hash32 =
+  # Hash transaction without signature
+  keccak256(encodeForSigning(tx, eip155))
+
+template txHashNoSignature*(tx: Transaction): Hash32 {.deprecated.} =
+  rlpHashForSigning(tx, tx.isEip155())
+
+proc readTxLegacy(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxLegacy
   rlp.tryEnterList()
   rlp.read(tx.nonce)
@@ -247,6 +252,9 @@ proc readTxLegacy*(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   rlp.read(tx.V)
   rlp.read(tx.R)
   rlp.read(tx.S)
+
+  if tx.V >= EIP155_CHAIN_ID_OFFSET:
+    tx.chainId = ChainId((tx.V - EIP155_CHAIN_ID_OFFSET) div 2)
 
 proc readTxEip2930(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip2930
@@ -375,7 +383,7 @@ proc readTxPayload(
   of TxEip7702:
     rlp.readTxEip7702(tx)
 
-proc readTxTyped*(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
+proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   let txType = rlp.readTxType()
   rlp.readTxPayload(tx, txType)
 

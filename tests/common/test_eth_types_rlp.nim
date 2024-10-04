@@ -296,4 +296,3 @@ suite "EIP-7865 tests":
 
     check decodedBody == body
     check decodedBlk == blk
-

@@ -17,7 +17,7 @@ type
     header: Header
 
 proc loadFile(x: int) =
-  let fileName = "tests" / "common" / "eip2718" / "acl_block_" & $x & ".json"
+  let fileName = currentSourcePath.parentDir / "eip2718" / "acl_block_" & $x & ".json"
   test fileName:
     let n = json.parseFile(fileName)
     let data = n["rlp"].getStr()

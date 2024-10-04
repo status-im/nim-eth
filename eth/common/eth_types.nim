@@ -41,9 +41,6 @@ type
   EthReceipt* = Receipt
   EthWithdrawapRequest* = WithdrawalRequest
 
-template contractCreation*(tx: Transaction): bool =
-  tx.to.isNone
-
 func init*(T: type BlockHashOrNumber, str: string): T {.raises: [ValueError].} =
   if str.startsWith "0x":
     if str.len != sizeof(default(T).hash.data) * 2 + 2:
