@@ -11,6 +11,8 @@ import "."/[addresses, base, hashes]
 
 export addresses, base, hashes
 
+const EIP155_CHAIN_ID_OFFSET* = 35'u64
+
 type
   AccessPair* = object
     address*    : Address
@@ -71,3 +73,9 @@ func destination*(tx: Transaction): Address =
   # use getRecipient if you also want to get
   # the contract address
   tx.to.valueOr(default(Address))
+
+func isEip155*(tx: Transaction): bool =
+  tx.V >= EIP155_CHAIN_ID_OFFSET
+
+func contractCreation*(tx: Transaction): bool =
+  tx.to.isNone

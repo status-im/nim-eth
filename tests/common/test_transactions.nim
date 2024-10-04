@@ -12,18 +12,24 @@
 import
   stew/byteutils,
   unittest2,
-  ../../eth/common,
-  ../../eth/rlp,
-  ../../eth/common/transactions_rlp
+  ../../eth/common/[transactions_rlp, transaction_utils]
 
 const
   recipient = address"095e7baea6a6c7c4c2dfeb977efac326af552d87"
   zeroG1    = bytes48"0xc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
   source    = address"0x0000000000000000000000000000000000000001"
-  storageKey= default(StorageKey)
+  storageKey= default(Bytes32)
   accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]
   blob      = default(NetworkBlob)
   abcdef    = hexToSeqByte("abcdef")
+  authList  = @[Authorization(
+    chainID: 1.ChainId,
+    address: source,
+    nonce: 2.AccountNonce,
+    yParity: 3,
+    R: 4.u256,
+    S: 5.u256
+  )]
 
 proc tx0(i: int): PooledTransaction =
   PooledTransaction(
@@ -144,6 +150,23 @@ proc tx8(i: int): PooledTransaction =
       versionedHashes:     @[digest],
       maxFeePerBlobGas:    10000000.u256))
 
+proc txEip7702(i: int): PooledTransaction =
+  PooledTransaction(
+    tx: Transaction(
+      txType:   TxEip7702,
+      chainId:  1.ChainId,
+      nonce:    i.AccountNonce,
+      maxPriorityFeePerGas: 2.GasInt,
+      maxFeePerGas: 3.GasInt,
+      gasLimit: 4.GasInt,
+      to:       Opt.some recipient,
+      value:    5.u256,
+      payload:  abcdef,
+      accessList: accesses,
+      authorizationList: authList
+    )
+  )
+
 template roundTrip(txFunc: untyped, i: int) =
   let tx = txFunc(i)
   let bytes = rlp.encode(tx)
@@ -151,7 +174,7 @@ template roundTrip(txFunc: untyped, i: int) =
   let bytes2 = rlp.encode(tx2)
   check bytes == bytes2
 
-suite "Transaction RLP Encoding":
+suite "Transactions":
   test "Legacy Tx Call":
     roundTrip(tx0, 1)
 
@@ -178,6 +201,9 @@ suite "Transaction RLP Encoding":
 
   test "Minimal Blob Tx contract creation":
     roundTrip(tx8, 9)
+
+  test "EIP 7702":
+    roundTrip(txEip7702, 9)
 
   test "Network payload survive encode decode":
     let tx = tx6(10)
@@ -227,14 +253,47 @@ suite "Transaction RLP Encoding":
     let bytes2 = rlp.encode(zz)
     check bytes2 == bytes
 
-  test "Receipts":
-    let rec = Receipt(
-      receiptType: Eip4844Receipt,
-      isHash: false,
-      status: false,
-      cumulativeGasUsed: 100.GasInt)
+  test "EIP-155 signature":
+    # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-155.md#example
+    var
+      tx = Transaction(
+        txType: TxLegacy,
+        chainId: ChainId(1),
+        nonce: 9,
+        gasPrice: 20000000000'u64,
+        gasLimit: 21000'u64,
+        to: Opt.some address"0x3535353535353535353535353535353535353535",
+        value: u256"1000000000000000000",
+      )
+      txEnc = tx.encodeForSigning(true)
+      txHash = tx.rlpHashForSigning(true)
+      key = PrivateKey.fromHex("0x4646464646464646464646464646464646464646464646464646464646464646").expect(
+          "working key"
+        )
 
-    let bytes = rlp.encode(rec)
-    let zz = rlp.decode(bytes, Receipt)
-    let bytes2 = rlp.encode(zz)
-    check bytes2 == bytes
+    tx.signature = tx.sign(key, true)
+
+    check:
+      txEnc.to0xHex == "0xec098504a817c800825208943535353535353535353535353535353535353535880de0b6b3a764000080018080"
+      txHash == hash32"0xdaf5a779ae972f972197303d7b574746c7ef83eadac0f2791ad23db92e4c8e53"
+      tx.V == 37
+      tx.R ==
+        u256"18515461264373351373200002665853028612451056578545711640558177340181847433846"
+      tx.S ==
+        u256"46948507304638947509940763649030358759909902576025900602547168820602576006531"
+
+  test "sign transaction":
+    let
+      txs = @[
+        tx0(3).tx, tx1(3).tx, tx2(3).tx, tx3(3).tx, tx4(3).tx,
+        tx5(3).tx, tx6(3).tx, tx7(3).tx, tx8(3).tx, txEip7702(3).tx]
+
+      privKey = PrivateKey.fromHex("63b508a03c3b5937ceb903af8b1b0c191012ef6eb7e9c3fb7afa94e5d214d376").expect("valid key")
+      sender = privKey.toPublicKey().to(Address)
+
+    for tx in txs:
+      var tx = tx
+      tx.signature = tx.sign(privKey, true)
+
+      check:
+        tx.recoverKey().expect("valid key").to(Address) == sender
