@@ -328,9 +328,6 @@ func clear*(w: var RlpWriter) =
 proc encode*[T](v: T): seq[byte] =
   mixin append
 
-  when T is SomeUnsignedInt:
-    {.warning: "here".}
-
   var writer = initRlpWriter()
   writer.append(v)
   move(writer.finish)
