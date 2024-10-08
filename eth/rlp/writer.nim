@@ -352,12 +352,3 @@ macro encodeList*(args: varargs[untyped]): seq[byte] =
     var `writer` = initRlpList(`listLen`)
     `body`
     move(finish(`writer`))
-
-# when true:
-#   # XXX: Currently fails with a malformed AST error on the args.len expression
-#   template encodeList*(args: varargs[untyped]): seq[byte] =
-#     mixin append
-#     var writer = initRlpList(args.len)
-#     for arg in args:
-#       writer.append(arg)
-#     writer.finish
