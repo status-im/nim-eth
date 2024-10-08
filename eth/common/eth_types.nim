@@ -39,7 +39,8 @@ type
   EthHeader* = Header
   EthTransaction* = Transaction
   EthReceipt* = Receipt
-  EthWithdrawapRequest* = WithdrawalRequest
+  EthWithdrawal* = Withdrawal
+  EthWithdrawalRequest* = WithdrawalRequest
 
 func init*(T: type BlockHashOrNumber, str: string): T {.raises: [ValueError].} =
   if str.startsWith "0x":
@@ -67,12 +68,12 @@ export eth_hash
 type
   # Names that don't appear in the spec and have no particular purpose any more -
   # just use the underlying type directly
-  Blob* {.deprecated.} = seq[byte]
-  BlockHeader*{.deprecated: "Header".} = Header
-  BlockNonce* {.deprecated.} = Bytes8
-  BloomFilter* {.deprecated.} = Bloom
-  StorageKey* {.deprecated.} = Bytes32
-  VersionedHashes* {.deprecated.} = seq[VersionedHash]
+  Blob* {.deprecated: "seq[byte]".} = seq[byte]
+  BlockHeader* {.deprecated: "Header".} = Header
+  BlockNonce* {.deprecated: "Bytes8".} = Bytes8
+  BloomFilter* {.deprecated: "Bloom".} = Bloom
+  StorageKey* {.deprecated: "Bytes32".} = Bytes32
+  VersionedHashes* {.deprecated: "seq[VersionedHash]".} = seq[VersionedHash]
 
 func toBlockNonce*(n: uint64): BlockNonce {.deprecated.} =
   n.to(BlockNonce)
