@@ -1,39 +1,39 @@
 import
   std/options,
   results,
-  stew/[assign2, shims/macros],
+  stew/[arraybuf, assign2, bitops2, shims/macros],
  ./priv/defs
+
+export arraybuf
 
 type
   RlpWriter* = object
     pendingLists: seq[tuple[remainingItems, outBytes: int]]
     output: seq[byte]
 
+  RlpIntBuf* = ArrayBuf[9, byte]
+    ## Small buffer for holding a single RLP-encoded integer
+
 const
   wrapObjsInList* = true
 
-proc bytesNeeded(num: SomeUnsignedInt): int =
-  type IntType = type(num)
-  var n = num
-  while n != IntType(0):
-    inc result
-    n = n shr 8
+func bytesNeeded(num: SomeUnsignedInt): int =
+  # Number of non-zero bytes in the big endian encoding
+  sizeof(num) - (num.leadingZeros() shr 3)
 
-proc writeBigEndian(outStream: var seq[byte], number: SomeUnsignedInt,
+func writeBigEndian(outStream: var auto, number: SomeUnsignedInt,
                     lastByteIdx: int, numberOfBytes: int) =
-  mixin `and`, `shr`
-
   var n = number
-  for i in countdown(lastByteIdx, lastByteIdx - int(numberOfBytes) + 1):
+  for i in countdown(lastByteIdx, lastByteIdx - numberOfBytes + 1):
     outStream[i] = byte(n and 0xff)
     n = n shr 8
 
-proc writeBigEndian(outStream: var seq[byte], number: SomeUnsignedInt,
+func writeBigEndian(outStream: var auto, number: SomeUnsignedInt,
                     numberOfBytes: int) {.inline.} =
   outStream.setLen(outStream.len + numberOfBytes)
   outStream.writeBigEndian(number, outStream.len - 1, numberOfBytes)
 
-proc writeCount(bytes: var seq[byte], count: int, baseMarker: byte) =
+func writeCount(bytes: var auto, count: int, baseMarker: byte) =
   if count < THRESHOLD_LIST_LEN:
     bytes.add(baseMarker + byte(count))
   else:
@@ -44,6 +44,16 @@ proc writeCount(bytes: var seq[byte], count: int, baseMarker: byte) =
     bytes.setLen(origLen + int(lenPrefixBytes) + 1)
     bytes[origLen] = baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
     bytes.writeBigEndian(uint64(count), bytes.len - 1, lenPrefixBytes)
+
+func writeInt(outStream: var auto, i: SomeUnsignedInt) =
+  if i == typeof(i)(0):
+    outStream.add BLOB_START_MARKER
+  elif i < typeof(i)(BLOB_START_MARKER):
+    outStream.add byte(i)
+  else:
+    let bytesNeeded = i.bytesNeeded
+    outStream.writeCount(bytesNeeded, BLOB_START_MARKER)
+    outStream.writeBigEndian(i, bytesNeeded)
 
 proc initRlpWriter*: RlpWriter =
   # Avoid allocations during initial write of small items - since the writer is
@@ -124,16 +134,7 @@ proc appendBlob(self: var RlpWriter, data: openArray[char]) =
 proc appendInt(self: var RlpWriter, i: SomeUnsignedInt) =
   # this is created as a separate proc as an extra precaution against
   # any overloading resolution problems when matching the IntLike concept.
-  type IntType = type(i)
-
-  if i == IntType(0):
-    self.output.add BLOB_START_MARKER
-  elif i < BLOB_START_MARKER.SomeUnsignedInt:
-    self.output.add byte(i)
-  else:
-    let bytesNeeded = i.bytesNeeded
-    self.output.writeCount(bytesNeeded, BLOB_START_MARKER)
-    self.output.writeBigEndian(i, bytesNeeded)
+  self.output.writeInt(i)
 
   self.maybeClosePendingLists()
 
@@ -319,16 +320,22 @@ template finish*(self: RlpWriter): seq[byte] =
   doAssert self.pendingLists.len == 0, "Insufficient number of elements written to a started list"
   self.output
 
+func clear*(w: var RlpWriter) =
+  # Prepare writer for reuse
+  w.pendingLists.setLen(0)
+  w.output.setLen(0)
+
 proc encode*[T](v: T): seq[byte] =
   mixin append
+
   var writer = initRlpWriter()
   writer.append(v)
   move(writer.finish)
 
-proc encodeInt*(i: SomeUnsignedInt): seq[byte] =
-  var writer = initRlpWriter()
-  writer.appendInt(i)
-  move(writer.finish)
+func encodeInt*(i: SomeUnsignedInt): RlpIntBuf =
+  var buf: RlpIntBuf
+  buf.writeInt(i)
+  buf
 
 macro encodeList*(args: varargs[untyped]): seq[byte] =
   var
@@ -345,12 +352,3 @@ macro encodeList*(args: varargs[untyped]): seq[byte] =
     var `writer` = initRlpList(`listLen`)
     `body`
     move(finish(`writer`))
-
-when false:
-  # XXX: Currently fails with a malformed AST error on the args.len expression
-  template encodeList*(args: varargs[untyped]): seq[byte] =
-    mixin append
-    var writer = initRlpList(args.len)
-    for arg in args:
-      writer.append(arg)
-    writer.finish

@@ -257,3 +257,8 @@ suite "test api usage":
     expect RlpTypeMismatch:
       discard rlp.read(MyEnum)
     rlp.skipElem()
+
+  test "encodeInt basics":
+    for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:
+      check:
+        encode(i) == encodeInt(i).data()
