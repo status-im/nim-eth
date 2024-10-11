@@ -33,12 +33,12 @@ type
       ## AKA mix_digest in some specs - Hash32 in the eth API but Bytes32 in
       ## the execution API and spec!
     nonce*:           Bytes8
-    baseFeePerGas*:   Opt[UInt256]   # EIP-1559
-    withdrawalsRoot*: Opt[Hash32]   # EIP-4895
-    blobGasUsed*:     Opt[uint64]    # EIP-4844
-    excessBlobGas*:   Opt[uint64]    # EIP-4844
+    baseFeePerGas*:   Opt[UInt256]      # EIP-1559
+    withdrawalsRoot*: Opt[Hash32]       # EIP-4895
+    blobGasUsed*:     Opt[uint64]       # EIP-4844
+    excessBlobGas*:   Opt[uint64]       # EIP-4844
     parentBeaconBlockRoot*: Opt[Hash32] # EIP-4788
-    requestsRoot*:    Opt[Hash32]  # EIP-7685
+    requestsHash*:    Opt[Hash32]       # EIP-7685
 
 # starting from EIP-4399, `mixDigest` field is called `prevRandao`
 template prevRandao*(h: Header): Bytes32 =
