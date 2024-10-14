@@ -545,7 +545,8 @@ proc randomNodes*(r: RoutingTable, maxAmount: int,
   # while it will take less total time compared to e.g. an (async)
   # randomLookup, the time might be wasted as all nodes are possibly seen
   # already.
-  while len(seen) < maxAmount:
+  # We check against the number of nodes to avoid an infinite loop in case of a filter.
+  while len(result) < maxAmount and len(seen) < sz:
     let bucket = r.rng[].sample(r.buckets)
     if bucket.nodes.len != 0:
       let node = r.rng[].sample(bucket.nodes)
