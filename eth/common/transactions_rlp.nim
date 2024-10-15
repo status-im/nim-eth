@@ -305,6 +305,23 @@ proc readTxEip4844(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   rlp.read(tx.R)
   rlp.read(tx.S)
 
+func rlpEncodeEip7702(auth: Authorization): seq[byte] =
+  var w = initRlpWriter()
+  w.append(0x05'u8)
+  w.startList(3)
+  w.append(auth.chainId.uint64)
+  w.append(auth.address)
+  w.append(auth.nonce)
+  w.finish()
+
+func encodeForSigning*(auth: Authorization): seq[byte] =
+  ## Encode authorization data in preparation for signing or signature checking.
+  auth.rlpEncodeEip7702
+
+func rlpHashForSigning*(auth: Authorization): Hash32 =
+  # Hash authorization without signature
+  keccak256(encodeForSigning(auth))
+
 proc read*(rlp: var Rlp, T: type Authorization): T {.raises: [RlpError].} =
   rlp.tryEnterList()
   result.chainId = rlp.read(uint64).ChainId
