@@ -26,9 +26,9 @@ const
     chainID: 1.ChainId,
     address: source,
     nonce: 2.AccountNonce,
-    yParity: 3,
-    R: 4.u256,
-    S: 5.u256
+    v: 3,
+    r: 4.u256,
+    s: 5.u256
   )]
 
 proc tx0(i: int): PooledTransaction =
