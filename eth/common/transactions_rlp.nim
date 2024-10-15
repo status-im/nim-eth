@@ -76,9 +76,9 @@ proc append*(w: var RlpWriter, x: Authorization) =
   w.append(x.chainId.uint64)
   w.append(x.address)
   w.append(x.nonce)
-  w.append(x.yParity)
-  w.append(x.R)
-  w.append(x.S)
+  w.append(x.v)
+  w.append(x.r)
+  w.append(x.s)
 
 proc appendTxEip7702(w: var RlpWriter, tx: Transaction) =
   w.startList(13)
@@ -310,9 +310,9 @@ proc read*(rlp: var Rlp, T: type Authorization): T {.raises: [RlpError].} =
   result.chainId = rlp.read(uint64).ChainId
   rlp.read(result.address)
   rlp.read(result.nonce)
-  rlp.read(result.yParity)
-  rlp.read(result.R)
-  rlp.read(result.S)
+  rlp.read(result.v)
+  rlp.read(result.r)
+  rlp.read(result.s)
 
 proc readTxEip7702(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip7702
