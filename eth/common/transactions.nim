@@ -24,9 +24,9 @@ type
     chainId*: ChainId
     address*: Address
     nonce*: AccountNonce
-    yParity*: uint64
-    R*: UInt256
-    S*: UInt256
+    v*: uint64
+    r*: UInt256
+    s*: UInt256
 
   TxType* = enum
     TxLegacy    # 0
