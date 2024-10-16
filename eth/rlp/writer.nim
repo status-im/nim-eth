@@ -224,9 +224,14 @@ macro genOptionalFieldsValidation(obj: untyped, T: type, num: static[int]): unty
       doAssert(obj.withdrawalsRoot.isNone, "withdrawalsRoot needs fee")
       doAssert(obj.blobGasUsed.isNone, "blobGasUsed needs fee")
       doAssert(obj.excessBlobGas.isNone, "excessBlobGas needs fee")
+      doAssert(obj.systemLogsRoot.isNone, "systemLogsRoot needs fee")
     if obj.withdrawalsRoot.isNone:
       doAssert(obj.blobGasUsed.isNone, "blobGasUsed needs withdrawalsRoot")
       doAssert(obj.excessBlobGas.isNone, "excessBlobGas needs withdrawalsRoot")
+      doAssert(
+        obj.systemLogsRoot.isNone, "systemLogsRoot needs withdrawalsRoot")
+    if obj.blobGasUsed.isNone:
+      doAssert(obj.systemLogsRoot.isNone, "systemLogsRoot needs blobGasUsed")
     doAssert obj.blobGasUsed.isSome == obj.excessBlobGas.isSome,
       "blobGasUsed and excessBlobGas must both be present or absent"
 
