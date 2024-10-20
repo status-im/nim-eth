@@ -49,7 +49,6 @@ type
     istart, iend: UInt256
     nodes: seq[Node]
     replacementCache: seq[Node]
-    lastUpdated: float # epochTime
 
   CommandId* = enum
     cmdPing = 1
@@ -216,7 +215,6 @@ proc add(k: KBucket, n: Node): Node =
   ## If the bucket is full, we add the node to the bucket's replacement cache and return the
   ## node at the head of the list (i.e. the least recently seen), which should be evicted if it
   ## fails to respond to a ping.
-  k.lastUpdated = epochTime()
   let nodeIdx = k.nodes.find(n)
   if nodeIdx != -1:
       k.nodes.delete(nodeIdx)
