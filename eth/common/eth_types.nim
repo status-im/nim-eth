@@ -33,14 +33,11 @@ type
   EthAccount* = Account
   EthAddress* = Address
   EthBlock* = Block
-  EthConsolidationRequest* = ConsolidationRequest
-  EthDepositRequest* = DepositRequest
   EthHash32* = Hash32
   EthHeader* = Header
   EthTransaction* = Transaction
   EthReceipt* = Receipt
   EthWithdrawal* = Withdrawal
-  EthWithdrawalRequest* = WithdrawalRequest
 
 func init*(T: type BlockHashOrNumber, str: string): T {.raises: [ValueError].} =
   if str.startsWith "0x":
