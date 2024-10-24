@@ -41,7 +41,7 @@ func writeCount(bytes: var auto, count: int, baseMarker: byte) =
       origLen = bytes.len
       lenPrefixBytes = uint64(count).bytesNeeded
 
-    bytes.setLen(origLen + int(lenPrefixBytes) + 1)
+    bytes.setLen(origLen + lenPrefixBytes + 1)
     bytes[origLen] = baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
     bytes.writeBigEndian(uint64(count), bytes.len - 1, lenPrefixBytes)
 
@@ -104,13 +104,10 @@ proc appendRawBytes*(self: var RlpWriter, bytes: openArray[byte]) =
     self.output.len - bytes.len, self.output.len - 1), bytes)
   self.maybeClosePendingLists()
 
-proc appendRawList(self: var RlpWriter, bytes: openArray[byte]) =
-  self.output.writeCount(bytes.len, LIST_START_MARKER)
-  self.appendRawBytes(bytes)
-
 proc startList*(self: var RlpWriter, listSize: int) =
   if listSize == 0:
-    self.appendRawList([])
+    self.output.writeCount(0, LIST_START_MARKER)
+    self.appendRawBytes([])
   else:
     self.pendingLists.add((listSize, self.output.len))
 
@@ -159,42 +156,17 @@ proc appendImpl[T](self: var RlpWriter, listOrBlob: openArray[T]) =
     for i in 0 ..< listOrBlob.len:
       self.append listOrBlob[i]
 
-proc hasOptionalFields(T: type): bool =
+proc countOptionalFields(T: type): int =
   mixin enumerateRlpFields
 
-  proc helper: bool =
-    var dummy: T
-    result = false
-    template detectOptionalField(RT, n, x) {.used.} =
-      when x is Option or x is Opt:
-        return true
-    enumerateRlpFields(dummy, detectOptionalField)
+  var dummy: T
 
-  const res = helper()
-  return res
-
-proc optionalFieldsNum(x: openArray[bool]): int =
-  # count optional fields backward
-  for i in countdown(x.len-1, 0):
-    if x[i]: inc result
-    else: break
-
-proc checkedOptionalFields(T: type, FC: static[int]): int =
-  mixin enumerateRlpFields
-
-  var
-    i = 0
-    dummy: T
-    res: array[FC, bool]
-
+  # closure signature matches the one in object_serialization.nim
   template op(RT, fN, f) =
-    res[i] = f is Option or f is Opt
-    inc i
+    when f is Option or f is Opt:
+      inc result
 
   enumerateRlpFields(dummy, op)
-
-  # ignoring first optional fields
-  optionalFieldsNum(res) - 1
 
 proc genPrevFields(obj: NimNode, fd: openArray[FieldDescription], hi, lo: int): NimNode =
   result = newStmtList()
@@ -230,32 +202,17 @@ macro genOptionalFieldsValidation(obj: untyped, T: type, num: static[int]): unty
     doAssert obj.blobGasUsed.isSome == obj.excessBlobGas.isSome,
       "blobGasUsed and excessBlobGas must both be present or absent"
 
-macro countFieldsRuntimeImpl(obj: untyped, T: type, num: static[int]): untyped =
-  let
-    Tresolved = getType(T)[1]
-    fd = recordFields(Tresolved.getImpl)
-    res = ident("result")
-    mlen = fd.len - num
-
-  result = newStmtList()
-  result.add quote do:
-    `res` = `mlen`
-
-  for i in countdown(fd.high, fd.len-num):
-    let fieldName = fd[i].name
-    result.add quote do:
-      `res` += `obj`.`fieldName`.isSome.ord
-
 proc countFieldsRuntime(obj: object|tuple): int =
-  # count mandatory fields and non empty optional fields
-  type ObjType = type obj
+  mixin enumerateRlpFields
 
-  const
-    fieldsCount = ObjType.rlpFieldsCount
-    # include first optional fields
-    cof = checkedOptionalFields(ObjType, fieldsCount) + 1
+  template op(RT, fN, f) {.used.} =
+    when f is Option or f is Opt:
+      if f.isSome: # if optional and non empty
+        inc result
+    else: # if  mandatory field
+      inc result
 
-  countFieldsRuntimeImpl(obj, ObjType, cof)
+  enumerateRlpFields(obj, op)
 
 proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrapObjsInList) =
   mixin enumerateRlpFields, append
@@ -263,25 +220,22 @@ proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrap
   type ObjType = type obj
 
   const
-    hasOptional = hasOptionalFields(ObjType)
-    fieldsCount = ObjType.rlpFieldsCount
+    cof = countOptionalFields(ObjType)
 
-  when hasOptional:
-    const
-      cof = checkedOptionalFields(ObjType, fieldsCount)
-    when cof > 0:
-      genOptionalFieldsValidation(obj, ObjType, cof)
+  when cof > 0:
+    # ignoring first optional fields
+    genOptionalFieldsValidation(obj, ObjType, cof - 1)
 
   if wrapInList:
-    when hasOptional:
+    when cof > 0:
       self.startList(obj.countFieldsRuntime)
     else:
-      self.startList(fieldsCount)
+      self.startList(ObjType.rlpFieldsCount)
 
   template op(RecordType, fieldName, field) {.used.} =
     when hasCustomPragmaFixed(RecordType, fieldName, rlpCustomSerialization):
       append(self, obj, field)
-    elif (field is Option or field is Opt) and hasOptional:
+    elif (field is Option or field is Opt) and cof > 0:
       # this works for optional fields at the end of an object/tuple
       # if the optional field is followed by a mandatory field,
       # custom serialization for a field or for the parent object
