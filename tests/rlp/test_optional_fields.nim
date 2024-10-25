@@ -53,13 +53,16 @@ objWithEmptyTrailingOptionals.j = Opt.some(0'u64)
 suite "test optional fields":
   test "all optionals are empty":
     let bytes = rlp.encode(objWithEmptyOptional)
+    check: bytes.len == 7 # 6 mandatory fields + prefix byte
 
   test "all optionals are non empty":
     let bytes = rlp.encode(objWithNonEmptyOptional)
+    check: bytes.len == 15 # 6 mandatory + 8 optional + prefix
 
   test "Only trailing optionals are non empty":
     let bytes = rlp.encode(objWithNonEmptyTrailingOptionals)
-
+    check: bytes.len == 10 # 6 mandatory + 3 trailing optional + prefix
+  
   test "Only trailing optionals are empty":
     let bytes = rlp.encode(objWithEmptyTrailingOptionals)
-
+    check: bytes.len == 12 # 6 mandatory + 5 non trailing + prefix
