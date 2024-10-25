@@ -156,7 +156,7 @@ proc appendImpl[T](self: var RlpWriter, listOrBlob: openArray[T]) =
     for i in 0 ..< listOrBlob.len:
       self.append listOrBlob[i]
 
-proc countOptionalFields(T: type): int =
+proc countOptionalFields(T: type): int {.compileTime.} =
   mixin enumerateRlpFields
 
   var dummy: T
@@ -165,6 +165,8 @@ proc countOptionalFields(T: type): int =
   template op(RT, fN, f) =
     when f is Option or f is Opt:
       inc result
+    else: # this will count only optional fields at the end
+      result = 0
 
   enumerateRlpFields(dummy, op)
 
@@ -205,14 +207,18 @@ macro genOptionalFieldsValidation(obj: untyped, T: type, num: static[int]): unty
 proc countFieldsRuntime(obj: object|tuple): int =
   mixin enumerateRlpFields
 
+  var numOptionals: int = 0
+
   template op(RT, fN, f) {.used.} =
     when f is Option or f is Opt:
       if f.isSome: # if optional and non empty
-        inc result
+        inc numOptionals
     else: # if  mandatory field
       inc result
+      numOptionals = 0 # count only optionals at the end (after mandatory)
 
   enumerateRlpFields(obj, op)
+  result += numOptionals
 
 proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrapObjsInList) =
   mixin enumerateRlpFields, append
