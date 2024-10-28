@@ -448,9 +448,6 @@ func readImpl(
     else:
       rlp.bytes.len()
 
-  template getUnderlyingType[T](_: Option[T]): untyped =
-    T
-
   template getUnderlyingType[T](_: Opt[T]): untyped =
     T
 
@@ -458,16 +455,6 @@ func readImpl(
     type FieldType {.used.} = type field
     when hasCustomPragmaFixed(RecordType, fieldName, rlpCustomSerialization):
       field = rlp.read(result, FieldType)
-    elif field is Option:
-      # this works for optional fields at the end of an object/tuple
-      # if the optional field is followed by a mandatory field,
-      # custom serialization for a field or for the parent object
-      # will be better
-      type UT = getUnderlyingType(field)
-      if rlp.position < payloadEnd:
-        field = some(rlp.read(UT))
-      else:
-        field = none(UT)
     elif field is Opt:
       # this works for optional fields at the end of an object/tuple
       # if the optional field is followed by a mandatory field,
