@@ -1,17 +1,20 @@
-import
-  std/options,
-  ../rlp
+import ../rlp
+import results
 
-proc read*[T](rlp: var Rlp, O: type Option[T]): O {.inline.} =
-  mixin read
-  if not rlp.isEmpty:
-    result = some read(rlp, T)
+proc append*[T](w: var RlpWriter, val: Opt[T]) =
+  mixin append
 
-proc append*(writer: var RlpWriter, value: Option) =
-  if value.isSome:
-    writer.append value.get
+  if val.isSome:
+    w.append(val.get())
   else:
-    writer.append ""
+    w.append("")
 
-export
-  options, rlp
+proc read*[T](rlp: var Rlp, val: var Opt[T]) {.raises: [RlpError].} =
+  mixin read
+  if rlp.blobLen != 0:
+    val = Opt.some(rlp.read(T))
+  else:
+    rlp.skipElem
+
+export 
+  rlp, results

@@ -7,29 +7,16 @@
 
 {.push raises: [].}
 
-import std/typetraits, ./base, ../rlp
+import
+  std/typetraits, ./base, ../rlp, 
+  ../rlp/options as rlp_options
 
-export base, rlp
+export base, rlp, rlp_options
 
-# TODO why is rlp serialization of `Opt` here and not in rlp?
-proc append*[T](w: var RlpWriter, val: Opt[T]) =
-  mixin append
-
-  if val.isSome:
-    w.append(val.get())
-  else:
-    w.append("")
 
 template read*[T](rlp: var Rlp, val: var T) =
   mixin read
   val = rlp.read(type val)
-
-proc read*[T](rlp: var Rlp, val: var Opt[T]) {.raises: [RlpError].} =
-  mixin read
-  if rlp.blobLen != 0:
-    val = Opt.some(rlp.read(T))
-  else:
-    rlp.skipElem
 
 proc read*(rlp: var Rlp, T: type StUint): T {.raises: [RlpError].} =
   if rlp.isBlob:
