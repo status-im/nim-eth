@@ -84,7 +84,7 @@ proc newEthereumNode*(
     bootstrapNodes: seq[ENode] = @[],
     bindUdpPort: Port,
     bindTcpPort: Port,
-    bindIp = IPv4_any(),
+    bindIp = IPv6_any(),
     rng = newRng()): EthereumNode =
 
   if rng == nil: # newRng could fail
