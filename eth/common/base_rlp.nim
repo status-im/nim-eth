@@ -9,9 +9,9 @@
 
 import
   std/typetraits, ./base, ../rlp, 
-  ../rlp/options as rlp_options
+  ../rlp/results as rlp_results
 
-export base, rlp, rlp_options
+export base, rlp, rlp_results
 
 
 template read*[T](rlp: var Rlp, val: var T) =
