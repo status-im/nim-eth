@@ -269,7 +269,7 @@ proc initRlpList*(listSize: int): RlpWriter =
 
 # TODO: This should return a lent value
 template finish*(self: RlpWriter): seq[byte] =
-  doAssert self.pendingLists.len == 0, "Insufficient number of elements written to a started list" & $(self.pendingLists.len)
+  doAssert self.pendingLists.len == 0, "Insufficient number of elements written to a started list"
   self.output
 
 func clear*(w: var RlpWriter) =
