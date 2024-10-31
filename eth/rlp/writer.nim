@@ -65,11 +65,11 @@ proc maybeClosePendingLists(self: var RlpWriter) =
     let lastListIdx = self.pendingLists.len - 1
     doAssert self.pendingLists[lastListIdx].remainingItems > 0
 
-    self.pendingLists[lastListIdx].remainingItems -= 1
     # if one last item is remaining in the list
-    if self.pendingLists[lastListIdx].remainingItems == 0:
+    if self.pendingLists[lastListIdx].remainingItems == 1:
       # A list have been just finished. It was started in `startList`.
       let listStartPos = self.pendingLists[lastListIdx].startPos
+      self.pendingLists[lastListIdx].remainingItems -= 1
       self.pendingLists.setLen lastListIdx
 
       # How many bytes were written since the start?
