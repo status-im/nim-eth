@@ -1,6 +1,6 @@
 import
   std/options,
-  results,
+  pkg/results,
   stew/[arraybuf, assign2, bitops2, shims/macros],
  ./priv/defs
 
@@ -8,7 +8,7 @@ export arraybuf
 
 type
   RlpWriter* = object
-    pendingLists: seq[tuple[remainingItems, outBytes: int]]
+    pendingLists: seq[tuple[remainingItems, startPos: int]]
     output: seq[byte]
 
   RlpIntBuf* = ArrayBuf[9, byte]
@@ -60,17 +60,16 @@ proc initRlpWriter*: RlpWriter =
   # expected to be short-lived, it doesn't hurt to allocate this buffer
   result.output = newSeqOfCap[byte](2000)
 
-proc decRet(n: var int, delta: int): int =
-  n -= delta
-  n
-
 proc maybeClosePendingLists(self: var RlpWriter) =
   while self.pendingLists.len > 0:
     let lastListIdx = self.pendingLists.len - 1
-    doAssert self.pendingLists[lastListIdx].remainingItems >= 1
-    if decRet(self.pendingLists[lastListIdx].remainingItems, 1) == 0:
+    doAssert self.pendingLists[lastListIdx].remainingItems > 0
+
+    self.pendingLists[lastListIdx].remainingItems -= 1
+    # if one last item is remaining in the list
+    if self.pendingLists[lastListIdx].remainingItems == 0:
       # A list have been just finished. It was started in `startList`.
-      let listStartPos = self.pendingLists[lastListIdx].outBytes
+      let listStartPos = self.pendingLists[lastListIdx].startPos
       self.pendingLists.setLen lastListIdx
 
       # How many bytes were written since the start?
@@ -111,22 +110,13 @@ proc startList*(self: var RlpWriter, listSize: int) =
   else:
     self.pendingLists.add((listSize, self.output.len))
 
-proc appendBlob(self: var RlpWriter, data: openArray[byte], startMarker: byte) =
+proc appendBlob(self: var RlpWriter, data: openArray[byte]) =
   if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:
     self.output.add byte(data[0])
     self.maybeClosePendingLists()
   else:
-    self.output.writeCount(data.len, startMarker)
+    self.output.writeCount(data.len, BLOB_START_MARKER)
     self.appendRawBytes(data)
-
-proc appendImpl(self: var RlpWriter, data: string) =
-  appendBlob(self, data.toOpenArrayByte(0, data.high), BLOB_START_MARKER)
-
-proc appendBlob(self: var RlpWriter, data: openArray[byte]) =
-  appendBlob(self, data, BLOB_START_MARKER)
-
-proc appendBlob(self: var RlpWriter, data: openArray[char]) =
-  appendBlob(self, data.toOpenArrayByte(0, data.high), BLOB_START_MARKER)
 
 proc appendInt(self: var RlpWriter, i: SomeUnsignedInt) =
   # this is created as a separate proc as an extra precaution against
@@ -135,26 +125,32 @@ proc appendInt(self: var RlpWriter, i: SomeUnsignedInt) =
 
   self.maybeClosePendingLists()
 
+
+template appendImpl(self: var RlpWriter, data: openArray[byte]) =
+  self.appendBlob(data)
+
+template appendImpl(self: var RlpWriter, data: openArray[char]) =
+  self.appendBlob(data.toOpenArrayByte(0, data.high))
+
+template appendImpl(self: var RlpWriter, data: string) =
+  self.appendBlob(data.toOpenArrayByte(0, data.high))
+
 template appendImpl(self: var RlpWriter, i: SomeUnsignedInt) =
-  appendInt(self, i)
+  self.appendInt(i)
 
 template appendImpl(self: var RlpWriter, e: enum) =
-  appendImpl(self, int(e))
+  # TODO: check for negative enums 
+  self.appendInt(uint64(e))
 
 template appendImpl(self: var RlpWriter, b: bool) =
-  appendImpl(self, int(b))
+  self.appendInt(uint64(b))
 
-proc appendImpl[T](self: var RlpWriter, listOrBlob: openArray[T]) =
+proc appendImpl[T](self: var RlpWriter, list: openArray[T]) =
   mixin append
 
-  # TODO: This append proc should be overloaded by `openArray[byte]` after
-  # nim bug #7416 is fixed.
-  when T is (byte or char):
-    self.appendBlob(listOrBlob)
-  else:
-    self.startList listOrBlob.len
-    for i in 0 ..< listOrBlob.len:
-      self.append listOrBlob[i]
+  self.startList list.len
+  for i in 0 ..< list.len:
+    self.append list[i]
 
 proc countOptionalFields(T: type): int {.compileTime.} =
   mixin enumerateRlpFields
@@ -253,20 +249,16 @@ proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrap
 
   enumerateRlpFields(obj, op)
 
-proc appendImpl(self: var RlpWriter, data: object) {.inline.} =
+template appendImpl(self: var RlpWriter, data: object) =
   self.appendRecordType(data)
 
-proc appendImpl(self: var RlpWriter, data: tuple) {.inline.} =
+template appendImpl(self: var RlpWriter, data: tuple) =
   self.appendRecordType(data)
 
 # We define a single `append` template with a pretty low specificity
 # score in order to facilitate easier overloading with user types:
 template append*[T](w: var RlpWriter; data: T) =
-  when data is (enum|bool):
-    # TODO detect negative enum values at compile time?
-    appendImpl(w, uint64(data))
-  else:
-    appendImpl(w, data)
+  appendImpl(w, data)
 
 template append*(w: var RlpWriter; data: SomeSignedInt) =
   {.error: "Signed integer encoding is not defined for rlp".}
@@ -277,7 +269,7 @@ proc initRlpList*(listSize: int): RlpWriter =
 
 # TODO: This should return a lent value
 template finish*(self: RlpWriter): seq[byte] =
-  doAssert self.pendingLists.len == 0, "Insufficient number of elements written to a started list"
+  doAssert self.pendingLists.len == 0, "Insufficient number of elements written to a started list" & $(self.pendingLists.len)
   self.output
 
 func clear*(w: var RlpWriter) =
