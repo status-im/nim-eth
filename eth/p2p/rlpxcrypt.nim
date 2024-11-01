@@ -61,8 +61,8 @@ proc sxor[T](a: var openArray[T], b: openArray[T]) {.inline.} =
 proc initSecretState*(secrets: ConnectionSecret, context: var SecretState) =
   ## Initialized `context` with values from `secrets`.
 
-  # FIXME: Yes, the encryption is insecure,
-  # see: https://github.com/ethereum/devp2p/issues/32
+  # This scheme is insecure, see:
+  # https://github.com/ethereum/devp2p/issues/32
   # https://github.com/ethereum/py-evm/blob/master/p2p/peer.py#L159-L160
   var iv: array[context.aesenc.sizeBlock, byte]
   context.aesenc.init(secrets.aesKey, iv)
@@ -132,8 +132,8 @@ proc encrypt*(c: var SecretState, header: openArray[byte],
   var frameMac = tmpmac.finish()
   tmpmac.clear()
   # return header_ciphertext + header_mac + frame_ciphertext + frame_mac
-  copyMem(addr output[headerMacPos], addr headerMac.data[0], RlpHeaderLength)
-  copyMem(addr output[frameMacPos], addr frameMac.data[0], RlpHeaderLength)
+  copyMem(addr output[headerMacPos], addr headerMac.data[0], RlpMacLength)
+  copyMem(addr output[frameMacPos], addr frameMac.data[0], RlpMacLength)
   ok()
 
 proc encryptMsg*(msg: openArray[byte], secrets: var SecretState): seq[byte] =
@@ -160,7 +160,7 @@ proc getBodySize*(a: RlpxHeader): int =
   (int(a[0]) shl 16) or (int(a[1]) shl 8) or int(a[2])
 
 proc decryptHeader*(c: var SecretState, data: openArray[byte],
-                    output: var openArray[byte]): RlpxResult[void] =
+                    output: var RlpxHeader): RlpxResult[int] =
   ## Decrypts header `data` using SecretState `c` context and store
   ## result into `output`.
   ##
@@ -190,30 +190,14 @@ proc decryptHeader*(c: var SecretState, data: openArray[byte],
   let headerMacPos = RlpHeaderLength
   if not equalMem(cast[pointer](unsafeAddr data[headerMacPos]),
                   cast[pointer](addr expectMac.data[0]), RlpMacLength):
-    result = err(IncorrectMac)
+    err(IncorrectMac)
   else:
     # return self.aes_dec.update(header_ciphertext)
     c.aesdec.decrypt(toa(data, 0, RlpHeaderLength), output)
-    result = ok()
-
-proc decryptHeaderAndGetMsgSize*(c: var SecretState,
-                                 encryptedHeader: openArray[byte],
-                                 outSize: var int,
-                                 outHeader: var RlpxHeader): RlpxResult[void] =
-  result = decryptHeader(c, encryptedHeader, outHeader)
-  if result.isOk():
-    outSize = outHeader.getBodySize
-
-proc decryptHeaderAndGetMsgSize*(c: var SecretState,
-                                 encryptedHeader: openArray[byte],
-                                 outSize: var int): RlpxResult[void] =
-  var decryptedHeader: RlpxHeader
-  result = decryptHeader(c, encryptedHeader, decryptedHeader)
-  if result.isOk():
-    outSize = decryptedHeader.getBodySize
+    ok(output.getBodySize())
 
 proc decryptBody*(c: var SecretState, data: openArray[byte], bodysize: int,
-                  output: var openArray[byte], outlen: var int): RlpxResult[void] =
+                  output: var openArray[byte]): RlpxResult[void] =
   ## Decrypts body `data` using SecretState `c` context and store
   ## result into `output`.
   ##
@@ -224,7 +208,6 @@ proc decryptBody*(c: var SecretState, data: openArray[byte], bodysize: int,
   var
     tmpmac: keccak256
     aes: array[RlpHeaderLength, byte]
-  outlen = 0
   let rsize = roundup16(bodysize)
   if len(data) < rsize + RlpMacLength:
     return err(IncompleteError)
@@ -245,8 +228,7 @@ proc decryptBody*(c: var SecretState, data: openArray[byte], bodysize: int,
   let bodyMacPos = rsize
   if not equalMem(cast[pointer](unsafeAddr data[bodyMacPos]),
                   cast[pointer](addr expectMac.data[0]), RlpMacLength):
-    result = err(IncorrectMac)
+    err(IncorrectMac)
   else:
     c.aesdec.decrypt(toa(data, 0, rsize), output)
-    outlen = bodysize
-    result = ok()
+    ok()
