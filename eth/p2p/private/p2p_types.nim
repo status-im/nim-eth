@@ -15,9 +15,9 @@ import
   chronos,
   results,
   ".."/../[rlp], ../../common/[base, keys],
-  ".."/[enode, kademlia, discovery, rlpxcrypt]
+  ".."/[enode, kademlia, discovery, rlpxtransport]
 
-export base.NetworkId
+export base.NetworkId, rlpxtransport
 
 const
   useSnappy* = defined(useSnappy)
@@ -48,16 +48,16 @@ type
     network*: EthereumNode
 
     # Private fields:
-    transport*: StreamTransport
+    transport*: RlpxTransport
     dispatcher*: Dispatcher
     lastReqId*: Opt[uint64]
-    secretsState*: SecretState
     connectionState*: ConnectionState
     protocolStates*: seq[RootRef]
     outstandingRequests*: seq[Deque[OutstandingRequest]] # per `msgId` table
     awaitedMessages*: seq[FutureBase] # per `msgId` table
     when useSnappy:
       snappyEnabled*: bool
+    clientId*: string
 
   SeenNode* = object
     nodeId*: NodeId
@@ -111,8 +111,7 @@ type
     protocols*: seq[ProtocolInfo]
 
   ProtocolInfo* = ref object
-    name*: string
-    version*: uint64
+    capability*: Capability
     messages*: seq[MessageInfo]
     index*: int # the position of the protocol in the
                 # ordered list of supported protocols
@@ -209,12 +208,14 @@ type
     ClientQuitting = 0x08,
     UnexpectedIdentity = 0x09,
     SelfConnection = 0x0A,
-    MessageTimeout = 0x0B,
+    PingTimeout = 0x0B,
     SubprotocolReason = 0x10
 
   Address = enode.Address
 
 proc `$`*(peer: Peer): string = $peer.remote
+
+proc `$`*(v: Capability): string = v.name & "/" & $v.version
 
 proc toENode*(v: EthereumNode): ENode =
   ENode(pubkey: v.keys.pubkey, address: v.address)

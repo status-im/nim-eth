@@ -25,7 +25,7 @@
 import
   std/[options, sequtils, macrocache],
   results,
-  stew/shims/macros, chronos, faststreams/outputs
+  stew/shims/macros, chronos
 
 type
   MessageKind* = enum
@@ -699,77 +699,6 @@ proc writeParamsAsRecord*(params: openArray[NimNode],
       var `writer` = init(WriterType(`Format`), `outputStream`)
       writeValue(`writer`, `param`)
 
-proc useStandardBody*(sendProc: SendProc,
-                      preSerializationStep: proc(stream: NimNode): NimNode,
-                      postSerializationStep: proc(stream: NimNode): NimNode,
-                      sendCallGenerator: proc (peer, bytes: NimNode): NimNode) =
-  let
-    msg = sendProc.msg
-    msgBytes = ident "msgBytes"
-    recipient = sendProc.peerParam
-    sendCall = sendCallGenerator(recipient, msgBytes)
-
-  if sendProc.msgParams.len == 0:
-    sendProc.setBody quote do:
-      var `msgBytes`: seq[byte]
-      `sendCall`
-    return
-
-  let
-    outputStream = ident "outputStream"
-
-    msgRecName = msg.recName
-    Format = msg.protocol.backend.SerializationFormat
-
-    preSerialization = if preSerializationStep.isNil: newStmtList()
-                       else: preSerializationStep(outputStream)
-
-    serialization = writeParamsAsRecord(sendProc.msgParams,
-                                       outputStream, Format, msgRecName)
-
-    postSerialization = if postSerializationStep.isNil: newStmtList()
-                        else: postSerializationStep(outputStream)
-
-    tracing = when not tracingEnabled:
-                newStmtList()
-              else:
-                logSentMsgFields(recipient,
-                                 msg.protocol.protocolInfo,
-                                 $msg.ident,
-                                 sendProc.msgParams)
-
-  sendProc.setBody quote do:
-    mixin init, WriterType, beginRecord, endRecord, getOutput
-
-    var `outputStream` = memoryOutput()
-    `preSerialization`
-    `serialization`
-    `postSerialization`
-    `tracing`
-    let `msgBytes` = getOutput(`outputStream`)
-    `sendCall`
-
-proc correctSerializerProcParams(params: NimNode) =
-  # A serializer proc is just like a send proc, but:
-  # 1. it has a void return type
-  params[0] = ident "void"
-  # 2. The peer params is replaced with OutputStream
-  params[1] = newIdentDefs(streamVar, bindSym "OutputStream")
-  # 3. The timeout param is removed
-  params.del(params.len - 1)
-
-proc createSerializer*(msg: Message, procType = nnkProcDef): NimNode =
-  var serializer = msg.createSendProc(procType, nameSuffix = "Serializer")
-  correctSerializerProcParams serializer.def.params
-
-  serializer.setBody writeParamsAsRecord(
-    serializer.msgParams,
-    streamVar,
-    msg.protocol.backend.SerializationFormat,
-    msg.recName)
-
-  return serializer.def
-
 proc defineThunk*(msg: Message, thunk: NimNode) =
   let protocol = msg.protocol
 
@@ -1019,7 +948,7 @@ proc genCode*(p: P2PProtocol): NimNode =
   regBody.add newCall(p.backend.registerProtocol, protocolVar)
 
   result.add quote do:
-    proc `protocolReg`() {.raises: [RlpError].} =
+    proc `protocolReg`() =
       let `protocolVar` = `protocolInit`
       `regBody`
     `protocolReg`()

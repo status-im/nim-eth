@@ -27,7 +27,7 @@ proc addCapability*(node: EthereumNode,
 
   let pos = lowerBound(node.protocols, p, rlpx.cmp)
   node.protocols.insert(p, pos)
-  node.capabilities.insert(p.asCapability, pos)
+  node.capabilities.insert(p.capability, pos)
 
   if p.networkStateInitializer != nil and networkState.isNil:
     node.protocolStates[p.index] = p.networkStateInitializer(node)

@@ -38,7 +38,8 @@ type
     IncompleteError = "rlpx: data incomplete"
     IncorrectArgs = "rlpx: incorrect arguments"
 
-  RlpxHeader* = array[16, byte]
+  RlpxEncryptedHeader* = array[RlpHeaderLength + RlpMacLength, byte]
+  RlpxHeader* = array[RlpHeaderLength, byte]
 
   RlpxResult*[T] = Result[T, RlpxError]
 
@@ -159,21 +160,19 @@ proc encryptMsg*(msg: openArray[byte], secrets: var SecretState): seq[byte] =
 proc getBodySize*(a: RlpxHeader): int =
   (int(a[0]) shl 16) or (int(a[1]) shl 8) or int(a[2])
 
-proc decryptHeader*(c: var SecretState, data: openArray[byte],
-                    output: var RlpxHeader): RlpxResult[int] =
+proc decryptHeader*(c: var SecretState, data: openArray[byte]): RlpxResult[RlpxHeader] =
   ## Decrypts header `data` using SecretState `c` context and store
   ## result into `output`.
   ##
-  ## `header` must be exactly `RlpHeaderLength + RlpMacLength` length.
-  ## `output` must be at least `RlpHeaderLength` length.
+  ## `header` must be at least `RlpHeaderLength + RlpMacLength` length.
+
   var
     tmpmac: keccak256
     aes: array[RlpHeaderLength, byte]
 
-  if len(data) != RlpHeaderLength + RlpMacLength:
+  if len(data) < RlpHeaderLength + RlpMacLength:
     return err(IncompleteError)
-  if len(output) < RlpHeaderLength:
-    return err(IncorrectArgs)
+
   # mac_secret = self.ingress_mac.digest()[:HEADER_LEN]
   tmpmac = c.imac
   var macsec = tmpmac.finish()
@@ -187,14 +186,14 @@ proc decryptHeader*(c: var SecretState, data: openArray[byte],
   tmpmac = c.imac
   var expectMac = tmpmac.finish()
   # if not bytes_eq(expected_header_mac, header_mac):
-  let headerMacPos = RlpHeaderLength
-  if not equalMem(cast[pointer](unsafeAddr data[headerMacPos]),
-                  cast[pointer](addr expectMac.data[0]), RlpMacLength):
-    err(IncorrectMac)
-  else:
-    # return self.aes_dec.update(header_ciphertext)
-    c.aesdec.decrypt(toa(data, 0, RlpHeaderLength), output)
-    ok(output.getBodySize())
+  if not equalMem(unsafeAddr data[RlpHeaderLength],
+                  addr expectMac.data[0], RlpMacLength):
+    return err(IncorrectMac)
+
+  # return self.aes_dec.update(header_ciphertext)
+  var output: RlpxHeader
+  c.aesdec.decrypt(toa(data, 0, RlpHeaderLength), output)
+  ok(output)
 
 proc decryptBody*(c: var SecretState, data: openArray[byte], bodysize: int,
                   output: var openArray[byte]): RlpxResult[void] =

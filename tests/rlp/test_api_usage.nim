@@ -21,8 +21,7 @@ proc test_blockBodyTranscode() =
       transactions: @[
         Transaction(nonce: 1)]),
     BlockBody(
-      uncles: @[
-        BlockHeader(nonce: BlockNonce([0x20u8,0,0,0,0,0,0,0]))]),
+      uncles: @[Header(nonce: Bytes8([0x20u8,0,0,0,0,0,0,0]))]),
     BlockBody(),
     BlockBody(
       transactions: @[

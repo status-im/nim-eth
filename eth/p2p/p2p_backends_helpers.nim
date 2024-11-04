@@ -16,7 +16,7 @@ let protocolManager = ProtocolManager()
 proc registerProtocol*(proto: ProtocolInfo) {.gcsafe.} =
   {.gcsafe.}:
     proto.index = protocolManager.protocols.len
-    if proto.name == "p2p":
+    if proto.capability.name == "p2p":
       doAssert(proto.index == 0)
     protocolManager.protocols.add proto
 
