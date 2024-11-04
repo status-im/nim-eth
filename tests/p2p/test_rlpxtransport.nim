@@ -41,7 +41,7 @@ suite "RLPx transport":
 
     await serverFut
 
-  asyncTest "Connect/accept":
+  asyncTest "Detect invalid pubkey":
     proc serveClient(server: StreamServer) {.async.} =
       let transp = await server.accept()
       discard await RlpxTransport.accept(rng, keys1, transp)
