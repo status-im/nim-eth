@@ -10,9 +10,9 @@
 
 {.push raises: [], gcsafe.}
 
-import results, chronos, eth/common/keys, ./[auth, rlpxcrypt]
+import results, chronos, ../common/keys, ./[auth, rlpxcrypt]
 
-export results, keys, auth, rlpxcrypt
+export results, keys
 
 type
   RlpxTransport* = ref object
