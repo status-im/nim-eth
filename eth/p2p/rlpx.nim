@@ -1229,7 +1229,7 @@ proc rlpxAccept*(node: EthereumNode, stream: StreamTransport): Future[Peer] {.as
 
   let
     peer = Peer(network: node)
-    remoteAddress = peer.transport.remoteAddress()
+    remoteAddress = stream.remoteAddress()
     deadline = sleepAsync(connectionTimeout)
   trace "Incoming connection", remoteAddress = $remoteAddress
 
