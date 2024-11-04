@@ -12,6 +12,8 @@
 
 import results, chronos, eth/common/keys, ./[auth, rlpxcrypt]
 
+export results, keys, auth, rlpxcrypt
+
 type
   RlpxTransport* = ref object
     stream: StreamTransport
