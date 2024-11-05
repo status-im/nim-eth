@@ -159,11 +159,9 @@ suite "Ethereum RLPx encryption/decryption test suite":
     var csecResponder = responder.getSecrets(m0, m1)
     var stateInitiator: SecretState
     var stateResponder: SecretState
-    var iheader, rheader: array[16, byte]
+    var iheader: array[16, byte]
     initSecretState(csecInitiator, stateInitiator)
     initSecretState(csecResponder, stateResponder)
-    burnMem(iheader)
-    burnMem(rheader)
     for i in 1..1000:
       # initiator -> responder
       block:
@@ -176,8 +174,9 @@ suite "Ethereum RLPx encryption/decryption test suite":
           randomBytes(ibody) == len(ibody)
           stateInitiator.encrypt(iheader, ibody,
                                  encrypted).isOk()
-          stateResponder.decryptHeader(toOpenArray(encrypted, 0, 31),
-                                       rheader).isOk()
+        let rheader = stateResponder.decryptHeader(
+          toOpenArray(encrypted, 0, 31)).expect("valid data")
+
         var length = getBodySize(rheader)
         check length == len(ibody)
         var rbody = newSeq[byte](decryptedLength(length))
@@ -190,7 +189,6 @@ suite "Ethereum RLPx encryption/decryption test suite":
           iheader == rheader
           ibody == rbody
         burnMem(iheader)
-        burnMem(rheader)
       # responder -> initiator
       block:
         var ibody = newSeq[byte](i * 3)
@@ -202,8 +200,8 @@ suite "Ethereum RLPx encryption/decryption test suite":
           randomBytes(ibody) == len(ibody)
           stateResponder.encrypt(iheader, ibody,
                                  encrypted).isOk()
-          stateInitiator.decryptHeader(toOpenArray(encrypted, 0, 31),
-                                       rheader).isOk()
+        let rheader = stateInitiator.decryptHeader(
+          toOpenArray(encrypted, 0, 31)).expect("valid data")
         var length = getBodySize(rheader)
         check length == len(ibody)
         var rbody = newSeq[byte](decryptedLength(length))
@@ -216,4 +214,3 @@ suite "Ethereum RLPx encryption/decryption test suite":
           iheader == rheader
           ibody == rbody
         burnMem(iheader)
-        burnMem(rheader)

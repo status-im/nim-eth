@@ -40,7 +40,7 @@ const
     ## least 100 bytes of padding to make the message distinguishable from
     ## pre-EIP8 and at most 200 to stay within recommendation
 
-  # signature + pubkey + nounce + version + rlp encoding overhead
+  # signature + pubkey + nonce + version + rlp encoding overhead
   # 65 + 64 + 32 + 1 + 7 = 169
   PlainAuthMessageEIP8Length = 169
   PlainAuthMessageMaxEIP8 = PlainAuthMessageEIP8Length + MaxPadLenEIP8
@@ -57,7 +57,8 @@ const
   PlainAckMessageEIP8Length = 102
   PlainAckMessageMaxEIP8 = PlainAckMessageEIP8Length + MaxPadLenEIP8
   # Min. encrypted message + size prefix = 217
-  AckMessageEIP8Length* = eciesEncryptedLength(PlainAckMessageMaxEIP8) + MsgLenLenEIP8
+  AckMessageEIP8Length* =
+    eciesEncryptedLength(PlainAckMessageEIP8Length) + MsgLenLenEIP8
   AckMessageMaxEIP8* = AckMessageEIP8Length + MaxPadLenEIP8
     ## Minimal output buffer size to pass into `ackMessage`
 
@@ -225,18 +226,27 @@ proc ackMessage*(
     return err(AuthError.EciesError)
   ok(fullsize)
 
-proc decodeMsgLen*(h: Handshake, input: openArray[byte]): AuthResult[int] =
+func decodeMsgLen(input: openArray[byte]): AuthResult[int] =
   if input.len < 2:
     return err(AuthError.IncompleteError)
-  let len = int(uint16.fromBytesBE(input)) + 2
+  ok(int(uint16.fromBytesBE(input)) + 2)
+
+func decodeAuthMsgLen*(h: Handshake, input: openArray[byte]): AuthResult[int] =
+  let len = ?decodeMsgLen(input)
   if len < AuthMessageEIP8Length:
+    return err(AuthError.IncompleteError)
+  ok(len)
+
+func decodeAckMsgLen*(h: Handshake, input: openArray[byte]): AuthResult[int] =
+  let len = ?decodeMsgLen(input)
+  if len < AckMessageEIP8Length:
     return err(AuthError.IncompleteError)
   ok(len)
 
 proc decodeAuthMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AuthMessage.
   let
-    expectedLength = ?h.decodeMsgLen(m)
+    expectedLength = ?h.decodeAuthMsgLen(m)
     size = expectedLength - MsgLenLenEIP8
 
   # Check if the prefixed size is => than the minimum
@@ -289,7 +299,7 @@ proc decodeAuthMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] 
 proc decodeAckMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AckMessage.
   let
-    expectedLength = ?h.decodeMsgLen(m)
+    expectedLength = ?h.decodeAckMsgLen(m)
     size = expectedLength - MsgLenLenEIP8
 
   # Check if the prefixed size is => than the minimum
