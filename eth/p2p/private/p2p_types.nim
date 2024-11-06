@@ -17,10 +17,7 @@ import
   ".."/../[rlp], ../../common/[base, keys],
   ".."/[enode, kademlia, discovery, rlpxtransport]
 
-export base.NetworkId, rlpxtransport
-
-const
-  useSnappy* = defined(useSnappy)
+export base.NetworkId, rlpxtransport, kademlia
 
 type
   EthereumNode* = ref object
@@ -39,8 +36,6 @@ type
     listeningServer*: StreamServer
     protocolStates*: seq[RootRef]
     discovery*: DiscoveryProtocol
-    when useSnappy:
-      protocolVersion*: uint64
     rng*: ref HmacDrbgContext
 
   Peer* = ref object
@@ -55,8 +50,7 @@ type
     protocolStates*: seq[RootRef]
     outstandingRequests*: seq[Deque[OutstandingRequest]] # per `msgId` table
     awaitedMessages*: seq[FutureBase] # per `msgId` table
-    when useSnappy:
-      snappyEnabled*: bool
+    snappyEnabled*: bool
     clientId*: string
 
   SeenNode* = object
@@ -119,8 +113,9 @@ type
     # Private fields:
     peerStateInitializer*: PeerStateInitializer
     networkStateInitializer*: NetworkStateInitializer
-    handshake*: HandshakeStep
-    disconnectHandler*: DisconnectionHandler
+
+    onPeerConnected*: OnPeerConnectedHandler
+    onPeerDisconnected*: OnPeerDisconnectedHandler
 
   MessageInfo* = ref object
     id*: uint64 # this is a `msgId` (as opposed to a `reqId`)
@@ -131,6 +126,7 @@ type
     printer*: MessageContentPrinter
     requestResolver*: RequestResolver
     nextMsgResolver*: NextMsgResolver
+    failResolver*: FailResolver
 
   Dispatcher* = ref object # private
     # The dispatcher stores the mapping of negotiated message IDs between
@@ -156,13 +152,12 @@ type
   OutstandingRequest* = object
     id*: uint64 # a `reqId` that may be used for response
     future*: FutureBase
-    timeoutAt*: Moment
 
   # Private types:
   MessageHandlerDecorator* = proc(msgId: uint64, n: NimNode): NimNode
 
-  ThunkProc* = proc(x: Peer, msgId: uint64, data: Rlp): Future[void]
-    {.gcsafe, async: (raises: [RlpError, EthP2PError]).}
+  ThunkProc* = proc(x: Peer, data: Rlp): Future[void]
+    {.async: (raises: [CancelledError, EthP2PError]).}
 
   MessageContentPrinter* = proc(msg: pointer): string
     {.gcsafe, raises: [].}
@@ -173,17 +168,20 @@ type
   NextMsgResolver* = proc(msgData: Rlp, future: FutureBase)
     {.gcsafe, raises: [RlpError].}
 
+  FailResolver* = proc(reason: DisconnectionReason, future: FutureBase)
+    {.gcsafe, raises: [].}
+
   PeerStateInitializer* = proc(peer: Peer): RootRef
     {.gcsafe, raises: [].}
 
   NetworkStateInitializer* = proc(network: EthereumNode): RootRef
     {.gcsafe, raises: [].}
 
-  HandshakeStep* = proc(peer: Peer): Future[void]
-    {.gcsafe, async: (raises: [EthP2PError]).}
+  OnPeerConnectedHandler* = proc(peer: Peer): Future[void]
+    {.async: (raises: [CancelledError, EthP2PError]).}
 
-  DisconnectionHandler* = proc(peer: Peer, reason: DisconnectionReason):
-    Future[void] {.gcsafe, async: (raises: [EthP2PError]).}
+  OnPeerDisconnectedHandler* = proc(peer: Peer, reason: DisconnectionReason):
+    Future[void] {.async: (raises: []).}
 
   ConnectionState* = enum
     None,
