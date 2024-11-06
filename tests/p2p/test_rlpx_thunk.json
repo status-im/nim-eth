@@ -1,7 +1,7 @@
 {
   "Invalid list when decoding for object": {
     "payload": "03",
-    "error": "MalformedRlpError",
+    "error": "PeerDisconnected",
     "description": "Object parameters are expected to be encoded in an RLP list"
   },
   "Message id that is not supported": {
@@ -21,62 +21,62 @@
   },
   "No Hash nor Status, but empty list": {
     "payload": "20c1c0",
-    "error": "RlpTypeMismatch",
+    "error": "PeerDisconnected",
     "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
   },
   "No Hash nor Status, list instead of blob": {
     "payload": "20c2c1c0",
-    "error": "RlpTypeMismatch",
+    "error": "PeerDisconnected",
     "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
   },
   "No Hash nor Status, blob of 2 bytes": {
     "payload": "20c4c3820011",
-    "error": "RlpTypeMismatch",
+    "error": "PeerDisconnected",
     "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
   },
   "No Hash nor Status, blob of 33 bytes": {
     "payload": "20e3e2a100112233445566778899aabbccddeeff00112233445566778899aabbcceeddff33",
-    "error": "RlpTypeMismatch",
+    "error": "PeerDisconnected",
     "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
   },
   "Listing elements when no data": {
     "payload": "01e1",
-    "error": "MalformedRlpError",
+    "error": "PeerDisconnected",
     "description": "listElem to error on empty list"
   },
   "Listing elements when invalid length": {
     "payload": "01ffdada",
-    "error": "MalformedRlpError",
+    "error": "PeerDisconnected",
     "description": "listElem to error on invalid size encoding"
   },
   "Listing single element list when having more entries": {
     "payload": "01c20420",
-    "error": "RlpTypeMismatch",
+    "error": "PeerDisconnected",
     "description": "listElem to assert on not a single entry list"
   },
   "Listing single element list when having empty list": {
     "payload": "01c0",
-    "error": "RlpTypeMismatch",
+    "error": "PeerDisconnected",
     "description": "listElem to assert on not a single entry list"
   },
   "DisconnectReason: single element list with entry out off enum range": {
     "payload": "01c111",
-    "error": "RlpTypeMismatch",
+    "error": "PeerDisconnected",
     "description": "Disconnect reason code out of bounds 0..16 (got: 17)"
   },
   "DisconnectReason: single element out off enum range": {
     "payload": "0111",
-    "error": "RlpTypeMismatch",
+    "error": "PeerDisconnected",
     "description": "Disconnect reason code out of bounds 0..16 (got: 17)"
   },
   "DisconnectReason: single element list with enum hole value": {
     "payload": "01c10C",
-    "error": "RlpTypeMismatch",
+    "error": "PeerDisconnected",
     "description": "Error on Disconnect reason with enum hole value"
   },
   "DisconnectReason: single element with enum hole value": {
     "payload": "010C",
-    "error": "RlpTypeMismatch",
+    "error": "PeerDisconnected",
     "description": "Error on Disconnect reason with enum hole value"
   },
   "devp2p hello packet version 22 + additional list elements for EIP-8": {

@@ -840,10 +840,9 @@ proc p2pProtocolBackendImpl*(protocol: P2PProtocol): Backend =
             clientId = `peerVar`.clientId,
             err = exc.msg
 
-          # TODO
-          # await `peerVar`.disconnectAndRaise(
-          #   BreachOfProtocol, "Invalid RLP in parameter list for " & $(`msgRecName`)
-          # )
+          await `peerVar`.disconnectAndRaise(
+            BreachOfProtocol, "Invalid RLP in parameter list for " & $(`msgRecName`)
+          )
 
     var sendProc = msg.createSendProc(isRawSender = (msg.kind == msgHandshake))
     sendProc.def.params[1][0] = peerOrResponder
