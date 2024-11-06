@@ -1,6 +1,6 @@
 import
   std/options,
-  results,
+  pkg/results,
   stew/[arraybuf, assign2, bitops2, shims/macros],
  ./priv/defs
 
@@ -8,7 +8,7 @@ export arraybuf
 
 type
   RlpWriter* = object
-    pendingLists: seq[tuple[remainingItems, outBytes: int]]
+    pendingLists: seq[tuple[remainingItems, startPos: int]]
     output: seq[byte]
 
   RlpIntBuf* = ArrayBuf[9, byte]
@@ -41,7 +41,7 @@ func writeCount(bytes: var auto, count: int, baseMarker: byte) =
       origLen = bytes.len
       lenPrefixBytes = uint64(count).bytesNeeded
 
-    bytes.setLen(origLen + int(lenPrefixBytes) + 1)
+    bytes.setLen(origLen + lenPrefixBytes + 1)
     bytes[origLen] = baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
     bytes.writeBigEndian(uint64(count), bytes.len - 1, lenPrefixBytes)
 
@@ -60,17 +60,16 @@ proc initRlpWriter*: RlpWriter =
   # expected to be short-lived, it doesn't hurt to allocate this buffer
   result.output = newSeqOfCap[byte](2000)
 
-proc decRet(n: var int, delta: int): int =
-  n -= delta
-  n
-
 proc maybeClosePendingLists(self: var RlpWriter) =
   while self.pendingLists.len > 0:
     let lastListIdx = self.pendingLists.len - 1
-    doAssert self.pendingLists[lastListIdx].remainingItems >= 1
-    if decRet(self.pendingLists[lastListIdx].remainingItems, 1) == 0:
+    doAssert self.pendingLists[lastListIdx].remainingItems > 0
+
+    self.pendingLists[lastListIdx].remainingItems -= 1
+    # if one last item is remaining in the list
+    if self.pendingLists[lastListIdx].remainingItems == 0:
       # A list have been just finished. It was started in `startList`.
-      let listStartPos = self.pendingLists[lastListIdx].outBytes
+      let listStartPos = self.pendingLists[lastListIdx].startPos
       self.pendingLists.setLen lastListIdx
 
       # How many bytes were written since the start?
@@ -104,32 +103,20 @@ proc appendRawBytes*(self: var RlpWriter, bytes: openArray[byte]) =
     self.output.len - bytes.len, self.output.len - 1), bytes)
   self.maybeClosePendingLists()
 
-proc appendRawList(self: var RlpWriter, bytes: openArray[byte]) =
-  self.output.writeCount(bytes.len, LIST_START_MARKER)
-  self.appendRawBytes(bytes)
-
 proc startList*(self: var RlpWriter, listSize: int) =
   if listSize == 0:
-    self.appendRawList([])
+    self.output.writeCount(0, LIST_START_MARKER)
+    self.appendRawBytes([])
   else:
     self.pendingLists.add((listSize, self.output.len))
 
-proc appendBlob(self: var RlpWriter, data: openArray[byte], startMarker: byte) =
+proc appendBlob(self: var RlpWriter, data: openArray[byte]) =
   if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:
     self.output.add byte(data[0])
     self.maybeClosePendingLists()
   else:
-    self.output.writeCount(data.len, startMarker)
+    self.output.writeCount(data.len, BLOB_START_MARKER)
     self.appendRawBytes(data)
-
-proc appendImpl(self: var RlpWriter, data: string) =
-  appendBlob(self, data.toOpenArrayByte(0, data.high), BLOB_START_MARKER)
-
-proc appendBlob(self: var RlpWriter, data: openArray[byte]) =
-  appendBlob(self, data, BLOB_START_MARKER)
-
-proc appendBlob(self: var RlpWriter, data: openArray[char]) =
-  appendBlob(self, data.toOpenArrayByte(0, data.high), BLOB_START_MARKER)
 
 proc appendInt(self: var RlpWriter, i: SomeUnsignedInt) =
   # this is created as a separate proc as an extra precaution against
@@ -138,63 +125,46 @@ proc appendInt(self: var RlpWriter, i: SomeUnsignedInt) =
 
   self.maybeClosePendingLists()
 
+
+template appendImpl(self: var RlpWriter, data: openArray[byte]) =
+  self.appendBlob(data)
+
+template appendImpl(self: var RlpWriter, data: openArray[char]) =
+  self.appendBlob(data.toOpenArrayByte(0, data.high))
+
+template appendImpl(self: var RlpWriter, data: string) =
+  self.appendBlob(data.toOpenArrayByte(0, data.high))
+
 template appendImpl(self: var RlpWriter, i: SomeUnsignedInt) =
-  appendInt(self, i)
+  self.appendInt(i)
 
 template appendImpl(self: var RlpWriter, e: enum) =
-  appendImpl(self, int(e))
+  # TODO: check for negative enums 
+  self.appendInt(uint64(e))
 
 template appendImpl(self: var RlpWriter, b: bool) =
-  appendImpl(self, int(b))
+  self.appendInt(uint64(b))
 
-proc appendImpl[T](self: var RlpWriter, listOrBlob: openArray[T]) =
+proc appendImpl[T](self: var RlpWriter, list: openArray[T]) =
   mixin append
 
-  # TODO: This append proc should be overloaded by `openArray[byte]` after
-  # nim bug #7416 is fixed.
-  when T is (byte or char):
-    self.appendBlob(listOrBlob)
-  else:
-    self.startList listOrBlob.len
-    for i in 0 ..< listOrBlob.len:
-      self.append listOrBlob[i]
+  self.startList list.len
+  for i in 0 ..< list.len:
+    self.append list[i]
 
-proc hasOptionalFields(T: type): bool =
+proc countOptionalFields(T: type): int {.compileTime.} =
   mixin enumerateRlpFields
 
-  proc helper: bool =
-    var dummy: T
-    result = false
-    template detectOptionalField(RT, n, x) {.used.} =
-      when x is Option or x is Opt:
-        return true
-    enumerateRlpFields(dummy, detectOptionalField)
+  var dummy: T
 
-  const res = helper()
-  return res
-
-proc optionalFieldsNum(x: openArray[bool]): int =
-  # count optional fields backward
-  for i in countdown(x.len-1, 0):
-    if x[i]: inc result
-    else: break
-
-proc checkedOptionalFields(T: type, FC: static[int]): int =
-  mixin enumerateRlpFields
-
-  var
-    i = 0
-    dummy: T
-    res: array[FC, bool]
-
+  # closure signature matches the one in object_serialization.nim
   template op(RT, fN, f) =
-    res[i] = f is Option or f is Opt
-    inc i
+    when f is Option or f is Opt:
+      inc result
+    else: # this will count only optional fields at the end
+      result = 0
 
   enumerateRlpFields(dummy, op)
-
-  # ignoring first optional fields
-  optionalFieldsNum(res) - 1
 
 proc genPrevFields(obj: NimNode, fd: openArray[FieldDescription], hi, lo: int): NimNode =
   result = newStmtList()
@@ -230,32 +200,21 @@ macro genOptionalFieldsValidation(obj: untyped, T: type, num: static[int]): unty
     doAssert obj.blobGasUsed.isSome == obj.excessBlobGas.isSome,
       "blobGasUsed and excessBlobGas must both be present or absent"
 
-macro countFieldsRuntimeImpl(obj: untyped, T: type, num: static[int]): untyped =
-  let
-    Tresolved = getType(T)[1]
-    fd = recordFields(Tresolved.getImpl)
-    res = ident("result")
-    mlen = fd.len - num
-
-  result = newStmtList()
-  result.add quote do:
-    `res` = `mlen`
-
-  for i in countdown(fd.high, fd.len-num):
-    let fieldName = fd[i].name
-    result.add quote do:
-      `res` += `obj`.`fieldName`.isSome.ord
-
 proc countFieldsRuntime(obj: object|tuple): int =
-  # count mandatory fields and non empty optional fields
-  type ObjType = type obj
+  mixin enumerateRlpFields
 
-  const
-    fieldsCount = ObjType.rlpFieldsCount
-    # include first optional fields
-    cof = checkedOptionalFields(ObjType, fieldsCount) + 1
+  var numOptionals: int = 0
 
-  countFieldsRuntimeImpl(obj, ObjType, cof)
+  template op(RT, fN, f) {.used.} =
+    when f is Option or f is Opt:
+      if f.isSome: # if optional and non empty
+        inc numOptionals
+    else: # if  mandatory field
+      inc result
+      numOptionals = 0 # count only optionals at the end (after mandatory)
+
+  enumerateRlpFields(obj, op)
+  result += numOptionals
 
 proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrapObjsInList) =
   mixin enumerateRlpFields, append
@@ -263,25 +222,22 @@ proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrap
   type ObjType = type obj
 
   const
-    hasOptional = hasOptionalFields(ObjType)
-    fieldsCount = ObjType.rlpFieldsCount
+    cof = countOptionalFields(ObjType)
 
-  when hasOptional:
-    const
-      cof = checkedOptionalFields(ObjType, fieldsCount)
-    when cof > 0:
-      genOptionalFieldsValidation(obj, ObjType, cof)
+  when cof > 0:
+    # ignoring first optional fields
+    genOptionalFieldsValidation(obj, ObjType, cof - 1)
 
   if wrapInList:
-    when hasOptional:
+    when cof > 0:
       self.startList(obj.countFieldsRuntime)
     else:
-      self.startList(fieldsCount)
+      self.startList(ObjType.rlpFieldsCount)
 
   template op(RecordType, fieldName, field) {.used.} =
     when hasCustomPragmaFixed(RecordType, fieldName, rlpCustomSerialization):
       append(self, obj, field)
-    elif (field is Option or field is Opt) and hasOptional:
+    elif (field is Option or field is Opt) and cof > 0:
       # this works for optional fields at the end of an object/tuple
       # if the optional field is followed by a mandatory field,
       # custom serialization for a field or for the parent object
@@ -293,20 +249,16 @@ proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrap
 
   enumerateRlpFields(obj, op)
 
-proc appendImpl(self: var RlpWriter, data: object) {.inline.} =
+template appendImpl(self: var RlpWriter, data: object) =
   self.appendRecordType(data)
 
-proc appendImpl(self: var RlpWriter, data: tuple) {.inline.} =
+template appendImpl(self: var RlpWriter, data: tuple) =
   self.appendRecordType(data)
 
 # We define a single `append` template with a pretty low specificity
 # score in order to facilitate easier overloading with user types:
 template append*[T](w: var RlpWriter; data: T) =
-  when data is (enum|bool):
-    # TODO detect negative enum values at compile time?
-    appendImpl(w, uint64(data))
-  else:
-    appendImpl(w, data)
+  appendImpl(w, data)
 
 template append*(w: var RlpWriter; data: SomeSignedInt) =
   {.error: "Signed integer encoding is not defined for rlp".}
