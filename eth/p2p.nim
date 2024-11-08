@@ -79,7 +79,6 @@ proc newEthereumNode*(
     networkId: NetworkId,
     clientId = "nim-eth-p2p",
     addAllCapabilities = true,
-    useCompression: bool = false,
     minPeers = 10,
     bootstrapNodes: seq[ENode] = @[],
     bindUdpPort: Port,
@@ -105,11 +104,6 @@ proc newEthereumNode*(
     keys.seckey, address, bootstrapNodes, bindUdpPort, bindIp, rng)
 
   result.rng = rng
-
-  when useSnappy:
-    result.protocolVersion = if useCompression: devp2pSnappyVersion
-                             else: devp2pVersion
-
   result.protocolStates.newSeq protocolCount()
 
   result.peerPool = newPeerPool(

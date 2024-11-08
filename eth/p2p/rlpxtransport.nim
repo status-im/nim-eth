@@ -46,7 +46,8 @@ proc initiatorHandshake(
 
     writeRes = await stream.write(addr authMsg[0], authMsgLen)
   if writeRes != authMsgLen:
-    raise (ref RlpxTransportError)(msg: "Could not write RLPx handshake header")
+    # TOOD raising a chronos error here is a hack - rework using something else
+    raise (ref TransportIncompleteError)(msg: "Could not write RLPx handshake header")
 
   var ackMsg = newSeqOfCap[byte](1024)
   ackMsg.setLen(MsgLenLenEIP8)
@@ -95,7 +96,8 @@ proc responderHandshake(
 
   var res = await stream.write(addr ackMsg[0], ackMsgLen)
   if res != ackMsgLen:
-    raise (ref RlpxTransportError)(msg: "Could not write RLPx ack message")
+    # TOOD raising a chronos error here is a hack - rework using something else
+    raise (ref TransportIncompleteError)(msg: "Could not write RLPx ack message")
 
   (handshake.getSecrets(authMsg, ^ackMsg), handshake.remoteHPubkey)
 
@@ -149,11 +151,9 @@ proc recvMsg*(
   let msgHeader = decryptHeader(transport.state, msgHeaderEnc).valueOr:
     raise (ref RlpxTransportError)(msg: "Cannot decrypt RLPx frame header")
 
-  # The capability-id and context id are always zero
+  # The header has more fields than the size, but they are unused / obsolete.
+  # Although some clients set them, we don't check this in the spirit of EIP-8
   # https://github.com/ethereum/devp2p/blob/5713591d0366da78a913a811c7502d9ca91d29a8/rlpx.md#framing
-  if (msgHeader[4] != 0x80) or (msgHeader[5] != 0x80):
-    raise
-      (ref RlpxTransportError)(msg: "Invalid capability-id/context-id in RLPx header")
 
   let msgSize = msgHeader.getBodySize()
   let remainingBytes = encryptedLength(msgSize) - 32
@@ -170,7 +170,6 @@ proc recvMsg*(
   reset(encryptedBytes) # Release memory (TODO: in-place decryption)
 
   msgBody.setLen(msgSize) # Remove padding
-
   msgBody
 
 proc sendMsg*(
@@ -179,7 +178,8 @@ proc sendMsg*(
   let cipherText = encryptMsg(data, transport.state)
   var res = await transport.stream.write(cipherText)
   if res != len(cipherText):
-    raise (ref RlpxTransportError)(msg: "Could not complete writing message")
+    # TOOD raising a chronos error here is a hack - rework using something else
+    raise (ref TransportIncompleteError)(msg: "Could not complete writing message")
 
 proc remoteAddress*(
     transport: RlpxTransport
