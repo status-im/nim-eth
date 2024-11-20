@@ -7,8 +7,9 @@
 
 {.push raises: [].}
 
-import ./[addresses_rlp, blocks, base_rlp, hashes_rlp], ../rlp
+import
+  ./[addresses_rlp, blocks, base_rlp, hashes_rlp, headers_rlp, transactions_rlp], ../rlp
 
 from stew/objects import checkedEnumAssign
 
-export addresses_rlp, blocks, base_rlp, hashes_rlp, rlp
+export addresses_rlp, blocks, base_rlp, hashes_rlp, headers_rlp, transactions_rlp, rlp
