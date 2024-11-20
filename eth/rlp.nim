@@ -1,9 +1,16 @@
+# nim-eth
+# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 ## This module implements RLP encoding and decoding as
 ## defined in Appendix B of the Ethereum Yellow Paper:
 ## https://ethereum.github.io/yellowpaper/paper.pdf
 
 import
-  std/[strutils, options],
+  std/strutils,
   stew/[byteutils, shims/macros],
   results,
   ./rlp/[writer, object_serialization],
