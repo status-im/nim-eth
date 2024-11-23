@@ -65,7 +65,7 @@ func writeInt(outStream: var auto, i: SomeUnsignedInt) =
 proc initRlpWriter*: RlpWriter =
   # Avoid allocations during initial write of small items - since the writer is
   # expected to be short-lived, it doesn't hurt to allocate this buffer
-  result.output = newSeqOfCap[byte](2000)
+  result.output = newSeqOfCap[byte](2)
 
 proc maybeClosePendingLists(self: var RlpWriter) =
   while self.pendingLists.len > 0:
