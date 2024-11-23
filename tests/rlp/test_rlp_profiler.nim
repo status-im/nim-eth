@@ -11,7 +11,7 @@ template benchmark(benchmarkName: string, code: untyped) =
   block:
     let t0 = epochTime()
     code
-    let elapsed = epochTime() - t0
+    let elapsed = (epochTime() - t0)
     let elapsedStr = elapsed.formatFloat(format = ffDecimal, precision = 9)
     echo "CPU Time [", benchmarkName, "] ", elapsedStr, "s"
 
@@ -34,4 +34,4 @@ let my_tx = Transaction(
 suite "test running time of rlp serialization":
   test "transaction serialization":
     benchmark "Transaction":
-      let my_bytes = rlp.encode(my_tx)
+      let myBytes = rlp.encode(my_tx)
