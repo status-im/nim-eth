@@ -55,10 +55,8 @@ proc runTests*(filename: string) =
             skip()
             return
 
-          var outRlp = initRlpWriter()
-          outRlp.append input
           let
-            actual = outRlp.finish.toHex
+            actual = rlp.encode(input).toHex
             expected = output.str
           check actual == expected
 
