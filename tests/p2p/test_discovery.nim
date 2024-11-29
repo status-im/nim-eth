@@ -13,6 +13,7 @@ import
   std/sequtils,
   chronos, stew/byteutils, nimcrypto/keccak, testutils/unittests,
   ../../eth/common/keys, ../../eth/p2p/[discovery, kademlia, enode],
+  ../../eth/rlp,
   ../stubloglevel
 
 proc localAddress(port: int): Address =
@@ -108,6 +109,21 @@ procSuite "Discovery Tests":
       # We currently do not raise on this, so can't really test it
       # "0x03f847b841AA0000000000000000000000000000000000000000000000000000000000000000a99a96bd988e1839272f93257bd9dfb2e558390e1f9bff28cdc8f04c9b5d06b1846fd3aed7",
     ]
+
+    let invalidRlpData = [
+      # valid version: "0x04f8a5f89ef84d847f000001827661827669b840ebefe173cab8832f6d6623f2a4d415959c1b80071e6af7d5986417d4bd07df19318b30d3d4fde75b025314ce22a523a714bef6c61838094e5d3640dccc6b9e34f84d847f000001827662827662b840ebefe173cab8832f6d6623f2a4d415959c1b80071e6af7d5986417d4bd07df19318b30d3d4fde75b025314ce22a523a714bef6c61838094e5d3640dccc6b9e348479e7f252",
+      # Invalid rlp item length (for the individual node list), causing a next listElem to read wrong data.
+      "0x04f8a5f89ef856847f000001827661827669b840ebefe173cab8832f6d6623f2a4d415959c1b80071e6af7d5986417d4bd07df19318b30d3d4fde75b025314ce22a523a714bef6c61838094e5d3640dccc6b9e34f84d847f000001827662827662b8403114ae2fe09b7a71d6693451c0d043df8315fb811e43c7b97ef2ff87409a2601b4425f92ffff80008417d66489cb1f8414d9dd4393ba16ebb455aa47345a222b8479e7f252",
+      # Invalid IP length in nodes
+      "0x04f8a4f89df84c837f0001827661827669b840ebefe173cab8832f6d6623f2a4d415959c1b80071e6af7d5986417d4bd07df19318b30d3d4fde75b025314ce22a523a714bef6c61838094e5d3640dccc6b9e34f84d847f000001827662827662b840ebefe173cab8832f6d6623f2a4d415959c1b80071e6af7d5986417d4bd07df19318b30d3d4fde75b025314ce22a523a714bef6c61838094e5d3640dccc6b9e348479e7f252",
+      # Invalid Public key in nodes
+      "0x04f8a5f89ef84d847f000001827661827669b840fbefe173cab8832f6d6623f2a4d415959c1b80071e6af7d5986417d4bd07df19318b30d3d4fde75b025314ce22a523a714bef6c61838094e5d3640dccc6b9e34f84d847f000001827662827662b840ebefe173cab8832f6d6623f2a4d415959c1b80071e6af7d5986417d4bd07df19318b30d3d4fde75b025314ce22a523a714bef6c61838094e5d3640dccc6b9e348479e7f252",
+      # Invalid Public key in nodes - too short
+      "0x04f8a4f89df84c847f000001827661827669b83fefe173cab8832f6d6623f2a4d415959c1b80071e6af7d5986417d4bd07df19318b30d3d4fde75b025314ce22a523a714bef6c61838094e5d3640dccc6b9e34f84d847f000001827662827662b840ebefe173cab8832f6d6623f2a4d415959c1b80071e6af7d5986417d4bd07df19318b30d3d4fde75b025314ce22a523a714bef6c61838094e5d3640dccc6b9e348479e7f252",
+      # nodes list len of 3 (removed port)
+      "0x04f8a2f89bf84a847f000001827661b840ebefe173cab8832f6d6623f2a4d415959c1b80071e6af7d5986417d4bd07df19318b30d3d4fde75b025314ce22a523a714bef6c61838094e5d3640dccc6b9e34f84d847f000001827662827662b840ebefe173cab8832f6d6623f2a4d415959c1b80071e6af7d5986417d4bd07df19318b30d3d4fde75b025314ce22a523a714bef6c61838094e5d3640dccc6b9e348479e7f252"
+    ]
+
     let
       address = localAddress(20302)
       nodeKey = PrivateKey.fromHex(
@@ -115,6 +131,10 @@ procSuite "Discovery Tests":
 
     for data in invalidProtocolData:
       expect DiscProtocolError:
+        bootNode.receive(address, packData(hexToSeqByte(data), nodeKey))
+
+    for data in invalidRlpData:
+      expect RlpError:
         bootNode.receive(address, packData(hexToSeqByte(data), nodeKey))
 
     # empty msg id and payload, doesn't raise, just fails and prints wrong
