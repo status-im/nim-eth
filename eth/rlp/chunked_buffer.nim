@@ -84,3 +84,10 @@ func addGapChunk*(buffer: var ChunkedBuffer) =
   let newChunk = new(RefBufferChunk)
   buffer.chunks.add(newChunk)
   buffer.fillLevel = len(buffer.chunks) * len(BufferChunk)
+
+func removeChunk*(buffer: var ChunkedBuffer, chunkIdx: int) =
+  buffer.fillLevel -= len(BufferChunk)
+  buffer.chunks.delete(chunkIdx)
+
+func completeCurChunk*(buffer: var ChunkedBuffer) =
+  buffer.fillLevel = len(buffer.chunks) * len(BufferChunk)
