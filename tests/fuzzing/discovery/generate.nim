@@ -38,7 +38,7 @@ proc generate() =
   # valid data for a FindNode packet
   block:
     var data: array[64, byte]
-    data[32 .. ^1] = peerKey.toPublicKey().toNodeId().toByteArrayBE()
+    data[32 .. ^1] = peerKey.toPublicKey().toNodeId().toBytesBE()
     let payload = rlp.encode((data, expiration()))
     let encodedData = @[3.byte] & @payload
     debug "FindNode", data=byteutils.toHex(encodedData)

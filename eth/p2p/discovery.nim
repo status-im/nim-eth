@@ -143,7 +143,7 @@ proc sendPong*(d: DiscoveryProtocol, n: Node, token: MDigest[256]) =
 
 proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
   var data: array[64, byte]
-  data[32 .. ^1] = targetNodeId.toByteArrayBE()
+  data[32 .. ^1] = targetNodeId.toBytesBE()
   let payload = rlp.encode((data, expiration()))
   let msg = pack(cmdFindNode, payload, d.privKey)
   trace ">>> find_node to ", n #, ": ", msg.toHex()
@@ -249,7 +249,7 @@ proc recvFindNode(
   let rng = rlp.listElem(0).toBytes
   # Check for pubkey len
   if rng.len == 64:
-    let nodeId = readUintBE[256](rng[32 .. ^1])
+    let nodeId = UInt256.fromBytesBE(rng.toOpenArray(32, 63))
     d.kademlia.recvFindNode(node, nodeId)
   else:
     trace "Invalid target public key received"
