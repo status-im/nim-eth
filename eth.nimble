@@ -1,6 +1,6 @@
 mode = ScriptMode.Verbose
 
-version       = "1.0.0"
+version       = "0.5.0"
 author        = "Status Research & Development GmbH"
 description   = "Ethereum Common library"
 license       = "MIT"
