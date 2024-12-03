@@ -32,7 +32,7 @@ type
 
 func makeKey(id: NodeId, address: Address): SessionKey =
   var pos = 0
-  result[pos ..< pos+sizeof(id)] = toBytes(id)
+  result[pos ..< pos+sizeof(id)] = toBytesBE(id)
   pos.inc(sizeof(id))
   case address.ip.family
   of IpAddressFamily.IpV4:
@@ -40,7 +40,7 @@ func makeKey(id: NodeId, address: Address): SessionKey =
   of IpAddressFamily.IpV6:
     result[pos ..< pos+sizeof(address.ip.address_v6)] = address.ip.address_v6
   pos.inc(sizeof(address.ip.address_v6))
-  result[pos ..< pos+sizeof(address.port)] = toBytes(address.port.uint16)
+  result[pos ..< pos+sizeof(address.port)] = toBytesBE(address.port.uint16)
 
 func store*(s: var Sessions, id: NodeId, address: Address, r, w: AesKey) =
   var value: array[sizeof(r) + sizeof(w), byte]
