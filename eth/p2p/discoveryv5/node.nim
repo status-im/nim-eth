@@ -80,7 +80,7 @@ func `==`*(a, b: Node): bool =
     (not a.isNil and not b.isNil and a.pubkey == b.pubkey)
 
 func hash*(id: NodeId): Hash =
-  hash(id.toByteArrayBE)
+  hash(id.toBytesBE)
 
 proc random*(T: type NodeId, rng: var HmacDrbgContext): T =
   rng.generate(T)

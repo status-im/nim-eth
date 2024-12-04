@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/typetraits, ./base, ../rlp, 
+  std/typetraits, ./base, ../rlp,
   ../rlp/results as rlp_results
 
 export base, rlp, rlp_results
@@ -49,7 +49,7 @@ func significantBytesBE(val: openArray[byte]): int =
 
 proc append*(w: var RlpWriter, value: StUint) =
   if value > 128:
-    let bytes = value.toByteArrayBE
+    let bytes = value.toBytesBE
     let nonZeroBytes = significantBytesBE(bytes)
     w.append bytes.toOpenArray(bytes.len - nonZeroBytes, bytes.len - 1)
   else:

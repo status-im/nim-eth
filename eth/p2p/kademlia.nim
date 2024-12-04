@@ -102,7 +102,7 @@ proc `==`*(a, b: Node): bool = (a.isNil and b.isNil) or
   (not a.isNil and not b.isNil and a.node.pubkey == b.node.pubkey)
 
 proc timeKey(id: NodeId, ip: IpAddress, cmd: CommandId): TimeKey =
-  result[0..31] = id.toByteArrayBE()[0..31]
+  result[0..31] = id.toBytesBE()[0..31]
   case ip.family
   of IpAddressFamily.IPv6:
     result[32..47] = ip.address_v6[0..15]
