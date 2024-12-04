@@ -1,9 +1,16 @@
+# nim-eth
+# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 ## This module implements RLP encoding and decoding as
 ## defined in Appendix B of the Ethereum Yellow Paper:
 ## https://ethereum.github.io/yellowpaper/paper.pdf
 
 import
-  std/[strutils, options],
+  std/strutils,
   stew/[byteutils, shims/macros],
   results,
   ./rlp/[writer, object_serialization],
@@ -448,9 +455,6 @@ func readImpl(
     else:
       rlp.bytes.len()
 
-  template getUnderlyingType[T](_: Option[T]): untyped =
-    T
-
   template getUnderlyingType[T](_: Opt[T]): untyped =
     T
 
@@ -458,16 +462,6 @@ func readImpl(
     type FieldType {.used.} = type field
     when hasCustomPragmaFixed(RecordType, fieldName, rlpCustomSerialization):
       field = rlp.read(result, FieldType)
-    elif field is Option:
-      # this works for optional fields at the end of an object/tuple
-      # if the optional field is followed by a mandatory field,
-      # custom serialization for a field or for the parent object
-      # will be better
-      type UT = getUnderlyingType(field)
-      if rlp.position < payloadEnd:
-        field = some(rlp.read(UT))
-      else:
-        field = none(UT)
     elif field is Opt:
       # this works for optional fields at the end of an object/tuple
       # if the optional field is followed by a mandatory field,

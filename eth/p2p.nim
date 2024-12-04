@@ -27,7 +27,7 @@ proc addCapability*(node: EthereumNode,
 
   let pos = lowerBound(node.protocols, p, rlpx.cmp)
   node.protocols.insert(p, pos)
-  node.capabilities.insert(p.asCapability, pos)
+  node.capabilities.insert(p.capability, pos)
 
   if p.networkStateInitializer != nil and networkState.isNil:
     node.protocolStates[p.index] = p.networkStateInitializer(node)
@@ -79,12 +79,11 @@ proc newEthereumNode*(
     networkId: NetworkId,
     clientId = "nim-eth-p2p",
     addAllCapabilities = true,
-    useCompression: bool = false,
     minPeers = 10,
     bootstrapNodes: seq[ENode] = @[],
     bindUdpPort: Port,
     bindTcpPort: Port,
-    bindIp = IPv4_any(),
+    bindIp = IPv6_any(),
     rng = newRng()): EthereumNode =
 
   if rng == nil: # newRng could fail
@@ -105,11 +104,6 @@ proc newEthereumNode*(
     keys.seckey, address, bootstrapNodes, bindUdpPort, bindIp, rng)
 
   result.rng = rng
-
-  when useSnappy:
-    result.protocolVersion = if useCompression: devp2pSnappyVersion
-                             else: devp2pVersion
-
   result.protocolStates.newSeq protocolCount()
 
   result.peerPool = newPeerPool(

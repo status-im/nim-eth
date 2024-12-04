@@ -5,11 +5,25 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
+import ../rlp
+import writer
+import pkg/results
 
-import
-  ./[addresses_rlp, blocks, base_rlp, hashes_rlp, headers_rlp, transactions_rlp], ../rlp
+export
+  rlp, results
 
-from stew/objects import checkedEnumAssign
+proc append*[T](w: var RlpWriter, val: Opt[T]) =
+  mixin append
 
-export addresses_rlp, blocks, base_rlp, hashes_rlp, headers_rlp, transactions_rlp, rlp
+  if val.isSome:
+    w.append(val.get())
+  else:
+    w.append("")
+
+proc read*[T](rlp: var Rlp, val: var Opt[T]) {.raises: [RlpError].} =
+  mixin read
+  if rlp.blobLen != 0:
+    val = Opt.some(rlp.read(T))
+  else:
+    rlp.skipElem
+

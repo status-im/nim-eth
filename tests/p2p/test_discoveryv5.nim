@@ -417,6 +417,9 @@ suite "Discovery v5 Tests":
     let discoveredFiltered = lookupNode.randomNodes(10,
       ("test", @[byte 1,2,3,4]))
     check discoveredFiltered.len == 1 and discoveredFiltered.contains(targetNode)
+    let discoveredEmpty = lookupNode.randomNodes(10,
+      proc(n: Node) : bool = false)
+    check discoveredEmpty.len == 0
 
     await lookupNode.closeWait()
 

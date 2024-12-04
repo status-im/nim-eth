@@ -6,4 +6,5 @@ import
   ./test_ecies,
   ./test_enode,
   ./test_rlpx_thunk,
+  ./test_rlpxtransport,
   ./test_protocol_handlers

@@ -94,13 +94,12 @@ suite "ENode":
         res.isOk
 
   test "Bootnodes test":
-    proc runBNTest(bns: openArray[string]): bool =
+    func runBNTest(bns: openArray[string]): bool =
       for z in bns:
         let res = ENode.fromString(z)
         if res.isErr: return false
       true
 
     check runBNTest(MainnetBootnodes)
-    check runBNTest(GoerliBootnodes)
     check runBNTest(SepoliaBootnodes)
     check runBNTest(HoleskyBootnodes)

@@ -31,8 +31,6 @@ p2pProtocol abc(version = 1,
 
   onPeerDisconnected do (peer: Peer, reason: DisconnectionReason) {.gcsafe.}:
     peer.networkState.count -= 1
-    if true:
-      raise newException(CatchableError, "Fake abc exception")
 
 p2pProtocol xyz(version = 1,
                 rlpxName = "xyz",
@@ -45,8 +43,6 @@ p2pProtocol xyz(version = 1,
 
   onPeerDisconnected do (peer: Peer, reason: DisconnectionReason) {.gcsafe.}:
     peer.networkState.count -= 1
-    if true:
-      raise newException(CatchableError, "Fake xyz exception")
     peer.state.status = "disconnected"
 
 p2pProtocol hah(version = 1,
@@ -77,11 +73,10 @@ suite "Testing protocol handlers":
 
     await peer.disconnect(SubprotocolReason, true)
     check:
-      # we want to check that even though the exceptions in the disconnect
-      # handlers, each handler still ran
+      # all disconnection handlers are called
       node1.protocolState(abc).count == 0
       node1.protocolState(xyz).count == 0
-      peer.state(xyz).status == "connected"
+      peer.state(xyz).status == "disconnected"
 
   asyncTest "Failing connection handler":
     let rng = newRng()
