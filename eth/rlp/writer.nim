@@ -138,6 +138,8 @@ proc maybeClosePendingLists(self: var RlpTwoPassWriter) =
         # How many bytes were written since the start?
         let listLen = self.fillLevel - listStartPos - prefixBytes 
 
+        debugEcho self.output
+
         # Write out the prefix length
         if listLen < THRESHOLD_LIST_LEN:
           self.output[listStartPos] = LIST_START_MARKER + byte(listLen)
