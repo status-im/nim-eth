@@ -19,8 +19,9 @@ type
     output: seq[byte]
   
   RlpTwoPassWriter* = object
-    pendingLists: seq[tuple[remainingItems, startPos, prefixBytes: int]]
+    pendingLists: seq[tuple[idx, remainingItems, startPos, prefixBytes: int]]
     output: seq[byte]
+    listCount: int
     listPrefixBytes: seq[int]
     fillLevel: int
     dryRun: bool
@@ -96,9 +97,9 @@ func writeCount(writer: var RlpDefaultWriter, count: int, baseMarker: byte) =
 
 func writeInt(writer: var RlpDefaultWriter, i: SomeUnsignedInt) =
   if i == typeof(i)(0):
-      writer.output.add BLOB_START_MARKER
+    writer.output.add BLOB_START_MARKER
   elif i < typeof(i)(BLOB_START_MARKER):
-      writer.output.add byte(i)
+    writer.output.add byte(i)
   else:
     let bytesNeeded = i.bytesNeeded
     writer.writeCount(bytesNeeded, BLOB_START_MARKER)
@@ -121,24 +122,24 @@ proc maybeClosePendingLists(self: var RlpTwoPassWriter) =
     if self.pendingLists[lastListIdx].remainingItems == 0:
       # A list have been just finished. It was started in `startList`.
       let listStartPos = self.pendingLists[lastListIdx].startPos
+      let listIdx = self.pendingLists[lastListIdx].idx
       let prefixBytes = self.pendingLists[lastListIdx].prefixBytes
 
+      # remove the pending list tuple
       self.pendingLists.setLen lastListIdx
 
       if self.dryRun:
-        # How many bytes were written since the start?
+      # How many bytes were written since the start?
         let listLen = self.fillLevel - listStartPos
 
         let totalPrefixBytes = if listLen < int(THRESHOLD_LIST_LEN): 1
                             else: int(uint64(listLen).bytesNeeded) + 1
 
-        self.listPrefixBytes.add(totalPrefixBytes)
+        self.listPrefixBytes[listIdx] = totalPrefixBytes
         self.fillLevel += totalPrefixBytes
       else:
         # How many bytes were written since the start?
         let listLen = self.fillLevel - listStartPos - prefixBytes 
-
-        debugEcho self.output
 
         # Write out the prefix length
         if listLen < THRESHOLD_LIST_LEN:
@@ -204,11 +205,14 @@ proc startList*(self: var RlpTwoPassWriter, listSize: int) =
   else:
     # if not in dry run mode shift the fill level by prefixBytes (calculated during dry run) 
     if not self.dryRun:
-      let prefixBytes = self.listPrefixBytes.pop()
-      self.pendingLists.add((listSize, self.fillLevel, prefixBytes))
+      let prefixBytes = self.listPrefixBytes[0]
+      self.listPrefixBytes.delete(0)
+      self.pendingLists.add((self.listCount, listSize, self.fillLevel, prefixBytes))
       self.fillLevel += prefixBytes
     else:
-      self.pendingLists.add((listSize, self.fillLevel, 0))
+      self.pendingLists.add((self.listCount, listSize, self.fillLevel, 0))
+      self.listPrefixBytes.add(0)
+    self.listCount += 1
 
 proc appendBlob(self: var RlpTwoPassWriter, data: openArray[byte]) =
   if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:
@@ -416,11 +420,11 @@ proc encode*[T](v: T): seq[byte] =
   var writer: RlpTwoPassWriter
   # first pass
   writer.dryRun = true
-
   writer.append(v)
 
   # second pass
   writer.dryRun = false
+  writer.listCount = 0
   writer.output = newSeqOfCap[byte](writer.fillLevel)
   writer.output.setLen(writer.fillLevel)
   writer.fillLevel = 0

@@ -28,11 +28,7 @@ proc test_blockBodyTranscode() =
         Transaction(nonce: 3),
         Transaction(nonce: 4)])]
 
-  let temp = blkSeq.encode
-
-  debugEcho temp
-  
-  let trBlkSeq = temp.decode(typeof blkSeq)
+  let trBlkSeq = blkSeq.encode.decode(typeof blkSeq)
 
   check trBlkSeq.len == blkSeq.len
   for n in 0 ..< min(trBlkSeq.len, trBlkSeq.len):

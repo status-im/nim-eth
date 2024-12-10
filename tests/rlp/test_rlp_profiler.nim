@@ -9,9 +9,12 @@ import
 
 template benchmark(benchmarkName: string, code: untyped) =
   block:
-    let t0 = epochTime()
-    code
-    let elapsed = (epochTime() - t0)
+    var sum = 0.0
+    for i in countup(1,100):
+      let t0 = epochTime()
+      code
+      sum += (epochTime() - t0)
+    let elapsed = sum/100
     let elapsedStr = elapsed.formatFloat(format = ffDecimal, precision = 9)
     echo "CPU Time [", benchmarkName, "] ", elapsedStr, "s"
 
@@ -21,7 +24,7 @@ const
     storageKeys: @[default(Bytes32)]
   )]
 
-let my_tx = Transaction(
+let myTx = Transaction(
   txType:     TxEip1559,
   chainId:    1.ChainId,
   nonce:      0.AccountNonce,
@@ -31,7 +34,32 @@ let my_tx = Transaction(
   accessList: accesses
 )
 
+let blkSeq = @[
+  BlockBody(
+    transactions: @[
+      Transaction(nonce: 1)]),
+  BlockBody(
+    uncles: @[Header(nonce: Bytes8([0x20u8,0,0,0,0,0,0,0]))]),
+  BlockBody(),
+  BlockBody(
+    transactions: @[
+      Transaction(nonce: 3),
+      Transaction(nonce: 4)])]
+
+proc encodeOnePass[T](v: T): seq[byte] =
+  var writer = initRlpWriter()
+
+  writer.append(v)
+  move(writer.finish)
+
+
 suite "test running time of rlp serialization":
   test "transaction serialization":
-    benchmark "Transaction":
-      let myBytes = rlp.encode(my_tx)
+    benchmark "Transaction serialization (two pass)":
+      let myTxBytes = rlp.encode(myTx)
+    benchmark "Block Sequence serialization (two pass)":
+      let myBlockBytes = rlp.encode(blkSeq)
+    benchmark "Transaction serialization (one pass)":
+      let myTxBytesOnePass = encodeOnePass(myTx)
+    benchmark "Block Sequence serailization (one pass)":
+      let myBlockBytesOnePass = encodeOnePass(blkSeq)
