@@ -144,9 +144,38 @@ proc maybeClosePendingLists(self: var RlpDefaultWriter) =
       # The currently open list is not finished yet. Nothing to do.
       return
 
+proc maybeClosePendingLists(self: var RlpLengthTracker) =
+  while self.pendingLists.len > 0:
+    let lastIdx = self.pendingLists.len - 1
+    self.pendingLists[lastIdx].remainingItems -= 1
+
+    if self.pendingLists[lastIdx].remainingItems == 0:
+      let listIdx = self.pendingLists[lastIdx].idx
+      let startLen = self.pendingLists[lastIdx].length
+
+      let listLen = self.totalLength - startLen
+
+      let prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
+                        else: int(uint64(listLen).bytesNeeded) + 1
+
+      # save the prefix
+      #self.listPrefixBytes[listIdx].prefix = calculateListPrefix(listLen, prefixLen)
+      # take note of the prefix len
+      self.listPrefixBytes[listIdx] = prefixLen
+      # close the list by deleting
+      self.pendingLists.setLen(lastIdx)
+    
+      self.totalLength += prefixLen
+    else:
+      return
+
 func appendRawBytes*(self: var RlpWriter, bytes: openArray[byte]) =
   self.output.setLen(self.output.len + bytes.len)
   assign(self.output.toOpenArray(self.output.len - bytes.len, self.output.len - 1), bytes)
+  self.maybeClosePendingLists()
+
+func appendRawBytes*(self: var RlpLengthTracker, bytes: openArray[byte]) =
+  self.totalLength += bytes.len
   self.maybeClosePendingLists()
 
 proc startList*(self: var RlpTwoPassWriter, listSize: int) =
@@ -173,31 +202,6 @@ proc startList*(self: var RlpDefaultWriter, listSize: int) =
     self.maybeClosePendingLists()
   else:
     self.pendingLists.add((listSize, self.output.len))
-
-proc maybeClosePendingLists(self: var RlpLengthTracker) =
-  while self.pendingLists.len > 0:
-    let lastIdx = self.pendingLists.len - 1
-    self.pendingLists[lastIdx].remainingItems -= 1
-
-    if self.pendingLists[lastIdx].remainingItems == 0:
-      let listIdx = self.pendingLists[lastIdx].idx
-      let startLen = self.pendingLists[lastIdx].length
-
-      let listLen = self.totalLength - startLen
-
-      let prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
-                        else: int(uint64(listLen).bytesNeeded) + 1
-
-      # save the prefix
-      #self.listPrefixBytes[listIdx].prefix = calculateListPrefix(listLen, prefixLen)
-      # take note of the prefix len
-      self.listPrefixBytes[listIdx] = prefixLen
-      # close the list by deleting
-      self.pendingLists.setLen(lastIdx)
-    
-      self.totalLength += prefixLen
-    else:
-      return
 
 proc startList*(self: var RlpLengthTracker, listSize: int) =
   if listSize == 0:
