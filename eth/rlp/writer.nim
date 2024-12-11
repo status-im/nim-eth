@@ -144,9 +144,10 @@ proc maybeClosePendingLists(self: var RlpDefaultWriter) =
       # The currently open list is not finished yet. Nothing to do.
       return
 
-template appendRawBytes*(self: var RlpWriter, bytes: openArray[byte]) =
+func appendRawBytes*(self: var RlpWriter, bytes: openArray[byte]) =
   self.output.setLen(self.output.len + bytes.len)
   assign(self.output.toOpenArray(self.output.len - bytes.len, self.output.len - 1), bytes)
+  self.maybeClosePendingLists()
 
 proc startList*(self: var RlpTwoPassWriter, listSize: int) =
   if listSize == 0:
@@ -158,9 +159,10 @@ proc startList*(self: var RlpTwoPassWriter, listSize: int) =
     self.pendingLists.add((listSize, self.output.len, prefixLen))
     self.output.setLen(self.output.len + prefixLen)
 
-proc writeRawBytes(self: var RlpWriter, bytes: openArray[byte]) =
+proc appendBlob(self: var RlpWriter, bytes: openArray[byte]) =
   if bytes.len == 1 and byte(bytes[0]) < BLOB_START_MARKER:
     self.output.add byte(bytes[0])
+    self.maybeClosePendingLists()
   else:
     self.writeCount(bytes.len, BLOB_START_MARKER)
     self.appendRawBytes(bytes)
@@ -223,10 +225,6 @@ func appendInt(self: var RlpLengthTracker, i: SomeUnsignedInt) =
     self.totalLength += 1
   else:
     self.totalLength += lengthCount(i.bytesNeeded) + i.bytesNeeded
-  self.maybeClosePendingLists()
-
-func appendBlob(self: var RlpWriter, data: openArray[byte]) =
-  self.writeRawBytes(data)
   self.maybeClosePendingLists()
 
 proc appendInt(self: var RlpWriter, i: SomeUnsignedInt) =
