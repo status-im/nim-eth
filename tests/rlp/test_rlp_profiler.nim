@@ -55,11 +55,11 @@ proc encodeOnePass[T](v: T): seq[byte] =
 
 suite "test running time of rlp serialization":
   test "transaction serialization":
-    benchmark "Transaction serialization (two pass)":
-      let myTxBytes = rlp.encode(myTx)
+#    benchmark "Transaction serialization (two pass)":
+#      let myTxBytes = rlp.encode(myTx)
     benchmark "Block Sequence serialization (two pass)":
       let myBlockBytes = rlp.encode(blkSeq)
-    benchmark "Transaction serialization (one pass)":
-      let myTxBytesOnePass = encodeOnePass(myTx)
+#    benchmark "Transaction serialization (one pass)":
+#      let myTxBytesOnePass = encodeOnePass(myTx)
     benchmark "Block Sequence serailization (one pass)":
       let myBlockBytesOnePass = encodeOnePass(blkSeq)
