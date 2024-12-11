@@ -9,7 +9,10 @@ import
   std/options,
   pkg/results,
   stew/[arraybuf, assign2, bitops2, shims/macros],
-  ./priv/defs
+  ./priv/defs,
+  times,
+  strutils
+
 
 export arraybuf
 
@@ -19,14 +22,18 @@ type
     output: seq[byte]
   
   RlpTwoPassWriter* = object
-    pendingLists: seq[tuple[idx, remainingItems, startPos, prefixBytes: int]]
+    pendingLists: seq[tuple[remainingItems, startPos, prefixLen: int]]
     output: seq[byte]
-    listCount: int
     listPrefixBytes: seq[int]
     fillLevel: int
-    dryRun: bool
 
-  RlpWriter* = RlpDefaultWriter | RlpTwoPassWriter
+  RlpLengthTracker* = object
+    pendingLists: seq[tuple[idx, remainingItems, length: int]]
+    listCount: int
+    listPrefixBytes: seq[int]
+    totalLength: int
+
+  RlpWriter* = RlpDefaultWriter | RlpTwoPassWriter | RlpLengthTracker
 
   RlpIntBuf* = ArrayBuf[9, byte]
     ## Small buffer for holding a single RLP-encoded integer
@@ -45,43 +52,30 @@ func writeBigEndian(outStream: var auto, number: SomeUnsignedInt,
     outStream[i] = byte(n and 0xff)
     n = n shr 8
 
-proc writeCount(writer: var RlpTwoPassWriter, count: int, baseMarker: byte) =
+func writeCount(writer: var RlpTwoPassWriter, count: int, baseMarker: byte) =
   if count < THRESHOLD_LIST_LEN:
-    if not writer.dryRun:
-      writer.output[writer.fillLevel] = (baseMarker + byte(count))
-
+    writer.output[writer.fillLevel] = (baseMarker + byte(count))
     writer.fillLevel += 1
   else:
     let lenPrefixBytes = uint64(count).bytesNeeded
 
-    if not writer.dryRun:
-      writer.output[writer.fillLevel] = baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
-
+    writer.output[writer.fillLevel] = baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
     writer.fillLevel += 1
-
-    if not writer.dryRun:
-      writer.output.writeBigEndian(uint64(count), writer.fillLevel + lenPrefixBytes - 1, lenPrefixBytes)
-
+    writer.output.writeBigEndian(uint64(count), writer.fillLevel + lenPrefixBytes - 1, lenPrefixBytes)
     writer.fillLevel += lenPrefixBytes
 
-proc writeInt(writer: var RlpTwoPassWriter, i: SomeUnsignedInt) =
+func writeInt(writer: var RlpTwoPassWriter, i: SomeUnsignedInt) =
   if i == typeof(i)(0):
-    if not writer.dryRun:
-      writer.output[writer.fillLevel] = BLOB_START_MARKER
-
+    writer.output[writer.fillLevel] = BLOB_START_MARKER
     writer.fillLevel += 1
   elif i < typeof(i)(BLOB_START_MARKER):
-    if not writer.dryRun:
-      writer.output[writer.fillLevel] = byte(i)
-
+    writer.output[writer.fillLevel] = byte(i)
     writer.fillLevel += 1
   else:
     let bytesNeeded = i.bytesNeeded
     writer.writeCount(bytesNeeded, BLOB_START_MARKER)
-    
-    if not writer.dryRun:
-      writer.output.writeBigEndian(i, writer.fillLevel + bytesNeeded - 1, bytesNeeded)
 
+    writer.output.writeBigEndian(i, writer.fillLevel + bytesNeeded - 1, bytesNeeded)
     writer.fillLevel += bytesNeeded
 
 func writeCount(writer: var RlpDefaultWriter, count: int, baseMarker: byte) =
@@ -93,7 +87,7 @@ func writeCount(writer: var RlpDefaultWriter, count: int, baseMarker: byte) =
     writer.output.add baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
     
     writer.output.setLen(writer.output.len + lenPrefixBytes)
-    writer.output.writeBigEndian(uint64(count), writer.output.len - 1,lenPrefixBytes)
+    writer.output.writeBigEndian(uint64(count), writer.output.len - 1, lenPrefixBytes)
 
 func writeInt(writer: var RlpDefaultWriter, i: SomeUnsignedInt) =
   if i == typeof(i)(0):
@@ -112,6 +106,7 @@ proc initRlpWriter*: RlpDefaultWriter =
   # expected to be short-lived, it doesn't hurt to allocate this buffer
   result
 
+# nothing to do when serializing using tracker
 proc maybeClosePendingLists(self: var RlpTwoPassWriter) =
   while self.pendingLists.len > 0:
     let lastListIdx = self.pendingLists.len - 1
@@ -122,32 +117,19 @@ proc maybeClosePendingLists(self: var RlpTwoPassWriter) =
     if self.pendingLists[lastListIdx].remainingItems == 0:
       # A list have been just finished. It was started in `startList`.
       let listStartPos = self.pendingLists[lastListIdx].startPos
-      let listIdx = self.pendingLists[lastListIdx].idx
-      let prefixBytes = self.pendingLists[lastListIdx].prefixBytes
+      let prefixLen = self.pendingLists[lastListIdx].prefixLen
 
-      # remove the pending list tuple
       self.pendingLists.setLen lastListIdx
 
-      if self.dryRun:
-      # How many bytes were written since the start?
-        let listLen = self.fillLevel - listStartPos
+      let listLen = self.fillLevel - listStartPos - prefixLen
 
-        let totalPrefixBytes = if listLen < int(THRESHOLD_LIST_LEN): 1
-                            else: int(uint64(listLen).bytesNeeded) + 1
-
-        self.listPrefixBytes[listIdx] = totalPrefixBytes
-        self.fillLevel += totalPrefixBytes
+      # Write out the prefix length
+      if listLen < THRESHOLD_LIST_LEN:
+        self.output[listStartPos] = LIST_START_MARKER + byte(listLen)
       else:
-        # How many bytes were written since the start?
-        let listLen = self.fillLevel - listStartPos - prefixBytes 
-
-        # Write out the prefix length
-        if listLen < THRESHOLD_LIST_LEN:
-          self.output[listStartPos] = LIST_START_MARKER + byte(listLen)
-        else:
-          let listLenBytes = prefixBytes - 1
-          self.output[listStartPos] = LEN_PREFIXED_LIST_MARKER + byte(listLenBytes)
-          self.output.writeBigEndian(uint64(listLen), listStartPos + listLenBytes, listLenBytes)
+        let listLenBytes = prefixLen - 1
+        self.output[listStartPos] = LEN_PREFIXED_LIST_MARKER + byte(listLenBytes)
+        self.output.writeBigEndian(uint64(listLen), listStartPos + listLenBytes, listLenBytes)
     else:
       # The currently open list is not finished yet. Nothing to do.
       return
@@ -189,69 +171,127 @@ proc maybeClosePendingLists(self: var RlpDefaultWriter) =
       # The currently open list is not finished yet. Nothing to do.
       return
 
-proc appendRawBytes*(self: var RlpTwoPassWriter, bytes: openArray[byte]) =
-  if not self.dryRun:
-    assign(self.output.toOpenArray(
-      self.fillLevel, self.fillLevel + bytes.len - 1), bytes)
+template appendRawBytes*(self: var RlpTwoPassWriter, bytes: openArray[byte]) =
+  assign(self.output.toOpenArray(self.fillLevel, self.fillLevel + bytes.len - 1), bytes)
+  self.fillLevel += bytes.len 
 
-  self.fillLevel += bytes.len
-
-  self.maybeClosePendingLists()
+template appendRawBytes*(self: var RlpDefaultWriter, bytes: openArray[byte]) =
+  self.output.setLen(self.output.len + bytes.len)
+  assign(self.output.toOpenArray(self.output.len - bytes.len, self.output.len - 1), bytes)
 
 proc startList*(self: var RlpTwoPassWriter, listSize: int) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)
-    self.appendRawBytes([])
-  else:
-    # if not in dry run mode shift the fill level by prefixBytes (calculated during dry run) 
-    if not self.dryRun:
-      let prefixBytes = self.listPrefixBytes[0]
-      self.listPrefixBytes.delete(0)
-      self.pendingLists.add((self.listCount, listSize, self.fillLevel, prefixBytes))
-      self.fillLevel += prefixBytes
-    else:
-      self.pendingLists.add((self.listCount, listSize, self.fillLevel, 0))
-      self.listPrefixBytes.add(0)
-    self.listCount += 1
-
-proc appendBlob(self: var RlpTwoPassWriter, data: openArray[byte]) =
-  if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:
-    if not self.dryRun:
-      self.output[self.fillLevel] = byte(data[0])
-
-    self.fillLevel += 1
     self.maybeClosePendingLists()
   else:
-    self.writeCount(data.len, BLOB_START_MARKER)
-    self.appendRawBytes(data)
+    let prefixLen = self.listPrefixBytes[0]
+    self.listPrefixBytes.delete(0)
+    self.pendingLists.add((listSize, self.fillLevel, prefixLen))
+    self.fillLevel += prefixLen
 
-proc appendRawBytes*(self: var RlpDefaultWriter, bytes: openArray[byte]) =
-  self.output.setLen(self.output.len + bytes.len)
-  assign(self.output.toOpenArray(
-    self.output.len - bytes.len, self.output.len - 1), bytes)
+proc writeRawBytes(self: var RlpTwoPassWriter, bytes: openArray[byte]) =
+  if bytes.len == 1 and byte(bytes[0]) < BLOB_START_MARKER:
+    self.output[self.fillLevel] = byte(bytes[0])
+    self.fillLevel += 1
+  else:
+    self.writeCount(bytes.len, BLOB_START_MARKER)
+    self.appendRawBytes(bytes)
 
-  self.maybeClosePendingLists()
+proc writeRawBytes(self: var RlpDefaultWriter, bytes: openArray[byte]) =
+  if bytes.len == 1 and byte(bytes[0]) < BLOB_START_MARKER:
+    self.output.add byte(bytes[0])
+  else:
+    self.writeCount(bytes.len, BLOB_START_MARKER)
+    self.appendRawBytes(bytes)
 
 proc startList*(self: var RlpDefaultWriter, listSize: int) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)
-    self.appendRawBytes([])
+    self.maybeClosePendingLists()
   else:
     self.pendingLists.add((listSize, self.output.len))
 
-proc appendBlob(self: var RlpDefaultWriter, data: openArray[byte]) =
-  if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:
-    self.output.add byte(data[0])
-    self.maybeClosePendingLists()
+proc calculateListPrefix(listLen, prefixLen: int): seq[byte] =
+  var prefix = newSeqOfCap[byte](1) # prefix min length is 1
+  prefix.setLen(prefixLen)
+
+  if listLen < THRESHOLD_LIST_LEN:
+    prefix[0] = LIST_START_MARKER + byte(listLen)
   else:
-    self.writeCount(data.len, BLOB_START_MARKER)
-    self.appendRawBytes(data)
+    let listLenBytes = prefixLen - 1
+    prefix[0] = LEN_PREFIXED_LIST_MARKER + byte(listLenBytes)
+    prefix.writeBigEndian(uint64(listLen), listLenBytes, listLenBytes)
+
+  move(prefix)
+
+proc recordLenInCurList(self: var RlpLengthTracker, length: int) =
+  if self.pendingLists.len <= 0:
+    self.totalLength += length
+    return
+
+  let lastIdx = self.pendingLists.len - 1
+  self.pendingLists[lastIdx].remainingItems -= 1
+  self.pendingLists[lastIdx].length += length
+
+
+  if self.pendingLists[lastIdx].remainingItems == 0:
+    let listIdx = self.pendingLists[lastIdx].idx
+    let listLen = self.pendingLists[lastIdx].length
+    let prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
+                      else: int(uint64(listLen).bytesNeeded) + 1
+
+    # save the prefix
+    #self.listPrefixBytes[listIdx].prefix = calculateListPrefix(listLen, prefixLen)
+    # take note of the prefix len
+    self.listPrefixBytes[listIdx] = prefixLen
+    # close the list by deleting
+    self.pendingLists.setLen(lastIdx)
+  
+    let finalListLen = listLen + prefixLen
+    # add the current lists length to its parent list
+    self.recordLenInCurList(finalListLen)
+
+proc startList*(self: var RlpLengthTracker, listSize: int) =
+  if listSize == 0:
+    self.recordLenInCurList(1)
+  else:
+    # open a list
+    self.pendingLists.add((self.listCount, listSize, 0))
+    self.listCount += 1
+    self.listPrefixBytes.add(0)
+
+func lengthCount(count: int): int =
+  if count < THRESHOLD_LIST_LEN:
+    return 1
+  else:
+    return uint64(count).bytesNeeded + 1
+
+func lengthBlob(self: var RlpLengthTracker, data: openArray[byte]) =
+  if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:
+    self.recordLenInCurList(1)
+  else:
+    self.recordLenInCurList(lengthCount(data.len) + data.len)
+
+func lengthInt(self: var RlpLengthTracker, i: SomeUnsignedInt) =
+  if i < typeof(i)(BLOB_START_MARKER):
+    self.recordLenInCurList(1)
+  else:
+    self.recordLenInCurList(lengthCount(i.bytesNeeded) + i.bytesNeeded)
+
+template appendBlob(self: var RlpLengthTracker, data: openArray[byte]) =
+  self.lengthBlob(data)
+
+template appendInt(self: var RlpLengthTracker, data: SomeUnsignedInt) =
+  self.lengthInt(data)
+
+template appendBlob(self: var RlpWriter, data: openArray[byte]) =
+  self.writeRawBytes(data)
+  self.maybeClosePendingLists()
 
 proc appendInt(self: var RlpWriter, i: SomeUnsignedInt) =
   # this is created as a separate proc as an extra precaution against
   # any overloading resolution problems when matching the IntLike concept.
   self.writeInt(i)
-
   self.maybeClosePendingLists()
 
 
@@ -417,18 +457,13 @@ func clear*(w: var RlpWriter) =
 proc encode*[T](v: T): seq[byte] =
   mixin append
 
+  var tracker: RlpLengthTracker
+  tracker.append(v)
+
   var writer: RlpTwoPassWriter
-  # first pass
-  writer.dryRun = true
-  writer.append(v)
-
-  # second pass
-  writer.dryRun = false
-  writer.listCount = 0
-  writer.output = newSeqOfCap[byte](writer.fillLevel)
-  writer.output.setLen(writer.fillLevel)
-  writer.fillLevel = 0
-
+  writer.output = newSeqOfCap[byte](tracker.totalLength)
+  writer.output.setLen(tracker.totalLength)
+  writer.listPrefixBytes = tracker.listPrefixBytes
   writer.append(v)
 
   move(writer.finish)
