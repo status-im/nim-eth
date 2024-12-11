@@ -172,72 +172,58 @@ proc startList*(self: var RlpDefaultWriter, listSize: int) =
   else:
     self.pendingLists.add((listSize, self.output.len))
 
-proc calculateListPrefix(listLen, prefixLen: int): seq[byte] =
-  var prefix = newSeqOfCap[byte](1) # prefix min length is 1
-  prefix.setLen(prefixLen)
+proc maybeClosePendingLists(self: var RlpLengthTracker) =
+  while self.pendingLists.len > 0:
+    let lastIdx = self.pendingLists.len - 1
+    self.pendingLists[lastIdx].remainingItems -= 1
 
-  if listLen < THRESHOLD_LIST_LEN:
-    prefix[0] = LIST_START_MARKER + byte(listLen)
-  else:
-    let listLenBytes = prefixLen - 1
-    prefix[0] = LEN_PREFIXED_LIST_MARKER + byte(listLenBytes)
-    prefix.writeBigEndian(uint64(listLen), listLenBytes, listLenBytes)
+    if self.pendingLists[lastIdx].remainingItems == 0:
+      let listIdx = self.pendingLists[lastIdx].idx
+      let startLen = self.pendingLists[lastIdx].length
 
-  move(prefix)
+      let listLen = self.totalLength - startLen
 
-proc recordLenInCurList(self: var RlpLengthTracker, length: int) =
-  if self.pendingLists.len <= 0:
-    self.totalLength += length
-    return
+      let prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
+                        else: int(uint64(listLen).bytesNeeded) + 1
 
-  let lastIdx = self.pendingLists.len - 1
-  self.pendingLists[lastIdx].remainingItems -= 1
-  self.pendingLists[lastIdx].length += length
-
-
-  if self.pendingLists[lastIdx].remainingItems == 0:
-    let listIdx = self.pendingLists[lastIdx].idx
-    let listLen = self.pendingLists[lastIdx].length
-    let prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
-                      else: int(uint64(listLen).bytesNeeded) + 1
-
-    # save the prefix
-    #self.listPrefixBytes[listIdx].prefix = calculateListPrefix(listLen, prefixLen)
-    # take note of the prefix len
-    self.listPrefixBytes[listIdx] = prefixLen
-    # close the list by deleting
-    self.pendingLists.setLen(lastIdx)
-  
-    let finalListLen = listLen + prefixLen
-    # add the current lists length to its parent list
-    self.recordLenInCurList(finalListLen)
+      # save the prefix
+      #self.listPrefixBytes[listIdx].prefix = calculateListPrefix(listLen, prefixLen)
+      # take note of the prefix len
+      self.listPrefixBytes[listIdx] = prefixLen
+      # close the list by deleting
+      self.pendingLists.setLen(lastIdx)
+    
+      self.totalLength += prefixLen
+    else:
+      return
 
 proc startList*(self: var RlpLengthTracker, listSize: int) =
   if listSize == 0:
-    self.recordLenInCurList(1)
+    self.totalLength += 1
+    self.maybeClosePendingLists()
   else:
     # open a list
-    self.pendingLists.add((self.listCount, listSize, 0))
+    self.pendingLists.add((self.listCount, listSize, self.totalLength))
     self.listCount += 1
     self.listPrefixBytes.add(0)
 
 func lengthCount(count: int): int {.inline.} =
-  if count < THRESHOLD_LIST_LEN:
-    return 1
-  else:
-    return uint64(count).bytesNeeded + 1
+  return if count < THRESHOLD_LIST_LEN: 1 
+          else: uint64(count).bytesNeeded + 1
 
 func appendBlob(self: var RlpLengthTracker, data: openArray[byte]) =
   if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:
-    self.recordLenInCurList(1)
+    self.totalLength += 1
   else:
-    self.recordLenInCurList(lengthCount(data.len) + data.len)
+    self.totalLength += lengthCount(data.len) + data.len
+  self.maybeClosePendingLists()
 
 func appendInt(self: var RlpLengthTracker, i: SomeUnsignedInt) =
   if i < typeof(i)(BLOB_START_MARKER):
-    self.recordLenInCurList(1)
+    self.totalLength += 1
   else:
-    self.recordLenInCurList(lengthCount(i.bytesNeeded) + i.bytesNeeded)
+    self.totalLength += lengthCount(i.bytesNeeded) + i.bytesNeeded
+  self.maybeClosePendingLists()
 
 func appendBlob(self: var RlpWriter, data: openArray[byte]) =
   self.writeRawBytes(data)
