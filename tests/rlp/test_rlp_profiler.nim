@@ -57,22 +57,22 @@ proc encodeAndHash[T](v: T): Hash32 =
 
 suite "test running times of rlp encode and encodeHash":
   test "encoding using two pass writer":
-    benchmark "Transaction serialization":
+    benchmark "Transaction serialization using two pass writer":
       let bytes1 = rlp.encode(myTx)
-    benchmark "Block Sequence serialization":
+    benchmark "Block Sequence serialization using two pass writer":
       let bytes2 = rlp.encode(blkSeq)
   test "encoding using default writer":
-    benchmark "Transaction serialization":
+    benchmark "Transaction serialization using default writer":
       let bytes3 = encodeOnePass(myTx)
-    benchmark "Block Sequence serailization":
+    benchmark "Block Sequence serailization using default writer":
       let bytes4 = encodeOnePass(blkSeq)
   test "encoding and hashing using hash writer":
-    benchmark "Transaction serialization":
+    benchmark "Transaction hashing using hash writer":
       let bytes5 = rlp.encodeHash(myTx)
-    benchmark "Block Sequence serailization":
+    benchmark "Block Sequence hashing using hash writer":
       let bytes6 = rlp.encodeHash(blkSeq)
   test "encoding and hashin using default writer":
-    benchmark "Transaction serialization":
+    benchmark "Transaction hashing using default writer and then hash":
       let bytes7 = encodeAndHash(myTx)
-    benchmark "Block Sequence serailization":
+    benchmark "Block Sequence hashing using default writer and then hash":
       let bytes8 = encodeAndHash(blkSeq)
