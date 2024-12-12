@@ -6,11 +6,16 @@ import
   utils
 
 type
+  TrackerKind* = enum
+    RecordLen,
+    RecordPrefix
+
   RlpLengthTracker* = object
+    case kind*: TrackerKind
+    of RecordLen: listPrefixLen*: seq[int]
+    of RecordPrefix: listPrefixBytes*: seq[seq[byte]]
     pendingLists: seq[tuple[idx, remainingItems, length: int]]
     listCount: int
-    listPrefixLen*: seq[int]
-    listPrefixBytes*: seq[seq[byte]]
     totalLength*: int
 
 proc calculateListPrefix(listLen, prefixLen: int): seq[byte] =
@@ -41,12 +46,14 @@ proc maybeClosePendingLists(self: var RlpLengthTracker) =
                         else: int(uint64(listLen).bytesNeeded) + 1
 
       # save the prefix
-      self.listPrefixBytes[listIdx] = calculateListPrefix(listLen, prefixLen)
-      # take note of the prefix len
-      self.listPrefixLen[listIdx] = prefixLen
+      if self.kind == TrackerKind.RecordPrefix:
+        self.listPrefixBytes[listIdx] = calculateListPrefix(listLen, prefixLen)
+      else: # take note of the prefix len
+        self.listPrefixLen[listIdx] = prefixLen
+
       # close the list by deleting
       self.pendingLists.setLen(lastIdx)
-    
+
       self.totalLength += prefixLen
     else:
       return
@@ -63,8 +70,10 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     # open a list
     self.pendingLists.add((self.listCount, listSize, self.totalLength))
     self.listCount += 1
-    self.listPrefixLen.add(0)
-    self.listPrefixBytes.add(@[])
+    if self.kind == TrackerKind.RecordLen:
+      self.listPrefixLen.add(0)
+    else:
+      self.listPrefixBytes.add(@[])
 
 func lengthCount(count: int): int {.inline.} =
   return if count < THRESHOLD_LIST_LEN: 1 
@@ -91,5 +100,7 @@ template finish*(self: RlpLengthTracker): seq[seq[byte]] =
 func clear*(w: var RlpLengthTracker) =
   # Prepare writer for reuse
   w.pendingLists.setLen(0)
-  w.listPrefixLen.setLen(0)
-  w.listPrefixBytes.setLen(0)
+  if w.kind == TrackerKind.RecordLen:
+    w.listPrefixLen.setLen(0)
+  else:
+    w.listPrefixBytes.setLen(0)
