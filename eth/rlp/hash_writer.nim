@@ -11,7 +11,7 @@ type
     keccak: keccak.keccak256
     listPrefixBytes*: seq[seq[byte]]
 
-func update(writer: var RlpHashWriter, data: byte) =
+template update(writer: var RlpHashWriter, data: byte) =
   writer.keccak.update([data])
 
 template update(writer: var RlpHashWriter, data: openArray[byte]) =
@@ -26,6 +26,7 @@ func writeCount(writer: var RlpHashWriter, count: int, baseMarker: byte) =
     writer.update baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
 
     var buf = newSeqOfCap[byte](lenPrefixBytes)
+    buf.setLen(lenPrefixBytes)
     buf.writeBigEndian(uint64(count), buf.len - 1, lenPrefixBytes)
     writer.update(buf)
 
@@ -39,6 +40,7 @@ func writeInt*(writer: var RlpHashWriter, i: SomeUnsignedInt) =
     writer.writeCount(bytesNeeded, BLOB_START_MARKER)
 
     var buf = newSeqOfCap[byte](bytesNeeded)
+    buf.setLen(bytesNeeded)
     buf.writeBigEndian(uint64(i), buf.len - 1, bytesNeeded)
     writer.update(buf)
 
@@ -56,7 +58,8 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)
   else:
-    let prefixBytes = self.listPrefixBytes.pop()
+    let prefixBytes = self.listPrefixBytes[0]
+    self.listPrefixBytes.delete(0)
     self.update(prefixBytes)
 
 template finish*(self: var RlpHashWriter): MDigest[self.keccak.bits] =

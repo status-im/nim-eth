@@ -73,6 +73,6 @@ suite "test running times of rlp encode and encodeHash":
       let bytes6 = rlp.encodeHash(blkSeq)
   test "encoding and hashin using default writer":
     benchmark "Transaction serialization":
-      let bytes7 = rlp.encodeHash(myTx)
+      let bytes7 = encodeAndHash(myTx)
     benchmark "Block Sequence serailization":
-      let bytes8 = rlp.encodeHash(blkSeq)
+      let bytes8 = encodeAndHash(blkSeq)
