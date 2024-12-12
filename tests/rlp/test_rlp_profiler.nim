@@ -52,14 +52,27 @@ proc encodeOnePass[T](v: T): seq[byte] =
   writer.append(v)
   move(writer.finish)
 
+proc encodeAndHash[T](v: T): Hash32 =
+  keccak256(encodeOnePass(v))
 
-suite "test running time of rlp serialization":
-  test "transaction serialization":
-    benchmark "Transaction serialization (two pass)":
-      let myTxBytes = rlp.encode(myTx)
-    benchmark "Block Sequence serialization (two pass)":
-      let myBlockBytes = rlp.encode(blkSeq)
-    benchmark "Transaction serialization (one pass)":
-      let myTxBytesOnePass = encodeOnePass(myTx)
-    benchmark "Block Sequence serailization (one pass)":
-      let myBlockBytesOnePass = encodeOnePass(blkSeq)
+suite "test running times of rlp encode and encodeHash":
+  test "encoding using two pass writer":
+    benchmark "Transaction serialization":
+      let bytes1 = rlp.encode(myTx)
+    benchmark "Block Sequence serialization":
+      let bytes2 = rlp.encode(blkSeq)
+  test "encoding using default writer":
+    benchmark "Transaction serialization":
+      let bytes3 = encodeOnePass(myTx)
+    benchmark "Block Sequence serailization":
+      let bytes4 = encodeOnePass(blkSeq)
+  test "encoding and hashing using hash writer":
+    benchmark "Transaction serialization":
+      let bytes5 = rlp.encodeHash(myTx)
+    benchmark "Block Sequence serailization":
+      let bytes6 = rlp.encodeHash(blkSeq)
+  test "encoding and hashin using default writer":
+    benchmark "Transaction serialization":
+      let bytes7 = rlp.encodeHash(myTx)
+    benchmark "Block Sequence serailization":
+      let bytes8 = rlp.encodeHash(blkSeq)
