@@ -9,7 +9,8 @@ import
 type
   RlpHashWriter* = object
     keccak: keccak.keccak256
-    listPrefixBytes*: seq[seq[byte]]
+    listLengths*: seq[int]
+    prefixLengths*: seq[int]
 
 template update(writer: var RlpHashWriter, data: byte) =
   writer.keccak.update([data])
@@ -58,16 +59,30 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)
   else:
-    let prefixBytes = self.listPrefixBytes[0]
-    self.listPrefixBytes.delete(0)
-    self.update(prefixBytes)
+    let prefixLen = self.prefixLengths[0]
+    let listLen = self.listLengths[0]
+    self.prefixLengths.delete(0)
+    self.listLengths.delete(0)
+
+    if listLen < THRESHOLD_LIST_LEN:
+      self.update(LIST_START_MARKER + byte(listLen))
+    else:
+      let listLenBytes = prefixLen - 1
+      self.update(LEN_PREFIXED_LIST_MARKER + byte(listLenBytes))
+
+      var buf = newSeqOfCap[byte](listLenBytes)
+      buf.setLen(listLenBytes)
+      buf.writeBigEndian(uint64(listLen), buf.len - 1, listLenBytes)
+      self.update(buf)
 
 template finish*(self: var RlpHashWriter): MDigest[self.keccak.bits] =
-  doAssert self.listPrefixBytes.len == 0, "Insufficient number of elements written to a started list"
+  self.listLengths.setLen(0)
+  self.prefixLengths.setLen(0)
   self.keccak.finish()
 
 func clear*(w: var RlpHashWriter) =
   # Prepare writer for reuse
-  w.listPrefixBytes.setLen(0)
+  w.listLengths.setLen(0)
+  w.prefixLengths.setLen(0)
 
 

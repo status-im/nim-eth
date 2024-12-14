@@ -6,15 +6,11 @@ import
   utils
 
 type
-  TrackerKind* = enum
-    RecordLen,
-    RecordPrefix
-
+  ListAndPrefixLengths = tuple[listLengths, prefixLengths: seq[int]]
   RlpLengthTracker* = object
-    case kind*: TrackerKind
-    of RecordLen: listPrefixLen*: seq[int]
-    of RecordPrefix: listPrefixBytes*: seq[seq[byte]]
-    pendingLists: seq[tuple[idx, remainingItems, length: int]]
+    prefixLengths*: seq[int]
+    listLengths*: seq[int]
+    pendingLists: seq[tuple[idx, remainingItems, startLen: int]]
     listCount: int
     totalLength*: int
 
@@ -38,18 +34,18 @@ proc maybeClosePendingLists(self: var RlpLengthTracker) =
 
     if self.pendingLists[lastIdx].remainingItems == 0:
       let listIdx = self.pendingLists[lastIdx].idx
-      let startLen = self.pendingLists[lastIdx].length
+      let startLen = self.pendingLists[lastIdx].startLen
 
       let listLen = self.totalLength - startLen
 
       let prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
                         else: int(uint64(listLen).bytesNeeded) + 1
 
-      # save the prefix
-      if self.kind == TrackerKind.RecordPrefix:
-        self.listPrefixBytes[listIdx] = calculateListPrefix(listLen, prefixLen)
-      else: # take note of the prefix len
-        self.listPrefixLen[listIdx] = prefixLen
+      # save the list lengths and prefix lengths
+      self.listLengths[listIdx] = listLen
+      self.prefixLengths[listIdx] = prefixLen
+
+      #TODO: extend the lists if they cross length of 50 by 50.
 
       # close the list by deleting
       self.pendingLists.setLen(lastIdx)
@@ -70,10 +66,6 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     # open a list
     self.pendingLists.add((self.listCount, listSize, self.totalLength))
     self.listCount += 1
-    if self.kind == TrackerKind.RecordLen:
-      self.listPrefixLen.add(0)
-    else:
-      self.listPrefixBytes.add(@[])
 
 func lengthCount(count: int): int {.inline.} =
   return if count < THRESHOLD_LIST_LEN: 1 
@@ -93,14 +85,23 @@ func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
     self.totalLength += lengthCount(i.bytesNeeded) + i.bytesNeeded
   self.maybeClosePendingLists()
 
-template finish*(self: RlpLengthTracker): seq[seq[byte]] =
+func initLengthTracker*(): RlpLengthTracker =
+
+  # TODO: Don't hardcode 50
+
+  # we preset the lengths since we want to skip using add method for
+  # these lists
+  result.prefixLengths = newSeqOfCap[int](50)
+  result.prefixLengths.setLen(50)
+  result.listLengths = newSeqOfCap[int](50)
+  result.listLengths.setLen(50)
+
+template finish*(self: RlpLengthTracker): ListAndPrefixLengths =
   doAssert self.pendingLists.len == 0, "Insufficient number of elements written to a started list"
-  self.listPrefixBytes
+  (self.listLengths, self.prefixLengths)
 
 func clear*(w: var RlpLengthTracker) =
   # Prepare writer for reuse
   w.pendingLists.setLen(0)
-  if w.kind == TrackerKind.RecordLen:
-    w.listPrefixLen.setLen(0)
-  else:
-    w.listPrefixBytes.setLen(0)
+  w.prefixLengths.setLen(0)
+  w.listLengths.setLen(0)
