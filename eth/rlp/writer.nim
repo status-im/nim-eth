@@ -185,13 +185,13 @@ proc initRlpList*(listSize: int): RlpDefaultWriter =
 proc encode*[T](v: T): seq[byte] =
   mixin append
 
-  var tracker = RlpLengthTracker(kind: TrackerKind.RecordLen)
-  var writer: RlpTwoPassWriter
+  var tracker = initLengthTracker()
   
   tracker.append(v)
 
-  writer.output = newSeqOfCap[byte](tracker.totalLength)
-  writer.listPrefixLen = tracker.listPrefixLen
+  var writer = initTwoPassWriter(tracker.totalLength)
+  writer.prefixLengths = tracker.prefixLengths
+  writer.listLengths = tracker.listLengths
   writer.append(v)
 
   move(writer.finish)
@@ -199,12 +199,13 @@ proc encode*[T](v: T): seq[byte] =
 proc encodeHash*[T](v: T): Hash32 =
   mixin append
 
-  var tracker = RlpLengthTracker(kind: TrackerKind.RecordPrefix)
+  var tracker = initLengthTracker()
   var writer: RlpHashWriter
 
   tracker.append(v)
 
-  writer.listPrefixBytes = tracker.listPrefixBytes
+  writer.prefixLengths = tracker.prefixLengths
+  writer.listLengths = tracker.listLengths
   writer.append(v)
 
   writer.finish.to(Hash32)
