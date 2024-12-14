@@ -12,6 +12,7 @@ type
     prefixLengths*: seq[int]
     listLengths*: seq[int]
     fillLevel: int
+    listCount: int
 
 func writeCount(writer: var RlpTwoPassWriter, count: int, baseMarker: byte) =
   if count < THRESHOLD_LIST_LEN:
@@ -59,10 +60,9 @@ proc startList*(self: var RlpTwoPassWriter, listSize: int) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)
   else:
-    let prefixLen = self.prefixLengths[0]
-    let listLen = self.listLengths[0]
-    self.prefixLengths.delete(0)
-    self.listLengths.delete(0)
+    let prefixLen = self.prefixLengths[self.listCount]
+    let listLen = self.listLengths[self.listCount]
+    self.listCount += 1
 
     if listLen < THRESHOLD_LIST_LEN:
       self.output[self.fillLevel] = LIST_START_MARKER + byte(listLen)
@@ -75,6 +75,7 @@ proc startList*(self: var RlpTwoPassWriter, listSize: int) =
 
 func initTwoPassWriter*(length: int): RlpTwoPassWriter =
   result.fillLevel = 0
+  result.listCount = 0
   result.output = newSeqOfCap[byte](length)
   result.output.setLen(length)
 
