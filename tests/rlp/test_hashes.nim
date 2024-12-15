@@ -2,10 +2,7 @@
 
 import 
   ../../eth/[rlp, common],
-  unittest2,
-  times,
-  os,
-  strutils
+  unittest2
 
 const 
   accesses  = @[AccessPair(
