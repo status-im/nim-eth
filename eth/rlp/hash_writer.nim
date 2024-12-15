@@ -11,6 +11,7 @@ type
     keccak: keccak.keccak256
     listLengths*: seq[int]
     prefixLengths*: seq[int]
+    listCount: int
 
 template update(writer: var RlpHashWriter, data: byte) =
   writer.keccak.update([data])
@@ -59,10 +60,10 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)
   else:
-    let prefixLen = self.prefixLengths[0]
-    let listLen = self.listLengths[0]
-    self.prefixLengths.delete(0)
-    self.listLengths.delete(0)
+    let prefixLen = self.prefixLengths[self.listCount]
+    let listLen = self.listLengths[self.listCount]
+    self.listCount += 1
+
 
     if listLen < THRESHOLD_LIST_LEN:
       self.update(LIST_START_MARKER + byte(listLen))
@@ -84,5 +85,4 @@ func clear*(w: var RlpHashWriter) =
   # Prepare writer for reuse
   w.listLengths.setLen(0)
   w.prefixLengths.setLen(0)
-
 
