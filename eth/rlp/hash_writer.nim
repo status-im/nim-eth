@@ -2,7 +2,7 @@ import
   std/options,
   pkg/results,
   nimcrypto/keccak,
-  stew/[arraybuf, bitops2, shims/macros],
+  stew/[arraybuf, shims/macros],
   ./priv/defs,
   utils
 
@@ -60,10 +60,11 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)
   else:
-    let prefixLen = self.prefixLengths[self.listCount]
-    let listLen = self.listLengths[self.listCount]
-    self.listCount += 1
+    let 
+      prefixLen = self.prefixLengths[self.listCount]
+      listLen = self.listLengths[self.listCount]
 
+    self.listCount += 1
 
     if listLen < THRESHOLD_LIST_LEN:
       self.update(LIST_START_MARKER + byte(listLen))

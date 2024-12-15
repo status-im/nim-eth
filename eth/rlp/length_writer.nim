@@ -1,12 +1,11 @@
 import
   std/options,
   pkg/results,
-  stew/[arraybuf, assign2, bitops2, shims/macros],
+  stew/[arraybuf, shims/macros],
   ./priv/defs,
   utils
 
 type
-  ListAndPrefixLengths = tuple[listLengths, prefixLengths: seq[int]]
   RlpLengthTracker* = object
     prefixLengths*: seq[int]
     listLengths*: seq[int]
@@ -14,18 +13,7 @@ type
     listCount: int
     totalLength*: int
 
-proc calculateListPrefix(listLen, prefixLen: int): seq[byte] =
-  var prefix = newSeqOfCap[byte](1) # prefix min length is 1
-  prefix.setLen(prefixLen)
-
-  if listLen < THRESHOLD_LIST_LEN:
-    prefix[0] = LIST_START_MARKER + byte(listLen)
-  else:
-    let listLenBytes = prefixLen - 1
-    prefix[0] = LEN_PREFIXED_LIST_MARKER + byte(listLenBytes)
-    prefix.writeBigEndian(uint64(listLen), listLenBytes, listLenBytes)
-
-  move(prefix)
+const LIST_LENGTH = 50
 
 proc maybeClosePendingLists(self: var RlpLengthTracker) =
   while self.pendingLists.len > 0:
@@ -33,19 +21,16 @@ proc maybeClosePendingLists(self: var RlpLengthTracker) =
     self.pendingLists[lastIdx].remainingItems -= 1
 
     if self.pendingLists[lastIdx].remainingItems == 0:
-      let listIdx = self.pendingLists[lastIdx].idx
-      let startLen = self.pendingLists[lastIdx].startLen
-
-      let listLen = self.totalLength - startLen
-
-      let prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
-                        else: int(uint64(listLen).bytesNeeded) + 1
+      let 
+        listIdx = self.pendingLists[lastIdx].idx
+        startLen = self.pendingLists[lastIdx].startLen
+        listLen = self.totalLength - startLen
+        prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
+                      else: int(uint64(listLen).bytesNeeded) + 1
 
       # save the list lengths and prefix lengths
       self.listLengths[listIdx] = listLen
       self.prefixLengths[listIdx] = prefixLen
-
-      #TODO: extend the lists if they cross length of 50 by 50.
 
       # close the list by deleting
       self.pendingLists.setLen(lastIdx)
@@ -66,6 +51,9 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     # open a list
     self.pendingLists.add((self.listCount, listSize, self.totalLength))
     self.listCount += 1
+    if self.listCount == self.listLengths.len:
+      self.listLengths.setLen(self.listLengths.len + LIST_LENGTH)
+      self.prefixLengths.setLen(self.prefixLengths.len + LIST_LENGTH)
 
 func lengthCount(count: int): int {.inline.} =
   return if count < THRESHOLD_LIST_LEN: 1 
@@ -86,19 +74,17 @@ func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
   self.maybeClosePendingLists()
 
 func initLengthTracker*(): RlpLengthTracker =
-
-  # TODO: Don't hardcode 50
-
   # we preset the lengths since we want to skip using add method for
   # these lists
-  result.prefixLengths = newSeqOfCap[int](50)
-  result.prefixLengths.setLen(50)
-  result.listLengths = newSeqOfCap[int](50)
-  result.listLengths.setLen(50)
+  result.prefixLengths = newSeqOfCap[int](LIST_LENGTH)
+  result.prefixLengths.setLen(LIST_LENGTH)
+  result.listLengths = newSeqOfCap[int](LIST_LENGTH)
+  result.listLengths.setLen(LIST_LENGTH)
 
-template finish*(self: RlpLengthTracker): ListAndPrefixLengths =
-  doAssert self.pendingLists.len == 0, "Insufficient number of elements written to a started list"
-  (self.listLengths, self.prefixLengths)
+template finish*(self: RlpLengthTracker): int =
+  doAssert self.pendingLists.len == 0, 
+    "Insufficient number of elements written to a started list"
+  self.totalLength
 
 func clear*(w: var RlpLengthTracker) =
   # Prepare writer for reuse
