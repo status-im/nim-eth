@@ -21,12 +21,11 @@ func writeCount(writer: var RlpTwoPassWriter, count: int, baseMarker: byte) =
   else:
     let lenPrefixBytes = uint64(count).bytesNeeded
 
-    writer.output[writer.fillLevel] = baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
+    writer.output[writer.fillLevel] = baseMarker + (THRESHOLD_LIST_LEN - 1) +
+      byte(lenPrefixBytes)
     writer.fillLevel += lenPrefixBytes + 1
-    writer.output.writeBigEndian(uint64(count), writer.fillLevel - 1, lenPrefixBytes)
-
-# nothing to do when serializing using tracker
-template maybeClosePendingLists(self: var RlpTwoPassWriter) = discard
+    writer.output.writeBigEndian(uint64(count), 
+      writer.fillLevel - 1, lenPrefixBytes)
 
 func writeInt*(writer: var RlpTwoPassWriter, i: SomeUnsignedInt) =
   if i == typeof(i)(0):
@@ -44,7 +43,8 @@ func writeInt*(writer: var RlpTwoPassWriter, i: SomeUnsignedInt) =
 
 func appendRawBytes*(self: var RlpTwoPassWriter, bytes: openArray[byte]) =
   self.fillLevel += bytes.len
-  assign(self.output.toOpenArray(self.fillLevel - bytes.len, self.fillLevel - 1), bytes)
+  assign(self.output.toOpenArray(
+    self.fillLevel - bytes.len, self.fillLevel - 1), bytes)
 
 proc writeBlob*(self: var RlpTwoPassWriter, bytes: openArray[byte]) =
   if bytes.len == 1 and byte(bytes[0]) < BLOB_START_MARKER:
@@ -60,8 +60,10 @@ proc startList*(self: var RlpTwoPassWriter, listSize: int) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)
   else:
-    let prefixLen = self.prefixLengths[self.listCount]
-    let listLen = self.listLengths[self.listCount]
+    let 
+      prefixLen = self.prefixLengths[self.listCount]
+      listLen = self.listLengths[self.listCount]
+
     self.listCount += 1
 
     if listLen < THRESHOLD_LIST_LEN:
@@ -71,7 +73,8 @@ proc startList*(self: var RlpTwoPassWriter, listSize: int) =
       let listLenBytes = prefixLen - 1
       self.output[self.fillLevel] = LEN_PREFIXED_LIST_MARKER + byte(listLenBytes)
       self.fillLevel += prefixLen
-      self.output.writeBigEndian(uint64(listLen), self.fillLevel - 1, listLenBytes)
+      self.output.writeBigEndian(uint64(listLen), self.fillLevel - 1,
+        listLenBytes)
 
 func initTwoPassWriter*(length: int): RlpTwoPassWriter =
   result.fillLevel = 0
@@ -80,7 +83,8 @@ func initTwoPassWriter*(length: int): RlpTwoPassWriter =
   result.output.setLen(length)
 
 template finish*(self: RlpTwoPassWriter): seq[byte] =
-  doAssert self.pendingLists.len == 0, "Insufficient number of elements written to a started list"
+  doAssert self.pendingLists.len == 0, 
+    "Insufficient number of elements written to a started list"
   self.prefixLengths.setLen(0)
   self.listLengths.setLen(0)
   self.output
