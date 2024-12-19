@@ -12,12 +12,18 @@ type
     listLengths*: seq[int]
     prefixLengths*: seq[int]
     listCount: int
+    bigEndianBuf: array[8, byte]
 
 template update(writer: var RlpHashWriter, data: byte) =
   writer.keccak.update([data])
 
 template update(writer: var RlpHashWriter, data: openArray[byte]) =
   writer.keccak.update(data)
+
+template updateBigEndian(writer: var RlpHashWriter, i: SomeUnsignedInt, 
+                          length: int) =
+  writer.bigEndianBuf.writeBigEndian(i, length - 1, length)
+  writer.update(writer.bigEndianBuf.toOpenArray(0, length - 1))
 
 func writeCount(writer: var RlpHashWriter, count: int, baseMarker: byte) =
   if count < THRESHOLD_LIST_LEN:
@@ -27,10 +33,7 @@ func writeCount(writer: var RlpHashWriter, count: int, baseMarker: byte) =
 
     writer.update baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
 
-    var buf = newSeqOfCap[byte](lenPrefixBytes)
-    buf.setLen(lenPrefixBytes)
-    buf.writeBigEndian(uint64(count), buf.len - 1, lenPrefixBytes)
-    writer.update(buf)
+    writer.updateBigEndian(uint64(count), lenPrefixBytes)
 
 func writeInt*(writer: var RlpHashWriter, i: SomeUnsignedInt) =
   if i == typeof(i)(0):
@@ -41,11 +44,8 @@ func writeInt*(writer: var RlpHashWriter, i: SomeUnsignedInt) =
     let bytesNeeded = i.bytesNeeded
     writer.writeCount(bytesNeeded, BLOB_START_MARKER)
 
-    var buf = newSeqOfCap[byte](bytesNeeded)
-    buf.setLen(bytesNeeded)
-    buf.writeBigEndian(uint64(i), buf.len - 1, bytesNeeded)
-    writer.update(buf)
-
+    writer.updateBigEndian(uint64(i), bytesNeeded)
+    
 template appendRawBytes*(self: var RlpHashWriter, bytes: openArray[byte]) =
   self.update(bytes)
 
@@ -71,11 +71,8 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
     else:
       let listLenBytes = prefixLen - 1
       self.update(LEN_PREFIXED_LIST_MARKER + byte(listLenBytes))
-
-      var buf = newSeqOfCap[byte](listLenBytes)
-      buf.setLen(listLenBytes)
-      buf.writeBigEndian(uint64(listLen), buf.len - 1, listLenBytes)
-      self.update(buf)
+      
+      self.updateBigEndian(uint64(listLen), listLenBytes)
 
 template finish*(self: var RlpHashWriter): MDigest[self.keccak.bits] =
   self.listLengths.setLen(0)
