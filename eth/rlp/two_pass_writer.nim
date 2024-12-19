@@ -3,14 +3,14 @@ import
   pkg/results,
   stew/[arraybuf, assign2, shims/macros],
   ./priv/defs,
-  utils
+  utils,
+  length_writer
 
 type
   RlpTwoPassWriter* = object
     pendingLists*: seq[tuple[remainingItems, startPos, prefixLen: int]]
     output*: seq[byte]
-    prefixLengths*: seq[int]
-    listLengths*: seq[int]
+    lengths*: seq[tuple[listLen, prefixLen: int]]
     fillLevel: int
     listCount: int
 
@@ -61,8 +61,8 @@ proc startList*(self: var RlpTwoPassWriter, listSize: int) =
     self.writeCount(0, LIST_START_MARKER)
   else:
     let 
-      prefixLen = self.prefixLengths[self.listCount]
-      listLen = self.listLengths[self.listCount]
+      prefixLen = self.lengths[self.listCount].prefixLen
+      listLen = self.lengths[self.listCount].listLen
 
     self.listCount += 1
 
@@ -76,22 +76,19 @@ proc startList*(self: var RlpTwoPassWriter, listSize: int) =
       self.output.writeBigEndian(uint64(listLen), self.fillLevel - 1,
         listLenBytes)
 
-func initTwoPassWriter*(length: int): RlpTwoPassWriter =
+func initTwoPassWriter*(tracker: var RlpLengthTracker): RlpTwoPassWriter =
   result.fillLevel = 0
   result.listCount = 0
-  result.output = newSeqOfCap[byte](length)
-  result.output.setLen(length)
+  result.output = newSeq[byte](tracker.totalLength)
+  result.lengths = move(tracker.lengths)
 
 template finish*(self: RlpTwoPassWriter): seq[byte] =
   doAssert self.pendingLists.len == 0, 
     "Insufficient number of elements written to a started list"
-  self.prefixLengths.setLen(0)
-  self.listLengths.setLen(0)
+  self.lengths.setLen(0)
   self.output
 
 func clear*(w: var RlpTwoPassWriter) =
   # Prepare writer for reuse
   w.pendingLists.setLen(0)
   w.output.setLen(0)
-  w.prefixLengths.setLen(0)
-  w.listLengths.setLen(0)

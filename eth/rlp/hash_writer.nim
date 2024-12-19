@@ -4,13 +4,13 @@ import
   nimcrypto/keccak,
   stew/[arraybuf, shims/macros],
   ./priv/defs,
-  utils
+  utils,
+  length_writer
 
 type
   RlpHashWriter* = object
     keccak: keccak.keccak256
-    listLengths*: seq[int]
-    prefixLengths*: seq[int]
+    lengths*: seq[tuple[listLen, prefixLen: int]]
     listCount: int
     bigEndianBuf: array[8, byte]
 
@@ -61,8 +61,8 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
     self.writeCount(0, LIST_START_MARKER)
   else:
     let 
-      prefixLen = self.prefixLengths[self.listCount]
-      listLen = self.listLengths[self.listCount]
+      prefixLen = self.lengths[self.listCount].prefixLen
+      listLen = self.lengths[self.listCount].listLen
 
     self.listCount += 1
 
@@ -74,13 +74,14 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
       
       self.updateBigEndian(uint64(listLen), listLenBytes)
 
+func initHashWriter*(tracker: var RlpLengthTracker): RlpHashWriter =
+  result.lengths = move(tracker.lengths)
+
 template finish*(self: var RlpHashWriter): MDigest[self.keccak.bits] =
-  self.listLengths.setLen(0)
-  self.prefixLengths.setLen(0)
+  self.lengths.setLen(0)
   self.keccak.finish()
 
 func clear*(w: var RlpHashWriter) =
   # Prepare writer for reuse
-  w.listLengths.setLen(0)
-  w.prefixLengths.setLen(0)
+  w.lengths.setLen(0)
 
