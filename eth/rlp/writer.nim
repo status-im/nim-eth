@@ -189,9 +189,7 @@ proc encode*[T](v: T): seq[byte] =
   
   tracker.append(v)
 
-  var writer = initTwoPassWriter(tracker.totalLength)
-  writer.prefixLengths = tracker.prefixLengths
-  writer.listLengths = tracker.listLengths
+  var writer = initTwoPassWriter(tracker)
   writer.append(v)
 
   move(writer.finish)
@@ -200,12 +198,10 @@ proc encodeHash*[T](v: T): Hash32 =
   mixin append
 
   var tracker = initLengthTracker()
-  var writer: RlpHashWriter
 
   tracker.append(v)
 
-  writer.prefixLengths = tracker.prefixLengths
-  writer.listLengths = tracker.listLengths
+  var writer = initHashWriter(tracker)
   writer.append(v)
 
   writer.finish.to(Hash32)

@@ -7,8 +7,7 @@ import
 
 type
   RlpLengthTracker* = object
-    prefixLengths*: seq[int]
-    listLengths*: seq[int]
+    lengths*: seq[tuple[listLen, prefixLen: int]]
     pendingLists: seq[tuple[idx, remainingItems, startLen: int]]
     listCount: int
     totalLength*: int
@@ -29,8 +28,7 @@ proc maybeClosePendingLists(self: var RlpLengthTracker) =
                       else: int(uint64(listLen).bytesNeeded) + 1
 
       # save the list lengths and prefix lengths
-      self.listLengths[listIdx] = listLen
-      self.prefixLengths[listIdx] = prefixLen
+      self.lengths[listIdx] = (listLen, prefixLen)
 
       # close the list by deleting
       self.pendingLists.setLen(lastIdx)
@@ -51,9 +49,8 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     # open a list
     self.pendingLists.add((self.listCount, listSize, self.totalLength))
     self.listCount += 1
-    if self.listCount == self.listLengths.len:
-      self.listLengths.setLen(self.listLengths.len + LIST_LENGTH)
-      self.prefixLengths.setLen(self.prefixLengths.len + LIST_LENGTH)
+    if self.listCount == self.lengths.len:
+      self.lengths.setLen(self.lengths.len + LIST_LENGTH)
 
 func lengthCount(count: int): int {.inline.} =
   return if count < THRESHOLD_LIST_LEN: 1 
@@ -76,10 +73,7 @@ func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
 func initLengthTracker*(): RlpLengthTracker =
   # we preset the lengths since we want to skip using add method for
   # these lists
-  result.prefixLengths = newSeqOfCap[int](LIST_LENGTH)
-  result.prefixLengths.setLen(LIST_LENGTH)
-  result.listLengths = newSeqOfCap[int](LIST_LENGTH)
-  result.listLengths.setLen(LIST_LENGTH)
+  result.lengths = newSeq[(int, int)](LIST_LENGTH)
 
 template finish*(self: RlpLengthTracker): int =
   doAssert self.pendingLists.len == 0, 
@@ -89,5 +83,4 @@ template finish*(self: RlpLengthTracker): int =
 func clear*(w: var RlpLengthTracker) =
   # Prepare writer for reuse
   w.pendingLists.setLen(0)
-  w.prefixLengths.setLen(0)
-  w.listLengths.setLen(0)
+  w.lengths.setLen(0)
