@@ -36,7 +36,6 @@ let cfg =
   " -d:chronicles_log_level=TRACE" &
   " --threads:on -d:release"
 
-
 proc build(args, path, outdir: string) =
   exec nimc & " " & lang & " " & cfg & " " & flags & " " & args &
     " --outdir:build/" & outdir & " " & path
