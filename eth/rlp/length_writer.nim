@@ -6,23 +6,23 @@ import
   utils
 
 type
-  RlpLengthTracker* = object
+  RlpLengthTracker*[N: static int] = object
     lengths*: seq[tuple[listLen, prefixLen: int]]
-    pendingLists: seq[tuple[idx, remainingItems, startLen: int]]
+    pendingLists: array[N, tuple[idx, remainingItems, startLen: int]]
+    listTop: int
     listCount: int
     totalLength*: int
 
 const LIST_LENGTH = 50
 
 proc maybeClosePendingLists(self: var RlpLengthTracker) =
-  while self.pendingLists.len > 0:
-    let lastIdx = self.pendingLists.len - 1
-    self.pendingLists[lastIdx].remainingItems -= 1
+  while self.listTop > 0:
+    self.pendingLists[self.listTop - 1].remainingItems -= 1
 
-    if self.pendingLists[lastIdx].remainingItems == 0:
+    if self.pendingLists[self.listTop - 1].remainingItems == 0:
       let 
-        listIdx = self.pendingLists[lastIdx].idx
-        startLen = self.pendingLists[lastIdx].startLen
+        listIdx = self.pendingLists[self.listTop - 1].idx
+        startLen = self.pendingLists[self.listTop - 1].startLen
         listLen = self.totalLength - startLen
         prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
                       else: int(uint64(listLen).bytesNeeded) + 1
@@ -31,7 +31,7 @@ proc maybeClosePendingLists(self: var RlpLengthTracker) =
       self.lengths[listIdx] = (listLen, prefixLen)
 
       # close the list by deleting
-      self.pendingLists.setLen(lastIdx)
+      self.listTop -= 1
 
       self.totalLength += prefixLen
     else:
@@ -47,7 +47,8 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     self.maybeClosePendingLists()
   else:
     # open a list
-    self.pendingLists.add((self.listCount, listSize, self.totalLength))
+    self.pendingLists[self.listTop] = (self.listCount, listSize, self.totalLength)
+    self.listTop += 1
     self.listCount += 1
     if self.listCount == self.lengths.len:
       self.lengths.setLen(self.lengths.len + LIST_LENGTH)
@@ -70,17 +71,14 @@ func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
     self.totalLength += lengthCount(i.bytesNeeded) + i.bytesNeeded
   self.maybeClosePendingLists()
 
-func initLengthTracker*(): RlpLengthTracker =
+func initLengthTracker*(self: var RlpLengthTracker) =
   # we preset the lengths since we want to skip using add method for
   # these lists
-  result.lengths = newSeq[(int, int)](LIST_LENGTH)
+  self.lengths = newSeq[(int, int)](LIST_LENGTH)
 
 template finish*(self: RlpLengthTracker): int =
-  doAssert self.pendingLists.len == 0, 
-    "Insufficient number of elements written to a started list"
   self.totalLength
 
 func clear*(w: var RlpLengthTracker) =
   # Prepare writer for reuse
-  w.pendingLists.setLen(0)
   w.lengths.setLen(0)

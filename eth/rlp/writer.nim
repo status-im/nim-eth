@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/options,
+  std/[options, typetraits],
   pkg/results,
   stew/[arraybuf, shims/macros],
   ./priv/defs,
@@ -15,6 +15,7 @@ import
   two_pass_writer,
   default_writer,
   utils,
+  stint,
   ../common/hashes
 
 export arraybuf, default_writer, length_writer, two_pass_writer, hash_writer
@@ -66,6 +67,27 @@ proc appendImpl[T](self: var RlpWriter, list: openArray[T]) =
   self.startList list.len
   for i in 0 ..< list.len:
     self.append list[i]
+
+template innerType[T](x: Option[T] | Opt[T]): typedesc = T
+
+proc countNestedListsDepth(T: type): int {.compileTime.} =
+  mixin enumerateRlpFields
+
+  var dummy: T
+
+  template op(RT, fN, f) =
+    result += countNestedListsDepth(type f) 
+
+  when T is Option or T is Opt:
+    result += countNestedListsDepth(innerType(dummy))
+  elif T is UInt256:
+    discard
+  elif T is object or T is tuple:
+    inc result
+    enumerateRlpFields(dummy, op)
+  elif T is seq or T is array:
+    inc result
+    result += countNestedListsDepth(elementType(dummy))
 
 proc countOptionalFields(T: type): int {.compileTime.} =
   mixin enumerateRlpFields
@@ -184,9 +206,11 @@ proc initRlpList*(listSize: int): RlpDefaultWriter =
 
 proc encode*[T](v: T): seq[byte] =
   mixin append
-
-  var tracker = initLengthTracker()
   
+  const nestedListsDepth = countNestedListsDepth(type v) 
+  var tracker: RlpLengthTracker[nestedListsDepth]
+  tracker.initLengthTracker()
+
   tracker.append(v)
 
   var writer = initTwoPassWriter(tracker)
@@ -197,7 +221,9 @@ proc encode*[T](v: T): seq[byte] =
 proc encodeHash*[T](v: T): Hash32 =
   mixin append
 
-  var tracker = initLengthTracker()
+  const nestedListsDepth = countNestedListsDepth(type v) 
+  var tracker: RlpLengthTracker[nestedListsDepth]
+  tracker.initLengthTracker()
 
   tracker.append(v)
 
