@@ -1,7 +1,7 @@
 {.used.}
 
 import
-  std/[math, strutils],
+  std/strutils,
   unittest2,
   stew/byteutils,
   ../../eth/[common, rlp]
