@@ -8,7 +8,6 @@ import
 
 type
   RlpTwoPassWriter* = object
-    pendingLists*: seq[tuple[remainingItems, startPos, prefixLen: int]]
     output*: seq[byte]
     lengths*: seq[tuple[listLen, prefixLen: int]]
     fillLevel: int
@@ -83,12 +82,10 @@ func initTwoPassWriter*(tracker: var RlpLengthTracker): RlpTwoPassWriter =
   result.lengths = move(tracker.lengths)
 
 template finish*(self: RlpTwoPassWriter): seq[byte] =
-  doAssert self.pendingLists.len == 0, 
-    "Insufficient number of elements written to a started list"
   self.lengths.setLen(0)
   self.output
 
 func clear*(w: var RlpTwoPassWriter) =
   # Prepare writer for reuse
-  w.pendingLists.setLen(0)
+  w.lengths.setLen(0)
   w.output.setLen(0)
