@@ -256,7 +256,10 @@ proc decodeAuthMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] 
   if expectedLength > len(m):
     return err(AuthError.IncompleteError)
 
-  var buffer = newSeq[byte](eciesDecryptedLength(size))
+  let plainLen = eciesDecryptedLength(size).valueOr:
+    return err(AuthError.IncompleteError)
+
+  var buffer = newSeq[byte](plainLen)
   if eciesDecrypt(
     toa(m, MsgLenLenEIP8, int(size)), buffer, h.host.seckey, toa(m, 0, MsgLenLenEIP8)
   ).isErr:
@@ -293,7 +296,7 @@ proc decodeAuthMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] 
     h.initiatorNonce = nonce
     h.remoteHPubkey = pubkey
     ok()
-  except CatchableError:
+  except RlpError:
     err(AuthError.RlpError)
 
 proc decodeAckMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
@@ -306,7 +309,10 @@ proc decodeAckMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   if expectedLength > len(m):
     return err(AuthError.IncompleteError)
 
-  var buffer = newSeq[byte](eciesDecryptedLength(size))
+  let plainLen = eciesDecryptedLength(size).valueOr:
+    return err(AuthError.IncompleteError)
+
+  var buffer = newSeq[byte](plainLen)
   if eciesDecrypt(
     toa(m, MsgLenLenEIP8, size), buffer, h.host.seckey, toa(m, 0, MsgLenLenEIP8)
   ).isErr:
@@ -329,7 +335,7 @@ proc decodeAckMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
     h.responderNonce = toArray(KeyLength, nonceBr)
 
     ok()
-  except CatchableError:
+  except RlpError:
     err(AuthError.RlpError)
 
 proc getSecrets*(
