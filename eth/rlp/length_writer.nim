@@ -10,7 +10,7 @@ type
     lengths*: seq[tuple[listLen, prefixLen: int]]
     pendingLists: array[N, tuple[idx, remainingItems, startLen: int]]
     listTop: int
-    listCount: int
+    listCount*: int
     totalLength*: int
 
 const LIST_LENGTH = 50

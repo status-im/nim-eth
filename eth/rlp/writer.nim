@@ -55,7 +55,7 @@ template appendImpl(self: var RlpWriter, i: SomeUnsignedInt) =
   self.appendInt(i)
 
 template appendImpl(self: var RlpWriter, e: enum) =
-  # TODO: check for negative enums 
+  # TODO: check for negative enums
   self.appendInt(uint64(e))
 
 template appendImpl(self: var RlpWriter, b: bool) =
@@ -76,7 +76,7 @@ proc countNestedListsDepth(T: type): int {.compileTime.} =
   var dummy: T
 
   template op(RT, fN, f) =
-    result += countNestedListsDepth(type f) 
+    result += countNestedListsDepth(type f)
 
   when T is Option or T is Opt:
     result += countNestedListsDepth(innerType(dummy))
@@ -206,8 +206,8 @@ proc initRlpList*(listSize: int): RlpDefaultWriter =
 
 proc encode*[T](v: T): seq[byte] =
   mixin append
-  
-  const nestedListsDepth = countNestedListsDepth(type v) 
+
+  const nestedListsDepth = countNestedListsDepth(type v)
   var tracker: RlpLengthTracker[nestedListsDepth]
   tracker.initLengthTracker()
 
@@ -221,11 +221,16 @@ proc encode*[T](v: T): seq[byte] =
 proc encodeHash*[T](v: T): Hash32 =
   mixin append
 
-  const nestedListsDepth = countNestedListsDepth(type v) 
+  const nestedListsDepth = countNestedListsDepth(type v)
   var tracker: RlpLengthTracker[nestedListsDepth]
   tracker.initLengthTracker()
 
   tracker.append(v)
+
+  #debugEcho "TRACKER LEN: ", tracker.listCount
+  #for i in 0..<tracker.listCount:
+    #let z = tracker.lengths[i]
+    #debugEcho "TRACKER: ", z.listLen, " ", z.prefixLen
 
   var writer = initHashWriter(tracker)
   writer.append(v)
@@ -243,7 +248,7 @@ func encodeInt*(i: SomeUnsignedInt): RlpIntBuf =
     let bytesNeeded = uint64(i).bytesNeeded
 
     buf.add(BLOB_START_MARKER + byte(bytesNeeded))
-    buf.setLen(buf.len + bytesNeeded) 
+    buf.setLen(buf.len + bytesNeeded)
     buf.writeBigEndian(i, buf.len - 1, bytesNeeded)
 
   buf
