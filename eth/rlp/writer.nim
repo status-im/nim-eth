@@ -240,7 +240,7 @@ proc encodeHash*[T](v: T): Hash32 =
   var writer = initHashWriter(tracker)
   writer.append(v)
 
-  writer.finish.to(Hash32)
+  writer.finish()
 
 func encodeInt*(i: SomeUnsignedInt): RlpIntBuf =
   var buf: RlpIntBuf

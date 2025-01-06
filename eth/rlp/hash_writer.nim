@@ -5,6 +5,7 @@ import
   stew/[arraybuf, shims/macros],
   ./priv/defs,
   utils,
+  ../common/hashes,
   length_writer
 
 type
@@ -77,9 +78,9 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
 func initHashWriter*(tracker: var RlpLengthTracker): RlpHashWriter =
   result.lengths = move(tracker.lengths)
 
-template finish*(self: var RlpHashWriter): MDigest[self.keccak.bits] =
+template finish*(self: var RlpHashWriter): Hash32 =
   self.lengths.setLen(0)
-  self.keccak.finish()
+  self.keccak.finish.to(Hash32)
 
 func clear*(w: var RlpHashWriter) =
   # Prepare writer for reuse
