@@ -171,6 +171,10 @@ type
 
   DiscResult*[T] = Result[T, cstring]
 
+  Direction {.pure.} = enum
+    In = "in"
+    Out = "out"
+
 const
   defaultDiscoveryConfig* = DiscoveryConfig(
     tableIpLimits: DefaultTableIpLimits,
@@ -277,7 +281,7 @@ proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async.} =
     # because of ping failures due to own network connection failure.
     warn "Discovery send failed", msg = e.msg, address = $ta
 
-  discv5_network_bytes.inc(data.len.int64, labelValues = ["out"])
+  discv5_network_bytes.inc(data.len.int64, labelValues = [$Direction.Out])
 
 proc send*(d: Protocol, a: Address, data: seq[byte]) =
   asyncSpawn sendTo(d, a, data)
@@ -425,7 +429,7 @@ proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
     debug "Node with this id already has ongoing handshake, ignoring packet"
 
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
-  discv5_network_bytes.inc(packet.len.int64, labelValues = ["in"])
+  discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
 
   let decoded = d.codec.decodePacket(a, packet)
   if decoded.isOk:
