@@ -208,7 +208,12 @@ proc encode*[T](v: T): seq[byte] =
   mixin append
   
   const nestedListsDepth = countNestedListsDepth(type v) 
-  var tracker: RlpLengthTracker[nestedListsDepth]
+
+  when nestedListsDepth > 0:
+    var tracker = StaticRlpLengthTracker[nestedListsDepth]()
+  elif nestedListsDepth == 0:
+    var tracker = DynamicRlpLengthTracker()
+
   tracker.initLengthTracker()
 
   tracker.append(v)
@@ -222,7 +227,12 @@ proc encodeHash*[T](v: T): Hash32 =
   mixin append
 
   const nestedListsDepth = countNestedListsDepth(type v) 
-  var tracker: RlpLengthTracker[nestedListsDepth]
+
+  when nestedListsDepth > 0:
+    var tracker = StaticRlpLengthTracker[nestedListsDepth]()
+  elif nestedListsDepth == 0:
+    var tracker = DynamicRlpLengthTracker()
+
   tracker.initLengthTracker()
 
   tracker.append(v)

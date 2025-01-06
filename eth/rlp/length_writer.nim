@@ -6,12 +6,23 @@ import
   utils
 
 type
-  RlpLengthTracker*[N: static int] = object
+  PendingListItem = tuple[idx, remainingItems, startLen: int]
+
+  StaticRlpLengthTracker*[N: static int] = object
+    pendingLists: array[N, PendingListItem]
     lengths*: seq[tuple[listLen, prefixLen: int]]
-    pendingLists: array[N, tuple[idx, remainingItems, startLen: int]]
     listTop: int
     listCount: int
     totalLength*: int
+  
+  DynamicRlpLengthTracker* = object
+    pendingLists: seq[PendingListItem]
+    lengths*: seq[tuple[listLen, prefixLen: int]]
+    listTop: int
+    listCount: int
+    totalLength*: int
+
+  RlpLengthTracker* = StaticRlpLengthTracker | DynamicRlpLengthTracker
 
 const LIST_LENGTH = 50
 
@@ -32,6 +43,8 @@ proc maybeClosePendingLists(self: var RlpLengthTracker) =
 
       # close the list by deleting
       self.listTop -= 1
+      when self is DynamicRlpLengthTracker:
+        self.pendingLists.setLen(self.listTop)
 
       self.totalLength += prefixLen
     else:
@@ -47,6 +60,8 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     self.maybeClosePendingLists()
   else:
     # open a list
+    when self is DynamicRlpLengthTracker:
+      self.pendingLists.setLen(self.listTop + 1)
     self.pendingLists[self.listTop] = (self.listCount, listSize, self.totalLength)
     self.listTop += 1
     self.listCount += 1
@@ -74,6 +89,8 @@ func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
 func initLengthTracker*(self: var RlpLengthTracker) =
   # we preset the lengths since we want to skip using add method for
   # these lists
+  when self is DynamicRlpLengthTracker:
+    self.pendingLists = newSeqOfCap[(int, int, int)](5)
   self.lengths = newSeq[(int, int)](LIST_LENGTH)
 
 template finish*(self: RlpLengthTracker): int =
@@ -82,3 +99,5 @@ template finish*(self: RlpLengthTracker): int =
 func clear*(w: var RlpLengthTracker) =
   # Prepare writer for reuse
   w.lengths.setLen(0)
+  when w is DynamicRlpLengthTracker:
+    w.pendingLists.setLen(0)
