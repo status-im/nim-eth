@@ -92,6 +92,7 @@ import
 export
   results, node, enr, encoding.maxDiscv5PacketSize, encoding.maxDiscv5TalkRespPayload
 
+declareCounter discv5_network_bytes, "discv5 traffic", labels = ["direction"]
 declareCounter discovery_message_requests_outgoing,
   "Discovery protocol outgoing message requests", labels = ["response"]
 declareCounter discovery_message_requests_incoming,
@@ -170,6 +171,10 @@ type
     protocolHandler*: TalkProtocolHandler
 
   DiscResult*[T] = Result[T, cstring]
+
+  Direction {.pure.} = enum
+    In = "in"
+    Out = "out"
 
 const
   defaultDiscoveryConfig* = DiscoveryConfig(
@@ -274,6 +279,8 @@ proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async: (ra
     # nodes. Else the revalidation might end up clearing the routing tabl
     # because of ping failures due to own network connection failure.
     warn "Discovery send failed", msg = e.msg, address = $ta
+
+  discv5_network_bytes.inc(data.len.int64, labelValues = [$Direction.Out])
 
 proc send*(d: Protocol, a: Address, data: seq[byte]) =
   asyncSpawn sendTo(d, a, data)
@@ -423,6 +430,8 @@ proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
     debug "Node with this id already has ongoing handshake, ignoring packet"
 
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
+  discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
+
   let decoded = d.codec.decodePacket(a, packet)
   if decoded.isOk:
     let packet = decoded[]
