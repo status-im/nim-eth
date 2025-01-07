@@ -64,6 +64,14 @@ let blkSeq = @[
       Transaction(nonce: 3),
       Transaction(nonce: 4)])]
 
+let h = BlockHeader(
+  nonce: Bytes8([0x20u8,0,0,0,0,0,0,0]),
+  baseFeePerGas: Opt.some(2.u256),
+  withdrawalsRoot: Opt.some(default(Hash32)),
+  blobGasUsed: Opt.some(1'u64),
+  excessBlobGas: Opt.some(1'u64)
+)
+
 let nonEmptyBlock = readBlock()
 
 proc encodeOnePass[T](v: T): seq[byte] =
@@ -83,28 +91,35 @@ suite "test running times of rlp encode and encodeHash":
       let bytes2 = rlp.encode(blkSeq)
     benchmark "Block serialization using two pass writer":
       let bytes3 = rlp.encode(nonEmptyBlock)
+    benchmark "Block header serialization using two pass writer":
+      let bytes4 = rlp.encode(h)
 
   test "encoding using default writer":
     benchmark "Transaction serialization using default writer":
-      let bytes3 = encodeOnePass(myTx)
+      let bytes5 = encodeOnePass(myTx)
     benchmark "Block Sequence serailization using default writer":
-      let bytes4 = encodeOnePass(blkSeq)
+      let bytes6 = encodeOnePass(blkSeq)
     benchmark "Block serialization using default writer":
-      let bytes5 = encodeOnePass(nonEmptyBlock)
+      let bytes7 = encodeOnePass(nonEmptyBlock)
+    benchmark "Block header serialization using default writer":
+      let bytes8 = encodeOnePass(h)
 
   test "encoding and hashing using hash writer":
     benchmark "Transaction hashing using hash writer":
-      let bytes6 = rlp.encodeHash(myTx)
+      let bytes9 = rlp.encodeHash(myTx)
     benchmark "Block Sequence hashing using hash writer":
-      let bytes7 = rlp.encodeHash(blkSeq)
+      let bytes10 = rlp.encodeHash(blkSeq)
     benchmark "Block hashing using hash writer":
-      let bytes8 = rlp.encodeHash(nonEmptyBlock)
+      let bytes11 = rlp.encodeHash(nonEmptyBlock)
+    benchmark "Block header hashing using hash writer":
+      let bytes12 = rlp.encodeHash(h)
 
   test "encoding and hashin using default writer":
     benchmark "Transaction hashing using default writer and then hash":
-      let bytes9 = encodeAndHash(myTx)
+      let bytes13 = encodeAndHash(myTx)
     benchmark "Block Sequence hashing using default writer and then hash":
-      let bytes10 = encodeAndHash(blkSeq)
+      let bytes14 = encodeAndHash(blkSeq)
     benchmark "Block hashing using defualt writer and the hash":
-      let bytes11 = encodeAndHash(blkSeq)
-
+      let bytes15 = encodeAndHash(blkSeq)
+    benchmark "Block header hashing using hash writer":
+      let bytes16 = encodeAndHash(h)
