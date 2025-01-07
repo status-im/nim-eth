@@ -143,7 +143,7 @@ proc sendPong*(d: DiscoveryProtocol, n: Node, token: MDigest[256]) =
 
 proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
   var data: array[64, byte]
-  data[32 .. ^1] = targetNodeId.toByteArrayBE()
+  data[32 .. ^1] = targetNodeId.toBytesBE()
   let payload = rlp.encode((data, expiration()))
   let msg = pack(cmdFindNode, payload, d.privKey)
   trace ">>> find_node to ", n #, ": ", msg.toHex()
@@ -220,6 +220,9 @@ proc recvNeighbours(
   var neighbours = newSeqOfCap[Node](16)
   for i in 0 ..< sz:
     let n = neighboursList.listElem(i)
+    if n.listLen() != 4:
+      raise newException(RlpError, "Invalid nodes list")
+
     let ipBlob = n.listElem(0).toBytes
     var ip: IpAddress
     case ipBlob.len
@@ -228,17 +231,14 @@ proc recvNeighbours(
     of 16:
       ip = IpAddress(family: IpAddressFamily.IPv6, address_v6: toArray(16, ipBlob))
     else:
-      error "Wrong ip address length!"
-      continue
+      raise newException(RlpError, "Invalid RLP byte string length for IP address")
 
     let udpPort = n.listElem(1).toInt(uint16).Port
     let tcpPort = n.listElem(2).toInt(uint16).Port
-    let pk = PublicKey.fromRaw(n.listElem(3).toBytes)
-    if pk.isErr:
-      warn "Could not parse public key"
-      continue
+    let pk = PublicKey.fromRaw(n.listElem(3).toBytes).valueOr:
+      raise newException(RlpError, "Invalid RLP byte string for node id")
 
-    neighbours.add(newNode(pk[], Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
+    neighbours.add(newNode(pk, Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
   d.kademlia.recvNeighbours(node, neighbours)
 
 proc recvFindNode(
@@ -249,7 +249,7 @@ proc recvFindNode(
   let rng = rlp.listElem(0).toBytes
   # Check for pubkey len
   if rng.len == 64:
-    let nodeId = readUintBE[256](rng[32 .. ^1])
+    let nodeId = UInt256.fromBytesBE(rng.toOpenArray(32, 63))
     d.kademlia.recvFindNode(node, nodeId)
   else:
     trace "Invalid target public key received"

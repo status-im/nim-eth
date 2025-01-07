@@ -1,6 +1,6 @@
 mode = ScriptMode.Verbose
 
-version       = "1.0.0"
+version       = "0.5.0"
 author        = "Status Research & Development GmbH"
 description   = "Ethereum Common library"
 license       = "MIT"
@@ -8,7 +8,7 @@ skipDirs      = @["tests"]
 
 requires "nim >= 1.6.0",
          "nimcrypto",
-         "stint",
+         "stint >= 0.8.0",
          "secp256k1",
          "chronos",
          "chronicles",
