@@ -119,7 +119,7 @@ suite "test running times of rlp encode and encodeHash":
       let bytes13 = encodeAndHash(myTx)
     benchmark "Block Sequence hashing using default writer and then hash":
       let bytes14 = encodeAndHash(blkSeq)
-    benchmark "Block hashing using defualt writer and the hash":
-      let bytes15 = encodeAndHash(blkSeq)
-    benchmark "Block header hashing using hash writer":
+    benchmark "Block hashing using default writer and then hash":
+      let bytes15 = encodeAndHash(nonEmptyBlock)
+    benchmark "Block header hashing using default writer and then hash":
       let bytes16 = encodeAndHash(h)
