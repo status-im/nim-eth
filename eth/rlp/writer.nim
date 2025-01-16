@@ -89,6 +89,9 @@ proc countNestedListsDepth(T: type): int {.compileTime.} =
     inc result
     result += countNestedListsDepth(elementType(dummy))
 
+proc countNestedListsDepth[E](T: type openArray[E]): int = 
+  countNestedListsDepth(seq[E])
+
 proc countOptionalFields(T: type): int {.compileTime.} =
   mixin enumerateRlpFields
 
@@ -207,7 +210,7 @@ proc initRlpList*(listSize: int): RlpDefaultWriter =
 proc encode*[T](v: T): seq[byte] =
   mixin append
   
-  const nestedListsDepth = countNestedListsDepth(type v) 
+  const nestedListsDepth = countNestedListsDepth(T) 
 
   when nestedListsDepth > 0:
     var tracker = StaticRlpLengthTracker[nestedListsDepth]()
@@ -226,7 +229,7 @@ proc encode*[T](v: T): seq[byte] =
 proc encodeHash*[T](v: T): Hash32 =
   mixin append
 
-  const nestedListsDepth = countNestedListsDepth(type v) 
+  const nestedListsDepth = countNestedListsDepth(T) 
 
   when nestedListsDepth > 0:
     var tracker = StaticRlpLengthTracker[nestedListsDepth]()
