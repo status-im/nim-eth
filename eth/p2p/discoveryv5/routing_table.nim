@@ -47,6 +47,10 @@ type
     ## replacement caches.
     distanceCalculator: DistanceCalculator
     rng: ref HmacDrbgContext
+    bannedNodes: Table[NodeId, chronos.Moment] ## Nodes can be banned from the
+    ## routing table for a period until the timeout is reached. Banned nodes
+    ## are removed from the routing table and not allowed to be included again
+    ## until the timeout expires.
 
   KBucket = ref object
     istart, iend: NodeId ## Range of NodeIds this KBucket covers. This is not a
@@ -95,6 +99,7 @@ type
     ReplacementAdded
     ReplacementExisting
     NoAddress
+    BannedNode
 
 # xor distance functions
 func distance*(a, b: NodeId): UInt256 =
@@ -188,6 +193,41 @@ func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
 
   b.ipLimits.dec(ip)
   r.ipLimits.dec(ip)
+
+proc replaceNode*(r: var RoutingTable, n: Node)
+func getNode*(r: RoutingTable, id: NodeId): Opt[Node]
+
+proc banNode*(r: var RoutingTable, nodeId: NodeId, period: chronos.Duration) =
+  ## Ban a node from the routing table for the given period. The node is removed
+  ## from the routing table and replaced using a node from the replacement cache.
+
+  let banTimeout = now(chronos.Moment) + period
+
+  if r.bannedNodes.contains(nodeId):
+    let existingTimeout = r.bannedNodes.getOrDefault(nodeId)
+    if existingTimeout < banTimeout:
+      r.bannedNodes[nodeId] = banTimeout
+  else:
+    r.bannedNodes[nodeId] = banTimeout
+
+  # Remove the node from the routing table
+  let node = r.getNode(nodeId)
+  if node.isSome():
+    r.replaceNode(node.get())
+
+proc isBanned*(r: var RoutingTable, nodeId: NodeId): bool =
+  if not r.bannedNodes.contains(nodeId):
+    return false
+
+  let
+    currentTime = now(chronos.Moment)
+    banTimeout = r.bannedNodes.getOrDefault(nodeId)
+  if currentTime < banTimeout:
+    return true
+
+  # Peer is in bannedNodes table but the time period has expired
+  r.bannedNodes.del(nodeId)
+  false
 
 proc add(k: KBucket, n: Node) =
   k.nodes.add(n)
@@ -342,6 +382,9 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
 
   if n == r.localNode:
     return LocalNode
+
+  if r.isBanned(n.id):
+    return BannedNode
 
   let bucket = r.bucketForNode(n.id)
 
