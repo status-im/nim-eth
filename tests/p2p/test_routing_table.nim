@@ -1,6 +1,7 @@
 {.used.}
 
 import
+  std/os,
   unittest2,
   ../../eth/common/keys, ../../eth/p2p/discoveryv5/[routing_table, node, enr],
   ./discv5_test_helper
@@ -611,8 +612,10 @@ suite "Routing Table Tests":
     var table = RoutingTable.init(localNode, 1, DefaultTableIpLimits, rng = rng)
 
     check table.addNode(node1) == Added
-    table.banNode(node1.id, 1.microseconds)
-    table.banNode(node2.id, 1.microseconds)
+    table.banNode(node1.id, 1.nanoseconds)
+    table.banNode(node2.id, 1.nanoseconds)
+
+    sleep(100)
 
     # Can add nodes for which the ban has expired
     check:
