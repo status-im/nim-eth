@@ -14,7 +14,7 @@ import
   ../../net/utils,
   "."/[node, random2, enr]
 
-export results
+export results, chronos.timer
 
 declareGauge routing_table_nodes,
   "Discovery routing table nodes", labels = ["state"]
@@ -99,7 +99,7 @@ type
     ReplacementAdded
     ReplacementExisting
     NoAddress
-    BannedNode
+    Banned
 
 # xor distance functions
 func distance*(a, b: NodeId): UInt256 =
@@ -194,8 +194,8 @@ func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   b.ipLimits.dec(ip)
   r.ipLimits.dec(ip)
 
-proc replaceNode*(r: var RoutingTable, n: Node)
 func getNode*(r: RoutingTable, id: NodeId): Opt[Node]
+proc replaceNode*(r: var RoutingTable, n: Node)
 
 proc banNode*(r: var RoutingTable, nodeId: NodeId, period: chronos.Duration) =
   ## Ban a node from the routing table for the given period. The node is removed
@@ -384,7 +384,7 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
     return LocalNode
 
   if r.isBanned(n.id):
-    return BannedNode
+    return Banned
 
   let bucket = r.bucketForNode(n.id)
 
