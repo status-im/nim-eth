@@ -660,3 +660,29 @@ suite "Routing Table Tests":
       table.isBanned(node1.id) == true
       table.contains(node2) == false
       table.isBanned(node2.id) == true
+
+  test "Banned nodes: cleanup expired bans":
+    let
+      localNode = generateNode(PrivateKey.random(rng[]))
+      node1 = generateNode(PrivateKey.random(rng[]))
+      node2 = generateNode(PrivateKey.random(rng[]))
+
+    var table = RoutingTable.init(localNode, 1, DefaultTableIpLimits, rng = rng)
+
+    table.banNode(node1.id, 1.nanoseconds)
+    sleep(1) # node1's ban is expired
+    table.banNode(node2.id, 1.minutes)
+
+    check:
+      table.isBanned(node1.id) == false
+      table.isBanned(node2.id) == true
+      table.addNode(node1) == Added
+      table.addNode(node2) == Banned
+
+    table.cleanupExpiredBans()
+
+    check:
+      table.isBanned(node1.id) == false
+      table.isBanned(node2.id) == true
+      table.addNode(node1) == Existing
+      table.addNode(node2) == Banned
