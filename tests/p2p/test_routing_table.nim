@@ -615,7 +615,7 @@ suite "Routing Table Tests":
     table.banNode(node1.id, 1.nanoseconds)
     table.banNode(node2.id, 1.nanoseconds)
 
-    sleep(100)
+    sleep(1)
 
     # Can add nodes for which the ban has expired
     check:
