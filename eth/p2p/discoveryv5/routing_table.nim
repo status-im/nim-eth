@@ -197,37 +197,49 @@ func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
 func getNode*(r: RoutingTable, id: NodeId): Opt[Node]
 proc replaceNode*(r: var RoutingTable, n: Node)
 
+proc cleanupExpiredBans(r: var RoutingTable) =
+  let currentTime = now(chronos.Moment)
+
+  var expiredIds = newSeq[NodeId]()
+  for id, timeout in r.bannedNodes:
+    if currentTime >= timeout:
+      expiredIds.add(id)
+
+  for id in expiredIds:
+    r.bannedNodes.del(id)
+
 proc banNode*(r: var RoutingTable, nodeId: NodeId, period: chronos.Duration) =
   ## Ban a node from the routing table for the given period. The node is removed
   ## from the routing table and replaced using a node from the replacement cache.
-
   let banTimeout = now(chronos.Moment) + period
 
   if r.bannedNodes.contains(nodeId):
     let existingTimeout = r.bannedNodes.getOrDefault(nodeId)
     if existingTimeout < banTimeout:
       r.bannedNodes[nodeId] = banTimeout
-  else:
-    r.bannedNodes[nodeId] = banTimeout
+    return # node is already banned so we don't need to try replacing it because
+    # it should have already been replaced when it was initially banned
+
+  # NodeId doesn't yet exist in the banned nodes table
+  r.bannedNodes[nodeId] = banTimeout
 
   # Remove the node from the routing table
   let node = r.getNode(nodeId)
   if node.isSome():
     r.replaceNode(node.get())
 
-proc isBanned*(r: var RoutingTable, nodeId: NodeId): bool =
+  # Remove all expired bans from the banned nodes table
+  r.cleanupExpiredBans()
+
+proc isBanned*(r: RoutingTable, nodeId: NodeId): bool =
   if not r.bannedNodes.contains(nodeId):
     return false
 
   let
     currentTime = now(chronos.Moment)
     banTimeout = r.bannedNodes.getOrDefault(nodeId)
-  if currentTime < banTimeout:
-    return true
 
-  # Peer is in bannedNodes table but the time period has expired
-  r.bannedNodes.del(nodeId)
-  false
+  currentTime < banTimeout
 
 proc add(k: KBucket, n: Node) =
   k.nodes.add(n)

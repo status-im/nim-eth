@@ -630,3 +630,33 @@ suite "Routing Table Tests":
       table.addNode(node2) == Added
       table.contains(node2) == true
       table.isBanned(node2.id) == false
+
+  test "Banned nodes: ban nodes with existing bans":
+    let
+      localNode = generateNode(PrivateKey.random(rng[]))
+      node1 = generateNode(PrivateKey.random(rng[]))
+      node2 = generateNode(PrivateKey.random(rng[]))
+
+    var table = RoutingTable.init(localNode, 1, DefaultTableIpLimits, rng = rng)
+
+    check:
+      table.addNode(node1) == Added
+      table.addNode(node2) == Added
+
+    table.banNode(node1.id, 1.nanoseconds)
+    sleep(1) # node1's ban is expired
+    table.banNode(node2.id, 1.minutes)
+
+    check:
+      table.isBanned(node1.id) == false
+      table.isBanned(node2.id) == true
+
+    # Can ban nodes which were previously banned
+    table.banNode(node1.id, 1.minutes)
+    table.banNode(node2.id, 1.minutes)
+
+    check:
+      table.contains(node1) == false
+      table.isBanned(node1.id) == true
+      table.contains(node2) == false
+      table.isBanned(node2.id) == true
