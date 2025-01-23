@@ -324,7 +324,8 @@ func init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop
     bitsPerHop: bitsPerHop,
     ipLimits: IpLimits(limit: ipLimits.tableIpLimit),
     distanceCalculator: distanceCalculator,
-    rng: rng)
+    rng: rng,
+    bannedNodes: initTable[NodeId, chronos.Moment]())
 
 func splitBucket(r: var RoutingTable, index: int) =
   let bucket = r.buckets[index]
