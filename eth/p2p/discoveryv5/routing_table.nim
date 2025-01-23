@@ -195,7 +195,7 @@ func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   r.ipLimits.dec(ip)
 
 func getNode*(r: RoutingTable, id: NodeId): Opt[Node]
-proc replaceNode*(r: var RoutingTable, n: Node)
+proc replaceNode*(r: var RoutingTable, n: Node) {.gcsafe.}
 
 proc banNode*(r: var RoutingTable, nodeId: NodeId, period: chronos.Duration) =
   ## Ban a node from the routing table for the given period. The node is removed

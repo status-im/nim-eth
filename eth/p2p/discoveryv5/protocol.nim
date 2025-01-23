@@ -124,6 +124,10 @@ const
   defaultResponseTimeout* = 4.seconds ## timeout for the response of a request-response
   ## call
 
+  ## Ban durations for banned nodes in the routing table
+  NodeBanDurationInvalidResponse = 15.minutes
+  NodeBanDurationNoResponse = 5.minutes
+
 type
   OptAddress* = object
     ip*: Opt[IpAddress]
@@ -142,6 +146,7 @@ type
     bindAddress: OptAddress ## UDP binding address
     pendingRequests: Table[AESGCMNonce, PendingRequest]
     routingTable*: RoutingTable
+    banNodes: bool
     codec*: Codec
     awaitedMessages: Table[(NodeId, RequestId), Future[Opt[Message]]]
     refreshLoop: Future[void]
@@ -156,6 +161,7 @@ type
     handshakeTimeout: Duration
     responseTimeout: Duration
     rng*: ref HmacDrbgContext
+
 
   PendingRequest = object
     node: Node
@@ -192,10 +198,13 @@ proc addNode*(d: Protocol, node: Node): bool =
   ##
   ## Returns true only when `Node` was added as a new entry to a bucket in the
   ## routing table.
-  if d.routingTable.addNode(node) == Added:
+  let r = d.routingTable.addNode(node)
+  if r == Added:
     return true
-  else:
-    return false
+
+  if r == Banned:
+    debug "Banned node not added to routing table", nodeId = node.id
+  return false
 
 proc addNode*(d: Protocol, r: Record): bool =
   ## Add `Node` from a `Record` to discovery routing table.
@@ -437,6 +446,10 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
     let packet = decoded[]
     case packet.flag
     of OrdinaryMessage:
+      if d.routingTable.isBanned(packet.srcId):
+        trace "Ignoring received OrdinaryMessage from banned node", nodeId = packet.srcId
+        return
+
       if packet.messageOpt.isSome():
         let message = packet.messageOpt.get()
         trace "Received message packet", srcId = packet.srcId, address = a,
@@ -464,6 +477,10 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
       else:
         debug "Timed out or unrequested whoareyou packet", address = a
     of HandshakeMessage:
+      if d.routingTable.isBanned(packet.srcIdHs):
+        trace "Ignoring received HandshakeMessage from banned node", nodeId = packet.srcId
+        return
+
       trace "Received handshake message packet", srcId = packet.srcIdHs,
         address = a, kind = packet.message.kind
       d.handleMessage(packet.srcIdHs, a, packet.message, packet.node)
@@ -494,14 +511,20 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
 
   proto.receive(Address(ip: raddr.toIpAddress(), port: raddr.port), buf)
 
-proc replaceNode(d: Protocol, n: Node) =
+proc banNode(d: Protocol, n: Node, banPeriod: chronos.Duration) =
   if n.record notin d.bootstrapRecords:
-    d.routingTable.replaceNode(n)
+    if d.banNodes:
+      d.routingTable.banNode(n.id, banPeriod) # banNode also replaces the node
+    else:
+      d.routingTable.replaceNode(n)
   else:
     # For now we never remove bootstrap nodes. It might make sense to actually
     # do so and to retry them only in case we drop to a really low amount of
     # peers in the routing table.
     debug "Message request to bootstrap node failed", enr = toURI(n.record)
+
+proc isBanned*(d: Protocol, nodeId: NodeId): bool =
+  d.banNodes and d.routingTable.isBanned(nodeId)
 
 # TODO: This could be improved to do the clean-up immediately in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
@@ -546,9 +569,11 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
           break
       return ok(res)
     else:
+      d.banNode(fromNode, NodeBanDurationInvalidResponse)
       discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
       return err("Invalid response to find node message")
   else:
+    d.banNode(fromNode, NodeBanDurationNoResponse)
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Nodes message not received in time")
 
@@ -583,11 +608,11 @@ proc ping*(d: Protocol, toNode: Node):
       d.routingTable.setJustSeen(toNode)
       return ok(resp.get().pong)
     else:
-      d.replaceNode(toNode)
+      d.banNode(toNode, NodeBanDurationInvalidResponse)
       discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
       return err("Invalid response to ping message")
   else:
-    d.replaceNode(toNode)
+    d.banNode(toNode, NodeBanDurationNoResponse)
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Pong message not received in time")
 
@@ -603,9 +628,8 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
   if nodes.isOk:
     let res = verifyNodesRecords(nodes.get(), toNode, findNodeResultLimit, distances)
     d.routingTable.setJustSeen(toNode)
-    return ok(res)
+    return ok(res.filterIt(not d.routingTable.isBanned(it.id)))
   else:
-    d.replaceNode(toNode)
     return err(nodes.error)
 
 proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
@@ -622,11 +646,11 @@ proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
       d.routingTable.setJustSeen(toNode)
       return ok(resp.get().talkResp.response)
     else:
-      d.replaceNode(toNode)
+      d.banNode(toNode, NodeBanDurationInvalidResponse)
       discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
       return err("Invalid response to talk request message")
   else:
-    d.replaceNode(toNode)
+    d.banNode(toNode, NodeBanDurationNoResponse)
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Talk response message not received in time")
 
@@ -704,7 +728,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async: (raises: [
     # future.read is possible here but await is recommended (avoids also FuturePendingError)
     let nodes = await query
     for n in nodes:
-      if not seen.containsOrIncl(n.id) and not d.routingTable.isBanned(n.id):
+      if not seen.containsOrIncl(n.id):
         # If it wasn't seen before, insert node while remaining sorted
         closestNodes.insert(n, closestNodes.lowerBound(n,
           proc(x: Node, n: Node): int =
@@ -765,7 +789,7 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     # future.read is possible here but await is recommended (avoids also FuturePendingError)
     let nodes = await query
     for n in nodes:
-      if not seen.containsOrIncl(n.id) and not d.routingTable.isBanned(n.id):
+      if not seen.containsOrIncl(n.id):
         queryBuffer.add(n)
 
   d.lastLookup = now(chronos.Moment)
@@ -994,6 +1018,7 @@ proc newProtocol*(
     bindPort: Port,
     bindIp = IPv4_any(),
     enrAutoUpdate = false,
+    banNodes = false,
     config = defaultDiscoveryConfig,
     rng = newRng()):
     Protocol =
@@ -1043,6 +1068,7 @@ proc newProtocol*(
     enrAutoUpdate: enrAutoUpdate,
     routingTable: RoutingTable.init(
       node, config.bitsPerHop, config.tableIpLimits, rng),
+    banNodes: banNodes,
     handshakeTimeout: config.handshakeTimeout,
     responseTimeout: config.responseTimeout,
     rng: rng)
