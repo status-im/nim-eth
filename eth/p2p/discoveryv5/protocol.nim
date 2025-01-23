@@ -704,7 +704,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async: (raises: [
     # future.read is possible here but await is recommended (avoids also FuturePendingError)
     let nodes = await query
     for n in nodes:
-      if not seen.containsOrIncl(n.id):
+      if not seen.containsOrIncl(n.id) and not d.routingTable.isBanned(n.id):
         # If it wasn't seen before, insert node while remaining sorted
         closestNodes.insert(n, closestNodes.lowerBound(n,
           proc(x: Node, n: Node): int =
@@ -765,7 +765,7 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     # future.read is possible here but await is recommended (avoids also FuturePendingError)
     let nodes = await query
     for n in nodes:
-      if not seen.containsOrIncl(n.id):
+      if not seen.containsOrIncl(n.id) and not d.routingTable.isBanned(n.id):
         queryBuffer.add(n)
 
   d.lastLookup = now(chronos.Moment)
@@ -796,6 +796,12 @@ proc resolve*(d: Protocol, id: NodeId): Future[Opt[Node]] {.async: (raises: [Can
   ## the node on the network.
   if id == d.localNode.id:
     return Opt.some(d.localNode)
+
+  # No point in trying to resolve a banned node because it won't exist in the
+  # routing table and it will be filtered out of any respones in the lookup call
+  if d.routingTable.isBanned(id):
+    debug "Not resolving banned node", nodeId = id
+    return Opt.none(Node)
 
   let node = d.getNode(id)
   if node.isSome():
@@ -881,6 +887,9 @@ proc refreshLoop(d: Protocol) {.async: (raises: []).} =
         let randomQuery = await d.queryRandom()
         trace "Discovered nodes in random target query", nodes = randomQuery.len
         debug "Total nodes in discv5 routing table", total = d.routingTable.len()
+
+      # Remove the expired bans from routing table to limit memory usage
+      d.routingTable.cleanupExpiredBans()
 
       await sleepAsync(refreshInterval)
   except CancelledError:
