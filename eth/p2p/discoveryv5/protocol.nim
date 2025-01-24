@@ -438,6 +438,21 @@ proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
   else:
     debug "Node with this id already has ongoing handshake, ignoring packet"
 
+proc banNode(d: Protocol, n: Node, banPeriod: chronos.Duration) =
+  if n.record notin d.bootstrapRecords:
+    if d.banNodes:
+      d.routingTable.banNode(n.id, banPeriod) # banNode also replaces the node
+    else:
+      d.routingTable.replaceNode(n)
+  else:
+    # For now we never remove bootstrap nodes. It might make sense to actually
+    # do so and to retry them only in case we drop to a really low amount of
+    # peers in the routing table.
+    debug "Message request to bootstrap node failed", enr = toURI(n.record)
+
+proc isBanned*(d: Protocol, nodeId: NodeId): bool =
+  d.banNodes and d.routingTable.isBanned(nodeId)
+
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
   discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
 
@@ -446,7 +461,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
     let packet = decoded[]
     case packet.flag
     of OrdinaryMessage:
-      if d.routingTable.isBanned(packet.srcId):
+      if d.isBanned(packet.srcId):
         trace "Ignoring received OrdinaryMessage from banned node", nodeId = packet.srcId
         return
 
@@ -477,7 +492,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
       else:
         debug "Timed out or unrequested whoareyou packet", address = a
     of HandshakeMessage:
-      if d.routingTable.isBanned(packet.srcIdHs):
+      if d.isBanned(packet.srcIdHs):
         trace "Ignoring received HandshakeMessage from banned node", nodeId = packet.srcId
         return
 
@@ -511,20 +526,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
 
   proto.receive(Address(ip: raddr.toIpAddress(), port: raddr.port), buf)
 
-proc banNode(d: Protocol, n: Node, banPeriod: chronos.Duration) =
-  if n.record notin d.bootstrapRecords:
-    if d.banNodes:
-      d.routingTable.banNode(n.id, banPeriod) # banNode also replaces the node
-    else:
-      d.routingTable.replaceNode(n)
-  else:
-    # For now we never remove bootstrap nodes. It might make sense to actually
-    # do so and to retry them only in case we drop to a really low amount of
-    # peers in the routing table.
-    debug "Message request to bootstrap node failed", enr = toURI(n.record)
 
-proc isBanned*(d: Protocol, nodeId: NodeId): bool =
-  d.banNodes and d.routingTable.isBanned(nodeId)
 
 # TODO: This could be improved to do the clean-up immediately in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
@@ -628,7 +630,7 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
   if nodes.isOk:
     let res = verifyNodesRecords(nodes.get(), toNode, findNodeResultLimit, distances)
     d.routingTable.setJustSeen(toNode)
-    return ok(res.filterIt(not d.routingTable.isBanned(it.id)))
+    return ok(res.filterIt(not d.isBanned(it.id)))
   else:
     return err(nodes.error)
 
@@ -823,7 +825,7 @@ proc resolve*(d: Protocol, id: NodeId): Future[Opt[Node]] {.async: (raises: [Can
 
   # No point in trying to resolve a banned node because it won't exist in the
   # routing table and it will be filtered out of any respones in the lookup call
-  if d.routingTable.isBanned(id):
+  if d.isBanned(id):
     debug "Not resolving banned node", nodeId = id
     return Opt.none(Node)
 
