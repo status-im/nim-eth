@@ -493,7 +493,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
         debug "Timed out or unrequested whoareyou packet", address = a
     of HandshakeMessage:
       if d.isBanned(packet.srcIdHs):
-        trace "Ignoring received HandshakeMessage from banned node", nodeId = packet.srcId
+        trace "Ignoring received HandshakeMessage from banned node", nodeId = packet.srcIdHs
         return
 
       trace "Received handshake message packet", srcId = packet.srcIdHs,
@@ -601,6 +601,10 @@ proc ping*(d: Protocol, toNode: Node):
   ## Send a discovery ping message.
   ##
   ## Returns the received pong message or an error.
+
+  if d.isBanned(toNode.id):
+    return err("toNode is banned")
+
   let reqId = d.sendMessage(toNode,
     PingMessage(enrSeq: d.localNode.record.seqNum))
   let resp = await d.waitMessage(toNode, reqId)
@@ -624,6 +628,10 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
   ##
   ## Returns the received nodes or an error.
   ## Received ENRs are already validated and converted to `Node`.
+
+  if d.isBanned(toNode.id):
+    return err("toNode is banned")
+
   let reqId = d.sendMessage(toNode, FindNodeMessage(distances: distances))
   let nodes = await d.waitNodes(toNode, reqId)
 
@@ -639,6 +647,10 @@ proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
   ## Send a discovery talkreq message.
   ##
   ## Returns the received talkresp message or an error.
+
+  if d.isBanned(toNode.id):
+    return err("toNode is banned")
+
   let reqId = d.sendMessage(toNode,
     TalkReqMessage(protocol: protocol, request: request))
   let resp = await d.waitMessage(toNode, reqId)
