@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -29,10 +29,10 @@ proc read*(rlp: var Rlp, T: type BlockHashOrNumber): T =
     BlockHashOrNumber(isHash: false, number: rlp.read(BlockNumber))
 
 proc rlpHash*[T](v: T): Hash32 =
-  keccak256(rlp.encode(v))
+  Hash32(rlp.encodeHash(v))
 
 proc rlpHash*(tx: PooledTransaction): Hash32 =
-  keccak256(rlp.encode(tx.tx))
+  Hash32(rlp.encodeHash(tx.tx))
 
 func blockHash*(h: Header): Hash32 {.inline.} =
   rlpHash(h)
