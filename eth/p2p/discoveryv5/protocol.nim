@@ -126,7 +126,6 @@ const
 
   ## Ban durations for banned nodes in the routing table
   NodeBanDurationInvalidResponse = 15.minutes
-  NodeBanDurationNoResponse = 5.minutes
 
 type
   OptAddress* = object
@@ -438,6 +437,15 @@ proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
   else:
     debug "Node with this id already has ongoing handshake, ignoring packet"
 
+proc replaceNode(d: Protocol, n: Node) =
+  if n.record notin d.bootstrapRecords:
+    d.routingTable.replaceNode(n)
+  else:
+    # For now we never remove bootstrap nodes. It might make sense to actually
+    # do so and to retry them only in case we drop to a really low amount of
+    # peers in the routing table.
+    debug "Message request to bootstrap node failed", enr = toURI(n.record)
+
 proc banNode(d: Protocol, n: Node, banPeriod: chronos.Duration) =
   if n.record notin d.bootstrapRecords:
     if d.banNodes:
@@ -575,7 +583,7 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
       discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
       return err("Invalid response to find node message")
   else:
-    d.banNode(fromNode, NodeBanDurationNoResponse)
+    d.replaceNode(fromNode)
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Nodes message not received in time")
 
@@ -618,7 +626,7 @@ proc ping*(d: Protocol, toNode: Node):
       discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
       return err("Invalid response to ping message")
   else:
-    d.banNode(toNode, NodeBanDurationNoResponse)
+    d.replaceNode(toNode)
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Pong message not received in time")
 
@@ -664,7 +672,7 @@ proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
       discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
       return err("Invalid response to talk request message")
   else:
-    d.banNode(toNode, NodeBanDurationNoResponse)
+    d.replaceNode(toNode)
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Talk response message not received in time")
 

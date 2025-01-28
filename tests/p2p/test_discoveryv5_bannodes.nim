@@ -225,7 +225,7 @@ suite "Discovery v5 Ban Nodes Enabled Tests":
         n.isSome()
         n.get().id == targetId
         n.get().record.seqNum == targetSeqNum
-    # Node will be banned because of failed findNode request.
+    # Node will be removed because of failed findNode request.
 
     # Bring target back online, update seqNum in ENR, check if we get the
     # updated ENR.
@@ -236,7 +236,9 @@ suite "Discovery v5 Ban Nodes Enabled Tests":
       # session will still be in the LRU cache.
       let nodes = await mainNode.findNode(targetNode.localNode, @[0'u16])
       check:
-        nodes.isErr() # Node is banned
+        nodes.isOk()
+        nodes[].len == 1
+        mainNode.addNode(nodes[][0])
 
       targetSeqNum.inc()
       # need to add something to get the enr sequence number incremented
@@ -245,15 +247,42 @@ suite "Discovery v5 Ban Nodes Enabled Tests":
 
       var n = mainNode.getNode(targetId)
       check:
-        n.isNone() # Node was removed when banned
+        n.isSome()
+        n.get().id == targetId
+        n.get().record.seqNum == targetSeqNum - 1
 
       n = await mainNode.resolve(targetId)
       check:
-        n.isNone() # Node is banned
+        n.isSome()
+        n.get().id == targetId
+        n.get().record.seqNum == targetSeqNum
+
+      # Add the updated version
+      discard mainNode.addNode(n.get())
+
+    # Update seqNum in ENR again, ping lookupNode to be added in routing table,
+    # close targetNode, resolve should lookup, check if we get updated ENR.
+    block:
+      targetSeqNum.inc()
+      let update = targetNode.updateRecord({"addsomefield": @[byte 2]})
+      check update.isOk()
+
+      # ping node so that its ENR gets added
+      check (await targetNode.ping(lookupNode.localNode)).isOk()
+      # ping node so that it becomes "seen" and thus will be forwarded on a
+      # findNode request
+      check (await lookupNode.ping(targetNode.localNode)).isOk()
+      await targetNode.closeWait()
+
+      check mainNode.addNode(lookupNode.localNode.record)
+      let n = await mainNode.resolve(targetId)
+      check:
+        n.isSome()
+        n.get().id == targetId
+        n.get().record.seqNum == targetSeqNum
 
     await mainNode.closeWait()
     await lookupNode.closeWait()
-    await targetNode.closeWait()
 
   asyncTest "Random nodes with enr field filter":
     let
