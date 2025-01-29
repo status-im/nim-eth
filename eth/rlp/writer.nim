@@ -55,7 +55,7 @@ template appendImpl(self: var RlpWriter, i: SomeUnsignedInt) =
   self.appendInt(i)
 
 template appendImpl(self: var RlpWriter, e: enum) =
-  # TODO: check for negative enums 
+  # TODO: check for negative enums
   self.appendInt(uint64(e))
 
 template appendImpl(self: var RlpWriter, b: bool) =
@@ -73,10 +73,10 @@ template innerType[T](x: Option[T] | Opt[T]): typedesc = T
 proc countNestedListsDepth(T: type): int {.compileTime.} =
   mixin enumerateRlpFields
 
-  var dummy: T
+  var dummy {.used.}: T
 
-  template op(RT, fN, f) =
-    result += countNestedListsDepth(type f) 
+  template op(RT, fN, f) {.used.}=
+    result += countNestedListsDepth(type f)
 
   when T is Option or T is Opt:
     result += countNestedListsDepth(innerType(dummy))
@@ -89,7 +89,7 @@ proc countNestedListsDepth(T: type): int {.compileTime.} =
     inc result
     result += countNestedListsDepth(elementType(dummy))
 
-proc countNestedListsDepth[E](T: type openArray[E]): int = 
+proc countNestedListsDepth[E](T: type openArray[E]): int =
   countNestedListsDepth(seq[E])
 
 proc countOptionalFields(T: type): int {.compileTime.} =
@@ -209,8 +209,8 @@ proc initRlpList*(listSize: int): RlpDefaultWriter =
 
 proc encode*[T](v: T): seq[byte] =
   mixin append
-  
-  const nestedListsDepth = countNestedListsDepth(T) 
+
+  const nestedListsDepth = countNestedListsDepth(T)
 
   when nestedListsDepth > 0:
     var tracker = StaticRlpLengthTracker[nestedListsDepth]()
@@ -229,7 +229,7 @@ proc encode*[T](v: T): seq[byte] =
 proc encodeHash*[T](v: T): Hash32 =
   mixin append
 
-  const nestedListsDepth = countNestedListsDepth(T) 
+  const nestedListsDepth = countNestedListsDepth(T)
 
   when nestedListsDepth > 0:
     var tracker = StaticRlpLengthTracker[nestedListsDepth]()
@@ -256,7 +256,7 @@ func encodeInt*(i: SomeUnsignedInt): RlpIntBuf =
     let bytesNeeded = uint64(i).bytesNeeded
 
     buf.add(BLOB_START_MARKER + byte(bytesNeeded))
-    buf.setLen(buf.len + bytesNeeded) 
+    buf.setLen(buf.len + bytesNeeded)
     buf.writeBigEndian(i, buf.len - 1, bytesNeeded)
 
   buf
