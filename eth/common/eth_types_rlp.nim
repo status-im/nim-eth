@@ -29,10 +29,10 @@ proc read*(rlp: var Rlp, T: type BlockHashOrNumber): T =
     BlockHashOrNumber(isHash: false, number: rlp.read(BlockNumber))
 
 proc rlpHash*[T](v: T): Hash32 =
-  Hash32(rlp.encodeHash(v))
+  rlp.encodeHash(v)
 
 proc rlpHash*(tx: PooledTransaction): Hash32 =
-  Hash32(rlp.encodeHash(tx.tx))
+  rlp.encodeHash(tx.tx)
 
 func blockHash*(h: Header): Hash32 {.inline.} =
   rlpHash(h)
