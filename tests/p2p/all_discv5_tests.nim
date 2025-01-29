@@ -6,5 +6,4 @@ import
   ./test_ip_vote,
   ./test_routing_table,
   ./test_discoveryv5_encoding,
-  ./test_discoveryv5,
-  ./test_discoveryv5_bannodes
+  ./test_discoveryv5

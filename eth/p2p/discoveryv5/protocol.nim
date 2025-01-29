@@ -446,7 +446,7 @@ proc replaceNode(d: Protocol, n: Node) =
     # peers in the routing table.
     debug "Message request to bootstrap node failed", enr = toURI(n.record)
 
-proc banNode(d: Protocol, n: Node, banPeriod: chronos.Duration) =
+proc banNode*(d: Protocol, n: Node, banPeriod: chronos.Duration) =
   if n.record notin d.bootstrapRecords:
     if d.banNodes:
       d.routingTable.banNode(n.id, banPeriod) # banNode also replaces the node

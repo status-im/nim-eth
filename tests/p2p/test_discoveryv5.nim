@@ -926,3 +926,116 @@ suite "Discovery v5 Tests":
 
     await node1.closeWait()
     await node2.closeWait()
+
+  asyncTest "Banned nodes are removed and cannot be added":
+    let
+      node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302), banNodes = true)
+      targetNode = generateNode(PrivateKey.random(rng[]))
+
+    # add the node
+    check:
+      node.addNode(targetNode) == true
+      node.getNode(targetNode.id).isSome()
+
+    # banning the node should remove it from the routing table
+    node.banNode(targetNode, 1.minutes)
+    check node.getNode(targetNode.id).isNone()
+
+    # cannot add a banned node
+    check:
+      node.addNode(targetNode) == false
+      node.getNode(targetNode.id).isNone()
+
+    await node.closeWait()
+
+  asyncTest "FindNode filters out banned nodes":
+    let
+      mainNode = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301),
+          banNodes = true)
+      testNode = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302),
+          @[mainNode.localNode.record], banNodes = true)
+
+    # Generate 100 random nodes and add to our main node's routing table
+    for i in 0 ..< 100:
+      discard mainNode.addSeenNode(generateNode(PrivateKey.random(rng[])))
+
+    let
+      neighbours = mainNode.neighbours(mainNode.localNode.id)
+      closest = neighbours[0]
+      closestDistance = logDistance(closest.id, mainNode.localNode.id)
+
+    block:
+      # the closest node is returned
+      let discovered = await testNode.findNode(mainNode.localNode, @[closestDistance])
+      check discovered.isOk
+      check closest in discovered[]
+
+    # ban the closest node
+    mainNode.banNode(closest, 1.minutes)
+
+    block:
+      # the banned node is not returned
+      let discovered = await testNode.findNode(mainNode.localNode, @[closestDistance])
+      check discovered.isOk
+      check closest notin discovered[]
+
+    await mainNode.closeWait()
+    await testNode.closeWait()
+
+  asyncTest "Cannot send messages to banned nodes":
+    let
+      node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302),
+          banNodes = true)
+      node2 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301),
+          banNodes = true)
+
+    # ban node2 in node1's routing table
+    node1.banNode(node2.localNode, 1.minutes)
+
+    block:
+      let pong = await node1.ping(node2.localNode)
+      check:
+        pong.isErr()
+        pong.error() == "toNode is banned"
+
+    block:
+      let nodes = await node1.findNode(node2.localNode, @[0.uint16])
+      check:
+        nodes.isErr()
+        nodes.error() == "toNode is banned"
+
+    block:
+      let node = await node1.resolve(node2.localNode.id)
+      check node.isNone()
+
+    await node2.closeWait()
+    await node1.closeWait()
+
+  asyncTest "Ignore messages from banned nodes":
+    let
+      node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302),
+          banNodes = true)
+      node2 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301),
+          banNodes = true)
+
+    # ban node1 in node2's routing table
+    node2.banNode(node1.localNode, 1.minutes)
+
+    block:
+      let pong = await node1.ping(node2.localNode)
+      check:
+        pong.isErr()
+        pong.error() == "Pong message not received in time"
+
+    block:
+      let nodes = await node1.findNode(node2.localNode, @[0.uint16])
+      check:
+        nodes.isErr()
+        nodes.error() == "Nodes message not received in time"
+
+    block:
+      let node = await node1.resolve(node2.localNode.id)
+      check node.isNone()
+
+    await node2.closeWait()
+    await node1.closeWait()
