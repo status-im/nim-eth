@@ -124,6 +124,9 @@ const
   defaultResponseTimeout* = 4.seconds ## timeout for the response of a request-response
   ## call
 
+  ## Ban durations for banned nodes in the routing table
+  NodeBanDurationInvalidResponse = 15.minutes
+
 type
   OptAddress* = object
     ip*: Opt[IpAddress]
@@ -142,6 +145,7 @@ type
     bindAddress: OptAddress ## UDP binding address
     pendingRequests: Table[AESGCMNonce, PendingRequest]
     routingTable*: RoutingTable
+    banNodes: bool
     codec*: Codec
     awaitedMessages: Table[(NodeId, RequestId), Future[Opt[Message]]]
     refreshLoop: Future[void]
@@ -156,6 +160,7 @@ type
     handshakeTimeout: Duration
     responseTimeout: Duration
     rng*: ref HmacDrbgContext
+
 
   PendingRequest = object
     node: Node
@@ -192,10 +197,13 @@ proc addNode*(d: Protocol, node: Node): bool =
   ##
   ## Returns true only when `Node` was added as a new entry to a bucket in the
   ## routing table.
-  if d.routingTable.addNode(node) == Added:
+  let r = d.routingTable.addNode(node)
+  if r == Added:
     return true
-  else:
-    return false
+
+  if r == Banned:
+    debug "Banned node not added to routing table", nodeId = node.id
+  return false
 
 proc addNode*(d: Protocol, r: Record): bool =
   ## Add `Node` from a `Record` to discovery routing table.
@@ -429,6 +437,30 @@ proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
   else:
     debug "Node with this id already has ongoing handshake, ignoring packet"
 
+proc replaceNode(d: Protocol, n: Node) =
+  if n.record notin d.bootstrapRecords:
+    d.routingTable.replaceNode(n)
+  else:
+    # For now we never remove bootstrap nodes. It might make sense to actually
+    # do so and to retry them only in case we drop to a really low amount of
+    # peers in the routing table.
+    debug "Message request to bootstrap node failed", enr = toURI(n.record)
+
+proc banNode*(d: Protocol, n: Node, banPeriod: chronos.Duration) =
+  if n.record notin d.bootstrapRecords:
+    if d.banNodes:
+      d.routingTable.banNode(n.id, banPeriod) # banNode also replaces the node
+    else:
+      d.routingTable.replaceNode(n)
+  else:
+    # For now we never remove bootstrap nodes. It might make sense to actually
+    # do so and to retry them only in case we drop to a really low amount of
+    # peers in the routing table.
+    debug "Message request to bootstrap node failed", enr = toURI(n.record)
+
+proc isBanned*(d: Protocol, nodeId: NodeId): bool =
+  d.banNodes and d.routingTable.isBanned(nodeId)
+
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
   discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
 
@@ -437,6 +469,10 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
     let packet = decoded[]
     case packet.flag
     of OrdinaryMessage:
+      if d.isBanned(packet.srcId):
+        trace "Ignoring received OrdinaryMessage from banned node", nodeId = packet.srcId
+        return
+
       if packet.messageOpt.isSome():
         let message = packet.messageOpt.get()
         trace "Received message packet", srcId = packet.srcId, address = a,
@@ -464,6 +500,10 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
       else:
         debug "Timed out or unrequested whoareyou packet", address = a
     of HandshakeMessage:
+      if d.isBanned(packet.srcIdHs):
+        trace "Ignoring received HandshakeMessage from banned node", nodeId = packet.srcIdHs
+        return
+
       trace "Received handshake message packet", srcId = packet.srcIdHs,
         address = a, kind = packet.message.kind
       d.handleMessage(packet.srcIdHs, a, packet.message, packet.node)
@@ -494,14 +534,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
 
   proto.receive(Address(ip: raddr.toIpAddress(), port: raddr.port), buf)
 
-proc replaceNode(d: Protocol, n: Node) =
-  if n.record notin d.bootstrapRecords:
-    d.routingTable.replaceNode(n)
-  else:
-    # For now we never remove bootstrap nodes. It might make sense to actually
-    # do so and to retry them only in case we drop to a really low amount of
-    # peers in the routing table.
-    debug "Message request to bootstrap node failed", enr = toURI(n.record)
+
 
 # TODO: This could be improved to do the clean-up immediately in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
@@ -546,9 +579,11 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
           break
       return ok(res)
     else:
+      d.banNode(fromNode, NodeBanDurationInvalidResponse)
       discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
       return err("Invalid response to find node message")
   else:
+    d.replaceNode(fromNode)
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Nodes message not received in time")
 
@@ -574,6 +609,10 @@ proc ping*(d: Protocol, toNode: Node):
   ## Send a discovery ping message.
   ##
   ## Returns the received pong message or an error.
+
+  if d.isBanned(toNode.id):
+    return err("toNode is banned")
+
   let reqId = d.sendMessage(toNode,
     PingMessage(enrSeq: d.localNode.record.seqNum))
   let resp = await d.waitMessage(toNode, reqId)
@@ -583,7 +622,7 @@ proc ping*(d: Protocol, toNode: Node):
       d.routingTable.setJustSeen(toNode)
       return ok(resp.get().pong)
     else:
-      d.replaceNode(toNode)
+      d.banNode(toNode, NodeBanDurationInvalidResponse)
       discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
       return err("Invalid response to ping message")
   else:
@@ -597,15 +636,18 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
   ##
   ## Returns the received nodes or an error.
   ## Received ENRs are already validated and converted to `Node`.
+
+  if d.isBanned(toNode.id):
+    return err("toNode is banned")
+
   let reqId = d.sendMessage(toNode, FindNodeMessage(distances: distances))
   let nodes = await d.waitNodes(toNode, reqId)
 
   if nodes.isOk:
     let res = verifyNodesRecords(nodes.get(), toNode, findNodeResultLimit, distances)
     d.routingTable.setJustSeen(toNode)
-    return ok(res)
+    return ok(res.filterIt(not d.isBanned(it.id)))
   else:
-    d.replaceNode(toNode)
     return err(nodes.error)
 
 proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
@@ -613,6 +655,10 @@ proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
   ## Send a discovery talkreq message.
   ##
   ## Returns the received talkresp message or an error.
+
+  if d.isBanned(toNode.id):
+    return err("toNode is banned")
+
   let reqId = d.sendMessage(toNode,
     TalkReqMessage(protocol: protocol, request: request))
   let resp = await d.waitMessage(toNode, reqId)
@@ -622,7 +668,7 @@ proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
       d.routingTable.setJustSeen(toNode)
       return ok(resp.get().talkResp.response)
     else:
-      d.replaceNode(toNode)
+      d.banNode(toNode, NodeBanDurationInvalidResponse)
       discovery_message_requests_outgoing.inc(labelValues = ["invalid_response"])
       return err("Invalid response to talk request message")
   else:
@@ -797,6 +843,12 @@ proc resolve*(d: Protocol, id: NodeId): Future[Opt[Node]] {.async: (raises: [Can
   if id == d.localNode.id:
     return Opt.some(d.localNode)
 
+  # No point in trying to resolve a banned node because it won't exist in the
+  # routing table and it will be filtered out of any respones in the lookup call
+  if d.isBanned(id):
+    debug "Not resolving banned node", nodeId = id
+    return Opt.none(Node)
+
   let node = d.getNode(id)
   if node.isSome():
     let request = await d.findNode(node.get(), @[0'u16])
@@ -881,6 +933,9 @@ proc refreshLoop(d: Protocol) {.async: (raises: []).} =
         let randomQuery = await d.queryRandom()
         trace "Discovered nodes in random target query", nodes = randomQuery.len
         debug "Total nodes in discv5 routing table", total = d.routingTable.len()
+
+      # Remove the expired bans from routing table to limit memory usage
+      d.routingTable.cleanupExpiredBans()
 
       await sleepAsync(refreshInterval)
   except CancelledError:
@@ -985,6 +1040,7 @@ proc newProtocol*(
     bindPort: Port,
     bindIp = IPv4_any(),
     enrAutoUpdate = false,
+    banNodes = false,
     config = defaultDiscoveryConfig,
     rng = newRng()):
     Protocol =
@@ -1034,6 +1090,7 @@ proc newProtocol*(
     enrAutoUpdate: enrAutoUpdate,
     routingTable: RoutingTable.init(
       node, config.bitsPerHop, config.tableIpLimits, rng),
+    banNodes: banNodes,
     handshakeTimeout: config.handshakeTimeout,
     responseTimeout: config.responseTimeout,
     rng: rng)
