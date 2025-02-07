@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -44,7 +44,6 @@ const
   protocolId = toBytes(discv5_protocol_id)
   idSignatureText  = "discovery v5 identity proof"
   keyAgreementPrefix = "discovery v5 key agreement"
-  gcmNonceSize* = 12
   idNonceSize* = 16
   gcmTagSize* = 16
   ivSize* = 16
@@ -74,7 +73,6 @@ const
     discv5TalkRespOverhead
 
 type
-  AESGCMNonce* = array[gcmNonceSize, byte]
   IdNonce* = array[idNonceSize, byte]
 
   WhoareyouData* = object
@@ -221,8 +219,17 @@ proc encodeMessagePacket*(rng: var HmacDrbgContext, c: var Codec,
     toId: NodeId, toAddr: Address, message: openArray[byte]):
     (seq[byte], AESGCMNonce) =
   let
-    nonce = rng.generate(AESGCMNonce) # Random AESGCM nonce
     iv = rng.generate(array[ivSize, byte]) # Random IV
+    sessionOpt = c.sessions.load(toId, toAddr) # Load session if it exists
+    nonce =
+      # If there is an existing session, use the next nonce, else generate a
+      # fully random one.
+      if sessionOpt.isSome():
+        discovery_session_lru_cache_hits.inc()
+        sessionOpt.value.nextNonce(rng)
+      else:
+        discovery_session_lru_cache_misses.inc()
+        rng.generate(AESGCMNonce)
 
   # static-header
   let
@@ -235,23 +242,19 @@ proc encodeMessagePacket*(rng: var HmacDrbgContext, c: var Codec,
   header.add(staticHeader)
   header.add(authdata)
 
-  # message
-  var messageEncrypted: seq[byte]
-  var initiatorKey, recipientKey: AesKey
-  if c.sessions.load(toId, toAddr, recipientKey, initiatorKey):
-    messageEncrypted = encryptGCM(initiatorKey, nonce, message, @iv & header)
-    discovery_session_lru_cache_hits.inc()
-  else:
-    # We might not have the node's keys if the handshake hasn't been performed
-    # yet. That's fine, we send a random-packet and we will be responded with
-    # a WHOAREYOU packet.
-    # Select 20 bytes of random data, which is the smallest possible ping
-    # message. 16 bytes for the gcm tag and 4 bytes for ping with requestId of
-    # 1 byte (e.g "01c20101"). Could increase to 27 for 8 bytes requestId in
-    # case this must not look like a random packet.
-    let randomData = rng.generate(array[gcmTagSize + 4, byte])
-    messageEncrypted.add(randomData)
-    discovery_session_lru_cache_misses.inc()
+  # Encrypt protocol message
+  let messageEncrypted =
+    if sessionOpt.isSome():
+      encryptGCM(sessionOpt.value.writeKey, nonce, message, @iv & header)
+    else:
+      # We might not have the node's keys if the handshake hasn't been performed
+      # yet. That's fine, we send a random-packet and we will be responded with
+      # a WHOAREYOU packet.
+      # Select 20 bytes of random data, which is the smallest possible ping
+      # message. 16 bytes for the gcm tag and 4 bytes for ping with requestId of
+      # 1 byte (e.g "01c20101"). Could increase to 27 for 8 bytes requestId in
+      # case this must not look like a random packet.
+      @(rng.generate(array[gcmTagSize + 4, byte]))
 
   let maskedHeader = encryptHeader(toId, iv, header)
 
@@ -306,9 +309,7 @@ proc encodeWhoareyouPacket*(rng: var HmacDrbgContext, c: var Codec,
 proc encodeHandshakePacket*(rng: var HmacDrbgContext, c: var Codec,
     toId: NodeId, toAddr: Address, message: openArray[byte],
     whoareyouData: WhoareyouData, pubkey: PublicKey): seq[byte] =
-  let
-    nonce = rng.generate(AESGCMNonce)
-    iv = rng.generate(array[ivSize, byte]) # Random IV
+  let iv = rng.generate(array[ivSize, byte]) # Random IV
 
   var authdata: seq[byte]
   var authdataHead: seq[byte]
@@ -326,12 +327,18 @@ proc encodeHandshakePacket*(rng: var HmacDrbgContext, c: var Codec,
   # compressed pub key format (33 bytes)
   authdata.add(ephKeys.pubkey.toRawCompressed())
 
-  # Add ENR of sequence number is newer
+  # Add ENR if sequence number is newer
   if whoareyouData.recordSeq < c.localNode.record.seqNum:
     authdata.add(encode(c.localNode.record))
 
   let secrets = deriveKeys(c.localNode.id, toId, ephKeys.seckey, pubkey,
     whoareyouData.challengeData)
+
+  # Store session and get nonce
+  let session =
+    Session(readKey: secrets.recipientKey, writeKey: secrets.initiatorKey, counter: 0)
+  c.sessions.store(toId, toAddr, session)
+  let nonce = session.nextNonce(rng)
 
   # Header
   let staticHeader = encodeStaticHeader(Flag.HandshakeMessage, nonce,
@@ -341,7 +348,7 @@ proc encodeHandshakePacket*(rng: var HmacDrbgContext, c: var Codec,
   header.add(staticHeader)
   header.add(authdata)
 
-  c.sessions.store(toId, toAddr, secrets.recipientKey, secrets.initiatorKey)
+  # Encrypt protocol message
   let messageEncrypted = encryptGCM(secrets.initiatorKey, nonce, message,
     @iv & header)
 
@@ -407,8 +414,7 @@ proc decodeMessagePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
   let srcId = NodeId.fromBytesBE(header.toOpenArray(staticHeaderSize,
     header.high))
 
-  var initiatorKey, recipientKey: AesKey
-  if not c.sessions.load(srcId, fromAddr, recipientKey, initiatorKey):
+  let recipientKey = c.sessions.loadReadKey(srcId, fromAddr).valueOr:
     # Don't consider this an error, simply haven't done a handshake yet or
     # the session got removed.
     trace "Decrypting failed (no keys)"

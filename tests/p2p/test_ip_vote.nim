@@ -1,5 +1,5 @@
 # nim-eth
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,7 +12,7 @@ import
   unittest2,
   ../../eth/common/keys, ../../eth/p2p/discoveryv5/[node, ip_vote]
 
-suite "IP vote":
+suite "Discovery v5.1 IP vote":
   let rng = newRng()
 
   test "Majority vote":
