@@ -551,9 +551,10 @@ procSuite "uTP over UDP protocol":
 
     await s.close()
 
-  asyncTest "Data transfer over multiple sockets":
+  asyncTest "Data transfer over multiple sockets over multiple nodes":
     const
-      amountOfTransfers = 100
+      amountOfTransfers = 20
+      amountOfNodes = 5
       dataToSend: seq[byte] = repeat(byte 0xA0, 1_000_000)
 
     var readFutures: seq[Future[void]]
@@ -585,10 +586,16 @@ procSuite "uTP over UDP protocol":
         noCancel fut
 
     let
-      address1 = initTAddress("127.0.0.1", 9079)
-      utpProto1 = UtpProtocol.new(handleIncomingConnectionDummy, address1)
-      address2 = initTAddress("127.0.0.1", 9080)
-      utpProto2 = UtpProtocol.new(handleIncomingConnection, address2)
+      address = initTAddress("127.0.0.1", 9079)
+      utpNode = UtpProtocol.new(handleIncomingConnectionDummy, address)
+
+    var utpNodeList: seq[UtpProtocol]
+    for i in 0..<amountOfNodes:
+      let
+        address = initTAddress("127.0.0.1", 9080 + i)
+        utpNode = UtpProtocol.new(handleIncomingConnection, address)
+
+      utpNodeList.add(utpNode)
 
     proc connectSendAndCheck(
         utpProto: UtpProtocol,
@@ -607,21 +614,23 @@ procSuite "uTP over UDP protocol":
 
     let t0 = Moment.now()
     for i in 0..<amountOfTransfers:
-      asyncSpawn utpProto1.connectSendAndCheck(address2)
+      for j in 0..<amountOfNodes:
+        asyncSpawn utpNode.connectSendAndCheck(initTAddress("127.0.0.1", 9080 + j))
 
-    while readFutures.len() < amountOfTransfers:
+    while readFutures.len() < amountOfTransfers * amountOfNodes:
       await sleepAsync(milliseconds(100))
 
     await allFutures(readFutures)
     let elapsed = Moment.now() - t0
 
-    await utpProto1.shutdownWait()
-    await utpProto2.shutdownWait()
+    await utpNode.shutdownWait()
+    for i in 0..<amountOfNodes:
+      await utpNodeList[i].shutdownWait()
 
-    let megabitsSent = amountOfTransfers * dataToSend.len() * 8 / 1_000_000
+    let megabitsSent = amountOfTransfers * amountOfNodes * dataToSend.len() * 8 / 1_000_000
     let seconds = float(elapsed.nanoseconds) / 1_000_000_000
     let throughput = megabitsSent / seconds
 
     echo ""
-    echo "Sent ", amountOfTransfers, " asynchronous uTP transfers in ", seconds,
+    echo "Sent ", amountOfTransfers, " asynchronous uTP transfers to ", amountOfNodes, " nodes in ", seconds,
       " seconds, payload throughput: ", throughput, " Mbit/s"

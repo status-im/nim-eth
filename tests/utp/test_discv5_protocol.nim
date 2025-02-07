@@ -234,9 +234,10 @@ procSuite "uTP over discovery v5 protocol":
     await node1.closeWait()
     await node2.closeWait()
 
-  asyncTest "Data transfer over multiple sockets":
+  asyncTest "Data transfer over multiple sockets over multiple nodes":
     const
-      amountOfTransfers = 25
+      amountOfTransfers = 5
+      amountOfNodes = 5
       dataToSend: seq[byte] = repeat(byte 0xA0, 1_000_000)
 
     var readFutures: seq[Future[void]]
@@ -268,21 +269,26 @@ procSuite "uTP over discovery v5 protocol":
         noCancel fut
 
     let
-      address1 = localAddress(20302)
-      address2 = localAddress(20303)
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), address1)
-      node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), address2)
+      sendingNode = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      sendingUtpNode = UtpDiscv5Protocol.new(
+        sendingNode, utpProtId, handleIncomingConnectionDummy)
 
-      utp1 = UtpDiscv5Protocol.new(
-        node1, utpProtId, handleIncomingConnectionDummy)
-      utp2 {.used.} = UtpDiscv5Protocol.new(
-        node2, utpProtId, handleIncomingConnection)
+    var nodeList: seq[discv5_protocol.Protocol]
+    var utpNodeList: seq[UtpDiscv5Protocol]
+    for i in 0..<amountOfNodes:
+      let
+        node = initDiscoveryNode(
+          rng, PrivateKey.random(rng[]), localAddress(20303 + i))
+        utpNode = UtpDiscv5Protocol.new(
+          node, utpProtId, handleIncomingConnection)
 
-    # nodes must have session between each other
-    check:
-      (await node1.ping(node2.localNode)).isOk()
+      nodeList.add(node)
+      utpNodeList.add(utpNode)
+
+      # nodes must have discv5 session between each other
+      check:
+        (await sendingNode.ping(node.localNode)).isOk()
 
     proc connectSendAndCheck(
         utpProto: UtpDiscv5Protocol,
@@ -301,22 +307,26 @@ procSuite "uTP over discovery v5 protocol":
 
     let t0 = Moment.now()
     for i in 0..<amountOfTransfers:
-      asyncSpawn utp1.connectSendAndCheck(
-        NodeAddress.init(node2.localNode.id, address2))
+      for j in 0..<amountOfNodes:
+        asyncSpawn sendingUtpNode.connectSendAndCheck(
+          NodeAddress.init(nodeList[j].localNode.id, nodeList[j].localNode.address.value()))
 
-    while readFutures.len() < amountOfTransfers:
+    while readFutures.len() < amountOfTransfers * amountOfNodes:
       await sleepAsync(milliseconds(100))
 
     await allFutures(readFutures)
     let elapsed = Moment.now() - t0
 
-    await utp1.shutdownWait()
-    await utp2.shutdownWait()
+    await sendingUtpNode.shutdownWait()
+    await sendingNode.closeWait()
+    for i in 0..<amountOfNodes:
+      await utpNodeList[i].shutdownWait()
+      await nodeList[i].closeWait()
 
-    let megabitsSent = amountOfTransfers * dataToSend.len() * 8 / 1_000_000
+    let megabitsSent = amountOfTransfers * amountOfNodes * dataToSend.len() * 8 / 1_000_000
     let seconds = float(elapsed.nanoseconds) / 1_000_000_000
     let throughput = megabitsSent / seconds
 
     echo ""
-    echo "Sent ", amountOfTransfers, " asynchronous uTP transfers in ", seconds,
+    echo "Sent ", amountOfTransfers, " asynchronous uTP transfers to ", amountOfNodes, " nodes in ", seconds,
       " seconds, payload throughput: ", throughput, " Mbit/s"
