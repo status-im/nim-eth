@@ -1,5 +1,5 @@
 # nim-eth
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -18,7 +18,7 @@ import
   ../stubloglevel,
   ./discv5_test_helper
 
-suite "Discovery v5 Tests":
+suite "Discovery v5.1 Tests":
   setup:
     let rng {.used.} = newRng()
 
