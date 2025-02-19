@@ -83,4 +83,18 @@ proc suite() =
         Foo.rlpFieldsCount == 3
         Transaction.rlpFieldsCount == 3
 
+    test "RLP size w/o data encoding":
+      var
+        originalBar = Bar(b: "abracadabra",
+                            f: Foo(x: 5'u64, y: "hocus pocus", z: @[uint64 100, 200, 300]))
+        originalBarBytes = encode(originalBar)
+
+        origVal = CustomSerialized(customFoo: Foo(x: 10'u64, y: "y", z: @[]), ignored: 5)
+        origValBytes = encode(origVal)
+
+      check:
+        originalBarBytes.len == originalBar.getEncodedLength
+        origValBytes.len == origVal.getEncodedLength
+
+
 suite()
