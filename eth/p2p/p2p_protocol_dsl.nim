@@ -153,7 +153,6 @@ let
   responseVar*          {.compileTime.} = ident "response"
   streamVar*            {.compileTime.} = ident "stream"
   protocolVar*          {.compileTime.} = ident "protocol"
-  deadlineVar*          {.compileTime.} = ident "deadline"
   timeoutVar*           {.compileTime.} = ident "timeout"
   perProtocolMsgIdVar*  {.compileTime.} = ident "perProtocolMsgId"
   currentProtocolSym*   {.compileTime.} = ident "CurrentProtocol"
@@ -996,4 +995,3 @@ macro emitForAllBackends(backendSyms: typed, options: untyped, body: untyped): u
 template p2pProtocol*(options: untyped, body: untyped) {.dirty.} =
   bind emitForAllBackends
   emitForAllBackends(p2pProtocolBackendImpl, options, body)
-
