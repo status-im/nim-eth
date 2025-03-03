@@ -1,3 +1,10 @@
+# eth
+# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
   std/json,
   unittest2,
@@ -55,10 +62,8 @@ proc runTests*(filename: string) =
             skip()
             return
 
-          var outRlp = initRlpWriter()
-          outRlp.append input
           let
-            actual = outRlp.finish.toHex
+            actual = rlp.encode(input).toHex
             expected = output.str
           check actual == expected
 

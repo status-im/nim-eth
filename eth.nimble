@@ -6,7 +6,7 @@ description   = "Ethereum Common library"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 1.6.0",
+requires "nim >= 2.0.10",
          "nimcrypto",
          "stint >= 0.8.0",
          "secp256k1",
@@ -36,15 +36,13 @@ let cfg =
   " -d:chronicles_log_level=TRACE" &
   " --threads:on -d:release"
 
-
 proc build(args, path, outdir: string) =
   exec nimc & " " & lang & " " & cfg & " " & flags & " " & args &
     " --outdir:build/" & outdir & " " & path
 
 proc run(path, outdir: string) =
   build "--mm:refc -r", path, outdir
-  if (NimMajor, NimMinor) > (1, 6):
-    build "--mm:orc -r", path, outdir
+  build "--mm:orc -r", path, outdir
 
 task test_keyfile, "Run keyfile tests":
   run "tests/keyfile/all_tests", "keyfile"

@@ -1,6 +1,7 @@
 {.used.}
 
 import
+  std/os,
   unittest2,
   ../../eth/common/keys, ../../eth/p2p/discoveryv5/[routing_table, node, enr],
   ./discv5_test_helper
@@ -561,3 +562,127 @@ suite "Routing Table Tests":
       # there may be more than one node at provided distance
       check len(neighboursAtLogDist) >= 1
       check neighboursAtLogDist.contains(n)
+
+  test "Banned nodes: banned node cannot be added":
+    let
+      localNode = generateNode(PrivateKey.random(rng[]))
+      node1 = generateNode(PrivateKey.random(rng[]))
+      node2 = generateNode(PrivateKey.random(rng[]))
+
+    var table = RoutingTable.init(localNode, 1, DefaultTableIpLimits, rng = rng)
+
+    # Can add a node that is not banned
+    check:
+      table.contains(node1) == false
+      table.isBanned(node1.id) == false
+      table.addNode(node1) == Added
+      table.contains(node1) == true
+      table.isBanned(node1.id) == false
+
+    # Can ban a node that exists in the routing table
+    table.banNode(node1.id, 1.minutes)
+    check:
+      table.contains(node1) == false # the node is removed when banned
+      table.isBanned(node1.id) == true
+      table.addNode(node1) == Banned # the node cannot be added while banned
+      table.contains(node1) == false
+      table.getNode(node1.id).isNone()
+      table.isBanned(node1.id) == true
+
+    # Can ban a node that doesn't yet exist in the routing table
+    check:
+      table.contains(node2) == false
+      table.isBanned(node2.id) == false
+
+    table.banNode(node2.id, 1.minutes)
+    check:
+      table.contains(node2) == false
+      table.isBanned(node2.id) == true
+      table.addNode(node2) == Banned # the node cannot be added while banned
+      table.contains(node2) == false
+      table.getNode(node2.id).isNone()
+      table.isBanned(node2.id) == true
+
+  test "Banned nodes: nodes with expired bans can be added":
+    let
+      localNode = generateNode(PrivateKey.random(rng[]))
+      node1 = generateNode(PrivateKey.random(rng[]))
+      node2 = generateNode(PrivateKey.random(rng[]))
+
+    var table = RoutingTable.init(localNode, 1, DefaultTableIpLimits, rng = rng)
+
+    check table.addNode(node1) == Added
+    table.banNode(node1.id, 1.nanoseconds)
+    table.banNode(node2.id, 1.nanoseconds)
+
+    sleep(1)
+
+    # Can add nodes for which the ban has expired
+    check:
+      table.contains(node1) == false
+      table.isBanned(node1.id) == false
+      table.addNode(node1) == Added
+      table.contains(node1) == true
+      table.isBanned(node1.id) == false
+
+      table.contains(node2) == false
+      table.isBanned(node2.id) == false
+      table.addNode(node2) == Added
+      table.contains(node2) == true
+      table.isBanned(node2.id) == false
+
+  test "Banned nodes: ban nodes with existing bans":
+    let
+      localNode = generateNode(PrivateKey.random(rng[]))
+      node1 = generateNode(PrivateKey.random(rng[]))
+      node2 = generateNode(PrivateKey.random(rng[]))
+
+    var table = RoutingTable.init(localNode, 1, DefaultTableIpLimits, rng = rng)
+
+    check:
+      table.addNode(node1) == Added
+      table.addNode(node2) == Added
+
+    table.banNode(node1.id, 1.nanoseconds)
+    sleep(1) # node1's ban is expired
+    table.banNode(node2.id, 1.minutes)
+
+    check:
+      table.isBanned(node1.id) == false
+      table.isBanned(node2.id) == true
+
+    # Can ban nodes which were previously banned
+    table.banNode(node1.id, 1.minutes)
+    table.banNode(node2.id, 1.minutes)
+
+    check:
+      table.contains(node1) == false
+      table.isBanned(node1.id) == true
+      table.contains(node2) == false
+      table.isBanned(node2.id) == true
+
+  test "Banned nodes: cleanup expired bans":
+    let
+      localNode = generateNode(PrivateKey.random(rng[]))
+      node1 = generateNode(PrivateKey.random(rng[]))
+      node2 = generateNode(PrivateKey.random(rng[]))
+
+    var table = RoutingTable.init(localNode, 1, DefaultTableIpLimits, rng = rng)
+
+    table.banNode(node1.id, 1.nanoseconds)
+    sleep(1) # node1's ban is expired
+    table.banNode(node2.id, 1.minutes)
+
+    check:
+      table.isBanned(node1.id) == false
+      table.isBanned(node2.id) == true
+      table.addNode(node1) == Added
+      table.addNode(node2) == Banned
+
+    table.cleanupExpiredBans()
+
+    check:
+      table.isBanned(node1.id) == false
+      table.isBanned(node2.id) == true
+      table.addNode(node1) == Existing
+      table.addNode(node2) == Banned

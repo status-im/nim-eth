@@ -14,7 +14,7 @@ import
   ../../net/utils,
   "."/[node, random2, enr]
 
-export results
+export results, chronos.timer
 
 declareGauge routing_table_nodes,
   "Discovery routing table nodes", labels = ["state"]
@@ -47,6 +47,10 @@ type
     ## replacement caches.
     distanceCalculator: DistanceCalculator
     rng: ref HmacDrbgContext
+    bannedNodes: Table[NodeId, chronos.Moment] ## Nodes can be banned from the
+    ## routing table for a period until the timeout is reached. Banned nodes
+    ## are removed from the routing table and not allowed to be included again
+    ## until the timeout expires.
 
   KBucket = ref object
     istart, iend: NodeId ## Range of NodeIds this KBucket covers. This is not a
@@ -95,6 +99,7 @@ type
     ReplacementAdded
     ReplacementExisting
     NoAddress
+    Banned
 
 # xor distance functions
 func distance*(a, b: NodeId): UInt256 =
@@ -189,6 +194,51 @@ func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   b.ipLimits.dec(ip)
   r.ipLimits.dec(ip)
 
+func getNode*(r: RoutingTable, id: NodeId): Opt[Node]
+proc replaceNode*(r: var RoutingTable, n: Node) {.gcsafe.}
+
+proc banNode*(r: var RoutingTable, nodeId: NodeId, period: chronos.Duration) =
+  ## Ban a node from the routing table for the given period. The node is removed
+  ## from the routing table and replaced using a node from the replacement cache.
+  let banTimeout = now(chronos.Moment) + period
+
+  if r.bannedNodes.contains(nodeId):
+    let existingTimeout = r.bannedNodes.getOrDefault(nodeId)
+    if existingTimeout < banTimeout:
+      r.bannedNodes[nodeId] = banTimeout
+    return # node is already banned so we don't need to try replacing it because
+    # it should have already been replaced when it was initially banned
+
+  # NodeId doesn't yet exist in the banned nodes table
+  r.bannedNodes[nodeId] = banTimeout
+
+  # Remove the node from the routing table
+  let node = r.getNode(nodeId)
+  if node.isSome():
+    r.replaceNode(node.get())
+
+proc isBanned*(r: RoutingTable, nodeId: NodeId): bool =
+  if not r.bannedNodes.contains(nodeId):
+    return false
+
+  let
+    currentTime = now(chronos.Moment)
+    banTimeout = r.bannedNodes.getOrDefault(nodeId)
+
+  currentTime < banTimeout
+
+proc cleanupExpiredBans*(r: var RoutingTable) =
+  ## Remove all expired bans from the banned nodes table
+  let currentTime = now(chronos.Moment)
+
+  var expiredIds = newSeq[NodeId]()
+  for id, timeout in r.bannedNodes:
+    if currentTime >= timeout:
+      expiredIds.add(id)
+
+  for id in expiredIds:
+    r.bannedNodes.del(id)
+
 proc add(k: KBucket, n: Node) =
   k.nodes.add(n)
   routing_table_nodes.inc()
@@ -274,7 +324,8 @@ func init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop
     bitsPerHop: bitsPerHop,
     ipLimits: IpLimits(limit: ipLimits.tableIpLimit),
     distanceCalculator: distanceCalculator,
-    rng: rng)
+    rng: rng,
+    bannedNodes: initTable[NodeId, chronos.Moment]())
 
 func splitBucket(r: var RoutingTable, index: int) =
   let bucket = r.buckets[index]
@@ -342,6 +393,9 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
 
   if n == r.localNode:
     return LocalNode
+
+  if r.isBanned(n.id):
+    return Banned
 
   let bucket = r.bucketForNode(n.id)
 

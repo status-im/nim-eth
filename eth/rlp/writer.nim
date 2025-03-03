@@ -1,22 +1,27 @@
 # eth
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/options,
+  std/[options, typetraits],
   pkg/results,
-  stew/[arraybuf, assign2, bitops2, shims/macros],
- ./priv/defs
+  stew/[arraybuf, shims/macros],
+  ./priv/defs,
+  hash_writer,
+  length_writer,
+  two_pass_writer,
+  default_writer,
+  utils,
+  stint,
+  ../common/hashes
 
-export arraybuf
+export arraybuf, default_writer, length_writer, two_pass_writer, hash_writer
 
 type
-  RlpWriter* = object
-    pendingLists: seq[tuple[remainingItems, startPos: int]]
-    output: seq[byte]
+  RlpWriter* = RlpDefaultWriter | RlpTwoPassWriter | RlpLengthTracker | RlpHashWriter
 
   RlpIntBuf* = ArrayBuf[9, byte]
     ## Small buffer for holding a single RLP-encoded integer
@@ -24,114 +29,18 @@ type
 const
   wrapObjsInList* = true
 
-func bytesNeeded(num: SomeUnsignedInt): int =
-  # Number of non-zero bytes in the big endian encoding
-  sizeof(num) - (num.leadingZeros() shr 3)
-
-func writeBigEndian(outStream: var auto, number: SomeUnsignedInt,
-                    lastByteIdx: int, numberOfBytes: int) =
-  var n = number
-  for i in countdown(lastByteIdx, lastByteIdx - numberOfBytes + 1):
-    outStream[i] = byte(n and 0xff)
-    n = n shr 8
-
-func writeBigEndian(outStream: var auto, number: SomeUnsignedInt,
-                    numberOfBytes: int) {.inline.} =
-  outStream.setLen(outStream.len + numberOfBytes)
-  outStream.writeBigEndian(number, outStream.len - 1, numberOfBytes)
-
-func writeCount(bytes: var auto, count: int, baseMarker: byte) =
-  if count < THRESHOLD_LIST_LEN:
-    bytes.add(baseMarker + byte(count))
-  else:
-    let
-      origLen = bytes.len
-      lenPrefixBytes = uint64(count).bytesNeeded
-
-    bytes.setLen(origLen + lenPrefixBytes + 1)
-    bytes[origLen] = baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
-    bytes.writeBigEndian(uint64(count), bytes.len - 1, lenPrefixBytes)
-
-func writeInt(outStream: var auto, i: SomeUnsignedInt) =
-  if i == typeof(i)(0):
-    outStream.add BLOB_START_MARKER
-  elif i < typeof(i)(BLOB_START_MARKER):
-    outStream.add byte(i)
-  else:
-    let bytesNeeded = i.bytesNeeded
-    outStream.writeCount(bytesNeeded, BLOB_START_MARKER)
-    outStream.writeBigEndian(i, bytesNeeded)
-
-proc initRlpWriter*: RlpWriter =
+proc initRlpWriter*: RlpDefaultWriter =
   # Avoid allocations during initial write of small items - since the writer is
   # expected to be short-lived, it doesn't hurt to allocate this buffer
-  result.output = newSeqOfCap[byte](2000)
+  result
 
-proc maybeClosePendingLists(self: var RlpWriter) =
-  while self.pendingLists.len > 0:
-    let lastListIdx = self.pendingLists.len - 1
-    doAssert self.pendingLists[lastListIdx].remainingItems > 0
-
-    self.pendingLists[lastListIdx].remainingItems -= 1
-    # if one last item is remaining in the list
-    if self.pendingLists[lastListIdx].remainingItems == 0:
-      # A list have been just finished. It was started in `startList`.
-      let listStartPos = self.pendingLists[lastListIdx].startPos
-      self.pendingLists.setLen lastListIdx
-
-      # How many bytes were written since the start?
-      let listLen = self.output.len - listStartPos
-
-      # Compute the number of bytes required to write down the list length
-      let totalPrefixBytes = if listLen < int(THRESHOLD_LIST_LEN): 1
-                             else: int(uint64(listLen).bytesNeeded) + 1
-
-      # Shift the written data to make room for the prefix length
-      self.output.setLen(self.output.len + totalPrefixBytes)
-
-      moveMem(addr self.output[listStartPos + totalPrefixBytes],
-              unsafeAddr self.output[listStartPos],
-              listLen)
-
-      # Write out the prefix length
-      if listLen < THRESHOLD_LIST_LEN:
-        self.output[listStartPos] = LIST_START_MARKER + byte(listLen)
-      else:
-        let listLenBytes = totalPrefixBytes - 1
-        self.output[listStartPos] = LEN_PREFIXED_LIST_MARKER + byte(listLenBytes)
-        self.output.writeBigEndian(uint64(listLen), listStartPos + listLenBytes, listLenBytes)
-    else:
-      # The currently open list is not finished yet. Nothing to do.
-      return
-
-proc appendRawBytes*(self: var RlpWriter, bytes: openArray[byte]) =
-  self.output.setLen(self.output.len + bytes.len)
-  assign(self.output.toOpenArray(
-    self.output.len - bytes.len, self.output.len - 1), bytes)
-  self.maybeClosePendingLists()
-
-proc startList*(self: var RlpWriter, listSize: int) =
-  if listSize == 0:
-    self.output.writeCount(0, LIST_START_MARKER)
-    self.appendRawBytes([])
-  else:
-    self.pendingLists.add((listSize, self.output.len))
-
-proc appendBlob(self: var RlpWriter, data: openArray[byte]) =
-  if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:
-    self.output.add byte(data[0])
-    self.maybeClosePendingLists()
-  else:
-    self.output.writeCount(data.len, BLOB_START_MARKER)
-    self.appendRawBytes(data)
+template appendBlob(self: var RlpWriter, data: openArray[byte]) =
+  self.writeBlob(data)
 
 proc appendInt(self: var RlpWriter, i: SomeUnsignedInt) =
   # this is created as a separate proc as an extra precaution against
   # any overloading resolution problems when matching the IntLike concept.
-  self.output.writeInt(i)
-
-  self.maybeClosePendingLists()
-
+  self.writeInt(i)
 
 template appendImpl(self: var RlpWriter, data: openArray[byte]) =
   self.appendBlob(data)
@@ -146,7 +55,7 @@ template appendImpl(self: var RlpWriter, i: SomeUnsignedInt) =
   self.appendInt(i)
 
 template appendImpl(self: var RlpWriter, e: enum) =
-  # TODO: check for negative enums 
+  # TODO: check for negative enums
   self.appendInt(uint64(e))
 
 template appendImpl(self: var RlpWriter, b: bool) =
@@ -158,6 +67,30 @@ proc appendImpl[T](self: var RlpWriter, list: openArray[T]) =
   self.startList list.len
   for i in 0 ..< list.len:
     self.append list[i]
+
+template innerType[T](x: Option[T] | Opt[T]): typedesc = T
+
+proc countNestedListsDepth(T: type): int {.compileTime.} =
+  mixin enumerateRlpFields
+
+  var dummy {.used.}: T
+
+  template op(RT, fN, f) {.used.}=
+    result += countNestedListsDepth(type f)
+
+  when T is Option or T is Opt:
+    result += countNestedListsDepth(innerType(dummy))
+  elif T is UInt256:
+    discard
+  elif T is object or T is tuple:
+    inc result
+    enumerateRlpFields(dummy, op)
+  elif T is seq or T is array:
+    inc result
+    result += countNestedListsDepth(elementType(dummy))
+
+proc countNestedListsDepth[E](T: type openArray[E]): int =
+  countNestedListsDepth(seq[E])
 
 proc countOptionalFields(T: type): int {.compileTime.} =
   mixin enumerateRlpFields
@@ -275,30 +208,62 @@ template append*[T](w: var RlpWriter; data: T) =
 template append*(w: var RlpWriter; data: SomeSignedInt) =
   {.error: "Signed integer encoding is not defined for rlp".}
 
-proc initRlpList*(listSize: int): RlpWriter =
+proc initRlpList*(listSize: int): RlpDefaultWriter =
   result = initRlpWriter()
   startList(result, listSize)
-
-# TODO: This should return a lent value
-template finish*(self: RlpWriter): seq[byte] =
-  doAssert self.pendingLists.len == 0, "Insufficient number of elements written to a started list"
-  self.output
-
-func clear*(w: var RlpWriter) =
-  # Prepare writer for reuse
-  w.pendingLists.setLen(0)
-  w.output.setLen(0)
 
 proc encode*[T](v: T): seq[byte] =
   mixin append
 
-  var writer = initRlpWriter()
+  const nestedListsDepth = countNestedListsDepth(T)
+
+  when nestedListsDepth > 0:
+    var tracker = StaticRlpLengthTracker[nestedListsDepth]()
+  elif nestedListsDepth == 0:
+    var tracker = DynamicRlpLengthTracker()
+
+  tracker.initLengthTracker()
+
+  tracker.append(v)
+
+  var writer = initTwoPassWriter(tracker)
   writer.append(v)
+
   move(writer.finish)
+
+proc encodeHash*[T](v: T): Hash32 =
+  mixin append
+
+  const nestedListsDepth = countNestedListsDepth(T)
+
+  when nestedListsDepth > 0:
+    var tracker = StaticRlpLengthTracker[nestedListsDepth]()
+  elif nestedListsDepth == 0:
+    var tracker = DynamicRlpLengthTracker()
+
+  tracker.initLengthTracker()
+
+  tracker.append(v)
+
+  var writer = initHashWriter(tracker)
+  writer.append(v)
+
+  writer.finish()
 
 func encodeInt*(i: SomeUnsignedInt): RlpIntBuf =
   var buf: RlpIntBuf
-  buf.writeInt(i)
+
+  if i == typeof(i)(0):
+    buf.add BLOB_START_MARKER
+  elif i < typeof(i)(BLOB_START_MARKER):
+    buf.add byte(i)
+  else:
+    let bytesNeeded = uint64(i).bytesNeeded
+
+    buf.add(BLOB_START_MARKER + byte(bytesNeeded))
+    buf.setLen(buf.len + bytesNeeded)
+    buf.writeBigEndian(i, buf.len - 1, bytesNeeded)
+
   buf
 
 macro encodeList*(args: varargs[untyped]): seq[byte] =
