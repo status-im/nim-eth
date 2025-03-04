@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -34,6 +34,7 @@ type
     TxEip1559   # 2
     TxEip4844   # 3
     TxEip7702   # 4
+    TxEip7873   # 5
 
   Transaction* = object
     txType*        : TxType               # EIP-2718
@@ -50,6 +51,7 @@ type
     maxFeePerBlobGas*: UInt256            # EIP-4844
     versionedHashes*: seq[VersionedHash]  # EIP-4844
     authorizationList*: seq[Authorization]# EIP-7702
+    initCodes*     : seq[seq[byte]]       # EIP-7873
     V*             : uint64
     R*, S*         : UInt256
 

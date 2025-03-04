@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -167,6 +167,23 @@ proc txEip7702(i: int): PooledTransaction =
     )
   )
 
+proc txEip7873(i: int): PooledTransaction =
+  PooledTransaction(
+    tx: Transaction(
+      txType:   TxEip7873,
+      chainId:  1.ChainId,
+      nonce:    i.AccountNonce,
+      maxPriorityFeePerGas: 2.GasInt,
+      maxFeePerGas: 3.GasInt,
+      gasLimit: 4.GasInt,
+      to:       Opt.some recipient,
+      value:    5.u256,
+      payload:  abcdef,
+      accessList: accesses,
+      initCodes: @[@[0xEF.byte, 0x00, 0x01]]
+    )
+  )
+
 template roundTrip(txFunc: untyped, i: int) =
   let tx = txFunc(i)
   let bytes = rlp.encode(tx)
@@ -204,6 +221,9 @@ suite "Transactions":
 
   test "EIP 7702":
     roundTrip(txEip7702, 9)
+
+  test "EIP 7873":
+    roundTrip(txEip7873, 10)
 
   test "Network payload survive encode decode":
     let tx = tx6(10)
@@ -286,7 +306,8 @@ suite "Transactions":
     let
       txs = @[
         tx0(3).tx, tx1(3).tx, tx2(3).tx, tx3(3).tx, tx4(3).tx,
-        tx5(3).tx, tx6(3).tx, tx7(3).tx, tx8(3).tx, txEip7702(3).tx]
+        tx5(3).tx, tx6(3).tx, tx7(3).tx, tx8(3).tx, txEip7702(3).tx,
+        txEip7873(3).tx]
 
       privKey = PrivateKey.fromHex("63b508a03c3b5937ceb903af8b1b0c191012ef6eb7e9c3fb7afa94e5d214d376").expect("valid key")
       sender = privKey.toPublicKey().to(Address)
