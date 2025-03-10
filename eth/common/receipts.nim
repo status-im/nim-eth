@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -28,6 +28,7 @@ type
     # Eip1559Receipt = TxEip1559
     # Eip4844Receipt = TxEip4844
     # Eip7702Receipt = TxEip7702
+    # Eip7873Receipt = TxEip7873
 
   Receipt* = object
     receiptType*      : ReceiptType
@@ -44,6 +45,7 @@ const
   Eip1559Receipt* = TxEip1559
   Eip4844Receipt* = TxEip4844
   Eip7702Receipt* = TxEip7702
+  Eip7873Receipt* = TxEip7873
 
 func hasStatus*(rec: Receipt): bool {.inline.} =
   rec.isHash == false
