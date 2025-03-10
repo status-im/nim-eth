@@ -72,8 +72,8 @@ type
   StorageKey* {.deprecated: "Bytes32".} = Bytes32
   VersionedHashes* {.deprecated: "seq[VersionedHash]".} = seq[VersionedHash]
 
-func toBlockNonce*(n: uint64): BlockNonce {.deprecated.} =
-  n.to(BlockNonce)
+func toBlockNonce*(n: uint64): Bytes8 {.deprecated.} =
+  n.to(Bytes8)
 
 func newAccount*(
     nonce: AccountNonce = 0, balance: UInt256 = 0.u256

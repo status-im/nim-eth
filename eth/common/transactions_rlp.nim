@@ -27,7 +27,7 @@ proc appendTxLegacy(w: var RlpWriter, tx: Transaction) =
 
 proc appendTxEip2930(w: var RlpWriter, tx: Transaction) =
   w.startList(11)
-  w.append(tx.chainId.uint64)
+  w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.gasPrice)
   w.append(tx.gasLimit)
@@ -41,7 +41,7 @@ proc appendTxEip2930(w: var RlpWriter, tx: Transaction) =
 
 proc appendTxEip1559(w: var RlpWriter, tx: Transaction) =
   w.startList(12)
-  w.append(tx.chainId.uint64)
+  w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.maxPriorityFeePerGas)
   w.append(tx.maxFeePerGas)
@@ -56,7 +56,7 @@ proc appendTxEip1559(w: var RlpWriter, tx: Transaction) =
 
 proc appendTxEip4844(w: var RlpWriter, tx: Transaction) =
   w.startList(14)
-  w.append(tx.chainId.uint64)
+  w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.maxPriorityFeePerGas)
   w.append(tx.maxFeePerGas)
@@ -73,7 +73,7 @@ proc appendTxEip4844(w: var RlpWriter, tx: Transaction) =
 
 proc append*(w: var RlpWriter, x: Authorization) =
   w.startList(6)
-  w.append(x.chainId.uint64)
+  w.append(x.chainId)
   w.append(x.address)
   w.append(x.nonce)
   w.append(x.v)
@@ -82,7 +82,7 @@ proc append*(w: var RlpWriter, x: Authorization) =
 
 proc appendTxEip7702(w: var RlpWriter, tx: Transaction) =
   w.startList(13)
-  w.append(tx.chainId.uint64)
+  w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.maxPriorityFeePerGas)
   w.append(tx.maxFeePerGas)
@@ -157,7 +157,7 @@ proc rlpEncodeEip2930(tx: Transaction): seq[byte] =
   var w = initRlpWriter()
   w.append(TxEip2930)
   w.startList(8)
-  w.append(tx.chainId.uint64)
+  w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.gasPrice)
   w.append(tx.gasLimit)
@@ -171,7 +171,7 @@ proc rlpEncodeEip1559(tx: Transaction): seq[byte] =
   var w = initRlpWriter()
   w.append(TxEip1559)
   w.startList(9)
-  w.append(tx.chainId.uint64)
+  w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.maxPriorityFeePerGas)
   w.append(tx.maxFeePerGas)
@@ -186,7 +186,7 @@ proc rlpEncodeEip4844(tx: Transaction): seq[byte] =
   var w = initRlpWriter()
   w.append(TxEip4844)
   w.startList(11)
-  w.append(tx.chainId.uint64)
+  w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.maxPriorityFeePerGas)
   w.append(tx.maxFeePerGas)
@@ -203,7 +203,7 @@ proc rlpEncodeEip7702(tx: Transaction): seq[byte] =
   var w = initRlpWriter()
   w.append(TxEip7702)
   w.startList(10)
-  w.append(tx.chainId.uint64)
+  w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.maxPriorityFeePerGas)
   w.append(tx.maxFeePerGas)
@@ -254,12 +254,12 @@ proc readTxLegacy(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   rlp.read(tx.S)
 
   if tx.V >= EIP155_CHAIN_ID_OFFSET:
-    tx.chainId = ChainId((tx.V - EIP155_CHAIN_ID_OFFSET) div 2)
+    tx.chainId = ((tx.V - EIP155_CHAIN_ID_OFFSET) div 2).u256.ChainId
 
 proc readTxEip2930(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip2930
   rlp.tryEnterList()
-  tx.chainId = rlp.read(uint64).ChainId
+  tx.chainId = rlp.read(ChainId)
   rlp.read(tx.nonce)
   rlp.read(tx.gasPrice)
   rlp.read(tx.gasLimit)
@@ -274,7 +274,7 @@ proc readTxEip2930(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
 proc readTxEip1559(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip1559
   rlp.tryEnterList()
-  tx.chainId = rlp.read(uint64).ChainId
+  tx.chainId = rlp.read(ChainId)
   rlp.read(tx.nonce)
   rlp.read(tx.maxPriorityFeePerGas)
   rlp.read(tx.maxFeePerGas)
@@ -290,7 +290,7 @@ proc readTxEip1559(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
 proc readTxEip4844(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip4844
   rlp.tryEnterList()
-  tx.chainId = rlp.read(uint64).ChainId
+  tx.chainId = rlp.read(ChainId)
   rlp.read(tx.nonce)
   rlp.read(tx.maxPriorityFeePerGas)
   rlp.read(tx.maxFeePerGas)
@@ -309,7 +309,7 @@ func rlpEncodeEip7702(auth: Authorization): seq[byte] =
   var w = initRlpWriter()
   w.append(0x05'u8)
   w.startList(3)
-  w.append(auth.chainId.uint64)
+  w.append(auth.chainId)
   w.append(auth.address)
   w.append(auth.nonce)
   w.finish()
@@ -324,7 +324,7 @@ func rlpHashForSigning*(auth: Authorization): Hash32 =
 
 proc read*(rlp: var Rlp, T: type Authorization): T {.raises: [RlpError].} =
   rlp.tryEnterList()
-  result.chainId = rlp.read(uint64).ChainId
+  result.chainId = rlp.read(ChainId)
   rlp.read(result.address)
   rlp.read(result.nonce)
   rlp.read(result.v)
@@ -334,7 +334,7 @@ proc read*(rlp: var Rlp, T: type Authorization): T {.raises: [RlpError].} =
 proc readTxEip7702(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip7702
   rlp.tryEnterList()
-  tx.chainId = rlp.read(uint64).ChainId
+  tx.chainId = rlp.read(ChainId)
   rlp.read(tx.nonce)
   rlp.read(tx.maxPriorityFeePerGas)
   rlp.read(tx.maxFeePerGas)

@@ -7,19 +7,19 @@
 
 {.used.}
 
-import 
+import
   ../../eth/[rlp, common],
   unittest2
 
-const 
+const
   accesses  = @[AccessPair(
-    address: address"0x0000000000000000000000000000000000000001", 
+    address: address"0x0000000000000000000000000000000000000001",
     storageKeys: @[default(Bytes32)]
   )]
 
 let myTx = Transaction(
   txType:     TxEip1559,
-  chainId:    1.ChainId,
+  chainId:    chainId(1),
   nonce:      0.AccountNonce,
   gasLimit:   123457.GasInt,
   maxPriorityFeePerGas: 42.GasInt,

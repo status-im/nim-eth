@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -23,7 +23,7 @@ const
   blob      = default(NetworkBlob)
   abcdef    = hexToSeqByte("abcdef")
   authList  = @[Authorization(
-    chainID: 1.ChainId,
+    chainID: chainId(1),
     address: source,
     nonce: 2.AccountNonce,
     v: 3,
@@ -56,7 +56,7 @@ proc tx2(i: int): PooledTransaction =
     tx: Transaction(
       # Tx with non-zero access list.
       txType:     TxEip2930,
-      chainId:    1.ChainId,
+      chainId:    chainId(1),
       nonce:      i.AccountNonce,
       to:         Opt.some recipient,
       gasLimit:   123457.GasInt,
@@ -69,7 +69,7 @@ proc tx3(i: int): PooledTransaction =
     tx: Transaction(
       # Tx with empty access list.
       txType:   TxEip2930,
-      chainId:  1.ChainId,
+      chainId:  chainId(1),
       nonce:    i.AccountNonce,
       to:       Opt.some recipient,
       gasLimit: 123457.GasInt,
@@ -81,7 +81,7 @@ proc tx4(i: int): PooledTransaction =
     tx: Transaction(
       # Contract creation with access list.
       txType:     TxEip2930,
-      chainId:    1.ChainId,
+      chainId:    chainId(1),
       nonce:      i.AccountNonce,
       gasLimit:   123457.GasInt,
       gasPrice:   10.GasInt,
@@ -91,7 +91,7 @@ proc tx5(i: int): PooledTransaction =
   PooledTransaction(
     tx: Transaction(
       txType:     TxEip1559,
-      chainId:    1.ChainId,
+      chainId:    chainId(1),
       nonce:      i.AccountNonce,
       gasLimit:   123457.GasInt,
       maxPriorityFeePerGas: 42.GasInt,
@@ -105,7 +105,7 @@ proc tx6(i: int): PooledTransaction =
   PooledTransaction(
     tx: Transaction(
       txType:              TxEip4844,
-      chainId:             1.ChainId,
+      chainId:             chainId(1),
       nonce:               i.AccountNonce,
       gasLimit:            123457.GasInt,
       maxPriorityFeePerGas:42.GasInt,
@@ -124,7 +124,7 @@ proc tx7(i: int): PooledTransaction =
   PooledTransaction(
     tx: Transaction(
       txType:              TxEip4844,
-      chainID:             1.ChainId,
+      chainID:             chainId(1),
       nonce:               i.AccountNonce,
       gasLimit:            123457.GasInt,
       maxPriorityFeePerGas:42.GasInt,
@@ -140,7 +140,7 @@ proc tx8(i: int): PooledTransaction =
   PooledTransaction(
     tx: Transaction(
       txType:              TxEip4844,
-      chainID:             1.ChainId,
+      chainID:             chainId(1),
       nonce:               i.AccountNonce,
       to:                  Opt.some(recipient),
       gasLimit:            123457.GasInt,
@@ -154,7 +154,7 @@ proc txEip7702(i: int): PooledTransaction =
   PooledTransaction(
     tx: Transaction(
       txType:   TxEip7702,
-      chainId:  1.ChainId,
+      chainId:  chainId(1),
       nonce:    i.AccountNonce,
       maxPriorityFeePerGas: 2.GasInt,
       maxFeePerGas: 3.GasInt,
@@ -258,7 +258,7 @@ suite "Transactions":
     var
       tx = Transaction(
         txType: TxLegacy,
-        chainId: ChainId(1),
+        chainId: chainId(1),
         nonce: 9,
         gasPrice: 20000000000'u64,
         gasLimit: 21000'u64,
