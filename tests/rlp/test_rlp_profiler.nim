@@ -7,7 +7,7 @@
 
 {.used.}
 
-import 
+import
   ../../eth/[rlp, common],
   unittest2,
   times,
@@ -16,7 +16,7 @@ import
   results
 
 proc readBlock(): EthBlock =
-  
+
   let
     filename = "tests/common/rlps/blocks_1024_td_135112316.rlp"
     res = io2.readAllBytes(filename)
@@ -24,7 +24,7 @@ proc readBlock(): EthBlock =
   if res.isErr:
     echo "failed to import", filename
     return
-  
+
   var
     # the encoded rlp can contains one or more blocks
     rlpBytes = rlpFromBytes(res.get)
@@ -43,15 +43,15 @@ template benchmark(benchmarkName: string, code: untyped) =
     let elapsedStr = elapsed.formatFloat(format = ffDecimal, precision = 9)
     echo "CPU Time [", benchmarkName, "] ", elapsedStr, "s"
 
-const 
+const
   accesses  = @[AccessPair(
-    address: address"0x0000000000000000000000000000000000000001", 
+    address: address"0x0000000000000000000000000000000000000001",
     storageKeys: @[default(Bytes32)]
   )]
 
 let myTx = Transaction(
   txType:     TxEip1559,
-  chainId:    1.ChainId,
+  chainId:    chainId(1),
   nonce:      0.AccountNonce,
   gasLimit:   123457.GasInt,
   maxPriorityFeePerGas: 42.GasInt,
@@ -71,7 +71,7 @@ let blkSeq = @[
       Transaction(nonce: 3),
       Transaction(nonce: 4)])]
 
-let h = BlockHeader(
+let h = Header(
   nonce: Bytes8([0x20u8,0,0,0,0,0,0,0]),
   baseFeePerGas: Opt.some(2.u256),
   withdrawalsRoot: Opt.some(default(Hash32)),
