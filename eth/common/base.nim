@@ -21,7 +21,7 @@ import
   std/[hashes, macros, typetraits],
   stint,
   results,
-  stew/[assign2, endians2, staticfor]
+  stew/[assign2, byteutils, endians2, staticfor]
 
 export stint, hashes, results
 
