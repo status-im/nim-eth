@@ -21,7 +21,7 @@ import
   std/[hashes, macros, typetraits],
   stint,
   results,
-  stew/[assign2, byteutils, endians2, staticfor]
+  stew/[assign2, endians2, staticfor]
 
 export stint, hashes, results
 
@@ -34,13 +34,13 @@ type
     # A distinct array is used to avoid copying on trivial type conversions
     # to and from other array-based types
 
-  ChainId* = distinct UInt256
+  ChainId* = UInt256
     ## Chain identifier used for transaction signing to guard against replay
     ## attacks between networks
     ##
     ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-155.md
 
-  NetworkId* = distinct UInt256
+  NetworkId* = UInt256
     ## Network identifier - similar to chain id but used for network
     ## communication to ensure connectivity with peers on the same network.
     ## Often has the same value as ChainId, but not always
@@ -181,9 +181,5 @@ type
 
   ForkID* = tuple[crc: uint32, nextFork: uint64] ## EIP 2364/2124
 
-func `==`*(a, b: NetworkId): bool {.borrow.}
-func `$`*(x: NetworkId): string {.borrow.}
-func `==`*(a, b: ChainId): bool {.borrow.}
-func `$`*(x: ChainId): string {.borrow.}
 func chainId*(x: SomeInteger): ChainId =
-  x.u256.ChainId
+  x.u256

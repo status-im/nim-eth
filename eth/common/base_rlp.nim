@@ -75,15 +75,3 @@ proc read*[N: static int](
     rlp: var Rlp, T: type FixedBytes[N]
 ): T {.raises: [RlpError].} =
   T(rlp.read(type(result.data)))
-
-proc append*(w: var RlpWriter, id: ChainId) =
-  w.append(distinctBase id)
-
-proc read*(rlp: var Rlp, T: type ChainId): T {.raises: [RlpError].} =
-  T(rlp.read(distinctBase T))
-
-proc append*(w: var RlpWriter, id: NetworkId) =
-  w.append(distinctBase id)
-
-proc read*(rlp: var Rlp, T: type NetworkId): T {.raises: [RlpError].} =
-  T(rlp.read(distinctBase T))

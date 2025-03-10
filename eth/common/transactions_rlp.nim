@@ -254,7 +254,7 @@ proc readTxLegacy(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   rlp.read(tx.S)
 
   if tx.V >= EIP155_CHAIN_ID_OFFSET:
-    tx.chainId = ((tx.V - EIP155_CHAIN_ID_OFFSET) div 2).u256.ChainId
+    tx.chainId = ((tx.V - EIP155_CHAIN_ID_OFFSET) div 2).u256
 
 proc readTxEip2930(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip2930
