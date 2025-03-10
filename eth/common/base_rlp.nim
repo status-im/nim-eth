@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/typetraits, ./base, ../rlp,
+  ./base, ../rlp,
   ../rlp/results as rlp_results
 
 export base, rlp, rlp_results
