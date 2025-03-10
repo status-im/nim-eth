@@ -1,5 +1,5 @@
 # nim-eth
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,7 +11,7 @@
 {.used.}
 
 import
-  std/[os, strutils],
+  std/[os, strutils, typetraits],
   stew/io2,
   stew/byteutils,
   results,
@@ -47,7 +47,7 @@ suite "Decode multiple EthBlock from bytes":
       check runTest(filename)
 
 func `==`(a, b: ChainId): bool =
-  a.uint == b.uint
+  distinctBase(a) == distinctBase(b)
 
 template roundTrip(x) =
   type TT = type(x)
@@ -57,25 +57,25 @@ template roundTrip(x) =
 
 suite "BlockHeader roundtrip test":
   test "Empty header":
-    let h = BlockHeader()
+    let h = Header()
     roundTrip(h)
 
   test "Header with gas":
-    let h = BlockHeader(gasLimit: 10.GasInt, gasUsed: 11.GasInt)
+    let h = Header(gasLimit: 10.GasInt, gasUsed: 11.GasInt)
     roundTrip(h)
 
   test "Header + some(baseFee)":
-    let h = BlockHeader(baseFeePerGas: Opt.some(1.u256))
+    let h = Header(baseFeePerGas: Opt.some(1.u256))
     roundTrip(h)
 
   test "Header + none(baseFee) + some(withdrawalsRoot)":
-    let h = BlockHeader(withdrawalsRoot: Opt.some(default(Hash32)))
+    let h = Header(withdrawalsRoot: Opt.some(default(Hash32)))
     expect AssertionDefect:
       roundTrip(h)
 
   test "Header + none(baseFee) + some(withdrawalsRoot) + " &
       "some(blobGasUsed) + some(excessBlobGas)":
-    let h = BlockHeader(
+    let h = Header(
       withdrawalsRoot: Opt.some(default(Hash32)),
       blobGasUsed: Opt.some(1'u64),
       excessBlobGas: Opt.some(1'u64)
@@ -85,7 +85,7 @@ suite "BlockHeader roundtrip test":
 
   test "Header + none(baseFee) + none(withdrawalsRoot) + " &
       "some(blobGasUsed) + some(excessBlobGas)":
-    let h = BlockHeader(
+    let h = Header(
       blobGasUsed: Opt.some(1'u64),
       excessBlobGas: Opt.some(1'u64)
     )
@@ -94,7 +94,7 @@ suite "BlockHeader roundtrip test":
 
   test "Header + some(baseFee) + none(withdrawalsRoot) + " &
       "some(blobGasUsed) + some(excessBlobGas)":
-    let h = BlockHeader(
+    let h = Header(
       baseFeePerGas: Opt.some(2.u256),
       blobGasUsed: Opt.some(1'u64),
       excessBlobGas: Opt.some(1'u64)
@@ -103,7 +103,7 @@ suite "BlockHeader roundtrip test":
       roundTrip(h)
 
   test "Header + some(baseFee) + some(withdrawalsRoot)":
-    let h = BlockHeader(
+    let h = Header(
       baseFeePerGas: Opt.some(2.u256),
       withdrawalsRoot: Opt.some(default(Hash32))
     )
@@ -111,7 +111,7 @@ suite "BlockHeader roundtrip test":
 
   test "Header + some(baseFee) + some(withdrawalsRoot) + " &
       "some(blobGasUsed) + some(excessBlobGas)":
-    let h = BlockHeader(
+    let h = Header(
       baseFeePerGas: Opt.some(2.u256),
       withdrawalsRoot: Opt.some(default(Hash32)),
       blobGasUsed: Opt.some(1'u64),
@@ -182,15 +182,15 @@ type
     stateRoot*:       Hash32
     txRoot*:          Hash32
     receiptRoot*:     Hash32
-    bloom*:           BloomFilter
+    bloom*:           Bloom
     difficulty*:      DifficultyInt
     blockNumber*:     BlockNumber
     gasLimit*:        GasInt
     gasUsed*:         GasInt
     timestamp*:       EthTime
-    extraData*:       Blob
+    extraData*:       seq[byte]
     mixDigest*:       Hash32
-    nonce*:           BlockNonce
+    nonce*:           Bytes8
     fee*:             Opt[UInt256]
     withdrawalsRoot*: Opt[Hash32]
     blobGasUsed*:     Opt[GasInt]
@@ -202,7 +202,7 @@ type
     withdrawals*:   Opt[seq[Withdrawal]]
 
   EthBlockOpt* = object
-    header*     : BlockHeader
+    header*     : Header
     txs*        : seq[Transaction]
     uncles*     : seq[BlockHeaderOpt]
     withdrawals*: Opt[seq[Withdrawal]]

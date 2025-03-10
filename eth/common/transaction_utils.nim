@@ -1,11 +1,14 @@
 # eth
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import ./[keys, transactions, transactions_rlp]
+import
+  std/typetraits,
+  stint,
+  ./[keys, transactions, transactions_rlp]
 
 export keys, transactions
 
@@ -37,7 +40,10 @@ proc `signature=`*(tx: var Transaction, param: tuple[sig: Signature, eip155: boo
     case tx.txType
     of TxLegacy:
       if param.eip155:
-        v + uint64(tx.chainId) * 2 + 35
+        # using distinctBase with trncate will cause type mismatch
+        # as of Nim 2.0.14
+        let chainId = UInt256(tx.chainId).truncate(uint64)
+        v + chainId * 2'u64 + 35'u64
       else:
         v + 27'u64
     else:
