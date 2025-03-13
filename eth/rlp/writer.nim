@@ -207,43 +207,35 @@ proc initRlpList*(listSize: int): RlpDefaultWriter =
   result = initRlpWriter()
   startList(result, listSize)
 
+template withTracker(v, body) =
+  mixin append
+
+  type T = typeof v
+  const nestedListsDepth = countNestedListsDepth(T)
+
+  var tracker {.inject.} = when nestedListsDepth > 0:
+                             StaticRlpLengthTracker[nestedListsDepth]()
+                           elif nestedListsDepth == 0:
+                             DynamicRlpLengthTracker()
+  tracker.initLengthTracker()
+  tracker.append(v)
+  body
+
 proc encode*[T](v: T): seq[byte] =
   mixin append
 
-  const nestedListsDepth = countNestedListsDepth(T)
-
-  when nestedListsDepth > 0:
-    var tracker = StaticRlpLengthTracker[nestedListsDepth]()
-  elif nestedListsDepth == 0:
-    var tracker = DynamicRlpLengthTracker()
-
-  tracker.initLengthTracker()
-
-  tracker.append(v)
-
-  var writer = initTwoPassWriter(tracker)
-  writer.append(v)
-
-  move(writer.finish)
+  withTracker(v):
+    var writer = initTwoPassWriter(tracker)
+    writer.append(v)
+    move(writer.finish)
 
 proc encodeHash*[T](v: T): Hash32 =
   mixin append
 
-  const nestedListsDepth = countNestedListsDepth(T)
-
-  when nestedListsDepth > 0:
-    var tracker = StaticRlpLengthTracker[nestedListsDepth]()
-  elif nestedListsDepth == 0:
-    var tracker = DynamicRlpLengthTracker()
-
-  tracker.initLengthTracker()
-
-  tracker.append(v)
-
-  var writer = initHashWriter(tracker)
-  writer.append(v)
-
-  writer.finish()
+  withTracker(v):
+    var writer = initHashWriter(tracker)
+    writer.append(v)
+    writer.finish()
 
 func encodeInt*(i: SomeUnsignedInt): RlpIntBuf =
   var buf: RlpIntBuf
@@ -277,16 +269,16 @@ macro encodeList*(args: varargs[untyped]): seq[byte] =
     `body`
     move(finish(`writer`))
 
-
 proc getEncodedLength*[T](v: T): int =
   mixin append
 
-  const nestedListsDepth = countNestedListsDepth(T)
-  when nestedListsDepth > 0:
-    var tracker = StaticRlpLengthTracker[nestedListsDepth]()
-  elif nestedListsDepth == 0:
-    var tracker = DynamicRlpLengthTracker()
+  withTracker(v):
+    return tracker.finish()
 
-  tracker.initLengthTracker()
-  tracker.append(v)
-  return tracker.finish()
+proc getEncodedLengthAndHash*[T](v: T): (int, Hash32) =
+  mixin append
+
+  withTracker(v):
+    var writer = initHashWriter(tracker)
+    writer.append(v)    
+    return (tracker.finish(), writer.finish())
