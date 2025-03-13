@@ -4,7 +4,8 @@ import
   std/times,
   unittest2,
   stew/byteutils,
-  ../../eth/rlp
+  ../../eth/rlp,
+  ../../eth/common/hashes
 
 type
   Transaction = object
@@ -96,5 +97,16 @@ proc suite() =
         originalBarBytes.len == originalBar.getEncodedLength
         origValBytes.len == origVal.getEncodedLength
 
+    test "getEncodedLengthAndHash":
+      var
+        originalBar = Bar(b: "abracadabra",
+                            f: Foo(x: 5'u64, y: "hocus pocus", z: @[uint64 100, 200, 300]))
+        originalBarBytes = encode(originalBar)
+        originalBarHash  = encodeHash(originalBar)
+        (length, hash)    = getEncodedLengthAndHash(originalBar)
+
+      check:
+        originalBarBytes.len == length
+        originalBarHash == hash
 
 suite()
