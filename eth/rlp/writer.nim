@@ -98,7 +98,7 @@ proc countOptionalFields(T: type): int {.compileTime.} =
   var dummy: T
 
   # closure signature matches the one in object_serialization.nim
-  template op(RT, fN, f) =
+  template op(RT, fN, f) {.used.} =
     when f is Option or f is Opt:
       inc result
     else: # this will count only optional fields at the end
@@ -280,5 +280,5 @@ proc getEncodedLengthAndHash*[T](v: T): (int, Hash32) =
 
   withTracker(v):
     var writer = initHashWriter(tracker)
-    writer.append(v)    
+    writer.append(v)
     return (tracker.finish(), writer.finish())
