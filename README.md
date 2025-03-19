@@ -12,7 +12,6 @@ Ethereum-related utilities written in Nim. Includes things like Bloom filters, p
 ## Docs
 
 - [rlp](doc/rlp.md)
-- [p2p](doc/p2p.md)
 - [keys](doc/keys.md)
 - [keyfile](doc/keyfile.md)
 - [trie](doc/trie.md)
