@@ -123,6 +123,7 @@ const
   ## whoareyou message
   defaultResponseTimeout* = 4.seconds ## timeout for the response of a request-response
   ## call
+  defaultSessionsSize = 256 ## Size of the session cache
 
   ## Ban durations for banned nodes in the routing table
   NodeBanDurationInvalidResponse = 15.minutes
@@ -137,6 +138,7 @@ type
     bitsPerHop*: int
     handshakeTimeout: Duration
     responseTimeout: Duration
+    sessionsSize*: int
 
   Protocol* = ref object
     transp: DatagramTransport
@@ -186,7 +188,8 @@ const
     tableIpLimits: DefaultTableIpLimits,
     bitsPerHop: DefaultBitsPerHop,
     handshakeTimeout: defaultHandshakeTimeout,
-    responseTimeout: defaultResponseTimeout
+    responseTimeout: defaultResponseTimeout,
+    sessionsSize: defaultSessionsSize
   )
 
 chronicles.formatIt(Opt[Port]): $it
@@ -1004,7 +1007,8 @@ func init*(
     bucketIpLimit: uint,
     bitsPerHop: int,
     handshakeTimeout: Duration,
-    responseTimeout: Duration
+    responseTimeout: Duration,
+    sessionsSize: int,
     ): T =
 
   DiscoveryConfig(
@@ -1013,21 +1017,25 @@ func init*(
       bucketIpLimit: bucketIpLimit),
     bitsPerHop: bitsPerHop,
     handshakeTimeout: handshakeTimeout,
-    responseTimeout: responseTimeout
+    responseTimeout: responseTimeout,
+    sessionsSize: sessionsSize
   )
 
 func init*(
     T: type DiscoveryConfig,
     tableIpLimit: uint,
     bucketIpLimit: uint,
-    bitsPerHop: int): T =
+    bitsPerHop: int,
+    sessionsSize = defaultSessionsSize
+    ): T =
 
   DiscoveryConfig.init(
     tableIpLimit,
     bucketIpLimit,
     bitsPerHop,
     defaultHandshakeTimeout,
-    defaultResponseTimeout
+    defaultResponseTimeout,
+    sessionsSize
   )
 
 proc newProtocol*(
@@ -1084,7 +1092,7 @@ proc newProtocol*(
     localNode: node,
     bindAddress: OptAddress(ip: Opt.some(bindIp), port: bindPort),
     codec: Codec(localNode: node, privKey: privKey,
-      sessions: Sessions.init(256)),
+      sessions: Sessions.init(config.sessionsSize)),
     bootstrapRecords: @bootstrapRecords,
     ipVote: IpVote.init(),
     enrAutoUpdate: enrAutoUpdate,
@@ -1143,7 +1151,7 @@ proc newProtocol*(
     localNode: node,
     bindAddress: OptAddress(ip: bindIp, port: bindPort),
     codec: Codec(localNode: node, privKey: privKey,
-      sessions: Sessions.init(256)),
+      sessions: Sessions.init(config.sessionsSize)),
     bootstrapRecords: @bootstrapRecords,
     ipVote: IpVote.init(),
     enrAutoUpdate: enrAutoUpdate,
