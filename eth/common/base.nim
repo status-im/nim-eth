@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -34,13 +34,13 @@ type
     # A distinct array is used to avoid copying on trivial type conversions
     # to and from other array-based types
 
-  ChainId* = distinct uint64
+  ChainId* = UInt256
     ## Chain identifier used for transaction signing to guard against replay
     ## attacks between networks
     ##
     ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-155.md
 
-  NetworkId* = distinct uint64
+  NetworkId* = UInt256
     ## Network identifier - similar to chain id but used for network
     ## communication to ensure connectivity with peers on the same network.
     ## Often has the same value as ChainId, but not always
@@ -181,7 +181,5 @@ type
 
   ForkID* = tuple[crc: uint32, nextFork: uint64] ## EIP 2364/2124
 
-func `==`*(a, b: NetworkId): bool {.borrow.}
-func `$`*(x: NetworkId): string {.borrow.}
-func `==`*(a, b: ChainId): bool {.borrow.}
-func `$`*(x: ChainId): string {.borrow.}
+func chainId*(x: SomeInteger): ChainId =
+  x.u256

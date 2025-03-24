@@ -281,3 +281,17 @@ macro encodeList*(args: varargs[untyped]): seq[byte] =
     var `writer` = initRlpList(`listLen`)
     `body`
     move(finish(`writer`))
+
+
+proc getEncodedLength*[T](v: T): int =
+  mixin append
+
+  const nestedListsDepth = countNestedListsDepth(T)
+  when nestedListsDepth > 0:
+    var tracker = StaticRlpLengthTracker[nestedListsDepth]()
+  elif nestedListsDepth == 0:
+    var tracker = DynamicRlpLengthTracker()
+
+  tracker.initLengthTracker()
+  tracker.append(v)
+  return tracker.finish()

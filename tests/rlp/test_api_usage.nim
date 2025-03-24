@@ -17,9 +17,6 @@ proc q(s: string): string = "\"" & s & "\""
 proc i(s: string): string = s.replace(" ").replace("\n")
 proc inspectMatch(r: Rlp, s: string): bool = r.inspect.i == s.i
 
-proc `==`(a,b: ChainId): bool {.borrow.}
-  ## helper for ` test_calcBlockBodyTranscode()`
-
 proc test_blockBodyTranscode() =
   ## RLP encode/decode a list of `BlockBody` objects. Note that tere is/was a
   ## problem in `eth/common/eth_types_rlp.append()` for `BlockBody` encoding.

@@ -135,7 +135,7 @@ func decodePacket*(bytes: openArray[byte]): Result[Packet, string] =
 
     let version = bytes[0] and 0xf
     if version != protocolVersion:
-      return err("Invalid packet version")
+      return err("Invalid packet version: " & $version)
 
     var kind: PacketType
     if not checkedEnumAssign(kind, (bytes[0] shr 4)):

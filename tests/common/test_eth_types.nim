@@ -59,13 +59,13 @@ suite "BlockHashOrNumber":
 
 suite "Block encodings":
   test "EIP-4399 prevRandao field":
-    var blk: BlockHeader
+    var blk: Header
     blk.prevRandao = Bytes32 testHash
     let res = blk.prevRandao
     check Bytes32(testHash) == res
 
   test "EIP-4788 parentBeaconBlockRoot field":
-    let header = BlockHeader(
+    let header = Header(
       baseFeePerGas: Opt.some(0.u256),
       withdrawalsRoot: Opt.some(testHash),
       blobGasUsed: Opt.some(1'u64),
@@ -73,7 +73,7 @@ suite "Block encodings":
       parentBeaconBlockRoot: Opt.some(testHash),
     )
     let rlpBytes = rlp.encode(header)
-    let dh = rlp.decode(rlpBytes, BlockHeader)
+    let dh = rlp.decode(rlpBytes, Header)
     check dh.parentBeaconBlockRoot.isSome
     check dh.parentBeaconBlockRoot.get == testHash
 
