@@ -16,20 +16,24 @@ import
 
 type
   NextNodeKind = enum
-    EmptyValue, HashNode, ValueNode
+    EmptyValue
+    HashNode
+    ValueNode
 
   NextNodeResult = object
     case kind: NextNodeKind
     of EmptyValue:
       discard
     of HashNode:
-      nextNodeHash: seq[byte]
-      restOfTheKey: NibblesSeq
+      nextNodeHash: Hash32
+      restOfTheKey: NibblesBuf
     of ValueNode:
       value: seq[byte]
 
   MptProofVerificationKind* = enum
-    ValidProof, InvalidProof, MissingKey
+    ValidProof
+    InvalidProof
+    MissingKey
 
   MptProofVerificationResult* = object
     case kind*: MptProofVerificationKind
@@ -41,51 +45,51 @@ type
       value*: seq[byte]
 
 func missingKey(): MptProofVerificationResult =
-  return MptProofVerificationResult(kind: MissingKey)
+  MptProofVerificationResult(kind: MissingKey)
 
 func invalidProof(msg: string): MptProofVerificationResult =
-  return MptProofVerificationResult(kind: InvalidProof, errorMsg: msg)
+  MptProofVerificationResult(kind: InvalidProof, errorMsg: msg)
 
 func validProof(value: seq[byte]): MptProofVerificationResult =
-  return MptProofVerificationResult(kind: ValidProof, value: value)
+  MptProofVerificationResult(kind: ValidProof, value: value)
 
 func isValid*(res: MptProofVerificationResult): bool =
-  return res.kind == ValidProof
+  res.kind == ValidProof
 
 func isMissing*(res: MptProofVerificationResult): bool =
-  return res.kind == MissingKey
+  res.kind == MissingKey
 
 proc getListLen(rlp: Rlp): Result[int, string] =
   try:
-    return ok(rlp.listLen)
+    ok(rlp.listLen)
   except RlpError as e:
-    return err(e.msg)
+    err(e.msg)
 
 proc getListElem(rlp: Rlp, idx: int): Result[Rlp, string] =
   if not rlp.isList:
     return err("rlp element is not a list")
 
   try:
-    return ok(rlp.listElem(idx))
+    ok(rlp.listElem(idx))
   except RlpError as e:
-    return err(e.msg)
+    err(e.msg)
 
 proc blobBytes(rlp: Rlp): Result[seq[byte], string] =
   try:
-    return ok(rlp.toBytes)
+    ok(rlp.toBytes)
   except RlpError as e:
-    return err(e.msg)
+    err(e.msg)
 
 func rawBytesSeq(b: openArray[byte]): seq[byte] =
   toSeq(b)
 
 proc getRawRlpBytes(rlp: Rlp): Result[seq[byte], string] =
-  try :
-    return ok(rawBytesSeq(rlp.rawData))
+  try:
+    ok(rawBytesSeq(rlp.rawData))
   except RlpError as e:
-    return err(e.msg)
+    err(e.msg)
 
-proc getNextNode(nodeRlp: Rlp, key: NibblesSeq): Result[NextNodeResult, string] =
+proc getNextNode(nodeRlp: Rlp, key: NibblesBuf): Result[NextNodeResult, string] =
   var currNode = nodeRlp
   var restKey = key
 
@@ -94,20 +98,18 @@ proc getNextNode(nodeRlp: Rlp, key: NibblesSeq): Result[NextNodeResult, string] 
       return err("invalid reference")
 
     if nextRef.isList:
-      let rawBytes = ? nextRef.getRawRlpBytes()
+      let rawBytes = ?nextRef.getRawRlpBytes()
       if len(rawBytes) > 32:
         return err("Embedded node longer than 32 bytes")
       else:
         currNode = nextRef
         restKey = restKey.slice(keyLen)
     else:
-      let nodeBytes = ? nextRef.blobBytes()
+      let nodeBytes = ?nextRef.blobBytes()
       if len(nodeBytes) == 32:
         return ok(
           NextNodeResult(
-            kind: HashNode,
-            nextNodeHash: nodeBytes,
-            restOfTheKey: restKey.slice(keyLen)
+            kind: HashNode, nextNodeHash: Hash32.copyFrom(nodeBytes), restOfTheKey: restKey.slice(keyLen)
           )
         )
       elif len(nodeBytes) == 0:
@@ -116,30 +118,29 @@ proc getNextNode(nodeRlp: Rlp, key: NibblesSeq): Result[NextNodeResult, string] 
         return err("reference rlp blob should have 0 or 32 bytes")
 
   while true:
-    let listLen = ? currNode.getListLen()
-
+    let listLen = ?currNode.getListLen()
     case listLen
     of 2:
       let
-        firstElem = ? currNode.getListElem(0)
-        blobBytes = ? firstElem.blobBytes()
+        firstElem = ?currNode.getListElem(0)
+        blobBytes = ?firstElem.blobBytes()
 
-      let (isLeaf, k) = hexPrefixDecode blobBytes
+      let (isLeaf, k) = NibblesBuf.fromHexPrefix(blobBytes)
 
       # Paths have diverged, return empty result
       if len(restKey) < len(k) or k != restKey.slice(0, len(k)):
         return ok(NextNodeResult(kind: EmptyValue))
 
-      let nextRef = ? currNode.getListElem(1)
+      let nextRef = ?currNode.getListElem(1)
 
       if isLeaf:
-        let blobBytes = ? nextRef.blobBytes()
+        let blobBytes = ?nextRef.blobBytes()
         return ok(NextNodeResult(kind: ValueNode, value: blobBytes))
 
       handleNextRef(nextRef, len(k))
     of 17:
       if len(restKey) == 0:
-        let value = ? currNode.getListElem(16)
+        let value = ?currNode.getListElem(16)
 
         if not value.hasData():
           return err("expected branch terminator")
@@ -150,45 +151,41 @@ proc getNextNode(nodeRlp: Rlp, key: NibblesSeq): Result[NextNodeResult, string] 
         if value.isEmpty():
           return ok(NextNodeResult(kind: EmptyValue))
         else:
-          let bytes = ? value.blobBytes()
+          let bytes = ?value.blobBytes()
           return ok(NextNodeResult(kind: ValueNode, value: bytes))
       else:
-        let nextRef = ? currNode.getListElem(restKey[0].int)
+        let nextRef = ?currNode.getListElem(restKey[0].int)
 
         handleNextRef(nextRef, 1)
     else:
       return err("Invalid list node ")
 
 proc verifyProof(
-  db: TrieDatabaseRef,
-  rootHash: seq[byte],
-  key: seq[byte]): Result[Option[seq[byte]], string] =
-  var currentKey = initNibbleRange(key)
+    db: TrieDatabaseRef, rootHash: Hash32, key: openArray[byte]
+): Result[Opt[seq[byte]], string] =
+  var currentKey = NibblesBuf.fromBytes(key)
 
   var currentHash = rootHash
 
   while true:
-    let node = db.get(currentHash)
+    let node = db.get(currentHash.data())
 
     if len(node) == 0:
       return err("missing expected node")
 
-    let next = ? getNextNode(rlpFromBytes(node), currentKey)
-
+    let next = ?getNextNode(rlpFromBytes(node), currentKey)
     case next.kind
     of EmptyValue:
-      return ok(none(seq[byte]))
+      return ok(Opt.none(seq[byte]))
     of ValueNode:
-      return ok(some(next.value))
+      return ok(Opt.some(next.value))
     of HashNode:
       currentKey = next.restOfTheKey
       currentHash = next.nextNodeHash
 
 proc verifyMptProof*(
-    branch: seq[seq[byte]],
-    rootHash: Hash32,
-    key: seq[byte],
-    value: seq[byte]): MptProofVerificationResult =
+    branch: seq[seq[byte]], rootHash: Hash32, key, value: openArray[byte]
+): MptProofVerificationResult =
   ## Verifies provided proof of inclusion (trie branch) against provided trie
   ## root hash.
   ## Distinguishes 3 possible results:
@@ -219,20 +216,12 @@ proc verifyMptProof*(
     db.put(nodeHash.data, node)
 
   let
-    hashBytes: seq[byte] = toSeq(rootHash.data)
-    proofVerificationResult = verifyProof(db, hashBytes, key)
-
-  if proofVerificationResult.isErr:
-    return invalidProof(proofVerificationResult.error)
-
-  let maybeProofValue = proofVerificationResult.get()
-
-  if maybeProofValue.isNone():
-    return missingKey()
-
-  let proofValue = maybeProofValue.unsafeGet()
+    maybeProofValue = verifyProof(db, rootHash, key).valueOr:
+      return invalidProof(error)
+    proofValue = maybeProofValue.valueOr:
+      return missingKey()
 
   if proofValue == value:
-    return validProof(proofValue)
+    validProof(proofValue)
   else:
-    return invalidProof("proof does not contain expected value")
+    invalidProof("proof does not contain expected value")

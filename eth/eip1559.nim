@@ -1,5 +1,4 @@
-import
-  common/eth_types
+import ./common/base
 
 const
   EIP1559_BASE_FEE_CHANGE_DENOMINATOR* = ##\
