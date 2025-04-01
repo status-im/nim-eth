@@ -48,12 +48,6 @@ task test_keyfile, "Run keyfile tests":
   run "tests/keyfile/all_tests", "keyfile"
 
 task test_discv5, "Run discovery v5 tests":
-  run "tests/p2p/all_discv5_tests", "p2p"
-
-task test_discv4, "Run discovery v4 tests":
-  run "tests/p2p/test_discovery", "p2p"
-
-task test_p2p, "Run p2p tests":
   run "tests/p2p/all_tests", "p2p"
 
 task test_rlp, "Run rlp tests":
@@ -76,7 +70,7 @@ task test, "Run all tests":
 
   test_keyfile_task()
   test_rlp_task()
-  test_p2p_task()
+  test_discv5_task()
   test_trie_task()
   test_db_task()
   test_utp_task()
