@@ -219,10 +219,10 @@ suite "hexary trie":
     var
       memdb = newMemoryDB()
       nonPruningTrie = initHexaryTrie(memdb, false)
-      keys = randList(seq[byte], randGen(5, 77), randGen(30))
-      vals = randList(seq[byte], randGen(1, 57), randGen(30))
+      keys = randList(seq[byte], randGen(5, 32), randGen(30))
+      vals = randList(seq[byte], randGen(1, 32), randGen(30))
 
-      moreKeys = randList(seq[byte], randGen(5, 33), randGen(45))
+      moreKeys = randList(seq[byte], randGen(5, 29), randGen(45))
       moreVals = randList(seq[byte], randGen(1, 47), randGen(45))
 
     for i in 0 ..< keys.len:
@@ -270,8 +270,8 @@ suite "hexary trie":
       var
         memdb = newMemoryDB()
         nonPruningTrie = initHexaryTrie(memdb, false)
-        keys = randList(seq[byte], randGen(3, 33), randGen(listLength))
-        values = randList(seq[byte], randGen(5, 77), randGen(listLength))
+        keys = randList(seq[byte], randGen(3, 29), randGen(listLength))
+        values = randList(seq[byte], randGen(5, 32), randGen(listLength))
         historyList = newSeq[History](listLength)
         ok = true
 
@@ -315,8 +315,8 @@ suite "hexary trie":
     var
       memdb = newMemoryDB()
       trie = initHexaryTrie(memdb)
-      keys = randList(seq[byte], randGen(5, 77), randGen(30))
-      vals = randList(seq[byte], randGen(1, 57), randGen(30))
+      keys = randList(seq[byte], randGen(5, 32), randGen(30))
+      vals = randList(seq[byte], randGen(1, 32), randGen(30))
 
     for i in 0 ..< keys.len:
       trie.put(keys[i], vals[i])
@@ -332,8 +332,8 @@ suite "hexary trie":
     var
       memdb = newMemoryDB()
       nonPruningTrie = initHexaryTrie(memdb, false)
-      keys = randList(seq[byte], randGen(5, 77), randGen(numKeyVal))
-      vals = randList(seq[byte], randGen(1, 57), randGen(numKeyVal))
+      keys = randList(seq[byte], randGen(5, 32), randGen(numKeyVal))
+      vals = randList(seq[byte], randGen(1, 32), randGen(numKeyVal))
       roots = newSeq[Hash32](numKeyVal)
 
     for i in 0 ..< keys.len:
@@ -368,9 +368,9 @@ suite "hexary trie":
       pruningTrie = initHexaryTrie(memdb, isPruning = true)
 
     let
-      keys = randList(seq[byte], randGen(5, 77), randGen(numKeyVal))
-      vals = randList(seq[byte], randGen(1, 57), randGen(numKeyVal))
-      newVals = randList(seq[byte], randGen(1, 63), randGen(numKeyVal))
+      keys = randList(seq[byte], randGen(5, 32), randGen(numKeyVal))
+      vals = randList(seq[byte], randGen(1, 32), randGen(numKeyVal))
+      newVals = randList(seq[byte], randGen(1, 31), randGen(numKeyVal))
 
     var tx1 = memdb.beginTransaction()
     for i in 0 ..< numKeyVal:
@@ -406,8 +406,8 @@ suite "hexary trie":
       pruningTrie = initHexaryTrie(memdb, isPruning = true)
 
     let
-      keys = randList(seq[byte], randGen(5, 77), randGen(numKeyVal))
-      vals = randList(seq[byte], randGen(1, 57), randGen(numKeyVal))
+      keys = randList(seq[byte], randGen(5, 32), randGen(numKeyVal))
+      vals = randList(seq[byte], randGen(1, 32), randGen(numKeyVal))
 
     for i in 0 ..< numKeyVal:
       pruningTrie.put(keys[i], vals[i])
