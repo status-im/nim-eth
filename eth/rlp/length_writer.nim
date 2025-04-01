@@ -5,12 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  std/options,
-  pkg/results,
-  stew/[arraybuf, shims/macros],
-  ./priv/defs,
-  utils
+import std/options, pkg/results, stew/[arraybuf, shims/macros], ./priv/defs, utils
 
 type
   PendingListItem = tuple[idx, remainingItems, startLen: int]
@@ -21,7 +16,7 @@ type
     listTop: int
     listCount: int
     totalLength*: int
-  
+
   DynamicRlpLengthTracker* = object
     pendingLists: seq[PendingListItem]
     lengths*: seq[int]
@@ -40,12 +35,15 @@ proc maybeClosePendingLists(self: var RlpLengthTracker) =
     self.pendingLists[self.listTop - 1].remainingItems -= 1
 
     if self.pendingLists[self.listTop - 1].remainingItems == 0:
-      let 
+      let
         listIdx = self.pendingLists[self.listTop - 1].idx
         startLen = self.pendingLists[self.listTop - 1].startLen
         listLen = self.totalLength - startLen
-        prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
-                    else: int(uint64(listLen).bytesNeeded) + 1
+        prefixLen =
+          if listLen < int(THRESHOLD_LIST_LEN):
+            1
+          else:
+            int(uint64(listLen).bytesNeeded) + 1
 
       # save the list lengths and prefix lengths
       self.lengths[listIdx] = listLen
@@ -68,7 +66,7 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     self.totalLength += 1
     self.maybeClosePendingLists()
   else:
-   # open a list
+    # open a list
     when self is DynamicRlpLengthTracker:
       self.pendingLists.setLen(self.listTop + 1)
     self.pendingLists[self.listTop] = (self.lengths.len, listSize, self.totalLength)
@@ -76,8 +74,11 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     self.lengths.setLen(self.lengths.len + 1)
 
 func lengthCount(count: int): int {.inline.} =
-  return if count < THRESHOLD_LIST_LEN: 1 
-          else: uint64(count).bytesNeeded + 1
+  return
+    if count < THRESHOLD_LIST_LEN:
+      1
+    else:
+      uint64(count).bytesNeeded + 1
 
 func writeBlob*(self: var RlpLengthTracker, data: openArray[byte]) =
   if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:

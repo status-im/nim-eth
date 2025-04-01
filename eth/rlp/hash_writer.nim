@@ -15,12 +15,11 @@ import
   ../common/hashes,
   length_writer
 
-type
-  RlpHashWriter* = object
-    keccak: keccak.keccak256
-    lengths*: seq[int]
-    listCount: int
-    bigEndianBuf: array[8, byte]
+type RlpHashWriter* = object
+  keccak: keccak.keccak256
+  lengths*: seq[int]
+  listCount: int
+  bigEndianBuf: array[8, byte]
 
 template update(writer: var RlpHashWriter, data: byte) =
   writer.keccak.update([data])
@@ -28,8 +27,7 @@ template update(writer: var RlpHashWriter, data: byte) =
 template update(writer: var RlpHashWriter, data: openArray[byte]) =
   writer.keccak.update(data)
 
-template updateBigEndian(writer: var RlpHashWriter, i: SomeUnsignedInt, 
-                          length: int) =
+template updateBigEndian(writer: var RlpHashWriter, i: SomeUnsignedInt, length: int) =
   writer.bigEndianBuf.writeBigEndian(i, length - 1, length)
   writer.update(writer.bigEndianBuf.toOpenArray(0, length - 1))
 
@@ -68,10 +66,13 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)
   else:
-    let 
+    let
       listLen = self.lengths[self.listCount]
-      prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
-                  else: int(uint64(listLen).bytesNeeded) + 1
+      prefixLen =
+        if listLen < int(THRESHOLD_LIST_LEN):
+          1
+        else:
+          int(uint64(listLen).bytesNeeded) + 1
 
     self.listCount += 1
 
@@ -93,4 +94,3 @@ template finish*(self: var RlpHashWriter): Hash32 =
 func clear*(w: var RlpHashWriter) =
   # Prepare writer for reuse
   w.lengths.setLen(0)
-
