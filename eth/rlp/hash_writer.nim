@@ -5,15 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  std/options,
-  pkg/results,
-  nimcrypto/keccak,
-  stew/[arraybuf, shims/macros],
-  ./priv/defs,
-  utils,
-  ../common/hashes,
-  length_writer
+import nimcrypto/keccak, ./priv/defs, utils, ../common/hashes, length_writer
 
 type RlpHashWriter* = object
   keccak: keccak.keccak256
