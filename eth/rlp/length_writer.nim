@@ -17,21 +17,23 @@ type
 
   StaticRlpLengthTracker*[N: static int] = object
     pendingLists: array[N, PendingListItem]
-    lengths*: seq[tuple[listLen, prefixLen: int]]
+    lengths*: seq[int]
     listTop: int
     listCount: int
     totalLength*: int
   
   DynamicRlpLengthTracker* = object
     pendingLists: seq[PendingListItem]
-    lengths*: seq[tuple[listLen, prefixLen: int]]
+    lengths*: seq[int]
     listTop: int
     listCount: int
     totalLength*: int
 
   RlpLengthTracker* = StaticRlpLengthTracker | DynamicRlpLengthTracker
 
-const LIST_LENGTH = 50
+# these constants set the initial capacities of the pendingLists stack and lengths list
+const LIST_LENGTH = 5
+const STACK_LENGTH = 5
 
 proc maybeClosePendingLists(self: var RlpLengthTracker) =
   while self.listTop > 0:
@@ -43,10 +45,10 @@ proc maybeClosePendingLists(self: var RlpLengthTracker) =
         startLen = self.pendingLists[self.listTop - 1].startLen
         listLen = self.totalLength - startLen
         prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
-                      else: int(uint64(listLen).bytesNeeded) + 1
+                    else: int(uint64(listLen).bytesNeeded) + 1
 
       # save the list lengths and prefix lengths
-      self.lengths[listIdx] = (listLen, prefixLen)
+      self.lengths[listIdx] = listLen
 
       # close the list by deleting
       self.listTop -= 1
@@ -66,14 +68,12 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     self.totalLength += 1
     self.maybeClosePendingLists()
   else:
-    # open a list
+   # open a list
     when self is DynamicRlpLengthTracker:
       self.pendingLists.setLen(self.listTop + 1)
-    self.pendingLists[self.listTop] = (self.listCount, listSize, self.totalLength)
+    self.pendingLists[self.listTop] = (self.lengths.len, listSize, self.totalLength)
     self.listTop += 1
-    self.listCount += 1
-    if self.listCount == self.lengths.len:
-      self.lengths.setLen(self.lengths.len + LIST_LENGTH)
+    self.lengths.setLen(self.lengths.len + 1)
 
 func lengthCount(count: int): int {.inline.} =
   return if count < THRESHOLD_LIST_LEN: 1 
@@ -97,8 +97,8 @@ func initLengthTracker*(self: var RlpLengthTracker) =
   # we preset the lengths since we want to skip using add method for
   # these lists
   when self is DynamicRlpLengthTracker:
-    self.pendingLists = newSeqOfCap[(int, int, int)](5)
-  self.lengths = newSeq[(int, int)](LIST_LENGTH)
+    self.pendingLists = newSeqOfCap[(int, int, int)](STACK_LENGTH)
+  self.lengths = newSeqOfCap[int](LIST_LENGTH)
 
 template finish*(self: RlpLengthTracker): int =
   self.totalLength

@@ -16,7 +16,7 @@ import
 type
   RlpTwoPassWriter* = object
     output*: seq[byte]
-    lengths*: seq[tuple[listLen, prefixLen: int]]
+    lengths*: seq[int]
     fillLevel: int
     listCount: int
 
@@ -67,8 +67,9 @@ proc startList*(self: var RlpTwoPassWriter, listSize: int) =
     self.writeCount(0, LIST_START_MARKER)
   else:
     let 
-      prefixLen = self.lengths[self.listCount].prefixLen
-      listLen = self.lengths[self.listCount].listLen
+      listLen = self.lengths[self.listCount]
+      prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
+                  else: int(uint64(listLen).bytesNeeded) + 1
 
     self.listCount += 1
 
