@@ -9,8 +9,7 @@ import ../rlp
 import writer
 import pkg/results
 
-export
-  rlp, results
+export rlp, results
 
 proc append*[T](w: var RlpWriter, val: Opt[T]) =
   mixin append
@@ -26,4 +25,3 @@ proc read*[T](rlp: var Rlp, val: var Opt[T]) {.raises: [RlpError].} =
     val = Opt.some(rlp.read(T))
   else:
     rlp.skipElem
-

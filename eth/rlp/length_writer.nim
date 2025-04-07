@@ -5,48 +5,48 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  std/options,
-  pkg/results,
-  stew/[arraybuf, shims/macros],
-  ./priv/defs,
-  utils
+import ./priv/defs, utils
 
 type
   PendingListItem = tuple[idx, remainingItems, startLen: int]
 
   StaticRlpLengthTracker*[N: static int] = object
     pendingLists: array[N, PendingListItem]
-    lengths*: seq[tuple[listLen, prefixLen: int]]
+    lengths*: seq[int]
     listTop: int
     listCount: int
     totalLength*: int
-  
+
   DynamicRlpLengthTracker* = object
     pendingLists: seq[PendingListItem]
-    lengths*: seq[tuple[listLen, prefixLen: int]]
+    lengths*: seq[int]
     listTop: int
     listCount: int
     totalLength*: int
 
   RlpLengthTracker* = StaticRlpLengthTracker | DynamicRlpLengthTracker
 
-const LIST_LENGTH = 50
+# these constants set the initial capacities of the pendingLists stack and lengths list
+const LIST_LENGTH = 5
+const STACK_LENGTH = 5
 
 proc maybeClosePendingLists(self: var RlpLengthTracker) =
   while self.listTop > 0:
     self.pendingLists[self.listTop - 1].remainingItems -= 1
 
     if self.pendingLists[self.listTop - 1].remainingItems == 0:
-      let 
+      let
         listIdx = self.pendingLists[self.listTop - 1].idx
         startLen = self.pendingLists[self.listTop - 1].startLen
         listLen = self.totalLength - startLen
-        prefixLen = if listLen < int(THRESHOLD_LIST_LEN): 1
-                      else: int(uint64(listLen).bytesNeeded) + 1
+        prefixLen =
+          if listLen < int(THRESHOLD_LIST_LEN):
+            1
+          else:
+            int(uint64(listLen).bytesNeeded) + 1
 
       # save the list lengths and prefix lengths
-      self.lengths[listIdx] = (listLen, prefixLen)
+      self.lengths[listIdx] = listLen
 
       # close the list by deleting
       self.listTop -= 1
@@ -69,15 +69,16 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     # open a list
     when self is DynamicRlpLengthTracker:
       self.pendingLists.setLen(self.listTop + 1)
-    self.pendingLists[self.listTop] = (self.listCount, listSize, self.totalLength)
+    self.pendingLists[self.listTop] = (self.lengths.len, listSize, self.totalLength)
     self.listTop += 1
-    self.listCount += 1
-    if self.listCount == self.lengths.len:
-      self.lengths.setLen(self.lengths.len + LIST_LENGTH)
+    self.lengths.setLen(self.lengths.len + 1)
 
 func lengthCount(count: int): int {.inline.} =
-  return if count < THRESHOLD_LIST_LEN: 1 
-          else: uint64(count).bytesNeeded + 1
+  return
+    if count < THRESHOLD_LIST_LEN:
+      1
+    else:
+      uint64(count).bytesNeeded + 1
 
 func writeBlob*(self: var RlpLengthTracker, data: openArray[byte]) =
   if data.len == 1 and byte(data[0]) < BLOB_START_MARKER:
@@ -97,8 +98,8 @@ func initLengthTracker*(self: var RlpLengthTracker) =
   # we preset the lengths since we want to skip using add method for
   # these lists
   when self is DynamicRlpLengthTracker:
-    self.pendingLists = newSeqOfCap[(int, int, int)](5)
-  self.lengths = newSeq[(int, int)](LIST_LENGTH)
+    self.pendingLists = newSeqOfCap[(int, int, int)](STACK_LENGTH)
+  self.lengths = newSeqOfCap[int](LIST_LENGTH)
 
 template finish*(self: RlpLengthTracker): int =
   self.totalLength

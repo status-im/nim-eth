@@ -5,14 +5,13 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  stew/shims/macros
+import stew/shims/macros
 
-template rlpIgnore* {.pragma.}
+template rlpIgnore*() {.pragma.}
   ## Specifies that a certain field should be ignored for the purposes
   ## of RLP serialization
 
-template rlpCustomSerialization* {.pragma.}
+template rlpCustomSerialization*() {.pragma.}
   ## This pragma can be applied to a record field to enable the
   ## use of custom `read` and `append` overloads that also take
   ## a reference to the object holding the field.
@@ -26,9 +25,11 @@ template enumerateRlpFields*[T](x: T, op: untyped) =
 proc rlpFieldsCount*(T: type): int =
   mixin enumerateRlpFields
 
-  proc helper: int =
+  proc helper(): int =
     var dummy: T
-    template countFields(RT, n, x) {.used.} = inc result
+    template countFields(RT, n, x) {.used.} =
+      inc result
+
     enumerateRlpFields(dummy, countFields)
 
   const res = helper()
@@ -42,9 +43,9 @@ macro rlpFields*(T: typedesc, fields: varargs[untyped]): untyped =
 
   for field in fields:
     let fieldName = $field
-    body.add quote do: `op`(`T`, `fieldName`, `ins`.`field`)
+    body.add quote do:
+      `op`(`T`, `fieldName`, `ins`.`field`)
 
-  result = quote do:
+  result = quote:
     template enumerateRlpFields*(`ins`: `T`, `op`: untyped) {.inject.} =
       `body`
-

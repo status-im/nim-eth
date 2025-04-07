@@ -23,13 +23,11 @@ export arraybuf, default_writer, length_writer, two_pass_writer, hash_writer
 type
   RlpWriter* = RlpDefaultWriter | RlpTwoPassWriter | RlpLengthTracker | RlpHashWriter
 
-  RlpIntBuf* = ArrayBuf[9, byte]
-    ## Small buffer for holding a single RLP-encoded integer
+  RlpIntBuf* = ArrayBuf[9, byte] ## Small buffer for holding a single RLP-encoded integer
 
-const
-  wrapObjsInList* = true
+const wrapObjsInList* = true
 
-proc initRlpWriter*: RlpDefaultWriter =
+proc initRlpWriter*(): RlpDefaultWriter =
   # Avoid allocations during initial write of small items - since the writer is
   # expected to be short-lived, it doesn't hurt to allocate this buffer
   result
@@ -68,14 +66,15 @@ proc appendImpl[T](self: var RlpWriter, list: openArray[T]) =
   for i in 0 ..< list.len:
     self.append list[i]
 
-template innerType[T](x: Option[T] | Opt[T]): typedesc = T
+template innerType[T](x: Option[T] | Opt[T]): typedesc =
+  T
 
 proc countNestedListsDepth(T: type): int {.compileTime.} =
   mixin enumerateRlpFields
 
   var dummy {.used.}: T
 
-  template op(RT, fN, f) {.used.}=
+  template op(RT, fN, f) {.used.} =
     result += countNestedListsDepth(type f)
 
   when T is Option or T is Opt:
@@ -106,7 +105,9 @@ proc countOptionalFields(T: type): int {.compileTime.} =
 
   enumerateRlpFields(dummy, op)
 
-proc genPrevFields(obj: NimNode, fd: openArray[FieldDescription], hi, lo: int): NimNode =
+proc genPrevFields(
+    obj: NimNode, fd: openArray[FieldDescription], hi, lo: int
+): NimNode =
   result = newStmtList()
   for i in countdown(hi, lo):
     let fieldName = fd[i].name
@@ -118,12 +119,12 @@ macro genOptionalFieldsValidation(obj: untyped, T: type, num: static[int]): unty
   let
     Tresolved = getType(T)[1]
     fd = recordFields(Tresolved.getImpl)
-    loidx = fd.len-num
+    loidx = fd.len - num
 
   result = newStmtList()
   for i in countdown(fd.high, loidx):
     let fieldName = fd[i].name
-    let prevFields = genPrevFields(obj, fd, i-1, loidx-1)
+    let prevFields = genPrevFields(obj, fd, i - 1, loidx - 1)
     result.add quote do:
       if `obj`.`fieldName`.isSome:
         `prevFields`
@@ -140,7 +141,7 @@ macro genOptionalFieldsValidation(obj: untyped, T: type, num: static[int]): unty
     doAssert obj.blobGasUsed.isSome == obj.excessBlobGas.isSome,
       "blobGasUsed and excessBlobGas must both be present or absent"
 
-proc countFieldsRuntime(obj: object|tuple): int =
+proc countFieldsRuntime(obj: object | tuple): int =
   mixin enumerateRlpFields
 
   var numOptionals: int = 0
@@ -156,13 +157,14 @@ proc countFieldsRuntime(obj: object|tuple): int =
   enumerateRlpFields(obj, op)
   result += numOptionals
 
-proc appendRecordType*(self: var RlpWriter, obj: object|tuple, wrapInList = wrapObjsInList) =
+proc appendRecordType*(
+    self: var RlpWriter, obj: object | tuple, wrapInList = wrapObjsInList
+) =
   mixin enumerateRlpFields, append
 
   type ObjType = type obj
 
-  const
-    cof = countOptionalFields(ObjType)
+  const cof = countOptionalFields(ObjType)
 
   when cof > 0:
     # ignoring first optional fields
@@ -197,10 +199,10 @@ template appendImpl(self: var RlpWriter, data: tuple) =
 
 # We define a single `append` template with a pretty low specificity
 # score in order to facilitate easier overloading with user types:
-template append*[T](w: var RlpWriter; data: T) =
+template append*[T](w: var RlpWriter, data: T) =
   appendImpl(w, data)
 
-template append*(w: var RlpWriter; data: SomeSignedInt) =
+template append*(w: var RlpWriter, data: SomeSignedInt) =
   {.error: "Signed integer encoding is not defined for rlp".}
 
 proc initRlpList*(listSize: int): RlpDefaultWriter =
@@ -213,10 +215,11 @@ template withTracker(v, body) =
   type T = typeof v
   const nestedListsDepth = countNestedListsDepth(T)
 
-  var tracker {.inject.} = when nestedListsDepth > 0:
-                             StaticRlpLengthTracker[nestedListsDepth]()
-                           elif nestedListsDepth == 0:
-                             DynamicRlpLengthTracker()
+  var tracker {.inject.} =
+    when nestedListsDepth > 0:
+      StaticRlpLengthTracker[nestedListsDepth]()
+    elif nestedListsDepth == 0:
+      DynamicRlpLengthTracker()
   tracker.initLengthTracker()
   tracker.append(v)
   body
@@ -264,7 +267,7 @@ macro encodeList*(args: varargs[untyped]): seq[byte] =
     body.add quote do:
       `append`(`writer`, `arg`)
 
-  result = quote do:
+  result = quote:
     var `writer` = initRlpList(`listLen`)
     `body`
     move(finish(`writer`))

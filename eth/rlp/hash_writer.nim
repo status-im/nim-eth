@@ -5,22 +5,13 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  std/options,
-  pkg/results,
-  nimcrypto/keccak,
-  stew/[arraybuf, shims/macros],
-  ./priv/defs,
-  utils,
-  ../common/hashes,
-  length_writer
+import nimcrypto/keccak, ./priv/defs, utils, ../common/hashes, length_writer
 
-type
-  RlpHashWriter* = object
-    keccak: keccak.keccak256
-    lengths*: seq[tuple[listLen, prefixLen: int]]
-    listCount: int
-    bigEndianBuf: array[8, byte]
+type RlpHashWriter* = object
+  keccak: keccak.keccak256
+  lengths*: seq[int]
+  listCount: int
+  bigEndianBuf: array[8, byte]
 
 template update(writer: var RlpHashWriter, data: byte) =
   writer.keccak.update([data])
@@ -28,8 +19,7 @@ template update(writer: var RlpHashWriter, data: byte) =
 template update(writer: var RlpHashWriter, data: openArray[byte]) =
   writer.keccak.update(data)
 
-template updateBigEndian(writer: var RlpHashWriter, i: SomeUnsignedInt, 
-                          length: int) =
+template updateBigEndian(writer: var RlpHashWriter, i: SomeUnsignedInt, length: int) =
   writer.bigEndianBuf.writeBigEndian(i, length - 1, length)
   writer.update(writer.bigEndianBuf.toOpenArray(0, length - 1))
 
@@ -53,7 +43,7 @@ func writeInt*(writer: var RlpHashWriter, i: SomeUnsignedInt) =
     writer.writeCount(bytesNeeded, BLOB_START_MARKER)
 
     writer.updateBigEndian(uint64(i), bytesNeeded)
-    
+
 template appendRawBytes*(self: var RlpHashWriter, bytes: openArray[byte]) =
   self.update(bytes)
 
@@ -68,9 +58,13 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)
   else:
-    let 
-      prefixLen = self.lengths[self.listCount].prefixLen
-      listLen = self.lengths[self.listCount].listLen
+    let
+      listLen = self.lengths[self.listCount]
+      prefixLen =
+        if listLen < int(THRESHOLD_LIST_LEN):
+          1
+        else:
+          int(uint64(listLen).bytesNeeded) + 1
 
     self.listCount += 1
 
@@ -79,7 +73,7 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
     else:
       let listLenBytes = prefixLen - 1
       self.update(LEN_PREFIXED_LIST_MARKER + byte(listLenBytes))
-      
+
       self.updateBigEndian(uint64(listLen), listLenBytes)
 
 func initHashWriter*(tracker: var RlpLengthTracker): RlpHashWriter =
@@ -92,4 +86,3 @@ template finish*(self: var RlpHashWriter): Hash32 =
 func clear*(w: var RlpHashWriter) =
   # Prepare writer for reuse
   w.lengths.setLen(0)
-
