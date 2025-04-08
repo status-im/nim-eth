@@ -15,6 +15,9 @@ export
   accounts_rlp, addresses_rlp, base_rlp, eth_types, hashes_rlp,
   headers_rlp, receipts_rlp, times_rlp, transactions_rlp, rlp
 
+export
+  computeRlpHash
+  
 proc append*(rlpWriter: var RlpWriter, value: BlockHashOrNumber) =
   case value.isHash
   of true:
@@ -28,11 +31,14 @@ proc read*(rlp: var Rlp, T: type BlockHashOrNumber): T =
   else:
     BlockHashOrNumber(isHash: false, number: rlp.read(BlockNumber))
 
-proc rlpHash*[T](v: T): Hash32 =
-  rlp.encodeHash(v)
+proc rlpHash*[T](v: T): Hash32 {.deprecated: "computeRlpHash".} =
+  rlp.computeRlpHash(v)
 
-proc rlpHash*(tx: PooledTransaction): Hash32 =
-  rlp.encodeHash(tx.tx)
+proc rlpHash*(tx: PooledTransaction): Hash32 {.deprecated: "computeRlpHash".} =
+  rlp.computeRlpHash(tx.tx)
 
-func blockHash*(h: Header): Hash32 {.inline.} =
-  rlpHash(h)
+func blockHash*(h: Header): Hash32 {.deprecated: "computeBlockHash".} =
+  rlp.computeRlpHash(h)
+
+template computeBlockHash*(h: Header): Hash32 =
+  rlp.computeRlpHash(h)

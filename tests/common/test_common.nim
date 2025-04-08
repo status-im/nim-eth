@@ -47,7 +47,7 @@ suite "RLP encoding":
       cumulativeGasUsed: 51000
     )
 
-    let hash = rlpHash(a)
+    let hash = computeRlpHash(a)
     let b = Receipt(
       receiptType: LegacyReceipt,
       isHash: true,

@@ -21,7 +21,7 @@ let rng = newRng()
 
 const
   pkbytes = "58d23b55bc9cdce1f18c2500f40ff4ab7245df9a89505e9b1fa4851f623d241d"
-  address = "dc544d1aa88ff8bbd2f2aec754b1f1e99e1812fd"
+  address = address"dc544d1aa88ff8bbd2f2aec754b1f1e99e1812fd"
 
   alice = [
     "9c0257114eb9399a2985f8e75dad7600c5d89fe3824ffa99ec1c3eb8bf3b0501",
@@ -79,22 +79,19 @@ suite "ECC/ECDSA/ECDHE tests suite":
 
   test "test_to_address_from_public_key":
     var s = PrivateKey.fromHex(pkbytes)[]
-    var chk = s.toPublicKey().toAddress()
-    var expect = "0x" & address
-    check chk == expect
+    var chk = s.toPublicKey().to(Address)
+    check chk == address
 
   test "test_to_canonical_address_from_public_key":
     var s = PrivateKey.fromHex(pkbytes)[]
     var chk = s.toPublicKey().toCanonicalAddress()
-    var expect = Address.fromHex(stripSpaces(address))
-    check chk == expect
+    check chk == address
 
   test "test_to_checksum_address_from_public_key":
     var s = PrivateKey.fromHex(pkbytes)[]
     var chk = s.toPublicKey().toChecksumAddress()
-    var expect = "0x" & address
     check:
-      chk.toLowerAscii() == expect
+      chk.toLowerAscii() == $address
 
   test "EIP-55 checksum addresses test cases":
     var checks = [
@@ -125,9 +122,9 @@ suite "ECC/ECDSA/ECDHE tests suite":
     for i in 1..100:
       var kp = KeyPair.random(rng[])
       var chaddress = kp.pubkey.toChecksumAddress()
-      var noaddress = kp.pubkey.toAddress()
-      if noaddress != chaddress:
-        check validateChecksumAddress(noaddress) == false
+      var noaddress = kp.pubkey.to(Address)
+      if $noaddress != chaddress:
+        check validateChecksumAddress($noaddress) == false
       check validateChecksumAddress(chaddress) == true
 
   test "ECDHE/py-evm test_ecies.py#L19":
