@@ -444,26 +444,26 @@ template benchmark(msg: string, code: untyped) =
 when defined(opt):
   when defined(hash):
     when defined(tx):
-      benchmark "encodeHash single transactions":
-        let bytes1 = rlp.encodeHash(tx)
+      benchmark "computeRlpHash single transactions":
+        let bytes1 = rlp.computeRlpHash(tx)
     elif defined(header):
-      benchmark "encodeHash header":
-        let bytes1 = rlp.encodeHash(header)
+      benchmark "computeRlpHash header":
+        let bytes1 = rlp.computeRlpHash(header)
     elif defined(blk):
-      benchmark "encodeHash block with 8 transactions":
-        let bytes2 = rlp.encodeHash(blk)
+      benchmark "computeRlpHash block with 8 transactions":
+        let bytes2 = rlp.computeRlpHash(blk)
     elif defined(blk80):
-      benchmark "encodeHash block with 80 transactions":
-        let bytes2 = rlp.encodeHash(blk80)
+      benchmark "computeRlpHash block with 80 transactions":
+        let bytes2 = rlp.computeRlpHash(blk80)
     elif defined(blk320):
-      benchmark "encodeHash block with 320 transactions":
-        let bytes2 = rlp.encodeHash(blk320)
+      benchmark "computeRlpHash block with 320 transactions":
+        let bytes2 = rlp.computeRlpHash(blk320)
     elif defined(blk640):
-      benchmark "encodeHash block with 640 transactions":
-        let bytes2 = rlp.encodeHash(blk640)
+      benchmark "computeRlpHash block with 640 transactions":
+        let bytes2 = rlp.computeRlpHash(blk640)
     elif defined(blk1280):
-      benchmark "encodeHash block with 1280 transactions":
-        let bytes2 = rlp.encodeHash(blk1280)
+      benchmark "computeRlpHash block with 1280 transactions":
+        let bytes2 = rlp.computeRlpHash(blk1280)
   else:
     when defined(tx):
       benchmark "encode single transactions":
