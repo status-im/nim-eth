@@ -20,6 +20,11 @@ type
 
   AccessList* = seq[AccessPair]
 
+  UnsignedAuthorization* = object
+    chainId*: ChainId
+    address*: Address
+    nonce*: AccountNonce
+
   Authorization* = object
     chainId*: ChainId
     address*: Address
@@ -55,6 +60,23 @@ type
     V*             : uint64
     R*, S*         : UInt256
 
+  UnsignedTransaction* = object
+    txType*        : TxType               # EIP-2718
+    chainId*       : ChainId              # EIP-2930
+    nonce*         : AccountNonce
+    gasPrice*      : GasInt
+    maxPriorityFeePerGas*: GasInt         # EIP-1559
+    maxFeePerGas*  : GasInt               # EIP-1559
+    gasLimit*      : GasInt
+    to*            : Opt[Address]
+    value*         : UInt256
+    payload*       : seq[byte]
+    accessList*    : AccessList           # EIP-2930
+    maxFeePerBlobGas*: UInt256            # EIP-4844
+    versionedHashes*: seq[VersionedHash]  # EIP-4844
+    authorizationList*: seq[Authorization]# EIP-7702
+    V*             : uint64
+
   # 32 -> UInt256
   # 4096 -> FIELD_ELEMENTS_PER_BLOB
   NetworkBlob* = array[32*4096, byte]
@@ -76,7 +98,7 @@ func destination*(tx: Transaction): Address =
   # the contract address
   tx.to.valueOr(default(Address))
 
-func isEip155*(tx: Transaction): bool =
+func isEip155*(tx: Transaction | UnsignedTransaction): bool =
   tx.V >= EIP155_CHAIN_ID_OFFSET
 
 func contractCreation*(tx: Transaction): bool =

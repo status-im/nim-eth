@@ -13,19 +13,11 @@ from stew/objects import checkedEnumAssign
 
 export addresses_rlp, base_rlp, hashes_rlp, transactions, rlp
 
-template encodeSignature(tx: Transaction) =
-    w.append(tx.V)
-    w.append(tx.R)
-    w.append(tx.S)
-
-proc appendTxLegacy(w: var RlpWriter, tx: Transaction) =
-  if tx.V > uint64(0):
+proc appendTxLegacy(w: var RlpWriter, tx: UnsignedTransaction) =
+  if tx.isEip155():
     w.startList(9)
-  else:# EIP155 is handled only when the transaction is not signed
-    if tx.isEip155():
-      w.startList(9)
-    else:
-      w.startList(6)
+  else:
+    w.startList(6)
 
   w.append(tx.nonce)
   w.append(tx.gasPrice)
@@ -34,14 +26,12 @@ proc appendTxLegacy(w: var RlpWriter, tx: Transaction) =
   w.append(tx.value)
   w.append(tx.payload)
 
-  if tx.V > uint64(0):
-    encodeSignature(tx)
-  elif tx.isEip155():
+  if tx.isEip155():
     w.append(tx.chainId)
     w.append(0'u8)
     w.append(0'u8)
-
-proc appendEip155(w: var RlpWriter, tx: Transaction) =
+ 
+proc appendTxLegacy(w: var RlpWriter, tx: Transaction) =
   w.startList(9)
   w.append(tx.nonce)
   w.append(tx.gasPrice)
@@ -49,16 +39,12 @@ proc appendEip155(w: var RlpWriter, tx: Transaction) =
   w.append(tx.to)
   w.append(tx.value)
   w.append(tx.payload)
-  w.append(tx.chainId)
-  w.append(0'u8)
-  w.append(0'u8)
+  w.append(tx.V)
+  w.append(tx.R)
+  w.append(tx.S)
 
-proc appendTxEip2930(w: var RlpWriter, tx: Transaction) =
-  if tx.V > uint64(0):
-    w.startList(11)
-  else:
-    w.startList(8)
-
+proc appendTxEip2930(w: var RlpWriter, tx: UnsignedTransaction) =
+  w.startList(8)
   w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.gasPrice)
@@ -68,15 +54,22 @@ proc appendTxEip2930(w: var RlpWriter, tx: Transaction) =
   w.append(tx.payload)
   w.append(tx.accessList)
 
-  if tx.V > uint64(0):
-    encodeSignature(tx)
+proc appendTxEip2930(w: var RlpWriter, tx: Transaction) =
+  w.startList(11)
+  w.append(tx.chainId)
+  w.append(tx.nonce)
+  w.append(tx.gasPrice)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.append(tx.V)
+  w.append(tx.R)
+  w.append(tx.S)
 
-proc appendTxEip1559(w: var RlpWriter, tx: Transaction) =
-  if tx.V > uint64(0):
-    w.startList(12)
-  else:
-    w.startList(9)
-
+proc appendTxEip1559(w: var RlpWriter, tx: UnsignedTransaction) =
+  w.startList(9)
   w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.maxPriorityFeePerGas)
@@ -87,15 +80,23 @@ proc appendTxEip1559(w: var RlpWriter, tx: Transaction) =
   w.append(tx.payload)
   w.append(tx.accessList)
 
-  if tx.V > uint64(0):
-    encodeSignature(tx)
+proc appendTxEip1559(w: var RlpWriter, tx: Transaction) =
+  w.startList(12)
+  w.append(tx.chainId)
+  w.append(tx.nonce)
+  w.append(tx.maxPriorityFeePerGas)
+  w.append(tx.maxFeePerGas)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.append(tx.V)
+  w.append(tx.R)
+  w.append(tx.S)
 
-proc appendTxEip4844(w: var RlpWriter, tx: Transaction) =
-  if tx.V > uint64(0):
-    w.startList(14)
-  else:
-    w.startList(11)
-
+proc appendTxEip4844(w: var RlpWriter, tx: UnsignedTransaction) =
+  w.startList(11)
   w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.maxPriorityFeePerGas)
@@ -108,15 +109,25 @@ proc appendTxEip4844(w: var RlpWriter, tx: Transaction) =
   w.append(tx.maxFeePerBlobGas)
   w.append(tx.versionedHashes)
 
-  if tx.V > uint64(0):
-    encodeSignature(tx)
+proc appendTxEip4844(w: var RlpWriter, tx: Transaction) =
+  w.startList(14)
+  w.append(tx.chainId)
+  w.append(tx.nonce)
+  w.append(tx.maxPriorityFeePerGas)
+  w.append(tx.maxFeePerGas)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.append(tx.maxFeePerBlobGas)
+  w.append(tx.versionedHashes)
+  w.append(tx.V)
+  w.append(tx.R)
+  w.append(tx.S)
 
-proc appendTxEip7702(w: var RlpWriter, tx: Transaction) =
-  if tx.V > uint64(0):
-    w.startList(13)
-  else:
-    w.startList(10)
-
+proc appendTxEip7702(w: var RlpWriter, tx: UnsignedTransaction) =
+  w.startList(10)
   w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.maxPriorityFeePerGas)
@@ -128,9 +139,23 @@ proc appendTxEip7702(w: var RlpWriter, tx: Transaction) =
   w.append(tx.accessList)
   w.append(tx.authorizationList)
 
-  if tx.V > uint64(0):
-    encodeSignature(tx)
+proc appendTxEip7702(w: var RlpWriter, tx: Transaction) =
+  w.startList(13)
+  w.append(tx.chainId)
+  w.append(tx.nonce)
+  w.append(tx.maxPriorityFeePerGas)
+  w.append(tx.maxFeePerGas)
+  w.append(tx.gasLimit)
+  w.append(tx.to)
+  w.append(tx.value)
+  w.append(tx.payload)
+  w.append(tx.accessList)
+  w.append(tx.authorizationList)
+  w.append(tx.V)
+  w.append(tx.R)
+  w.append(tx.S)
 
+<<<<<<< HEAD
 proc appendTxEip7873(w: var RlpWriter, tx: Transaction) =
   w.startList(13)
   w.append(tx.chainId)
@@ -147,7 +172,7 @@ proc appendTxEip7873(w: var RlpWriter, tx: Transaction) =
   w.append(tx.R)
   w.append(tx.S)
 
-proc appendTxPayload(w: var RlpWriter, tx: Transaction) =
+proc appendTxPayload(w: var RlpWriter, tx: Transaction | UnsignedTransaction) =
   case tx.txType
   of TxLegacy:
     w.appendTxLegacy(tx)
@@ -162,25 +187,25 @@ proc appendTxPayload(w: var RlpWriter, tx: Transaction) =
   of TxEip7873:
     w.appendTxEip7873(tx)
 
-proc append*(w: var RlpWriter, tx: Transaction) =
+proc append*(w: var RlpWriter, tx: Transaction | UnsignedTransaction) =
   if tx.txType != TxLegacy:
     w.append(tx.txType)
   w.appendTxPayload(tx)
 
-proc append*(w: var RlpWriter, x: Authorization) =
-  if x.v > uint64(0):
-    w.startList(6)
-  else:
-    w.startList(3)
-
+proc append*(w: var RlpWriter, x: UnsignedAuthorization) =
+  w.startList(3)
   w.append(x.chainId)
   w.append(x.address)
   w.append(x.nonce)
 
-  if x.v > uint64(0):
-    w.append(x.v)
-    w.append(x.r)
-    w.append(x.s)
+proc append*(w: var RlpWriter, x: Authorization) =
+  w.startList(6)
+  w.append(x.chainId)
+  w.append(x.address)
+  w.append(x.nonce)
+  w.append(x.v)
+  w.append(x.r)
+  w.append(x.s)
 
 proc append(w: var RlpWriter, networkPayload: NetworkPayload) =
   w.append(networkPayload.blobs)
@@ -196,6 +221,7 @@ proc append*(w: var RlpWriter, tx: PooledTransaction) =
   if tx.networkPayload != nil:
     w.append(tx.networkPayload)
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 proc rlpEncodeLegacy(tx: Transaction): seq[byte] =
   var w = initRlpWriter()
@@ -320,12 +346,30 @@ proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
 template rlpEncode*(tx: Transaction): seq[byte] {.deprecated.} =
   encodeForSigning(tx, tx.isEip155())
 
-func rlpHashForSigning*(tx: Transaction, eip155: bool): Hash32 =
+func toUnsignedTransaction(tx: Transaction): UnsignedTransaction =
+   result.txType = tx.txType
+   result.chainId = tx.chainId
+   result.nonce = tx.nonce
+   result.gasPrice = tx.gasPrice
+   result.maxPriorityFeePerGas = tx.maxPriorityFeePerGas
+   result.maxFeePerGas = tx.maxFeePerGas
+   result.gasLimit = tx.gasLimit
+   result.to = tx.to
+   result.value = tx.value
+   result.payload = tx.payload
+   result.accessList = tx.accessList
+   result.maxFeePerBlobGas = tx.maxFeePerBlobGas
+   result.versionedHashes = tx.versionedHashes
+   result.authorizationList = tx.authorizationList
+   result.V = tx.V
+
+func rlpHashForSigning*(tx: Transaction): Hash32 =
   # Hash transaction without signature
-  rlp.encodeHash(tx)
+  let unsignedTx = toUnsignedTransaction(tx)
+  rlp.encodeHash(unsignedTx)
 
 template txHashNoSignature*(tx: Transaction): Hash32 {.deprecated.} =
-  rlpHashForSigning(tx, tx.isEip155())
+  rlpHashForSigning(tx)
 
 proc readTxLegacy(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxLegacy
@@ -394,6 +438,11 @@ proc readTxEip4844(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
 
 func rlpHashForSigning*(auth: Authorization): Hash32 =
   # Hash authorization without signature
+  let unsignedAuth = UnsignedAuthorization(
+    chainId: auth.chainId,
+    address: auth.address,
+    nonce: auth.nonce
+  )
   rlp.encodeHash(auth)
 
 proc read*(rlp: var Rlp, T: type Authorization): T {.raises: [RlpError].} =
