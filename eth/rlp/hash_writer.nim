@@ -54,7 +54,7 @@ proc writeBlob*(self: var RlpHashWriter, bytes: openArray[byte]) =
     self.writeCount(bytes.len, BLOB_START_MARKER)
     self.appendRawBytes(bytes)
 
-proc startList*(self: var RlpHashWriter, listSize: int) =
+proc startList*(self: var RlpHashWriter, listSize: int, startMarker: byte = LIST_START_MARKER, lenPrefixedMarker: byte = LEN_PREFIXED_LIST_MARKER) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)
   else:
@@ -69,12 +69,15 @@ proc startList*(self: var RlpHashWriter, listSize: int) =
     self.listCount += 1
 
     if listLen < THRESHOLD_LIST_LEN:
-      self.update(LIST_START_MARKER + byte(listLen))
+      self.update(startMarker + byte(listLen))
     else:
       let listLenBytes = prefixLen - 1
-      self.update(LEN_PREFIXED_LIST_MARKER + byte(listLenBytes))
+      self.update(lenPrefixedMarker + byte(listLenBytes))
 
       self.updateBigEndian(uint64(listLen), listLenBytes)
+
+proc wrapEncoding*(self: var RlpHashWriter, numOfEncodings: int) =
+  self.startList(numOfEncodings, BLOB_START_MARKER, BLOB_START_MARKER + (THRESHOLD_LIST_LEN - 1))
 
 func initHashWriter*(tracker: var RlpLengthTracker): RlpHashWriter =
   result.lengths = move(tracker.lengths)
