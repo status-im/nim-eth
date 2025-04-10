@@ -5,9 +5,9 @@ export hashes
 type
   ShortHash = ArrayBuf[32, byte]
 
-  OrderedTrieLeaf* = object
+  OrderedTrieLeaf*[T] = object
     keyPath: ArrayBuf[10, byte]
-    value: seq[byte]
+    value: T
 
   OrderedTrieBranch* = ArrayBuf[16, ShortHash]
 
@@ -50,7 +50,12 @@ func init*(T: type OrderedTrieRootBuilder, expected: int): T =
 proc append*(w: var RlpWriter, node: OrderedTrieLeaf) =
   w.startList(2)
   w.append(node.keyPath.data)
-  w.append(node.value)
+  # we need to make sure we encode the encoding.
+  if (typeof node.value) is SomeUnsignedInt and node.value > 0 and node.value < (typeof node.value)(128):
+    w.append(node.value)
+  else:
+    w.wrapEncoding(1)
+    w.append(node.value)
 
 proc append*(w: var RlpWriter, node: OrderedTrieExtension) =
   w.startList(2)
@@ -76,12 +81,12 @@ func toShortHash(v: OrderedTrieNode): ShortHash =
       var writer = initTwoPassWriter(tracker)
       writer.append(v)
       let buf = writer.finish()
-      ShortHash.initCopyFrom(buf)
+      return ShortHash.initCopyFrom(buf)
     else:
       var writer = initHashWriter(tracker)
       writer.append(v)
       let buf = writer.finish()
-      ShortHash.initCopyFrom(buf.data)
+      return ShortHash.initCopyFrom(buf.data)
 
 func keyAtIndex(b: var OrderedTrieRootBuilder, i: int): RlpIntBuf =
   # Given a leaf index, compute the rlp-encoded key
@@ -171,7 +176,7 @@ proc updateHash(b: var OrderedTrieRootBuilder, key: uint64, v: auto) =
             let prev = b.keyAtIndex(pos - 1)
             prev.sharedPrefixLen(cur)
 
-      let leafNode = OrderedTrieLeaf(
+      let leafNode = OrderedTrieLeaf[typeof v](
         keyPath: cur.hexPrefixEncode(spl + 1, cur.nibbles, isLeaf = true),
         value: v
       )
