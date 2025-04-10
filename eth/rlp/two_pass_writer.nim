@@ -51,7 +51,7 @@ proc writeBlob*(self: var RlpTwoPassWriter, bytes: openArray[byte]) =
     self.writeCount(bytes.len, BLOB_START_MARKER)
     self.appendRawBytes(bytes)
 
-proc startList*(self: var RlpTwoPassWriter, listSize: int) =
+proc startList*(self: var RlpTwoPassWriter, listSize: int, startMarker: byte = LIST_START_MARKER, lenPrefixedMarker: byte = LEN_PREFIXED_LIST_MARKER) =
   mixin writeCount
 
   if listSize == 0:
@@ -68,13 +68,16 @@ proc startList*(self: var RlpTwoPassWriter, listSize: int) =
     self.listCount += 1
 
     if listLen < THRESHOLD_LIST_LEN:
-      self.output[self.fillLevel] = LIST_START_MARKER + byte(listLen)
+      self.output[self.fillLevel] = startMarker + byte(listLen)
       self.fillLevel += 1
     else:
       let listLenBytes = prefixLen - 1
-      self.output[self.fillLevel] = LEN_PREFIXED_LIST_MARKER + byte(listLenBytes)
+      self.output[self.fillLevel] = lenPrefixedMarker + byte(listLenBytes)
       self.fillLevel += prefixLen
       self.output.writeBigEndian(uint64(listLen), self.fillLevel - 1, listLenBytes)
+
+proc wrapEncoding*(self: var RlpTwoPassWriter, numOfEncodings: int) =
+  self.startList(numOfEncodings, BLOB_START_MARKER, BLOB_START_MARKER + (THRESHOLD_LIST_LEN - 1))
 
 func initTwoPassWriter*(tracker: var RlpLengthTracker): RlpTwoPassWriter =
   result.fillLevel = 0

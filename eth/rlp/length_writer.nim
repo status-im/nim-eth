@@ -73,6 +73,9 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     self.listTop += 1
     self.lengths.setLen(self.lengths.len + 1)
 
+proc wrapEncoding*(self: var RlpLengthTracker, numOfEncodings: int) =
+  self.startList(numOfEncodings)
+
 func lengthCount(count: int): int {.inline.} =
   return
     if count < THRESHOLD_LIST_LEN:
