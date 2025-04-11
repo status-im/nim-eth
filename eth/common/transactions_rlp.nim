@@ -14,7 +14,7 @@ from stew/objects import checkedEnumAssign
 export addresses_rlp, base_rlp, hashes_rlp, transactions, rlp
 
 proc appendTxLegacy(w: var RlpWriter, tx: UnsignedTransaction) =
-  if tx.isEip155():
+  if tx.eip155:
     w.startList(9)
   else:
     w.startList(6)
@@ -26,11 +26,11 @@ proc appendTxLegacy(w: var RlpWriter, tx: UnsignedTransaction) =
   w.append(tx.value)
   w.append(tx.payload)
 
-  if tx.isEip155():
+  if tx.eip155:
     w.append(tx.chainId)
     w.append(0'u8)
     w.append(0'u8)
- 
+
 proc appendTxLegacy(w: var RlpWriter, tx: Transaction) =
   w.startList(9)
   w.append(tx.nonce)
@@ -223,6 +223,7 @@ proc append*(w: var RlpWriter, tx: PooledTransaction) =
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 proc rlpEncodeLegacy(tx: Transaction): seq[byte] =
   var w = initRlpWriter()
   w.startList(6)
@@ -346,7 +347,7 @@ proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
 template rlpEncode*(tx: Transaction): seq[byte] {.deprecated.} =
   encodeForSigning(tx, tx.isEip155())
 
-func toUnsignedTransaction(tx: Transaction): UnsignedTransaction =
+func toUnsignedTransaction(tx: Transaction, eip155: bool): UnsignedTransaction =
    result.txType = tx.txType
    result.chainId = tx.chainId
    result.nonce = tx.nonce
@@ -361,11 +362,15 @@ func toUnsignedTransaction(tx: Transaction): UnsignedTransaction =
    result.maxFeePerBlobGas = tx.maxFeePerBlobGas
    result.versionedHashes = tx.versionedHashes
    result.authorizationList = tx.authorizationList
-   result.V = tx.V
+   result.eip155 = eip155
 
-func rlpHashForSigning*(tx: Transaction): Hash32 =
+proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
+  let unsignedTx = toUnsignedTransaction(tx, eip155)
+  rlp.encode(unsignedTx)
+
+func rlpHashForSigning*(tx: Transaction, eip155: bool): Hash32 =
   # Hash transaction without signature
-  let unsignedTx = toUnsignedTransaction(tx)
+  let unsignedTx = toUnsignedTransaction(tx, eip155)
   rlp.encodeHash(unsignedTx)
 
 template txHashNoSignature*(tx: Transaction): Hash32 {.deprecated.} =

@@ -75,7 +75,7 @@ type
     maxFeePerBlobGas*: UInt256            # EIP-4844
     versionedHashes*: seq[VersionedHash]  # EIP-4844
     authorizationList*: seq[Authorization]# EIP-7702
-    V*             : uint64
+    eip155*         : bool
 
   # 32 -> UInt256
   # 4096 -> FIELD_ELEMENTS_PER_BLOB
