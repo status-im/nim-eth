@@ -50,7 +50,7 @@ proc `signature=`*(tx: var Transaction, param: tuple[sig: Signature, eip155: boo
       v
 
 proc sign*(tx: Transaction, pk: PrivateKey, eip155: bool): (Signature, bool) =
-  let hash = tx.rlpHashForSigning()
+  let hash = tx.rlpHashForSigning(eip155)
 
   (sign(pk, SkMessage(hash.data)), eip155)
 
@@ -62,7 +62,7 @@ proc recoverKey*(tx: Transaction): Opt[PublicKey] =
   ## the transaction data.
   let
     sig = ?tx.signature()
-    txHash = tx.rlpHashForSigning()
+    txHash = tx.rlpHashForSigning(tx.isEip155())
 
   recover(sig, SkMessage(txHash.data)).mapConvertErr(void)
 
