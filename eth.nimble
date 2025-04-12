@@ -34,7 +34,7 @@ let cfg =
   " --skipUserCfg --nimcache:build/nimcache -f" &
   " --warning[ObservableStores]:off -d:nimOldCaseObjects" &
   " -d:chronicles_log_level=TRACE" &
-  " --threads:on -d:release"
+  " --threads:on -d:debug --excessiveStackTrace:on"
 
 proc build(args, path, outdir: string) =
   exec nimc & " " & lang & " " & cfg & " " & flags & " " & args &
