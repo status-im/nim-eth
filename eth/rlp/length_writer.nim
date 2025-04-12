@@ -5,20 +5,20 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import ./priv/defs, utils
+import ./priv/defs, utils, pkg/results, stacked_counters
 
 type
-  PendingListItem = tuple[idx, remainingItems, startLen: int]
+  PendingListItem = tuple[idx, startLen: int]
 
   StaticRlpLengthTracker*[N: static int] = object
-    pendingLists: array[N, PendingListItem]
+    pendingLists: StaticStackedCounters[N, PendingListItem]
     lengths*: seq[int]
     listTop: int
     listCount: int
     totalLength*: int
 
   DynamicRlpLengthTracker* = object
-    pendingLists: seq[PendingListItem]
+    pendingLists: DynamicStackedCounters[PendingListItem]
     lengths*: seq[int]
     listTop: int
     listCount: int
@@ -31,28 +31,24 @@ const LIST_LENGTH = 5
 const STACK_LENGTH = 5
 
 proc maybeClosePendingLists(self: var RlpLengthTracker) =
-  while self.listTop > 0:
-    self.pendingLists[self.listTop - 1].remainingItems -= 1
+  # we use a while loop here to close nested lists one after the other (if possible)
+  while true:
+    let item = self.pendingLists.pop(PendingListItem)
 
-    if self.pendingLists[self.listTop - 1].remainingItems == 0:
-      let
-        listIdx = self.pendingLists[self.listTop - 1].idx
-        startLen = self.pendingLists[self.listTop - 1].startLen
-        listLen = self.totalLength - startLen
+    if item.isSome():
+      let 
+        i = item.get()
+        listLen = self.totalLength - i.startLen
         prefixLen =
           if listLen < int(THRESHOLD_LIST_LEN):
             1
           else:
             int(uint64(listLen).bytesNeeded) + 1
 
-      # save the list lengths and prefix lengths
-      self.lengths[listIdx] = listLen
+      # save the list length
+      self.lengths[i.idx] = listLen
 
-      # close the list by deleting
-      self.listTop -= 1
-      when self is DynamicRlpLengthTracker:
-        self.pendingLists.setLen(self.listTop)
-
+      # update the total length
       self.totalLength += prefixLen
     else:
       return
@@ -67,10 +63,7 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     self.maybeClosePendingLists()
   else:
     # open a list
-    when self is DynamicRlpLengthTracker:
-      self.pendingLists.setLen(self.listTop + 1)
-    self.pendingLists[self.listTop] = (self.lengths.len, listSize, self.totalLength)
-    self.listTop += 1
+    self.pendingLists.push((self.lengths.len, self.totalLength), listSize)
     self.lengths.setLen(self.lengths.len + 1)
 
 proc wrapEncoding*(self: var RlpLengthTracker, numOfEncodings: int) =
@@ -101,7 +94,7 @@ func initLengthTracker*(self: var RlpLengthTracker) =
   # we preset the lengths since we want to skip using add method for
   # these lists
   when self is DynamicRlpLengthTracker:
-    self.pendingLists = newSeqOfCap[(int, int, int)](STACK_LENGTH)
+    self.pendingLists.init(STACK_LENGTH, PendingListItem)
   self.lengths = newSeqOfCap[int](LIST_LENGTH)
 
 template finish*(self: RlpLengthTracker): int =
