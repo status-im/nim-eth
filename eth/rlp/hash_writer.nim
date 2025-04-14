@@ -10,7 +10,9 @@ import nimcrypto/keccak, ./priv/defs, utils, ../common/hashes, length_writer
 type RlpHashWriter* = object
   keccak: keccak.keccak256
   lengths*: seq[int]
+  wrapLengths*: seq[int]
   listCount: int
+  wrapCount: int
   bigEndianBuf: array[8, byte]
 
 template update(writer: var RlpHashWriter, data: byte) =
@@ -23,15 +25,12 @@ template updateBigEndian(writer: var RlpHashWriter, i: SomeUnsignedInt, length: 
   writer.bigEndianBuf.writeBigEndian(i, length - 1, length)
   writer.update(writer.bigEndianBuf.toOpenArray(0, length - 1))
 
-func writeCount(writer: var RlpHashWriter, count: int, baseMarker: byte) =
-  if count < THRESHOLD_LIST_LEN:
-    writer.update(baseMarker + byte(count))
+func writeLength(writer: var RlpHashWriter, dataLen: int, baseMarker: byte) =
+  if dataLen < THRESHOLD_LEN:
+    writer.update(baseMarker + byte(dataLen))
   else:
-    let lenPrefixBytes = uint64(count).bytesNeeded
-
-    writer.update baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
-
-    writer.updateBigEndian(uint64(count), lenPrefixBytes)
+    writer.update(baseMarker + (THRESHOLD_LEN - 1) + byte(uint64(dataLen).bytesNeeded))
+    writer.updateBigEndian(uint64(dataLen), uint64(dataLen).bytesNeeded)
 
 func writeInt*(writer: var RlpHashWriter, i: SomeUnsignedInt) =
   if i == typeof(i)(0):
@@ -40,52 +39,56 @@ func writeInt*(writer: var RlpHashWriter, i: SomeUnsignedInt) =
     writer.update byte(i)
   else:
     let bytesNeeded = i.bytesNeeded
-    writer.writeCount(bytesNeeded, BLOB_START_MARKER)
-
+    writer.writeLength(bytesNeeded, BLOB_START_MARKER)
     writer.updateBigEndian(uint64(i), bytesNeeded)
 
-template appendRawBytes*(self: var RlpHashWriter, bytes: openArray[byte]) =
-  self.update(bytes)
+template appendRawBytes*(writer: var RlpHashWriter, bytes: openArray[byte]) =
+  writer.update(bytes)
 
-proc writeBlob*(self: var RlpHashWriter, bytes: openArray[byte]) =
+proc writeBlob*(writer: var RlpHashWriter, bytes: openArray[byte]) =
   if bytes.len == 1 and byte(bytes[0]) < BLOB_START_MARKER:
-    self.update byte(bytes[0])
+    writer.update byte(bytes[0])
   else:
-    self.writeCount(bytes.len, BLOB_START_MARKER)
-    self.appendRawBytes(bytes)
+    writer.writeLength(bytes.len, BLOB_START_MARKER)
+    writer.appendRawBytes(bytes)
 
-proc startList*(self: var RlpHashWriter, listSize: int, startMarker: byte = LIST_START_MARKER, lenPrefixedMarker: byte = LEN_PREFIXED_LIST_MARKER) =
+proc startList*(writer: var RlpHashWriter, listSize: int) =
+  mixin writeCount
+
   if listSize == 0:
-    self.writeCount(0, LIST_START_MARKER)
+    writer.writeLength(0, LIST_START_MARKER)
   else:
     let
-      listLen = self.lengths[self.listCount]
-      prefixLen =
-        if listLen < int(THRESHOLD_LIST_LEN):
-          1
-        else:
-          int(uint64(listLen).bytesNeeded) + 1
+      listLen = writer.lengths[writer.listCount]
+      prefixLen = prefixLength(listLen)
 
-    self.listCount += 1
+    writer.listCount += 1
 
-    if listLen < THRESHOLD_LIST_LEN:
-      self.update(startMarker + byte(listLen))
-    else:
-      let listLenBytes = prefixLen - 1
-      self.update(lenPrefixedMarker + byte(listLenBytes))
+    writer.writeLength(listLen, LIST_START_MARKER)
 
-      self.updateBigEndian(uint64(listLen), listLenBytes)
+proc wrapEncoding*(writer: var RlpHashWriter, numOfEncodings: int) =
+  debugEcho "wrapEncoding Hash Writer: ", numOfEncodings
+  let
+    encodingLen = writer.wrapLengths[writer.wrapCount]
+    prefixLen = prefixLength(encodingLen)
 
-proc wrapEncoding*(self: var RlpHashWriter, numOfEncodings: int) =
-  self.startList(numOfEncodings, BLOB_START_MARKER, BLOB_START_MARKER + (THRESHOLD_LIST_LEN - 1))
+  if encodingLen == 0:
+    return # do nothing because nested encoding of a single byte <128 is the byte itself
+
+  writer.wrapCount += 1
+
+  writer.writeLength(encodingLen, BLOB_START_MARKER)
 
 func initHashWriter*(tracker: var RlpLengthTracker): RlpHashWriter =
   result.lengths = move(tracker.lengths)
+  result.wrapLengths = move(tracker.wrapLengths)
 
 template finish*(self: var RlpHashWriter): Hash32 =
   self.lengths.setLen(0)
+  self.wrapLengths.setLen(0)
   self.keccak.finish.to(Hash32)
 
-func clear*(w: var RlpHashWriter) =
+func clear*(self: var RlpHashWriter) =
   # Prepare writer for reuse
-  w.lengths.setLen(0)
+  self.lengths.setLen(0)
+  self.wrapLengths.setLen(0)
