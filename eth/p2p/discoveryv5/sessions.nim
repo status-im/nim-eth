@@ -35,6 +35,7 @@ type
     readKey*: AesKey
     writeKey*: AesKey
     counter*: uint32
+    enr*: Opt[Record]
 
   Sessions* = LruCache[SessionKey, Session]
 
@@ -77,7 +78,7 @@ func store*(s: var Sessions, id: NodeId, address: Address, session: Session) =
   s.put(makeKey(id, address), session)
 
 func store*(s: var Sessions, id: NodeId, address: Address, r, w: AesKey) =
-  s.store(id, address, Session(readKey: r, writeKey: w, counter: 0))
+  s.store(id, address, Session(readKey: r, writeKey: w, counter: 0, enr: Opt.none(Record)))
 
 func load*(s: var Sessions, id: NodeId, address: Address): Opt[Session] =
   s.get(makeKey(id, address))
@@ -91,3 +92,14 @@ func loadReadKey*(s: var Sessions, id: NodeId, address: Address): Opt[AesKey] =
 
 func del*(s: var Sessions, id: NodeId, address: Address) =
   s.del(makeKey(id, address))
+
+func setEnr*(s: var Sessions, id: NodeId, address: Address, enr: Record) =
+  let res = s.peek(makeKey(id, address))
+  if res.isSome():
+    res.value().enr = Opt.some(enr)
+
+func getEnr*(s: var Sessions, id: NodeId, address: Address): Opt[Record] =
+  let session = s.peek(makeKey(id, address)).valueOr:
+    return Opt.none(Record)
+
+  session.enr

@@ -13,7 +13,7 @@ import
   ../../common/keys, ../../net/utils,
   ./enr
 
-export stint, results
+export stint, results, enr
 
 type
   NodeId* = UInt256

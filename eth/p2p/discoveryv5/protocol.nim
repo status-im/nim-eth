@@ -272,6 +272,9 @@ func updateRecord*(
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
+func getEnr*(d: Protocol, id: NodeId, address: Address): Opt[enr.Record] =
+  d.codec.sessions.getEnr(id, address)
+
 proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async: (raises: []).} =
   let ta = initTAddress(a.ip, a.port)
   try:
@@ -498,6 +501,10 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
         let data = encodeHandshakePacket(d.rng[], d.codec, toNode.id,
           address, pr.message, packet.whoareyou, toNode.pubkey)
 
+        # Finished setting up the session on our side, so store the ENR of the
+        # peer in the session cache.
+        d.codec.sessions.setEnr(toNode.id, address, toNode.record)
+
         trace "Send handshake message packet", dstId = toNode.id, address
         d.send(toNode, data)
       else:
@@ -509,7 +516,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
 
       trace "Received handshake message packet", srcId = packet.srcIdHs,
         address = a, kind = packet.message.kind
-      d.handleMessage(packet.srcIdHs, a, packet.message, packet.node)
+
       # For a handshake message it is possible that we received an newer ENR.
       # In that case we can add/update it to the routing table.
       if packet.node.isSome():
@@ -521,6 +528,20 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
         if node.address.isSome() and a == node.address.get():
           if d.addNode(node):
             trace "Added new node to routing table after handshake", node
+
+        # Received an ENR in the handshake, add it to the session that was just
+        # created in the session cache.
+        d.codec.sessions.setEnr(packet.srcIdHs, a, node.record)
+      else:
+        # Did not receive an ENR in the handshake, this means that the ENR used
+        # is up to date. Get it from the routing table which should normally
+        # be there unless the request was started manually (E.g. from a JSON-RPC call).
+        let node = d.getNode(packet.srcIdHs)
+        if node.isSome():
+          d.codec.sessions.setEnr(packet.srcIdHs, a, node.value().record)
+
+      # The handling of the message needs to be done after adding the ENR.
+      d.handleMessage(packet.srcIdHs, a, packet.message, packet.node)
   else:
     trace "Packet decoding error", error = decoded.error, address = a
 
@@ -536,8 +557,6 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
               return
 
   proto.receive(Address(ip: raddr.toIpAddress(), port: raddr.port), buf)
-
-
 
 # TODO: This could be improved to do the clean-up immediately in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
