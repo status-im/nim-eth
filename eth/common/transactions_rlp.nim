@@ -98,7 +98,7 @@ proc appendTxEip7702(w: var RlpWriter, tx: Transaction) =
 
 proc appendTxEip7873(w: var RlpWriter, tx: Transaction) =
   w.startList(13)
-  w.append(tx.chainId.uint64)
+  w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.maxPriorityFeePerGas)
   w.append(tx.maxFeePerGas)
@@ -237,7 +237,7 @@ proc rlpEncodeEip7873(tx: Transaction): seq[byte] =
   var w = initRlpWriter()
   w.append(TxEip7873)
   w.startList(10)
-  w.append(tx.chainId.uint64)
+  w.append(tx.chainId)
   w.append(tx.nonce)
   w.append(tx.maxPriorityFeePerGas)
   w.append(tx.maxFeePerGas)
@@ -387,7 +387,7 @@ proc readTxEip7702(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
 proc readTxEip7873(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip7873
   rlp.tryEnterList()
-  tx.chainId = rlp.read(uint64).ChainId
+  tx.chainId = rlp.read(ChainId)
   rlp.read(tx.nonce)
   rlp.read(tx.maxPriorityFeePerGas)
   rlp.read(tx.maxFeePerGas)

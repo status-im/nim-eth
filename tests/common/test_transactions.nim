@@ -171,7 +171,7 @@ proc txEip7873(i: int): PooledTransaction =
   PooledTransaction(
     tx: Transaction(
       txType:   TxEip7873,
-      chainId:  1.ChainId,
+      chainId:  chainId(1),
       nonce:    i.AccountNonce,
       maxPriorityFeePerGas: 2.GasInt,
       maxFeePerGas: 3.GasInt,
