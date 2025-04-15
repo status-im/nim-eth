@@ -224,8 +224,7 @@ proc rlpEncodeEip7702(w: var RlpWriter, tx: Transaction) =
   w.append(tx.accessList)
   w.append(tx.authorizationList)
 
-proc rlpEncodeEip7873(tx: Transaction): seq[byte] =
-  var w = initRlpWriter()
+proc rlpEncodeEip7873(w: var RlpWriter, tx: Transaction) =
   w.append(TxEip7873)
   w.startList(10)
   w.append(tx.chainId)
@@ -238,24 +237,23 @@ proc rlpEncodeEip7873(tx: Transaction): seq[byte] =
   w.append(tx.payload)
   w.append(tx.accessList)
   w.append(tx.initCodes)
-  w.finish()
 
 proc encodeUnsignedTransaction*(w: var RlpWriter, tx: Transaction, eip155: bool) =
   ## Encode transaction data in preparation for signing or signature checking.
   ## For signature checking, set `eip155 = tx.isEip155`
   case tx.txType
   of TxLegacy:
-    if eip155: tx.rlpEncodeEip155 else: tx.rlpEncodeLegacy
+    if eip155: w.rlpEncodeEip155(tx) else: w.rlpEncodeLegacy(tx)
   of TxEip2930:
-    tx.rlpEncodeEip2930
+    w.rlpEncodeEip2930(tx)
   of TxEip1559:
-    tx.rlpEncodeEip1559
+    w.rlpEncodeEip1559(tx)
   of TxEip4844:
-    tx.rlpEncodeEip4844
+    w.rlpEncodeEip4844(tx)
   of TxEip7702:
-    tx.rlpEncodeEip7702
+    w.rlpEncodeEip7702(tx)
   of TxEip7873:
-    tx.rlpEncodeEip7873
+    w.rlpEncodeEip7873(tx)
 
 proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
   ## Encode transaction data in preparation for signing or signature checking.
