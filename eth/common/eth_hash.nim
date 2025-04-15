@@ -22,10 +22,10 @@ type
   Hash256* {.deprecated.} = Hash32
   KeccakHash* {.deprecated.} = Hash32
 
-template keccakHash*(v: openArray[byte]): Hash32 {.deprecated.} =
+template keccakHash*(v: openArray[byte]): Hash32 {.deprecated: "keccak256".} =
   keccak256(v)
 
-template keccakHash*(v: Address): Hash32 {.deprecated.} =
+template keccakHash*(v: Address): Hash32 {.deprecated: "keccak256".} =
   keccak256(v.data)
 
 from nimcrypto/hash import MDigest
