@@ -34,6 +34,7 @@ type
     TxEip1559   # 2
     TxEip4844   # 3
     TxEip7702   # 4
+    TxEip7873   # 5
 
   Transaction* = object
     txType*        : TxType               # EIP-2718
@@ -50,6 +51,7 @@ type
     maxFeePerBlobGas*: UInt256            # EIP-4844
     versionedHashes*: seq[VersionedHash]  # EIP-4844
     authorizationList*: seq[Authorization]# EIP-7702
+    initCodes*     : seq[seq[byte]]       # EIP-7873
     V*             : uint64
     R*, S*         : UInt256
 

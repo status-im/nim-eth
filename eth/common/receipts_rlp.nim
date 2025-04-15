@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,7 +14,7 @@ from stew/objects import checkedEnumAssign
 export addresses_rlp, base_rlp, hashes_rlp, receipts, rlp
 
 proc append*(w: var RlpWriter, rec: Receipt) =
-  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt}:
+  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip7873Receipt}:
     w.append(rec.receiptType.uint)
 
   w.startList(4)
@@ -59,7 +59,7 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].}
   var txVal: ReceiptType
   if checkedEnumAssign(txVal, recType):
     case txVal
-    of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt:
+    of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip7873Receipt:
       receipt.receiptType = txVal
     of LegacyReceipt:
       # The legacy type should not be used here.
