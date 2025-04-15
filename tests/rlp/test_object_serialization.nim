@@ -102,8 +102,8 @@ proc suite() =
         originalBar = Bar(b: "abracadabra",
                             f: Foo(x: 5'u64, y: "hocus pocus", z: @[uint64 100, 200, 300]))
         originalBarBytes = encode(originalBar)
-        originalBarHash  = encodeHash(originalBar)
-        (length, hash)    = getEncodedLengthAndHash(originalBar)
+        originalBarHash  = computeRlpHash(originalBar)
+        (length, hash)   = getEncodedLengthAndHash(originalBar)
 
       check:
         originalBarBytes.len == length

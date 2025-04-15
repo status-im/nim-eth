@@ -232,7 +232,7 @@ proc encode*[T](v: T): seq[byte] =
     writer.append(v)
     move(writer.finish)
 
-proc encodeHash*[T](v: T): Hash32 =
+proc computeRlpHash*[T](v: T): Hash32 =
   mixin append
 
   withTracker(v):

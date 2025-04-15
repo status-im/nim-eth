@@ -49,7 +49,7 @@ proc encodeAndHash[T](v: T): Hash32 =
 suite "test simulatneous encoding and hashing using hash writer":
   test "sanity check - Transaction":
     let hashedTx = encodeAndHash(myTx)
-    check rlp.encodeHash(myTx) == hashedTx
+    check rlp.computeRlpHash(myTx) == hashedTx
   test "sanity check - Transaction":
     let hashedBlockSeq = encodeAndHash(blkSeq)
-    check rlp.encodeHash(blkSeq) == hashedBlockSeq
+    check rlp.computeRlpHash(blkSeq) == hashedBlockSeq
