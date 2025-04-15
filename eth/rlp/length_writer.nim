@@ -30,7 +30,7 @@ type
 const LIST_LENGTH = 5
 const STACK_LENGTH = 5
 
-proc decrementWrapCounters(self: var RlpLengthTracker, isLessThanBlobMarker: bool) =
+proc decrementWrapCounters(self: var RlpLengthTracker, isSelfEncoding: bool) =
   # we use a while loop here to close nested lists one after the other (if possible)
   while true:
     let item = self.wrappedEncodings.pop(PendingListItem)
@@ -42,7 +42,7 @@ proc decrementWrapCounters(self: var RlpLengthTracker, isLessThanBlobMarker: boo
         encodingLen = self.totalLength - i.startLen
         prefixLen = prefixLength(encodingLen) 
 
-      if isLessThanBlobMarker and prefixLen == 1:
+      if isSelfEncoding and prefixLen == 1:
         # nested/wrapped encoding of a single byte lesser than 128(BLOB_START_MARKER)
         # is not required the byte itself is its own encoding
         prefixLen = 0
@@ -79,7 +79,7 @@ proc decrementListCounters(self: var RlpLengthTracker) =
 
 func appendRawBytes*(self: var RlpLengthTracker, bytes: openArray[byte]) =
   self.totalLength += bytes.len
-  self.decrementWrapCounters(bytes.len == 1 and bytes[0] < BLOB_START_MARKER)
+  self.decrementWrapCounters(bytes.len == 1 and bytes[0] < BLOB_START_MARKER and bytes[0] > 0)
   self.decrementListCounters()
 
 proc startList*(self: var RlpLengthTracker, listSize: int) =
@@ -98,25 +98,27 @@ proc wrapEncoding*(self: var RlpLengthTracker, numOfEncodings: int) =
   self.wrapLengths.setLen(self.wrapLengths.len + 1)
 
 func writeBlob*(self: var RlpLengthTracker, data: openArray[byte]) =
-  let isLessThanBlobMarker = data.len == 1 and byte(data[0]) < BLOB_START_MARKER
+  let isSelfEncoding = data.len == 1 and byte(data[0]) < BLOB_START_MARKER
 
-  if isLessThanBlobMarker:
+  if isSelfEncoding:
     self.totalLength += data.len
   else:
     self.totalLength += prefixLength(data.len) + data.len
 
-  self.decrementWrapCounters(isLessThanBlobMarker)
+  self.decrementWrapCounters(isSelfEncoding)
   self.decrementListCounters()
 
 func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
-  let isLessThanBlobMarker = i < typeof(i)(BLOB_START_MARKER)
+  let isSelfEncoding = i < typeof(i)(BLOB_START_MARKER) and i > typeof(i)(0)
 
-  if isLessThanBlobMarker:
+  if isSelfEncoding:
+    self.totalLength += 1
+  elif i == typeof(i)(0):
     self.totalLength += 1
   else:
     self.totalLength += prefixLength(i.bytesNeeded) + i.bytesNeeded
 
-  self.decrementWrapCounters(isLessThanBlobMarker)
+  self.decrementWrapCounters(isSelfEncoding)
   self.decrementListCounters()
 
 func initLengthTracker*(self: var RlpLengthTracker) =

@@ -50,12 +50,8 @@ func init*(T: type OrderedTrieRootBuilder, expected: int): T =
 proc append*(w: var RlpWriter, node: OrderedTrieLeaf) =
   w.startList(2)
   w.append(node.keyPath.data)
-  # we need to make sure we encode the encoding.
-  if (typeof node.value) is SomeUnsignedInt and node.value > 0 and node.value < (typeof node.value)(128):
-    w.append(node.value)
-  else:
-    w.wrapEncoding(1)
-    w.append(node.value)
+  w.wrapEncoding(1)
+  w.append(node.value)
 
 proc append*(w: var RlpWriter, node: OrderedTrieExtension) =
   w.startList(2)

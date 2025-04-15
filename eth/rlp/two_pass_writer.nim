@@ -69,7 +69,6 @@ proc startList*(writer: var RlpTwoPassWriter, listSize: int) =
     writer.writeLength(listLen, LIST_START_MARKER)
 
 proc wrapEncoding*(self: var RlpTwoPassWriter, numOfEncodings: int) =
-  debugEcho "wrapEncoding Hash Writer: ", numOfEncodings
   let
     encodingLen = self.wrapLengths[self.wrapCount]
     prefixLen = prefixLength(encodingLen)
