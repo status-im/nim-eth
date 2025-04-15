@@ -99,8 +99,6 @@ proc appendTxEip7702(w: var RlpWriter, tx: Transaction) =
   w.append(tx.R)
   w.append(tx.S)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 proc appendTxEip7873(w: var RlpWriter, tx: Transaction) =
   w.startList(13)
   w.append(tx.chainId)
@@ -151,15 +149,7 @@ proc append*(w: var RlpWriter, tx: PooledTransaction) =
   if tx.networkPayload != nil:
     w.append(tx.networkPayload)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-proc rlpEncodeLegacy(tx: Transaction): seq[byte] =
-  var w = initRlpWriter()
-=======
 proc rlpEncodeLegacy(w: var RlpWriter, tx: Transaction) =
->>>>>>> f673b1a (fix)
   w.startList(6)
   w.append(tx.nonce)
   w.append(tx.gasPrice)
@@ -167,15 +157,8 @@ proc rlpEncodeLegacy(w: var RlpWriter, tx: Transaction) =
   w.append(tx.to)
   w.append(tx.value)
   w.append(tx.payload)
-<<<<<<< HEAD
-  w.finish()
-
-proc rlpEncodeEip155(tx: Transaction): seq[byte] =
-  var w = initRlpWriter()
-=======
 
 proc rlpEncodeEip155(w: var RlpWriter, tx: Transaction) =
->>>>>>> f673b1a (fix)
   w.startList(9)
   w.append(tx.nonce)
   w.append(tx.gasPrice)
@@ -186,15 +169,8 @@ proc rlpEncodeEip155(w: var RlpWriter, tx: Transaction) =
   w.append(tx.chainId)
   w.append(0'u8)
   w.append(0'u8)
-<<<<<<< HEAD
-  w.finish()
-
-proc rlpEncodeEip2930(tx: Transaction): seq[byte] =
-  var w = initRlpWriter()
-=======
 
 proc rlpEncodeEip2930(w: var RlpWriter, tx: Transaction) =
->>>>>>> f673b1a (fix)
   w.append(TxEip2930)
   w.startList(8)
   w.append(tx.chainId)
@@ -205,15 +181,8 @@ proc rlpEncodeEip2930(w: var RlpWriter, tx: Transaction) =
   w.append(tx.value)
   w.append(tx.payload)
   w.append(tx.accessList)
-<<<<<<< HEAD
-  w.finish()
-
-proc rlpEncodeEip1559(tx: Transaction): seq[byte] =
-  var w = initRlpWriter()
-=======
 
 proc rlpEncodeEip1559(w: var RlpWriter, tx: Transaction) =
->>>>>>> f673b1a (fix)
   w.append(TxEip1559)
   w.startList(9)
   w.append(tx.chainId)
@@ -225,15 +194,8 @@ proc rlpEncodeEip1559(w: var RlpWriter, tx: Transaction) =
   w.append(tx.value)
   w.append(tx.payload)
   w.append(tx.accessList)
-<<<<<<< HEAD
-  w.finish()
-
-proc rlpEncodeEip4844(tx: Transaction): seq[byte] =
-  var w = initRlpWriter()
-=======
 
 proc rlpEncodeEip4844(w: var RlpWriter, tx: Transaction) =
->>>>>>> f673b1a (fix)
   w.append(TxEip4844)
   w.startList(11)
   w.append(tx.chainId)
@@ -247,15 +209,8 @@ proc rlpEncodeEip4844(w: var RlpWriter, tx: Transaction) =
   w.append(tx.accessList)
   w.append(tx.maxFeePerBlobGas)
   w.append(tx.versionedHashes)
-<<<<<<< HEAD
-  w.finish()
-
-proc rlpEncodeEip7702(tx: Transaction): seq[byte] =
-  var w = initRlpWriter()
-=======
 
 proc rlpEncodeEip7702(w: var RlpWriter, tx: Transaction) =
->>>>>>> f673b1a (fix)
   w.append(TxEip7702)
   w.startList(10)
   w.append(tx.chainId)
@@ -268,8 +223,6 @@ proc rlpEncodeEip7702(w: var RlpWriter, tx: Transaction) =
   w.append(tx.payload)
   w.append(tx.accessList)
   w.append(tx.authorizationList)
-<<<<<<< HEAD
-  w.finish()
 
 proc rlpEncodeEip7873(tx: Transaction): seq[byte] =
   var w = initRlpWriter()
@@ -287,16 +240,11 @@ proc rlpEncodeEip7873(tx: Transaction): seq[byte] =
   w.append(tx.initCodes)
   w.finish()
 
-proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
-=======
-
 proc encodeUnsignedTransaction*(w: var RlpWriter, tx: Transaction, eip155: bool) =
->>>>>>> f673b1a (fix)
   ## Encode transaction data in preparation for signing or signature checking.
   ## For signature checking, set `eip155 = tx.isEip155`
   case tx.txType
   of TxLegacy:
-<<<<<<< HEAD
     if eip155: tx.rlpEncodeEip155 else: tx.rlpEncodeLegacy
   of TxEip2930:
     tx.rlpEncodeEip2930
@@ -308,37 +256,6 @@ proc encodeUnsignedTransaction*(w: var RlpWriter, tx: Transaction, eip155: bool)
     tx.rlpEncodeEip7702
   of TxEip7873:
     tx.rlpEncodeEip7873
-
-template rlpEncode*(tx: Transaction): seq[byte] {.deprecated.} =
-  encodeForSigning(tx, tx.isEip155())
-
-func toUnsignedTransaction(tx: Transaction, eip155: bool): UnsignedTransaction =
-   result.txType = tx.txType
-   result.chainId = tx.chainId
-   result.nonce = tx.nonce
-   result.gasPrice = tx.gasPrice
-   result.maxPriorityFeePerGas = tx.maxPriorityFeePerGas
-   result.maxFeePerGas = tx.maxFeePerGas
-   result.gasLimit = tx.gasLimit
-   result.to = tx.to
-   result.value = tx.value
-   result.payload = tx.payload
-   result.accessList = tx.accessList
-   result.maxFeePerBlobGas = tx.maxFeePerBlobGas
-   result.versionedHashes = tx.versionedHashes
-   result.authorizationList = tx.authorizationList
-   result.eip155 = eip155
-=======
-    if eip155: w.rlpEncodeEip155(tx) else: w.rlpEncodeLegacy(tx)
-  of TxEip2930:
-    w.rlpEncodeEip2930(tx)
-  of TxEip1559:
-    w.rlpEncodeEip1559(tx)
-  of TxEip4844:
-    w.rlpEncodeEip4844(tx)
-  of TxEip7702:
-    w.rlpEncodeEip7702(tx)
->>>>>>> f673b1a (fix)
 
 proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
   ## Encode transaction data in preparation for signing or signature checking.
