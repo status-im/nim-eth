@@ -85,9 +85,12 @@ func initTwoPassWriter*(tracker: var RlpLengthTracker): RlpTwoPassWriter =
   result.lengths = move(tracker.lengths)
   result.wrapLengths = move(tracker.wrapLengths)
 
+func reInit*(self: var RlpTwoPassWriter, tracker: var RlpLengthTracker) =
+  self.output.setLen(tracker.totalLength)
+  self.lengths = move(tracker.lengths)
+  self.wrapLengths = move(tracker.wrapLengths)
+
 template finish*(self: RlpTwoPassWriter): seq[byte] =
-  self.lengths.setLen(0)
-  self.wrapLengths.setLen(0)
   self.output
 
 func clear*(self: var RlpTwoPassWriter) =
@@ -95,3 +98,6 @@ func clear*(self: var RlpTwoPassWriter) =
   self.lengths.setLen(0)
   self.wrapLengths.setLen(0)
   self.output.setLen(0)
+  self.listCount = 0
+  self.wrapCount = 0
+  self.fillLevel = 0

@@ -82,12 +82,17 @@ func initHashWriter*(tracker: var RlpLengthTracker): RlpHashWriter =
   result.lengths = move(tracker.lengths)
   result.wrapLengths = move(tracker.wrapLengths)
 
+func reInit*(self: var RlpHashWriter, tracker: var RlpLengthTracker) =
+  self.lengths = move(tracker.lengths)
+  self.wrapLengths = move(tracker.wrapLengths)
+
 template finish*(self: var RlpHashWriter): Hash32 =
-  self.lengths.setLen(0)
-  self.wrapLengths.setLen(0)
   self.keccak.finish.to(Hash32)
 
 func clear*(self: var RlpHashWriter) =
   # Prepare writer for reuse
   self.lengths.setLen(0)
   self.wrapLengths.setLen(0)
+  self.listCount = 0
+  self.wrapCount = 0
+  self.keccak.clear()

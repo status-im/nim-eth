@@ -43,4 +43,8 @@ proc pop*(self: var DynamicStackedCounters, T: type): Opt[T] =
 proc init*(self: var DynamicStackedCounters, stackLen: int, T: type) =
   self.stack = newSeqOfCap[(T, int)](stackLen)
 
+proc clear*(self: var DynamicStackedCounters) =
+  self.stack.setLen(0)
 
+proc clear*(self: var StaticStackedCounters) =
+  self.top = 0
