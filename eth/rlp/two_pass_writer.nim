@@ -95,9 +95,4 @@ template finish*(self: RlpTwoPassWriter): seq[byte] =
 
 func clear*(self: var RlpTwoPassWriter) =
   # Prepare writer for reuse
-  self.lengths.setLen(0)
-  self.wrapLengths.setLen(0)
-  self.output.setLen(0)
-  self.listCount = 0
-  self.wrapCount = 0
-  self.fillLevel = 0
+  self.reset()

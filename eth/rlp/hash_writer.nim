@@ -91,8 +91,4 @@ template finish*(self: var RlpHashWriter): Hash32 =
 
 func clear*(self: var RlpHashWriter) =
   # Prepare writer for reuse
-  self.lengths.setLen(0)
-  self.wrapLengths.setLen(0)
-  self.listCount = 0
-  self.wrapCount = 0
-  self.keccak.clear()
+  self.reset()

@@ -133,7 +133,7 @@ template finish*(self: RlpLengthTracker): int =
 
 func clear*(w: var RlpLengthTracker) =
   # Prepare writer for reuse
-  w.lengths.setLen(0)
+  w.lengths.reset()
   w.totalLength = 0
   when w is DynamicRlpLengthTracker:
-    w.pendingLists.clear
+    w.pendingLists.clear()
