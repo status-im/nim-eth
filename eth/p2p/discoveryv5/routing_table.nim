@@ -195,7 +195,8 @@ func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   r.ipLimits.dec(ip)
 
 func getNode*(r: RoutingTable, id: NodeId): Opt[Node]
-proc replaceNode*(r: var RoutingTable, n: Node) {.gcsafe.}
+proc removeNode*(r: var RoutingTable, n: Node) {.gcsafe.}
+proc replaceNode*(r: var RoutingTable, n: Node): bool {.discardable, gcsafe.}
 
 proc banNode*(r: var RoutingTable, nodeId: NodeId, period: chronos.Duration) =
   ## Ban a node from the routing table for the given period. The node is removed
@@ -214,8 +215,9 @@ proc banNode*(r: var RoutingTable, nodeId: NodeId, period: chronos.Duration) =
 
   # Remove the node from the routing table
   let node = r.getNode(nodeId)
-  if node.isSome():
-    r.replaceNode(node.get())
+  if node.isSome() and not r.replaceNode(node.get()):
+    # Remove the node if the node was not replaced due to an empty replacement cache
+    r.removeNode(node.get())
 
 proc isBanned*(r: RoutingTable, nodeId: NodeId): bool =
   if not r.bannedNodes.contains(nodeId):
@@ -458,20 +460,35 @@ proc removeNode*(r: var RoutingTable, n: Node) =
   if b.remove(n):
     ipLimitDec(r, b, n)
 
-proc replaceNode*(r: var RoutingTable, n: Node) =
+proc replaceNode*(r: var RoutingTable, n: Node): bool {.discardable.} =
   ## Replace node `n` with last entry in the replacement cache. If there are
-  ## no entries in the replacement cache, node `n` will simply be removed.
-  # TODO: Kademlia paper recommends here to not remove nodes if there are no
+  ## no entries in the replacement cache, node `n` will simply be marked as
+  ## not seen. Returns bool indictating whether or not the node was successfully
+  ## replaced.
+
+  # Note: Kademlia paper recommends here to not remove nodes if there are no
   # replacements. However, that would require a bit more complexity in the
   # revalidation as you don't want to try pinging that node all the time.
+
+  var replaced = false
+
   let b = r.bucketForNode(n.id)
-  if b.remove(n):
+
+  if b.replacementCache.len == 0:
+    let idx = b.nodes.find(n)
+    if idx >= 0 and n.seen:
+      b.nodes[idx].seen = false
+
+  elif b.remove(n):
     ipLimitDec(r, b, n)
 
-    if b.replacementCache.len > 0:
-      # Nodes in the replacement cache are already included in the ip limits.
-      b.add(b.replacementCache[high(b.replacementCache)])
-      b.replacementCache.delete(high(b.replacementCache))
+    # Nodes in the replacement cache are already included in the ip limits.
+    b.add(b.replacementCache[high(b.replacementCache)])
+    b.replacementCache.delete(high(b.replacementCache))
+    replaced = true
+
+  return replaced
+
 
 func getNode*(r: RoutingTable, id: NodeId): Opt[Node] =
   ## Get the `Node` with `id` as `NodeId` from the routing table.

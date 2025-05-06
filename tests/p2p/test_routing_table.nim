@@ -148,7 +148,7 @@ suite "Routing Table Tests":
     table.replaceNode(generateNode(PrivateKey.random(rng[])))
     check table.len == 1
 
-    table.replaceNode(addedNode)
+    table.removeNode(addedNode)
     check table.len == 0
 
   test "Empty replacement cache":
@@ -162,8 +162,8 @@ suite "Routing Table Tests":
       check table.addNode(n) == Added
 
     table.replaceNode(table.nodeToRevalidate())
-    # This node should still be removed
-    check (table.getNode(bucketNodes[bucketNodes.high].id)).isNone()
+    # This node should not be removed
+    check (table.getNode(bucketNodes[bucketNodes.high].id)).isSome()
 
   test "Double add":
     let node = generateNode(PrivateKey.random(rng[]))
@@ -191,7 +191,7 @@ suite "Routing Table Tests":
     check:
       res.isSome()
       res.get() == doubleNode
-      table.len == 1
+      table.len == 16
 
   test "Double replacement add":
     let node = generateNode(PrivateKey.random(rng[]))
@@ -237,7 +237,7 @@ suite "Routing Table Tests":
 
     for n in bucketNodes:
       table.replaceNode(table.nodeToRevalidate())
-      check (table.getNode(n.id)).isNone()
+      check (table.getNode(n.id)).isSome()
 
   test "Just seen replacement":
     let node = generateNode(PrivateKey.random(rng[]))
@@ -286,7 +286,7 @@ suite "Routing Table Tests":
       check table.addNode(anotherSameIpNode) == IpLimitReached
 
       # Remove one and try add again
-      table.replaceNode(table.nodeToRevalidate())
+      table.removeNode(table.nodeToRevalidate())
       check table.addNode(anotherSameIpNode) == Added
 
       # Further fill the bucket with nodes with different ip.
@@ -386,10 +386,10 @@ suite "Routing Table Tests":
 
         table.getNode(anotherSameIpNode2.id).isNone()
 
-    block: # Replace again to see if the first one never becomes available
+    block: # Replace again to see if the first one becomes available
       table.replaceNode(table.nodeToRevalidate())
       check:
-        table.getNode(anotherSameIpNode1.id).isNone()
+        table.getNode(anotherSameIpNode1.id).isSome()
         table.getNode(anotherSameIpNode2.id).isNone()
 
   test "Ip limits on replacement cache: deletion":
