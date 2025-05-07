@@ -470,25 +470,23 @@ proc replaceNode*(r: var RoutingTable, n: Node): bool {.discardable.} =
   # replacements. However, that would require a bit more complexity in the
   # revalidation as you don't want to try pinging that node all the time.
 
-  var replaced = false
-
   let b = r.bucketForNode(n.id)
 
   if b.replacementCache.len == 0:
     let idx = b.nodes.find(n)
+
     if idx >= 0 and n.seen:
       b.nodes[idx].seen = false
-
+    return false
   elif b.remove(n):
     ipLimitDec(r, b, n)
 
     # Nodes in the replacement cache are already included in the ip limits.
     b.add(b.replacementCache[high(b.replacementCache)])
     b.replacementCache.delete(high(b.replacementCache))
-    replaced = true
-
-  return replaced
-
+    return true
+  else:
+    return false
 
 func getNode*(r: RoutingTable, id: NodeId): Opt[Node] =
   ## Get the `Node` with `id` as `NodeId` from the routing table.

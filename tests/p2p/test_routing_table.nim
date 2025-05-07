@@ -157,41 +157,56 @@ suite "Routing Table Tests":
     var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
 
     # create a full bucket TODO: no need to store bucketNodes
-    let bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
-    for n in bucketNodes:
-      check table.addNode(n) == Added
+    var bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
+    for i in 0..<BUCKET_SIZE:
+      bucketNodes[i].seen = true
+      check table.addNode(bucketNodes[i]) == Added
 
-    table.replaceNode(table.nodeToRevalidate())
     # This node should not be removed
-    check (table.getNode(bucketNodes[bucketNodes.high].id)).isSome()
+    check:
+      table.replaceNode(table.nodeToRevalidate()) == false
+      table.getNode(bucketNodes[bucketNodes.high].id).get().seen == false
 
   test "Double add":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
     var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
 
-    let doubleNode = node.nodeAtDistance(rng[], 256)
+    var doubleNode = node.nodeAtDistance(rng[], 256)
+    doubleNode.seen = true
+
     # Try to add the node twice
     check table.addNode(doubleNode) == Added
     check table.addNode(doubleNode) == Existing
 
-    for n in 0..<BUCKET_SIZE-1:
-      check table.addNode(node.nodeAtDistance(rng[], 256)) == Added
+    var bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
+    for i in 0..<BUCKET_SIZE - 1:
+      bucketNodes[i].seen = true
+      check table.addNode(bucketNodes[i]) == Added
 
-    check table.addNode(node.nodeAtDistance(rng[], 256)) == ReplacementAdded
+    check table.addNode(bucketNodes[^1]) == ReplacementAdded
     # Check when adding again once the bucket is full
     check table.addNode(doubleNode) == Existing
 
-    # Test if its order is preserved, there is one node in replacement cache
-    # which is why we run `BUCKET_SIZE` times.
-    for n in 0..<BUCKET_SIZE:
-      table.replaceNode(table.nodeToRevalidate())
+    # The first call to replaceNode should replace the node using the replacement cache
+    check table.replaceNode(bucketNodes[0]) == true
 
-    let res = table.getNode(doubleNode.id)
+    # The next BUCKET_SIZE - 1 replaceNode calls should only set seen to false
+    for i in 1..<BUCKET_SIZE:
+      check:
+        table.replaceNode(bucketNodes[i]) == false
+        table.getNode(bucketNodes[i].id).get().seen == false
+
+    # Test if its order is preserved
+    for i in 0..<BUCKET_SIZE - 1:
+      table.removeNode(table.nodeToRevalidate())
+
+    let nodeRes = table.getNode(doubleNode.id)
     check:
-      res.isSome()
-      res.get() == doubleNode
-      table.len == 16
+      nodeRes.isSome()
+      nodeRes.get() == doubleNode
+      nodeRes.get().seen == true
+      table.len == 1
 
   test "Double replacement add":
     let node = generateNode(PrivateKey.random(rng[]))
@@ -236,8 +251,9 @@ suite "Routing Table Tests":
       table.setJustSeen(n)
 
     for n in bucketNodes:
-      table.replaceNode(table.nodeToRevalidate())
-      check (table.getNode(n.id)).isSome()
+      check:
+        table.replaceNode(n) == false
+        table.getNode(n.id).get().seen == false
 
   test "Just seen replacement":
     let node = generateNode(PrivateKey.random(rng[]))
