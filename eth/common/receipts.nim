@@ -39,6 +39,14 @@ type
     logsBloom*        : Bloom
     logs*             : seq[Log]
 
+  StoredReceipt* = object
+    receiptType*      : ReceiptType
+    isHash*           : bool
+    status*           : bool
+    hash*             : Hash32
+    cumulativeGasUsed*: GasInt
+    logs*             : seq[Log]
+
 const
   LegacyReceipt*  = TxLegacy
   Eip2930Receipt* = TxEip2930
