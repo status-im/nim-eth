@@ -64,3 +64,13 @@ func hasStateRoot*(rec: Receipt): bool {.inline.} =
 func stateRoot*(rec: Receipt): Hash32 {.inline.} =
   doAssert(rec.hasStateRoot)
   rec.hash
+
+func toStored*(rec: Receipt): StoredReceipt =
+  StoredReceipt(
+    receiptType       : rec.receiptType,
+    isHash            : rec.isHash,
+    status            : rec.status,
+    hash              : rec.hash,
+    cumulativeGasUsed : rec.cumulativeGasUsed,
+    logs              : rec.logs
+  )
