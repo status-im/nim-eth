@@ -686,3 +686,25 @@ suite "Routing Table Tests":
       table.isBanned(node2.id) == true
       table.addNode(node1) == Existing
       table.addNode(node2) == Banned
+
+  test "neighbours filter predicate":
+    let numNodes = 10
+    let local = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(local, 1, ipLimits, rng = rng,
+      distanceCalculator = customDistanceCalculator)
+
+    let nodes = generateNRandomNodes(rng[], numNodes)
+
+    for n in nodes:
+      check table.addNode(n) == Added
+
+    let neighbours = table.neighbours(
+      local.id, k = numNodes, seenOnly = false, nil) # no predicate
+    check neighbours.len() == numNodes
+
+    let filteredNeignbours = table.neighbours(
+      local.id, k = numNodes, seenOnly = false,
+      proc(id: NodeId): bool = id == nodes[0].id) # Only return the first node
+    check:
+      filteredNeignbours.len() == 1
+      filteredNeignbours[0] == nodes[0]
