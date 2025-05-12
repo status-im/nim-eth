@@ -516,7 +516,7 @@ proc neighbours*(
   if result.len > k:
     result.setLen(k)
 
-proc neighboursAtDistance*(r: RoutingTable, distance: uint16,
+func neighboursAtDistance*(r: RoutingTable, distance: uint16,
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours at given logarithmic distance.
   result = r.neighbours(r.idAtDistance(r.localNode.id, distance), k, seenOnly)
