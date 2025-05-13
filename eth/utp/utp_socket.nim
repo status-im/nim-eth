@@ -429,6 +429,19 @@ proc init*(
     maxNumberOfOpenConnections: maxNumberOfOpenConnections
   )
 
+proc destroy*(s: UtpSocket) =
+  debug "Destroying socket", to = s.socketKey
+  ## Moves socket to destroy state and clean all resources.
+  ## Remote is not notified in any way about socket end of life.
+  s.state = Destroy
+  s.eventLoop.cancelSoon()
+  # This procedure initiate cleanup process which goes like:
+  # Cancel EventLoop -> Cancel timeoutsLoop -> Fire closeEvent
+  # This is necessary due to how evenLoop look like i.e it has only one await
+  # point on `eventQueue.get` which trigger cancellation exception only when
+  # someone will try run `eventQueue.put`. Without `eventQueue.put` , eventLoop
+  # future shows as cancelled, but handler for CancelledError is not run
+
 # number of bytes which will fit in current send window
 proc freeWindowBytes(socket: UtpSocket): uint32 =
   let maxSend = min(socket.maxRemoteWindow, socket.maxWindow)
@@ -733,19 +746,6 @@ proc isClosedAndCleanedUpAllResources*(socket: UtpSocket): bool =
   ## Test Api to check that all resources are properly cleaned up
   socket.isClosed() and socket.eventLoop.cancelled() and
     socket.checkTimeoutsLoop.cancelled()
-
-proc destroy*(s: UtpSocket) =
-  debug "Destroying socket", to = s.socketKey
-  ## Moves socket to destroy state and clean all resources.
-  ## Remote is not notified in any way about socket end of life.
-  s.state = Destroy
-  s.eventLoop.cancelSoon()
-  # This procedure initiate cleanup process which goes like:
-  # Cancel EventLoop -> Cancel timeoutsLoop -> Fire closeEvent
-  # This is necessary due to how evenLoop look like i.e it has only one await
-  # point on `eventQueue.get` which trigger cancellation exception only when
-  # someone will try run `eventQueue.put`. Without `eventQueue.put` , eventLoop
-  # future shows as cancelled, but handler for CancelledError is not run
 
 proc destroyWait*(s: UtpSocket) {.async: (raises: [CancelledError]).} =
   ## Moves socket to destroy state and clean all resources and wait for all
