@@ -47,6 +47,8 @@ type
     cumulativeGasUsed*: GasInt
     logs*             : seq[Log]
 
+  SomeReceipt* = Receipt | StoredReceipt
+
 const
   LegacyReceipt*  = TxLegacy
   Eip2930Receipt* = TxEip2930
