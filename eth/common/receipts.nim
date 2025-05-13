@@ -7,7 +7,9 @@
 
 {.push raises: [].}
 
-import "."/[addresses, base, hashes, transactions]
+import 
+  "."/[addresses, base, hashes, transactions],
+  ".."/bloom
 
 export addresses, base, hash, transactions
 
@@ -67,12 +69,29 @@ func stateRoot*(rec: Receipt): Hash32 {.inline.} =
   doAssert(rec.hasStateRoot)
   rec.hash
 
-func toStored*(rec: Receipt): StoredReceipt =
+func logsBloom(logs: openArray[Log]): BloomFilter =
+  for log in logs:
+    result.incl log.address
+    for topic in log.topics:
+      result.incl topic
+
+func to*(rec: Receipt, _: type StoredReceipt): StoredReceipt =
   StoredReceipt(
     receiptType       : rec.receiptType,
     isHash            : rec.isHash,
     status            : rec.status,
     hash              : rec.hash,
     cumulativeGasUsed : rec.cumulativeGasUsed,
+    logs              : rec.logs
+  )
+
+func to*(rec: StoredReceipt, _: Receipt): Receipt =
+  Receipt(
+    receiptType       : rec.receiptType,
+    isHash            : rec.isHash,
+    status            : rec.status,
+    hash              : rec.hash,
+    cumulativeGasUsed : rec.cumulativeGasUsed,
+    logsBloom         : logsBloom(rec.logs).value.to(Bloom),
     logs              : rec.logs
   )
