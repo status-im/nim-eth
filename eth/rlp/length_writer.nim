@@ -40,7 +40,7 @@ proc decrementWrapCounters(self: var RlpLengthTracker, isSelfEncoding: bool) =
 
       var
         encodingLen = self.totalLength - i.startLen
-        prefixLen = prefixLength(encodingLen) 
+        prefixLen = prefixLength(encodingLen)
 
       if isSelfEncoding and prefixLen == 1:
         # nested/wrapped encoding of a single byte lesser than 128(BLOB_START_MARKER)
@@ -64,7 +64,7 @@ proc decrementListCounters(self: var RlpLengthTracker) =
     let item = self.pendingLists.pop(PendingListItem)
 
     if item.isSome():
-      let 
+      let
         i = item.get()
         listLen = self.totalLength - i.startLen
         prefixLen = prefixLength(listLen)
@@ -79,13 +79,16 @@ proc decrementListCounters(self: var RlpLengthTracker) =
 
 func appendRawBytes*(self: var RlpLengthTracker, bytes: openArray[byte]) =
   self.totalLength += bytes.len
-  self.decrementWrapCounters(bytes.len == 1 and bytes[0] < BLOB_START_MARKER and bytes[0] > 0)
+  self.decrementWrapCounters(
+    bytes.len == 1 and bytes[0] < BLOB_START_MARKER and bytes[0] > 0
+  )
   self.decrementListCounters()
 
 proc startList*(self: var RlpLengthTracker, listSize: int) =
   if listSize == 0:
     self.totalLength += 1
-    self.decrementWrapCounters(false) # empty lists always are encoded as a single byte which >128
+    self.decrementWrapCounters(false)
+      # empty lists always are encoded as a single byte which >128
     self.decrementListCounters()
   else:
     # open a list = push a list on the stack with count value as the list size
@@ -133,7 +136,7 @@ template finish*(self: RlpLengthTracker): int =
 
 func clear*(w: var RlpLengthTracker) =
   # Prepare writer for reuse
-  w.lengths.reset()
+  w.lengths.setLen(0)
   w.totalLength = 0
   when w is DynamicRlpLengthTracker:
-    w.pendingLists.clear()
+    w.pendingLists.clear

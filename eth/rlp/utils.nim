@@ -29,4 +29,3 @@ func prefixLength*(dataLen: int): int {.inline.} =
     # the length of the encoded length is added to marker prefix
     else:
       int(uint64(dataLen).bytesNeeded) + 1
-
