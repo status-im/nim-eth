@@ -209,7 +209,7 @@ proc initRlpList*(listSize: int): RlpDefaultWriter =
   result = initRlpWriter()
   startList(result, listSize)
 
-template withTracker(v, body) =
+template withTracker*(v, body) =
   mixin append
 
   type T = typeof v
