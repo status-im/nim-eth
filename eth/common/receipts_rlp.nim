@@ -13,18 +13,23 @@ from stew/objects import checkedEnumAssign
 
 export addresses_rlp, base_rlp, hashes_rlp, receipts, rlp
 
-proc append*(w: var RlpWriter, rec: Receipt) =
+proc append*(w: var RlpWriter, rec: Receipt | StoredReceipt) =
   if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip7873Receipt}:
     w.append(rec.receiptType.uint)
 
-  w.startList(4)
+  when rec.type is StoredReceipt:
+    w.startList(3)
+  else:
+    w.startList(4)
+    
   if rec.isHash:
     w.append(rec.hash)
   else:
     w.append(rec.status.uint8)
 
   w.append(rec.cumulativeGasUsed)
-  w.append(rec.logsBloom)
+  when rec.type is Receipt:
+    w.append(rec.logsBloom)
   w.append(rec.logs)
 
 proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].} =
@@ -135,22 +140,9 @@ proc append*(rlpWriter: var RlpWriter, receipts: seq[Receipt] | openArray[Receip
 
 # #################################################
 #
-#         Experimental Stored Receipts
+#         Stored Receipts
 #
 # #################################################
-
-proc append*(w: var RlpWriter, rec: StoredReceipt) =
-  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip7873Receipt}:
-    w.append(rec.receiptType.uint)
-
-  w.startList(4)
-  if rec.isHash:
-    w.append(rec.hash)
-  else:
-    w.append(rec.status.uint8)
-
-  w.append(rec.cumulativeGasUsed)
-  w.append(rec.logs)
 
 proc readReceiptLegacy(rlp: var Rlp, receipt: var StoredReceipt) {.raises: [RlpError].} =
   receipt.receiptType = LegacyReceipt
@@ -213,7 +205,7 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): T {.raises: [RlpError].} =
   # for legacy receipts, or `Type || RLP([fields..])`. Both of these
   # encodings are byte sequences. The part after `Type` doesn't have to be
   # RLP in theory, but all types so far use RLP. EIP-2718 covers this.
-  var receipt: Receipt
+  var receipt: StoredReceipt
   if rlp.isList:
     rlp.readReceiptLegacy(receipt)
   else:
@@ -222,7 +214,7 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): T {.raises: [RlpError].} =
 
 proc read*(
     rlp: var Rlp, T: (type seq[StoredReceipt]) | (type openArray[StoredReceipt])
-): seq[Receipt] {.raises: [RlpError].} =
+): seq[StoredReceipt] {.raises: [RlpError].} =
   # In arrays (sequences), receipts are encoded as either `RLP([fields..])`
   # for legacy receipts, or `RLP(Type || RLP([fields..]))` for all typed
   # receipts to date. Spot the extra `RLP(..)` blob encoding, to make it
@@ -235,9 +227,9 @@ proc read*(
       RlpTypeMismatch, "Receipts list expected, but source RLP is not a list"
     )
 
-  var receipts: seq[Receipt]
+  var receipts: seq[StoredReceipt]
   for item in rlp:
-    var receipt: Receipt
+    var receipt: StoredReceipt
     if item.isList:
       item.readReceiptLegacy(receipt)
     else:
