@@ -49,8 +49,6 @@ type
     cumulativeGasUsed*: GasInt
     logs*             : seq[Log]
 
-  SomeReceipt* = Receipt | StoredReceipt
-
 const
   LegacyReceipt*  = TxLegacy
   Eip2930Receipt* = TxEip2930
@@ -85,7 +83,7 @@ func to*(rec: Receipt, _: type StoredReceipt): StoredReceipt =
     logs              : rec.logs
   )
 
-func to*(rec: StoredReceipt, _: Receipt): Receipt =
+func to*(rec: StoredReceipt, _: type Receipt): Receipt =
   Receipt(
     receiptType       : rec.receiptType,
     isHash            : rec.isHash,
