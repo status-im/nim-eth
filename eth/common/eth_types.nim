@@ -59,6 +59,9 @@ func `$`*(x: BlockHashOrNumber): string =
 # Backwards-compatibility section - this will be removed in future versions of
 # this file
 
+import ./eth_hash
+export eth_hash
+
 type
   # Names that don't appear in the spec and have no particular purpose any more -
   # just use the underlying type directly
