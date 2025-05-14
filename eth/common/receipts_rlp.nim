@@ -13,26 +13,33 @@ from stew/objects import checkedEnumAssign
 
 export addresses_rlp, base_rlp, hashes_rlp, receipts, rlp
 
-proc append*(w: var RlpWriter, rec: SomeReceipt) =
+# RLP encoding for Receipt (eth/68)
+proc append*(w: var RlpWriter, rec: Receipt) =
   if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip7873Receipt}:
     w.append(rec.receiptType.uint)
 
-  when rec.type is StoredReceipt:
-    w.startList(3)
-  else:
-    w.startList(4)
-    
+  w.startList(4)
   if rec.isHash:
     w.append(rec.hash)
   else:
     w.append(rec.status.uint8)
-
   w.append(rec.cumulativeGasUsed)
-  when rec.type is Receipt:
-    w.append(rec.logsBloom)
+  w.append(rec.logsBloom)
   w.append(rec.logs)
 
-proc readReceiptLegacy(rlp: var Rlp, receipt: var SomeReceipt) {.raises: [RlpError].} =
+# RLP encoding for StoredReceipt (eth/69)
+proc append*(w: var RlpWriter, rec: StoredReceipt) =
+  w.startList(4)
+  w.append(rec.receiptType.uint)
+  if rec.isHash:
+    w.append(rec.hash)
+  else:
+    w.append(rec.status.uint8)
+  w.append(rec.cumulativeGasUsed)
+  w.append(rec.logs)
+
+# Decode legacy receipt (eth/68)
+proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].} =
   receipt.receiptType = LegacyReceipt
   rlp.tryEnterList()
   if rlp.isBlob and rlp.blobLen in {0, 1}:
@@ -46,13 +53,12 @@ proc readReceiptLegacy(rlp: var Rlp, receipt: var SomeReceipt) {.raises: [RlpErr
       RlpTypeMismatch,
       "HashOrStatus expected, but the source RLP is not a blob of right size.",
     )
-
   rlp.read(receipt.cumulativeGasUsed)
-  when receipt.type is Receipt:
-    rlp.read(receipt.logsBloom)
+  rlp.read(receipt.logsBloom)
   rlp.read(receipt.logs)
 
-proc readReceiptTyped(rlp: var Rlp, receipt: var SomeReceipt) {.raises: [RlpError].} =
+# Decode typed receipt (eth/68)
+proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].} =
   if not rlp.hasData:
     raise newException(MalformedRlpError, "Receipt expected but source RLP is empty")
   if not rlp.isSingleByte:
@@ -68,12 +74,10 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var SomeReceipt) {.raises: [RlpErro
     of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip7873Receipt:
       receipt.receiptType = txVal
     of LegacyReceipt:
-      # The legacy type should not be used here.
       raise newException(MalformedRlpError, "Invalid ReceiptType: " & $recType)
   else:
     raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $recType)
 
-  # Note: This currently remains the same as the legacy receipt.
   rlp.tryEnterList()
   if rlp.isBlob and rlp.blobLen in {0, 1}:
     receipt.isHash = false
@@ -88,54 +92,86 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var SomeReceipt) {.raises: [RlpErro
     )
 
   rlp.read(receipt.cumulativeGasUsed)
-  when receipt.type is Receipt:
-    rlp.read(receipt.logsBloom)
+  rlp.read(receipt.logsBloom)
   rlp.read(receipt.logs)
 
-proc read*(rlp: var Rlp, T: type SomeReceipt): T {.raises: [RlpError].} =
-  # Individual receipts are encoded and stored as either `RLP([fields..])`
-  # for legacy receipts, or `Type || RLP([fields..])`. Both of these
-  # encodings are byte sequences. The part after `Type` doesn't have to be
-  # RLP in theory, but all types so far use RLP. EIP-2718 covers this.
-  var receipt: T
+# Decode eth/69 StoredReceipt
+proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpError].} =
+  var rec: StoredReceipt
+  rlp.tryEnterList()
+
+  let txType = rlp.read(uint8)
+  if not checkedEnumAssign(rec.receiptType, txType):
+    raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $txType)
+
+  if rlp.isBlob and rlp.blobLen in {0, 1}:
+    rec.isHash = false
+    rec.status = rlp.read(uint8) == 1
+  elif rlp.isBlob and rlp.blobLen == 32:
+    rec.isHash = true
+    rec.hash = rlp.read(Hash32)
+  else:
+    raise newException(RlpTypeMismatch, "Expected status or 32-byte hash blob")
+
+  rlp.read(rec.cumulativeGasUsed)
+  rlp.read(rec.logs)
+
+  rec
+
+# Decode eth/68 Receipt
+proc read*(rlp: var Rlp, T: type Receipt): Receipt {.raises: [RlpError].} =
+  var receipt: Receipt
   if rlp.isList:
     rlp.readReceiptLegacy(receipt)
   else:
     rlp.readReceiptTyped(receipt)
   receipt
 
-proc read*[T: SomeReceipt](
-  rlp: var Rlp, _: type seq[T]
-): seq[T] {.raises: [RlpError].} =
-  # In arrays (sequences), receipts are encoded as either `RLP([fields..])`
-  # for legacy receipts, or `RLP(Type || RLP([fields..]))` for all typed
-  # receipts to date. Spot the extra `RLP(..)` blob encoding, to make it
-  # valid RLP inside a larger RLP. EIP-2976 covers this, "Typed Transactions
-  # over Gossip", although it's not very clear about the blob encoding.
-  #
-  # See also note about transactions above.
+# Decode list of eth/68 Receipts
+proc read*(
+    rlp: var Rlp, T: (type seq[Receipt]) | (type openArray[Receipt])
+): seq[Receipt] {.raises: [RlpError].} =
   if not rlp.isList:
-    raise newException(RlpTypeMismatch, "Receipts list expected, but source RLP is not a list")
+    raise newException(
+      RlpTypeMismatch, "Receipts list expected, but source RLP is not a list"
+    )
 
-  var receipts: seq[T]
+  var receipts: seq[Receipt]
   for item in rlp:
-    var receipt: T
+    var receipt: Receipt
     if item.isList:
       item.readReceiptLegacy(receipt)
     else:
       var rr = rlpFromBytes(rlp.read(seq[byte]))
       rr.readReceiptTyped(receipt)
-    receipts.add(receipt)
+    receipts.add receipt
 
   receipts
 
-proc append*[T: SomeReceipt](
-  rlpWriter: var RlpWriter, receipts: seq[T] | openArray[T]
-) =
-  # See above about encoding arrays/sequences of receipts.
-  rlpWriter.startList(receipts.len)
-  for receipt in receipts:
-    if receipt.receiptType == LegacyReceipt:
-      rlpWriter.append(receipt)
+# Decode list of eth/69 StoredReceipts
+proc read*(
+    rlp: var Rlp, T: (type seq[StoredReceipt]) | (type openArray[StoredReceipt])
+): seq[StoredReceipt] {.raises: [RlpError].} =
+  if not rlp.isList:
+    raise newException(RlpTypeMismatch, "Expected a list of receipts")
+
+  var receipts: seq[StoredReceipt]
+  for item in rlp:
+    receipts.add item.read(StoredReceipt)
+
+  receipts
+
+# Encode list of eth/68 Receipts
+proc append*(w: var RlpWriter, receipts: seq[Receipt] | openArray[Receipt]) =
+  w.startList(receipts.len)
+  for rec in receipts:
+    if rec.receiptType == LegacyReceipt:
+      w.append(rec)
     else:
-      rlpWriter.append(rlp.encode(receipt))
+      w.append(rlp.encode(rec))
+
+# Encode list of eth/69 StoredReceipts
+proc append*(w: var RlpWriter, receipts: seq[StoredReceipt] | openArray[StoredReceipt]) =
+  w.startList(receipts.len)
+  for rec in receipts:
+    w.append(rec)
