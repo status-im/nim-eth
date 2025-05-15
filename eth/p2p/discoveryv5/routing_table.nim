@@ -490,8 +490,13 @@ func bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
 func nodesByDistanceTo(r: RoutingTable, k: KBucket, id: NodeId): seq[Node] =
   sortedByIt(k.nodes, r.distance(it.id, id))
 
-func neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
-    seenOnly = false): seq[Node] =
+proc neighbours*(
+    r: RoutingTable,
+    id: NodeId,
+    k: int = BUCKET_SIZE,
+    seenOnly = false,
+    filterPred: proc(nodeId: NodeId): bool {.closure.} = nil,
+): seq[Node] {.effectsOf: filterPred.} =
   ## Return up to k neighbours of the given node id.
   ## When seenOnly is set to true, only nodes that have been contacted
   ## previously successfully will be selected.
@@ -500,7 +505,7 @@ func neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE,
     for bucket in r.bucketsByDistanceTo(id):
       for n in r.nodesByDistanceTo(bucket, id):
         # Only provide actively seen nodes when `seenOnly` set.
-        if not seenOnly or n.seen:
+        if (not seenOnly or n.seen) and (filterPred == nil or filterPred(n.id)):
           result.add(n)
           if result.len == k * 2:
             break addNodes
