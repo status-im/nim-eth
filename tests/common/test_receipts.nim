@@ -15,7 +15,7 @@ import
 
 template roundTrip(v: untyped) =
   let bytes = rlp.encode(v)
-  let v2 = rlp.decode(bytes, Receipt)
+  let v2 = rlp.decode(bytes, v.type)
   let bytes2 = rlp.encode(v2)
   check bytes == bytes2
 
@@ -36,4 +36,23 @@ suite "Receipts":
       status: false,
       cumulativeGasUsed: 100.GasInt)
 
+    roundTrip(rec)
+
+suite "Stored Receipt":
+  test "EIP-4844":
+    let rec = StoredReceipt(
+      receiptType: Eip4844Receipt,
+      isHash: false,
+      status: false,
+      cumulativeGasUsed: 100.GasInt)
+
+    roundTrip(rec)
+
+  test "EIP-7702":
+    let rec = StoredReceipt(
+      receiptType: Eip7702Receipt,
+      isHash: false,
+      status: false,
+      cumulativeGasUsed: 100.GasInt)
+    
     roundTrip(rec)
