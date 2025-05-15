@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -167,8 +167,6 @@ func midpoint(k: KBucket): NodeId =
   k.istart + (k.iend - k.istart) div 2.u256
 
 func len(k: KBucket): int = k.nodes.len
-
-func tail(k: KBucket): Node = k.nodes[high(k.nodes)]
 
 func ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
   ## Check if the ip limits of the routing table and the bucket are reached for

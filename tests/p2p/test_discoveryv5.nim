@@ -446,7 +446,7 @@ suite "Discovery v5.1 Tests":
 
     # Defect (for now?) on incorrect key use
     expect ResultDefect:
-      let incorrectKeyUpdates = newProtocol(PrivateKey.random(rng[]),
+      discard newProtocol(PrivateKey.random(rng[]),
         ip, Opt.some(port), Opt.some(port), bindPort = port, rng = rng,
         previousRecord = Opt.some(updatesNode.getRecord()))
 

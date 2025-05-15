@@ -30,7 +30,6 @@ type
     # Eip1559Receipt = TxEip1559
     # Eip4844Receipt = TxEip4844
     # Eip7702Receipt = TxEip7702
-    # Eip7873Receipt = TxEip7873
 
   Receipt* = object
     receiptType*      : ReceiptType
@@ -55,7 +54,6 @@ const
   Eip1559Receipt* = TxEip1559
   Eip4844Receipt* = TxEip4844
   Eip7702Receipt* = TxEip7702
-  Eip7873Receipt* = TxEip7873
 
 func hasStatus*(rec: Receipt): bool {.inline.} =
   rec.isHash == false
