@@ -68,10 +68,13 @@ func stateRoot*(rec: Receipt): Hash32 {.inline.} =
   rec.hash
 
 func logsBloom(logs: openArray[Log]): BloomFilter =
+  var res: BloomFilter
   for log in logs:
-    result.incl log.address
+    res.incl log.address
     for topic in log.topics:
-      result.incl topic
+      res.incl topic
+
+  res
 
 func to*(rec: Receipt, _: type StoredReceipt): StoredReceipt =
   StoredReceipt(
