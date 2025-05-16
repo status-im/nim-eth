@@ -8,8 +8,8 @@
 {.push raises: [].}
 
 import 
-  "."/[addresses, base, hashes, transactions],
-  ".."/bloom
+  ./[addresses, base, hashes, transactions],
+  ../bloom
 
 export addresses, base, hash, transactions
 
