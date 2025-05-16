@@ -8,8 +8,8 @@
 {.push raises: [].}
 
 import 
-  "."/[addresses, base, hashes, transactions],
-  ".."/bloom
+  ./[addresses, base, hashes, transactions],
+  ../bloom
 
 export addresses, base, hash, transactions
 
@@ -94,3 +94,15 @@ func to*(rec: StoredReceipt, _: type Receipt): Receipt =
     logsBloom         : logsBloom(rec.logs).value.to(Bloom),
     logs              : rec.logs
   )
+
+func to*(list: openArray[Receipt], _: type seq[StoredReceipt]): seq[StoredReceipt] =
+  var res: seq[StoredReceipt]
+  for x in list:
+    res.add x.to(StoredReceipt)
+  res
+
+func to*(list: openArray[StoredReceipt], _: type seq[Receipt]): seq[Receipt] =
+  var res: seq[Receipt]
+  for x in list:
+    res.add x.to(Receipt)
+  res
