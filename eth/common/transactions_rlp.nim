@@ -96,22 +96,6 @@ proc appendTxEip7702(w: var RlpWriter, tx: Transaction) =
   w.append(tx.R)
   w.append(tx.S)
 
-proc appendTxEip7873(w: var RlpWriter, tx: Transaction) =
-  w.startList(13)
-  w.append(tx.chainId)
-  w.append(tx.nonce)
-  w.append(tx.maxPriorityFeePerGas)
-  w.append(tx.maxFeePerGas)
-  w.append(tx.gasLimit)
-  w.append(tx.to)
-  w.append(tx.value)
-  w.append(tx.payload)
-  w.append(tx.accessList)
-  w.append(tx.initCodes)
-  w.append(tx.V)
-  w.append(tx.R)
-  w.append(tx.S)
-
 proc appendTxPayload(w: var RlpWriter, tx: Transaction) =
   case tx.txType
   of TxLegacy:
@@ -124,8 +108,6 @@ proc appendTxPayload(w: var RlpWriter, tx: Transaction) =
     w.appendTxEip4844(tx)
   of TxEip7702:
     w.appendTxEip7702(tx)
-  of TxEip7873:
-    w.appendTxEip7873(tx)
 
 proc append*(w: var RlpWriter, tx: Transaction) =
   if tx.txType != TxLegacy:
@@ -233,22 +215,6 @@ proc rlpEncodeEip7702(tx: Transaction): seq[byte] =
   w.append(tx.authorizationList)
   w.finish()
 
-proc rlpEncodeEip7873(tx: Transaction): seq[byte] =
-  var w = initRlpWriter()
-  w.append(TxEip7873)
-  w.startList(10)
-  w.append(tx.chainId)
-  w.append(tx.nonce)
-  w.append(tx.maxPriorityFeePerGas)
-  w.append(tx.maxFeePerGas)
-  w.append(tx.gasLimit)
-  w.append(tx.to)
-  w.append(tx.value)
-  w.append(tx.payload)
-  w.append(tx.accessList)
-  w.append(tx.initCodes)
-  w.finish()
-
 proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
   ## Encode transaction data in preparation for signing or signature checking.
   ## For signature checking, set `eip155 = tx.isEip155`
@@ -263,8 +229,6 @@ proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
     tx.rlpEncodeEip4844
   of TxEip7702:
     tx.rlpEncodeEip7702
-  of TxEip7873:
-    tx.rlpEncodeEip7873
 
 template rlpEncode*(tx: Transaction): seq[byte] {.deprecated.} =
   encodeForSigning(tx, tx.isEip155())
@@ -384,23 +348,6 @@ proc readTxEip7702(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   rlp.read(tx.R)
   rlp.read(tx.S)
 
-proc readTxEip7873(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
-  tx.txType = TxEip7873
-  rlp.tryEnterList()
-  tx.chainId = rlp.read(ChainId)
-  rlp.read(tx.nonce)
-  rlp.read(tx.maxPriorityFeePerGas)
-  rlp.read(tx.maxFeePerGas)
-  rlp.read(tx.gasLimit)
-  rlp.read(tx.to)
-  rlp.read(tx.value)
-  rlp.read(tx.payload)
-  rlp.read(tx.accessList)
-  rlp.read(tx.initCodes)
-  rlp.read(tx.V)
-  rlp.read(tx.R)
-  rlp.read(tx.S)
-
 proc readTxType(rlp: var Rlp): TxType {.raises: [RlpError].} =
   if rlp.isList:
     raise newException(
@@ -452,8 +399,6 @@ proc readTxPayload(
     rlp.readTxEip4844(tx)
   of TxEip7702:
     rlp.readTxEip7702(tx)
-  of TxEip7873:
-    rlp.readTxEip7873(tx)
 
 proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   let txType = rlp.readTxType()

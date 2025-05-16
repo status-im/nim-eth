@@ -15,7 +15,7 @@ export addresses_rlp, base_rlp, hashes_rlp, receipts, rlp
 
 # RLP encoding for Receipt (eth/68)
 proc append*(w: var RlpWriter, rec: Receipt) =
-  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip7873Receipt}:
+  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt}:
     w.append(rec.receiptType.uint)
 
   w.startList(4)
@@ -71,7 +71,7 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].}
   var txVal: ReceiptType
   if checkedEnumAssign(txVal, recType):
     case txVal
-    of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip7873Receipt:
+    of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt:
       receipt.receiptType = txVal
     of LegacyReceipt:
       raise newException(MalformedRlpError, "Invalid ReceiptType: " & $recType)
