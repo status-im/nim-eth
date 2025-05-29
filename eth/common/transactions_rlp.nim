@@ -114,19 +114,7 @@ proc append*(w: var RlpWriter, tx: Transaction) =
     w.append(tx.txType)
   w.appendTxPayload(tx)
 
-proc append(w: var RlpWriter, networkPayload: NetworkPayload) =
-  w.append(networkPayload.blobs)
-  w.append(networkPayload.commitments)
-  w.append(networkPayload.proofs)
 
-proc append*(w: var RlpWriter, tx: PooledTransaction) =
-  if tx.tx.txType != TxLegacy:
-    w.append(tx.tx.txType)
-  if tx.networkPayload != nil:
-    w.startList(4) # spec: rlp([tx_payload, blobs, commitments, proofs])
-  w.appendTxPayload(tx.tx)
-  if tx.networkPayload != nil:
-    w.append(tx.networkPayload)
 
 proc rlpEncodeLegacy(tx: Transaction): seq[byte] =
   var w = initRlpWriter()
@@ -414,32 +402,6 @@ proc read*(rlp: var Rlp, T: type Transaction): T {.raises: [RlpError].} =
   else:
     rlp.readTxTyped(result)
 
-proc read(rlp: var Rlp, T: type NetworkPayload): T {.raises: [RlpError].} =
-  result = NetworkPayload()
-  rlp.read(result.blobs)
-  rlp.read(result.commitments)
-  rlp.read(result.proofs)
-
-proc readTxTyped(rlp: var Rlp, tx: var PooledTransaction) {.raises: [RlpError].} =
-  let
-    txType = rlp.readTxType()
-    hasNetworkPayload =
-      if txType == TxEip4844:
-        rlp.listLen == 4
-      else:
-        false
-  if hasNetworkPayload:
-    rlp.tryEnterList() # spec: rlp([tx_payload, blobs, commitments, proofs])
-  rlp.readTxPayload(tx.tx, txType)
-  if hasNetworkPayload:
-    rlp.read(tx.networkPayload)
-
-proc read*(rlp: var Rlp, T: type PooledTransaction): T {.raises: [RlpError].} =
-  if rlp.isList:
-    rlp.readTxLegacy(result.tx)
-  else:
-    rlp.readTxTyped(result)
-
 proc read*(
     rlp: var Rlp, T: (type seq[Transaction]) | (type openArray[Transaction])
 ): seq[Transaction] {.raises: [RlpError].} =
@@ -452,8 +414,8 @@ proc read*(
   # In practice the extra `RLP(..)` applies to all arrays/sequences of
   # transactions.  In principle, all aggregates (objects etc.), but
   # arrays/sequences are enough.  In `eth/65` protocol this is essential for
-  # the correct encoding/decoding of `Transactions`, `NewBlock`, and
-  # `PooledTransactions` network calls.  We need a type match on both
+  # the correct encoding/decoding of `Transactions`, and `NewBlock`,
+  # network calls.  We need a type match on both
   # `openArray[Transaction]` and `seq[Transaction]` to catch all cases.
   if not rlp.isList:
     raise newException(
@@ -468,37 +430,11 @@ proc read*(
       rr.readTxTyped(tx)
     result.add tx
 
-proc read*(
-    rlp: var Rlp, T: (type seq[PooledTransaction]) | (type openArray[PooledTransaction])
-): seq[PooledTransaction] {.raises: [RlpError].} =
-  if not rlp.isList:
-    raise newException(
-      RlpTypeMismatch, "PooledTransaction list expected, but source RLP is not a list"
-    )
-  for item in rlp:
-    var tx: PooledTransaction
-    if item.isList:
-      item.readTxLegacy(tx.tx)
-    else:
-      var rr = rlpFromBytes(rlp.read(seq[byte]))
-      rr.readTxTyped(tx)
-    result.add tx
-
 proc append*(rlpWriter: var RlpWriter, txs: seq[Transaction] | openArray[Transaction]) =
   # See above about encoding arrays/sequences of transactions.
   rlpWriter.startList(txs.len)
   for tx in txs:
     if tx.txType == TxLegacy:
-      rlpWriter.append(tx)
-    else:
-      rlpWriter.append(rlp.encode(tx))
-
-proc append*(
-    rlpWriter: var RlpWriter, txs: seq[PooledTransaction] | openArray[PooledTransaction]
-) =
-  rlpWriter.startList(txs.len)
-  for tx in txs:
-    if tx.tx.txType == TxLegacy:
       rlpWriter.append(tx)
     else:
       rlpWriter.append(rlp.encode(tx))

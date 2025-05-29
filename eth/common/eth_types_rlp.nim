@@ -17,7 +17,7 @@ export
 
 export
   computeRlpHash
-  
+
 proc append*(rlpWriter: var RlpWriter, value: BlockHashOrNumber) =
   case value.isHash
   of true:
@@ -33,9 +33,6 @@ proc read*(rlp: var Rlp, T: type BlockHashOrNumber): T =
 
 proc rlpHash*[T](v: T): Hash32 {.deprecated: "computeRlpHash".} =
   rlp.computeRlpHash(v)
-
-proc rlpHash*(tx: PooledTransaction): Hash32 {.deprecated: "computeRlpHash".} =
-  rlp.computeRlpHash(tx.tx)
 
 func blockHash*(h: Header): Hash32 {.deprecated: "computeBlockHash".} =
   rlp.computeRlpHash(h)

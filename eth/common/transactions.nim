@@ -53,22 +53,6 @@ type
     V*             : uint64
     R*, S*         : UInt256
 
-  # 32 -> UInt256
-  # 4096 -> FIELD_ELEMENTS_PER_BLOB
-  NetworkBlob* = array[32*4096, byte]
-
-  BlobsBundle* = object
-    commitments*: seq[KzgCommitment]
-    proofs*: seq[KzgProof]
-    blobs*: seq[NetworkBlob]
-
-  # TODO why was this part of eth types?
-  NetworkPayload* = ref BlobsBundle
-
-  PooledTransaction* = object
-    tx*: Transaction
-    networkPayload*: NetworkPayload       # EIP-4844
-
 func destination*(tx: Transaction): Address =
   # use getRecipient if you also want to get
   # the contract address
