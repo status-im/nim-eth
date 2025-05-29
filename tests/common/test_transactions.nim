@@ -20,7 +20,6 @@ const
   source    = address"0x0000000000000000000000000000000000000001"
   storageKey= default(Bytes32)
   accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]
-  blob      = default(NetworkBlob)
   abcdef    = hexToSeqByte("abcdef")
   authList  = @[Authorization(
     chainID: chainId(1),
@@ -31,146 +30,131 @@ const
     s: 5.u256
   )]
 
-proc tx0(i: int): PooledTransaction =
-  PooledTransaction(
-    tx: Transaction(
-      txType:   TxLegacy,
-      nonce:    i.AccountNonce,
-      to:       Opt.some recipient,
-      gasLimit: 1.GasInt,
-      gasPrice: 2.GasInt,
-      payload:  abcdef))
+proc tx0(i: int): Transaction =
+  Transaction(
+    txType:   TxLegacy,
+    nonce:    i.AccountNonce,
+    to:       Opt.some recipient,
+    gasLimit: 1.GasInt,
+    gasPrice: 2.GasInt,
+    payload:  abcdef)
 
-proc tx1(i: int): PooledTransaction =
-  PooledTransaction(
-    tx: Transaction(
-      # Legacy tx contract creation.
-      txType:   TxLegacy,
-      nonce:    i.AccountNonce,
-      gasLimit: 1.GasInt,
-      gasPrice: 2.GasInt,
-      payload:  abcdef))
+proc tx1(i: int): Transaction =
+  Transaction(
+    # Legacy tx contract creation.
+    txType:   TxLegacy,
+    nonce:    i.AccountNonce,
+    gasLimit: 1.GasInt,
+    gasPrice: 2.GasInt,
+    payload:  abcdef)
 
-proc tx2(i: int): PooledTransaction =
-  PooledTransaction(
-    tx: Transaction(
-      # Tx with non-zero access list.
-      txType:     TxEip2930,
-      chainId:    chainId(1),
-      nonce:      i.AccountNonce,
-      to:         Opt.some recipient,
-      gasLimit:   123457.GasInt,
-      gasPrice:   10.GasInt,
-      accessList: accesses,
-      payload:    abcdef))
+proc tx2(i: int): Transaction =
+  Transaction(
+    # Tx with non-zero access list.
+    txType:     TxEip2930,
+    chainId:    chainId(1),
+    nonce:      i.AccountNonce,
+    to:         Opt.some recipient,
+    gasLimit:   123457.GasInt,
+    gasPrice:   10.GasInt,
+    accessList: accesses,
+    payload:    abcdef)
 
-proc tx3(i: int): PooledTransaction =
-  PooledTransaction(
-    tx: Transaction(
-      # Tx with empty access list.
-      txType:   TxEip2930,
-      chainId:  chainId(1),
-      nonce:    i.AccountNonce,
-      to:       Opt.some recipient,
-      gasLimit: 123457.GasInt,
-      gasPrice: 10.GasInt,
-      payload:  abcdef))
+proc tx3(i: int): Transaction =
+  Transaction(
+    # Tx with empty access list.
+    txType:   TxEip2930,
+    chainId:  chainId(1),
+    nonce:    i.AccountNonce,
+    to:       Opt.some recipient,
+    gasLimit: 123457.GasInt,
+    gasPrice: 10.GasInt,
+    payload:  abcdef)
 
-proc tx4(i: int): PooledTransaction =
-  PooledTransaction(
-    tx: Transaction(
-      # Contract creation with access list.
-      txType:     TxEip2930,
-      chainId:    chainId(1),
-      nonce:      i.AccountNonce,
-      gasLimit:   123457.GasInt,
-      gasPrice:   10.GasInt,
-      accessList: accesses))
+proc tx4(i: int): Transaction =
+  Transaction(
+    # Contract creation with access list.
+    txType:     TxEip2930,
+    chainId:    chainId(1),
+    nonce:      i.AccountNonce,
+    gasLimit:   123457.GasInt,
+    gasPrice:   10.GasInt,
+    accessList: accesses)
 
-proc tx5(i: int): PooledTransaction =
-  PooledTransaction(
-    tx: Transaction(
-      txType:     TxEip1559,
-      chainId:    chainId(1),
-      nonce:      i.AccountNonce,
-      gasLimit:   123457.GasInt,
-      maxPriorityFeePerGas: 42.GasInt,
-      maxFeePerGas: 10.GasInt,
-      accessList: accesses))
+proc tx5(i: int): Transaction =
+  Transaction(
+    txType:     TxEip1559,
+    chainId:    chainId(1),
+    nonce:      i.AccountNonce,
+    gasLimit:   123457.GasInt,
+    maxPriorityFeePerGas: 42.GasInt,
+    maxFeePerGas: 10.GasInt,
+    accessList: accesses)
 
-proc tx6(i: int): PooledTransaction =
+proc tx6(i: int): Transaction =
   const
     digest = hash32"010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014"
 
-  PooledTransaction(
-    tx: Transaction(
-      txType:              TxEip4844,
-      chainId:             chainId(1),
-      nonce:               i.AccountNonce,
-      gasLimit:            123457.GasInt,
-      maxPriorityFeePerGas:42.GasInt,
-      maxFeePerGas:        10.GasInt,
-      accessList:          accesses,
-      versionedHashes:     @[digest]),
-    networkPayload: NetworkPayload(
-      blobs: @[blob],
-      commitments: @[zeroG1],
-      proofs: @[zeroG1]))
+  Transaction(
+    txType:              TxEip4844,
+    chainId:             chainId(1),
+    nonce:               i.AccountNonce,
+    gasLimit:            123457.GasInt,
+    maxPriorityFeePerGas:42.GasInt,
+    maxFeePerGas:        10.GasInt,
+    accessList:          accesses,
+    versionedHashes:     @[digest])
 
-proc tx7(i: int): PooledTransaction =
+proc tx7(i: int): Transaction =
   const
     digest = hash32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
 
-  PooledTransaction(
-    tx: Transaction(
-      txType:              TxEip4844,
-      chainID:             chainId(1),
-      nonce:               i.AccountNonce,
-      gasLimit:            123457.GasInt,
-      maxPriorityFeePerGas:42.GasInt,
-      maxFeePerGas:        10.GasInt,
-      accessList:          accesses,
-      versionedHashes:     @[digest],
-      maxFeePerBlobGas:    10000000.u256))
+  Transaction(
+    txType:              TxEip4844,
+    chainID:             chainId(1),
+    nonce:               i.AccountNonce,
+    gasLimit:            123457.GasInt,
+    maxPriorityFeePerGas:42.GasInt,
+    maxFeePerGas:        10.GasInt,
+    accessList:          accesses,
+    versionedHashes:     @[digest],
+    maxFeePerBlobGas:    10000000.u256)
 
-proc tx8(i: int): PooledTransaction =
+proc tx8(i: int): Transaction =
   const
     digest = hash32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
 
-  PooledTransaction(
-    tx: Transaction(
-      txType:              TxEip4844,
-      chainID:             chainId(1),
-      nonce:               i.AccountNonce,
-      to:                  Opt.some(recipient),
-      gasLimit:            123457.GasInt,
-      maxPriorityFeePerGas:42.GasInt,
-      maxFeePerGas:        10.GasInt,
-      accessList:          accesses,
-      versionedHashes:     @[digest],
-      maxFeePerBlobGas:    10000000.u256))
+  Transaction(
+    txType:              TxEip4844,
+    chainID:             chainId(1),
+    nonce:               i.AccountNonce,
+    to:                  Opt.some(recipient),
+    gasLimit:            123457.GasInt,
+    maxPriorityFeePerGas:42.GasInt,
+    maxFeePerGas:        10.GasInt,
+    accessList:          accesses,
+    versionedHashes:     @[digest],
+    maxFeePerBlobGas:    10000000.u256)
 
-proc txEip7702(i: int): PooledTransaction =
-  PooledTransaction(
-    tx: Transaction(
-      txType:   TxEip7702,
-      chainId:  chainId(1),
-      nonce:    i.AccountNonce,
-      maxPriorityFeePerGas: 2.GasInt,
-      maxFeePerGas: 3.GasInt,
-      gasLimit: 4.GasInt,
-      to:       Opt.some recipient,
-      value:    5.u256,
-      payload:  abcdef,
-      accessList: accesses,
-      authorizationList: authList
-    )
+proc txEip7702(i: int): Transaction =
+  Transaction(
+    txType:   TxEip7702,
+    chainId:  chainId(1),
+    nonce:    i.AccountNonce,
+    maxPriorityFeePerGas: 2.GasInt,
+    maxFeePerGas: 3.GasInt,
+    gasLimit: 4.GasInt,
+    to:       Opt.some recipient,
+    value:    5.u256,
+    payload:  abcdef,
+    accessList: accesses,
+    authorizationList: authList
   )
 
 template roundTrip(txFunc: untyped, i: int) =
   let tx = txFunc(i)
   let bytes = rlp.encode(tx)
-  let tx2 = rlp.decode(bytes, PooledTransaction)
+  let tx2 = rlp.decode(bytes, Transaction)
   let bytes2 = rlp.encode(tx2)
   check bytes == bytes2
 
@@ -205,33 +189,18 @@ suite "Transactions":
   test "EIP 7702":
     roundTrip(txEip7702, 9)
 
-  test "Network payload survive encode decode":
-    let tx = tx6(10)
-    let bytes = rlp.encode(tx)
-    let zz = rlp.decode(bytes, PooledTransaction)
-    check not zz.networkPayload.isNil
-    check zz.networkPayload.proofs == tx.networkPayload.proofs
-    check zz.networkPayload.blobs == tx.networkPayload.blobs
-    check zz.networkPayload.commitments == tx.networkPayload.commitments
-
-  test "No Network payload still no network payload":
-    let tx = tx7(11)
-    let bytes = rlp.encode(tx)
-    let zz = rlp.decode(bytes, PooledTransaction)
-    check zz.networkPayload.isNil
-
   test "Minimal Blob tx recipient survive encode decode":
     let tx = tx8(12)
     let bytes = rlp.encode(tx)
-    let zz = rlp.decode(bytes, PooledTransaction)
-    check zz.tx.to.isSome
+    let zz = rlp.decode(bytes, Transaction)
+    check zz.to.isSome
 
   test "Tx List 0,1,2,3,4,5,6,7,8":
     let txs = @[tx0(3), tx1(3), tx2(3), tx3(3), tx4(3),
                 tx5(3), tx6(3), tx7(3), tx8(3)]
 
     let bytes = rlp.encode(txs)
-    let zz = rlp.decode(bytes, seq[PooledTransaction])
+    let zz = rlp.decode(bytes, seq[Transaction])
     let bytes2 = rlp.encode(zz)
     check bytes2 == bytes
 
@@ -240,7 +209,7 @@ suite "Transactions":
                 tx3(3), tx2(3), tx1(3), tx0(3)]
 
     let bytes = rlp.encode(txs)
-    let zz = rlp.decode(bytes, seq[PooledTransaction])
+    let zz = rlp.decode(bytes, seq[Transaction])
     let bytes2 = rlp.encode(zz)
     check bytes2 == bytes
 
@@ -249,7 +218,7 @@ suite "Transactions":
                 tx4(3), tx3(3), tx2(3), tx1(3)]
 
     let bytes = rlp.encode(txs)
-    let zz = rlp.decode(bytes, seq[PooledTransaction])
+    let zz = rlp.decode(bytes, seq[Transaction])
     let bytes2 = rlp.encode(zz)
     check bytes2 == bytes
 
@@ -285,8 +254,8 @@ suite "Transactions":
   test "sign transaction":
     let
       txs = @[
-        tx0(3).tx, tx1(3).tx, tx2(3).tx, tx3(3).tx, tx4(3).tx,
-        tx5(3).tx, tx6(3).tx, tx7(3).tx, tx8(3).tx, txEip7702(3).tx]
+        tx0(3), tx1(3), tx2(3), tx3(3), tx4(3),
+        tx5(3), tx6(3), tx7(3), tx8(3), txEip7702(3)]
 
       privKey = PrivateKey.fromHex("63b508a03c3b5937ceb903af8b1b0c191012ef6eb7e9c3fb7afa94e5d214d376").expect("valid key")
       sender = privKey.toPublicKey().to(Address)
