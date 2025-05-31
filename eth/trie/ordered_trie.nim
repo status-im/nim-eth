@@ -1,4 +1,4 @@
-import ../common/hashes, ../rlp, stew/arraybuf
+import ../common/hashes, ../rlp, ../rlp/[hash_writer, length_writer, two_pass_writer], stew/arraybuf
 
 export hashes
 
@@ -32,20 +32,89 @@ type
     items: int
       ## Number of items added so far (and therefore also the key of the next item)
 
+  TrieRlpWriter = object
+    tracker: DynamicRlpLengthTracker
+    twoPassWriter: RlpTwoPassWriter
+    hashWriter: RlpHashWriter
+
+func init(T: type TrieRlpWriter): T =
+  result.tracker = DynamicRlpLengthTracker()
+  result.tracker.initLengthTracker()
+  result.twoPassWriter = initTwoPassWriter(result.tracker)
+  result.hashWriter = initHashWriter(result.tracker)
+
+func clear(self: var TrieRlpWriter) =
+  self.tracker.clear()
+  self.twoPassWriter.clear()
+  self.hashWriter.clear()
+
 func init*(T: type OrderedTrieRootBuilder, expected: int): T =
   T(leaves: newSeq[ShortHash](expected))
 
-func toShortHash(v: openArray[byte]): ShortHash =
-  if v.len < 32:
-    ShortHash.initCopyFrom(v)
-  else:
-    ShortHash.initCopyFrom(keccak256(v).data)
+template appendLeaf(w: var RlpWriter, keypath: ArrayBuf[10, byte], value: auto) =
+  w.startList(2)
+  w.append(keypath.data)
+  w.wrapEncoding(1)
+  w.append(value)
 
-func append(w: var RlpWriter, key: ShortHash) =
+template appendExtension(w: var RlpWriter, keypath: ArrayBuf[10, byte], value: ShortHash) =
+  w.startList(2)
+  w.append(keypath.data)
+  w.append(value)
+
+func append*(w: var RlpWriter, key: ShortHash) =
   if 1 < key.len and key.len < 32:
     w.appendRawBytes key.data
   else:
     w.append key.data
+
+template appendBranch(w: var RlpWriter, branchNode: ArrayBuf[16, ShortHash]) = 
+  w.startList(17)
+  for n in 0 .. 15:
+    w.append(branchNode[n])
+  w.append(openArray[byte]([]))
+
+func encodeLeaf(w: var TrieRlpWriter, keypath: ArrayBuf[10, byte], value: auto): ShortHash =
+  w.clear()
+  w.tracker.appendLeaf(keypath, value)
+  if w.tracker.totalLength < 32:
+    w.twoPassWriter.reInit(w.tracker)
+    w.twoPassWriter.appendLeaf(keypath, value)
+    let buf = w.twoPassWriter.finish()
+    return ShortHash.initCopyFrom(buf)
+  else:
+    w.hashWriter.reInit(w.tracker)
+    w.hashWriter.appendLeaf(keypath, value)
+    let buf = w.hashWriter.finish()
+    return ShortHash.initCopyFrom(buf.data)
+
+func encodeExtension(w: var TrieRlpWriter, keypath: ArrayBuf[10, byte], value: ShortHash): ShortHash =
+  w.clear()
+  w.tracker.appendExtension(keypath, value)
+  if w.tracker.totalLength < 32:
+    w.twoPassWriter.reInit(w.tracker)
+    w.twoPassWriter.appendExtension(keypath, value)
+    let buf = w.twoPassWriter.finish()
+    return ShortHash.initCopyFrom(buf)
+  else:
+    w.hashWriter.reInit(w.tracker)
+    w.hashWriter.appendExtension(keypath, value)
+    let buf = w.hashWriter.finish()
+    return ShortHash.initCopyFrom(buf.data)
+
+func encodeBranch(w: var TrieRlpWriter, v: ArrayBuf[16, ShortHash]): ShortHash =
+  w.clear()
+  w.tracker.appendBranch(v)
+  if w.tracker.totalLength < 32:
+    w.twoPassWriter.reInit(w.tracker)
+    w.twoPassWriter.appendBranch(v)
+    let buf = w.twoPassWriter.finish()
+    return ShortHash.initCopyFrom(buf)
+  else:
+    w.hashWriter.reInit(w.tracker)
+    w.hashWriter.appendBranch(v)
+    let buf = w.hashWriter.finish()
+    return ShortHash.initCopyFrom(buf.data)
 
 func keyAtIndex(b: var OrderedTrieRootBuilder, i: int): RlpIntBuf =
   # Given a leaf index, compute the rlp-encoded key
@@ -111,15 +180,12 @@ proc keyToIndex(b: var OrderedTrieRootBuilder, key: uint64): int =
   else:
     int key
 
-proc updateHash(b: var OrderedTrieRootBuilder, key: uint64, v: auto, w: var RlpWriter) =
+proc updateHash(b: var OrderedTrieRootBuilder, w: var TrieRlpWriter, key: uint64, v: auto) =
   let
     pos = b.keyToIndex(key)
     cur = rlp.encodeInt(key)
   b.leaves[pos] =
     try:
-      w.clear()
-      w.startList(2)
-
       # compute the longest shared nibble prefix between a key and its sorted
       # neighbours which determines how much of the key is left in the leaf
       # itself during encoding
@@ -138,14 +204,12 @@ proc updateHash(b: var OrderedTrieRootBuilder, key: uint64, v: auto, w: var RlpW
             let prev = b.keyAtIndex(pos - 1)
             prev.sharedPrefixLen(cur)
 
-      w.append(cur.hexPrefixEncode(spl + 1, cur.nibbles, isLeaf = true).data())
-      w.append(rlp.encode(v))
+      w.encodeLeaf(cur.hexPrefixEncode(spl + 1, cur.nibbles, isLeaf = true), v)
 
-      toShortHash(w.finish)
     except RlpError:
       raiseAssert "RLP failures not expected"
 
-proc add*[T](b: var OrderedTrieRootBuilder, v: openArray[T]) =
+proc add*[T](b: var OrderedTrieRootBuilder, w: var TrieRlpWriter, v: openArray[T]) =
   ## Add items to the trie root builder, calling `rlp.encode(item)` to compute
   ## the value of the item. The total number of items added before calling
   ## `rootHash` must equal what was given in `init`.
@@ -154,12 +218,11 @@ proc add*[T](b: var OrderedTrieRootBuilder, v: openArray[T]) =
   ##      directly:
   ##      * https://github.com/status-im/nim-eth/issues/724
   ##      * https://github.com/status-im/nim-eth/issues/698
-  var w = initRlpWriter()
   for item in v:
-    b.updateHash(uint64 b.items, item, w)
+    b.updateHash(w, uint64 b.items, item)
     b.items += 1
 
-proc computeKey(b: var OrderedTrieRootBuilder, rng: Slice[int], depth: int): ShortHash =
+proc computeKey(b: var OrderedTrieRootBuilder, w: var TrieRlpWriter, rng: Slice[int], depth: int): ShortHash =
   if rng.len == 0:
     ShortHash.initCopyFrom([byte 128]) # RLP of empty list
   elif rng.len == 1: # Leaf
@@ -182,35 +245,30 @@ proc computeKey(b: var OrderedTrieRootBuilder, rng: Slice[int], depth: int): Sho
         if p == depth:
           break
 
-    var w = initRlpWriter()
-
     if p == depth: # No shared prefix - this is a branch
-      w.startList(17)
+      var branchNode = ArrayBuf[16, ShortHash]()
       # Sub-divide the keys by nibble and recurse
       var pos = rng.a
-      for n in 0'u8 .. 15'u8:
+      for n in 0 .. 15:
         var x: int
         # Pick out the keys that have the asked-for nibble at the given depth
-        while pos + x <= rng.b and b.keyAtIndex(pos + x).nibble(depth) == n:
+        while pos + x <= rng.b and b.keyAtIndex(pos + x).nibble(depth) == uint8(n):
           x += 1
 
         if x > 0:
-          w.append b.computeKey(pos .. pos + x - 1, depth + 1)
-        else:
-          w.append(openArray[byte]([]))
+          branchNode[n] = b.computeKey(w, pos .. pos + x - 1, depth + 1)
         pos += x
 
-      w.append(openArray[byte]([])) # No data in branch nodes
+      return w.encodeBranch(branchNode) 
     else:
-      w.startList(2)
-      w.append(ka.hexPrefixEncode(depth, p, isLeaf = false).data())
-      w.append(b.computeKey(rng, p))
+      return w.encodeExtension(
+        ka.hexPrefixEncode(depth, p, isLeaf = false),
+        b.computeKey(w, rng, p)
+      )
 
-    toShortHash(w.finish())
-
-proc rootHash*(b: var OrderedTrieRootBuilder): Root =
+proc rootHash*(b: var OrderedTrieRootBuilder, w: var TrieRlpWriter): Root =
   doAssert b.items == b.leaves.len, "Items added does not match initial length"
-  let h = b.computeKey(0 ..< b.leaves.len, 0)
+  let h = b.computeKey(w, 0 ..< b.leaves.len, 0)
   if h.len == 32:
     Root(h.buf)
   else:
@@ -225,8 +283,9 @@ proc orderedTrieRoot*[T](items: openArray[T]): Root =
   ##
   ## The given values will be rlp-encoded using `rlp.encode`.
   var b = OrderedTrieRootBuilder.init(items.len)
-  b.add(items)
-  b.rootHash
+  var w = TrieRlpWriter.init()
+  b.add(w, items)
+  b.rootHash(w)
 
 when isMainModule: # A small benchmark
   import std/[monotimes, times], eth/trie/[hexary, db]

@@ -137,7 +137,7 @@ func rlpItem(input: openArray[byte], start = 0): RlpItem =
       lenOfStrLen = int(prefix - 0xb7)
       strLen = decodeInteger(input.view(start + 1 .. start + lenOfStrLen))
 
-    if strLen < THRESHOLD_LIST_LEN:
+    if strLen < THRESHOLD_LEN:
       raiseNonCanonical()
 
     if strLen >= uint64(length - lenOfStrLen):
@@ -165,7 +165,7 @@ func rlpItem(input: openArray[byte], start = 0): RlpItem =
       lenOfListLen = int(prefix - 0xf7)
       listLen = decodeInteger(input.view(start + 1 .. start + lenOfListLen))
 
-    if listLen < THRESHOLD_LIST_LEN:
+    if listLen < THRESHOLD_LEN:
       raiseNonCanonical()
 
     if listLen >= uint64(length - lenOfListLen):
