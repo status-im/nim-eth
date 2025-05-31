@@ -194,20 +194,6 @@ proc rlpEncodeEip7702(w: var RlpWriter, tx: Transaction) =
   w.append(tx.accessList)
   w.append(tx.authorizationList)
 
-proc rlpEncodeEip7873(w: var RlpWriter, tx: Transaction) =
-  w.append(TxEip7873)
-  w.startList(10)
-  w.append(tx.chainId)
-  w.append(tx.nonce)
-  w.append(tx.maxPriorityFeePerGas)
-  w.append(tx.maxFeePerGas)
-  w.append(tx.gasLimit)
-  w.append(tx.to)
-  w.append(tx.value)
-  w.append(tx.payload)
-  w.append(tx.accessList)
-  w.append(tx.initCodes)
-
 proc encodeUnsignedTransaction*(w: var RlpWriter, tx: Transaction, eip155: bool) =
   ## Encode transaction data in preparation for signing or signature checking.
   ## For signature checking, set `eip155 = tx.isEip155`
@@ -222,8 +208,6 @@ proc encodeUnsignedTransaction*(w: var RlpWriter, tx: Transaction, eip155: bool)
     w.rlpEncodeEip4844(tx)
   of TxEip7702:
     w.rlpEncodeEip7702(tx)
-  of TxEip7873:
-    w.rlpEncodeEip7873(tx)
 
 proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
   ## Encode transaction data in preparation for signing or signature checking.
