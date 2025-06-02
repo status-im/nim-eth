@@ -22,6 +22,10 @@ func writeCount(writer: var RlpDefaultWriter, count: int, baseMarker: byte) =
     writer.output.setLen(writer.output.len + lenPrefixBytes)
     writer.output.writeBigEndian(uint64(count), writer.output.len - 1, lenPrefixBytes)
 
+# next item encoded will not decrement list or wrap counters
+template ignoreNextItem*(self: RlpDefaultWriter) =
+  discard
+
 proc maybeClosePendingLists(self: var RlpDefaultWriter) =
   while self.pendingLists.len > 0:
     let lastListIdx = self.pendingLists.len - 1
