@@ -33,7 +33,9 @@ type
 const LIST_LENGTH = 5
 const STACK_LENGTH = 5
 
-proc processWrapCounter(self: var RlpLengthTracker, item: Opt[PendingWrapItem], isSelfEncoding: bool): bool =
+proc processWrapCounter(
+    self: var RlpLengthTracker, item: Opt[PendingWrapItem], isSelfEncoding: bool
+): bool =
   if item.isSome():
     let i = item.get()
 
@@ -75,21 +77,23 @@ proc processListCounter(self: var RlpLengthTracker, item: Opt[PendingListItem]):
   else:
     return false
 
-proc decrementCounters(self: var RlpLengthTracker, isSelfEncoding: bool, callCode: int = 0) =
+proc decrementCounters(
+    self: var RlpLengthTracker, isSelfEncoding: bool, callCode: int = 0
+) =
   if self.ignoreNextItem:
     self.ignoreNextItem = false
     return
 
-  var 
+  var
     wrapStatus = true
     listStatus = true
 
   # we use a while loop here to close nested wrappings one after the other (if possible)
   while true:
-    let 
+    let
       topListItem = self.pendingLists.peek(PendingListItem).get((0, 0))
       topWrapItem = self.wrappedEncodings.peek(PendingWrapItem).get((0, 0, 0))
-      wrapItem = 
+      wrapItem =
         # if a wrapped encoding was started just before a list started (AND the list is not yet closed) then do not decrement the counter
         if topListItem.idx < topWrapItem.listIdx and wrapStatus:
           self.wrappedEncodings.pop(PendingWrapItem)
@@ -99,7 +103,7 @@ proc decrementCounters(self: var RlpLengthTracker, isSelfEncoding: bool, callCod
       wrapStatus = self.processWrapCounter(wrapItem, isSelfEncoding)
 
     let
-      listItem = 
+      listItem =
         if listStatus:
           self.pendingLists.pop(PendingListItem)
         else:
@@ -132,7 +136,9 @@ proc ignoreNextItem*(self: var RlpLengthTracker) =
   self.ignoreNextItem = true
 
 proc wrapEncoding*(self: var RlpLengthTracker, numOfEncodings: int) =
-  self.wrappedEncodings.push((self.wrapLengths.len, self.lengths.len, self.totalLength), numOfEncodings)
+  self.wrappedEncodings.push(
+    (self.wrapLengths.len, self.lengths.len, self.totalLength), numOfEncodings
+  )
   self.wrapLengths.setLen(self.wrapLengths.len + 1)
 
 func writeBlob*(self: var RlpLengthTracker, data: openArray[byte]) =

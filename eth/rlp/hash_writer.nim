@@ -58,19 +58,18 @@ proc startList*(writer: var RlpHashWriter, listSize: int) =
   if listSize == 0:
     writer.writeLength(0, LIST_START_MARKER)
   else:
-    let
-      listLen = writer.lengths[writer.listCount]
+    let listLen = writer.lengths[writer.listCount]
 
     writer.listCount += 1
 
     writer.writeLength(listLen, LIST_START_MARKER)
 
 # next item encoded will not decrement list or wrap counters
-template ignoreNextItem*(self: var RlpHashWriter) = discard
+template ignoreNextItem*(self: var RlpHashWriter) =
+  discard
 
 proc wrapEncoding*(writer: var RlpHashWriter, numOfEncodings: int) =
-  let
-    encodingLen = writer.wrapLengths[writer.wrapCount]
+  let encodingLen = writer.wrapLengths[writer.wrapCount]
 
   if encodingLen == 0:
     return # do nothing because nested encoding of a single byte <128 is the byte itself
