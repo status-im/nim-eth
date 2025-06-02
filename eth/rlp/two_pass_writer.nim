@@ -62,16 +62,17 @@ proc startList*(writer: var RlpTwoPassWriter, listSize: int) =
   else:
     let
       listLen = writer.lengths[writer.listCount]
-      prefixLen = prefixLength(listLen)
 
     writer.listCount += 1
 
     writer.writeLength(listLen, LIST_START_MARKER)
 
+# next item encoded will not decrement list or wrap counters
+template ignoreNextItem*(self: RlpTwoPassWriter) = discard
+
 proc wrapEncoding*(self: var RlpTwoPassWriter, numOfEncodings: int) =
   let
     encodingLen = self.wrapLengths[self.wrapCount]
-    prefixLen = prefixLength(encodingLen)
 
   if encodingLen == 0:
     return # do nothing because nested encoding of a single byte <128 is the byte itself

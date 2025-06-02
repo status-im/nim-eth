@@ -114,6 +114,10 @@ proc appendTxPayload(w: var RlpWriter, tx: Transaction) =
 
 proc append*(w: var RlpWriter, tx: Transaction) =
   if tx.txType != TxLegacy:
+    # since the tx type is encoded outside the transaction type its encoding
+    # cannot be considered a part of the rlp list that encodes the type. Hence
+    # we exclude it from affecting the list counters
+    w.ignoreNextItem()
     w.append(tx.txType)
   w.appendTxPayload(tx)
 
@@ -141,6 +145,7 @@ proc rlpEncodeEip155(w: var RlpWriter, tx: Transaction) =
   w.append(0'u8)
 
 proc rlpEncodeEip2930(w: var RlpWriter, tx: Transaction) =
+  w.ignoreNextItem()
   w.append(TxEip2930)
   w.startList(8)
   w.append(tx.chainId)
@@ -153,6 +158,7 @@ proc rlpEncodeEip2930(w: var RlpWriter, tx: Transaction) =
   w.append(tx.accessList)
 
 proc rlpEncodeEip1559(w: var RlpWriter, tx: Transaction) =
+  w.ignoreNextItem()
   w.append(TxEip1559)
   w.startList(9)
   w.append(tx.chainId)
@@ -166,6 +172,7 @@ proc rlpEncodeEip1559(w: var RlpWriter, tx: Transaction) =
   w.append(tx.accessList)
 
 proc rlpEncodeEip4844(w: var RlpWriter, tx: Transaction) =
+  w.ignoreNextItem()
   w.append(TxEip4844)
   w.startList(11)
   w.append(tx.chainId)
@@ -181,6 +188,7 @@ proc rlpEncodeEip4844(w: var RlpWriter, tx: Transaction) =
   w.append(tx.versionedHashes)
 
 proc rlpEncodeEip7702(w: var RlpWriter, tx: Transaction) =
+  w.ignoreNextItem()
   w.append(TxEip7702)
   w.startList(10)
   w.append(tx.chainId)

@@ -14,6 +14,7 @@ type
   StaticRlpLengthTracker*[N: static int] = object
     pendingLists: StaticStackedCounters[N, PendingListItem]
     wrappedEncodings: DynamicStackedCounters[PendingWrapItem]
+    ignoreNextItem: bool
     lengths*: seq[int]
     wrapLengths*: seq[int]
     totalLength*: int
@@ -21,6 +22,7 @@ type
   DynamicRlpLengthTracker* = object
     pendingLists: DynamicStackedCounters[PendingListItem]
     wrappedEncodings: DynamicStackedCounters[PendingWrapItem]
+    ignoreNextItem: bool
     lengths*: seq[int]
     wrapLengths*: seq[int]
     totalLength*: int
@@ -73,7 +75,11 @@ proc processListCounter(self: var RlpLengthTracker, item: Opt[PendingListItem]):
   else:
     return false
 
-proc decrementCounters(self: var RlpLengthTracker, isSelfEncoding: bool) =
+proc decrementCounters(self: var RlpLengthTracker, isSelfEncoding: bool, callCode: int = 0) =
+  if self.ignoreNextItem:
+    self.ignoreNextItem = false
+    return
+
   var 
     wrapStatus = true
     listStatus = true
@@ -107,19 +113,23 @@ proc decrementCounters(self: var RlpLengthTracker, isSelfEncoding: bool) =
 func appendRawBytes*(self: var RlpLengthTracker, bytes: openArray[byte]) =
   self.totalLength += bytes.len
   self.decrementCounters(
-    bytes.len == 1 and bytes[0] < BLOB_START_MARKER and bytes[0] > 0
+    bytes.len == 1 and bytes[0] < BLOB_START_MARKER and bytes[0] > 0, 1
   )
 
 proc startList*(self: var RlpLengthTracker, listSize: int) =
   if listSize == 0:
     self.totalLength += 1
     # empty lists always are encoded as a single byte which >128
-    self.decrementCounters(false)
+    self.decrementCounters(false, 2)
   else:
     # open a list = push a list on the stack with count value as the list size
     self.pendingLists.push((self.lengths.len, self.totalLength), listSize)
 
     self.lengths.setLen(self.lengths.len + 1)
+
+# next item encoded will not decrement list or wrap counters
+proc ignoreNextItem*(self: var RlpLengthTracker) =
+  self.ignoreNextItem = true
 
 proc wrapEncoding*(self: var RlpLengthTracker, numOfEncodings: int) =
   self.wrappedEncodings.push((self.wrapLengths.len, self.lengths.len, self.totalLength), numOfEncodings)
@@ -133,7 +143,7 @@ func writeBlob*(self: var RlpLengthTracker, data: openArray[byte]) =
   else:
     self.totalLength += prefixLength(data.len) + data.len
 
-  self.decrementCounters(isSelfEncoding)
+  self.decrementCounters(isSelfEncoding, 3)
 
 func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
   let isSelfEncoding = i < typeof(i)(BLOB_START_MARKER) and i > typeof(i)(0)
@@ -145,7 +155,7 @@ func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
   else:
     self.totalLength += prefixLength(i.bytesNeeded) + i.bytesNeeded
 
-  self.decrementCounters(isSelfEncoding)
+  self.decrementCounters(isSelfEncoding, 4)
 
 func initLengthTracker*(self: var RlpLengthTracker) =
   # we preset the lengths since we want to skip using add method for
