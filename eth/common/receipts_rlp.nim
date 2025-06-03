@@ -16,6 +16,7 @@ export addresses_rlp, base_rlp, hashes_rlp, receipts, rlp
 # RLP encoding for Receipt (eth/68)
 proc append*(w: var RlpWriter, rec: Receipt) =
   if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt}:
+    w.ignoreNextItem()
     w.append(rec.receiptType.uint)
 
   w.startList(4)

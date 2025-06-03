@@ -1,4 +1,4 @@
-import ../../eth/trie/[db, hexary, ordered_trie], ../../eth/rlp, ../../eth/common/transactions_rlp, unittest2
+import ../../eth/trie/[db, hexary, ordered_trie], ../../eth/rlp, ../../eth/common/[transactions_rlp, receipts_rlp, blocks_rlp], unittest2
 
 {.used.}
 
@@ -31,6 +31,51 @@ let tx2 = Transaction(
   R: u256("56247832262823455468856823881508823668838282218082565762357790783193396561053"),
   S: u256("41264676679744500716811770511010812185591177620844949948278128119116121553882")
 )
+
+let rx = Receipt(
+  receiptType: TxEip1559, 
+  isHash: false, 
+  status: true, 
+  hash: Hash32.fromHex("0x0000000000000000000000000000000000000000000000000000000000000000"),
+  cumulativeGasUsed: 21000.GasInt
+)
+
+let rx2 = Receipt(
+  receiptType: TxEip4844, 
+  isHash: false,
+  status: true,
+  hash: Hash32.fromHex("0x0000000000000000000000000000000000000000000000000000000000000000"),
+  cumulativeGasUsed: 42000.GasInt
+)
+
+let 
+  w1 = Withdrawal(
+    index: 0'u64, 
+    validatorIndex: 0'u64, 
+    address: address"0x0000000000000000000000000000000000000100", 
+    amount: 0'u64
+  )
+
+  w2 = Withdrawal(
+    index: 0'u64, 
+    validatorIndex: 0'u64, 
+    address: address"0x0000000000000000000000000000000000000200",
+    amount: 0'u64
+  )
+
+  w3 = Withdrawal(
+    index: 1'u64,
+    validatorIndex: 0'u64, 
+    address: address"0x0000000000000000000000000000000000000300",
+    amount: 1'u64
+  )
+
+  w4 = Withdrawal(
+    index: 2'u64, 
+    validatorIndex: 0'u64,
+    address: address"0x0000000000000000000000000000000000000400", 
+    amount: 18446744073709551615'u64
+  )
 
 suite "OrderedTrie":
   for n in [0, 1, 2, 3, 126, 127, 128, 129, 130, 1000]:
@@ -65,3 +110,17 @@ suite "OrderedTrie":
       root2 = Hash32.fromHex("0xa22e4570f1ca6c1dfd5f8651d19d91c9af0396b5426637a76c028f5c0e71610f")
 
     check orderedTrieRoot(txs2) == root2
+
+  test "Receipt Trie":
+    let 
+      rxs = @[rx, rx2]
+      rxRoot = Hash32.fromHex("0xe18bcf626336785eeb28b571dbd41ffd7abf49de089e4aa71c3cd96720c5ca3a")
+
+    check orderedTrieRoot(rxs) == rxRoot 
+
+  test "Withdrawals Trie":
+    let
+      wRoot = Hash32.fromHex("0x8ef2a68d571f1ca21e12010d4066dd80a304c350ca9865e1f8ee28c1b0ac69ee")
+      withdrawals = @[w1, w2, w3, w4]
+
+    check orderedTrieRoot(withdrawals) == wRoot
