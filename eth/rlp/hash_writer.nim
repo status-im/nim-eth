@@ -52,6 +52,20 @@ proc writeBlob*(writer: var RlpHashWriter, bytes: openArray[byte]) =
     writer.writeLength(bytes.len, BLOB_START_MARKER)
     writer.appendRawBytes(bytes)
 
+template appendDetached*(writer: var RlpHashWriter, bytes: openArray[byte]) =
+  writer.update(bytes)
+
+  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # for special cases like transaction types
+  # self.decrementCounters(false)
+
+template appendDetached*(writer: var RlpHashWriter, data: byte) =
+  writer.update(data)
+
+  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # for special cases like transaction types
+  # self.decrementCounters(false)
+
 proc startList*(writer: var RlpHashWriter, listSize: int) =
   mixin writeCount
 
@@ -63,10 +77,6 @@ proc startList*(writer: var RlpHashWriter, listSize: int) =
     writer.listCount += 1
 
     writer.writeLength(listLen, LIST_START_MARKER)
-
-# next item encoded will not decrement list or wrap counters
-template ignoreNextItem*(self: var RlpHashWriter) =
-  discard
 
 proc wrapEncoding*(writer: var RlpHashWriter, numOfEncodings: int) =
   let encodingLen = writer.wrapLengths[writer.wrapCount]

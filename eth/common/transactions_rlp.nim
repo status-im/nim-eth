@@ -117,11 +117,8 @@ proc append*(w: var RlpWriter, tx: Transaction) =
     # since the tx type is encoded outside the transaction type its encoding
     # cannot be considered a part of the rlp list that encodes the type. Hence
     # we exclude it from affecting the list counters
-    w.ignoreNextItem()
-    w.append(tx.txType)
+    w.appendDetached(tx.txType.uint8)
   w.appendTxPayload(tx)
-
-
 
 proc rlpEncodeLegacy(w: var RlpWriter, tx: Transaction) =
   w.startList(6)
@@ -145,8 +142,7 @@ proc rlpEncodeEip155(w: var RlpWriter, tx: Transaction) =
   w.append(0'u8)
 
 proc rlpEncodeEip2930(w: var RlpWriter, tx: Transaction) =
-  w.ignoreNextItem()
-  w.append(TxEip2930)
+  w.appendDetached(uint8(TxEip2930))
   w.startList(8)
   w.append(tx.chainId)
   w.append(tx.nonce)
@@ -158,8 +154,7 @@ proc rlpEncodeEip2930(w: var RlpWriter, tx: Transaction) =
   w.append(tx.accessList)
 
 proc rlpEncodeEip1559(w: var RlpWriter, tx: Transaction) =
-  w.ignoreNextItem()
-  w.append(TxEip1559)
+  w.appendDetached(uint8(TxEip1559))
   w.startList(9)
   w.append(tx.chainId)
   w.append(tx.nonce)
@@ -172,8 +167,7 @@ proc rlpEncodeEip1559(w: var RlpWriter, tx: Transaction) =
   w.append(tx.accessList)
 
 proc rlpEncodeEip4844(w: var RlpWriter, tx: Transaction) =
-  w.ignoreNextItem()
-  w.append(TxEip4844)
+  w.appendDetached(uint8(TxEip4844))
   w.startList(11)
   w.append(tx.chainId)
   w.append(tx.nonce)
@@ -188,8 +182,7 @@ proc rlpEncodeEip4844(w: var RlpWriter, tx: Transaction) =
   w.append(tx.versionedHashes)
 
 proc rlpEncodeEip7702(w: var RlpWriter, tx: Transaction) =
-  w.ignoreNextItem()
-  w.append(TxEip7702)
+  w.appendDetached(uint8(TxEip7702))
   w.startList(10)
   w.append(tx.chainId)
   w.append(tx.nonce)

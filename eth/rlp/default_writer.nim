@@ -22,10 +22,6 @@ func writeCount(writer: var RlpDefaultWriter, count: int, baseMarker: byte) =
     writer.output.setLen(writer.output.len + lenPrefixBytes)
     writer.output.writeBigEndian(uint64(count), writer.output.len - 1, lenPrefixBytes)
 
-# next item encoded will not decrement list or wrap counters
-template ignoreNextItem*(self: RlpDefaultWriter) =
-  discard
-
 proc maybeClosePendingLists(self: var RlpDefaultWriter) =
   while self.pendingLists.len > 0:
     let lastListIdx = self.pendingLists.len - 1
@@ -96,6 +92,24 @@ proc writeBlob*(self: var RlpDefaultWriter, bytes: openArray[byte]) =
   else:
     self.writeCount(bytes.len, BLOB_START_MARKER)
     self.appendRawBytes(bytes)
+
+proc appendDetached*(writer: var RlpDefaultWriter, bytes: openArray[byte]) =
+  writer.output.setLen(writer.output.len + bytes.len)
+  assign(
+    writer.output.toOpenArray(writer.output.len - bytes.len, writer.output.len - 1),
+    bytes,
+  )
+
+  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # for special cases like transaction types
+  # writer.maybeClosePendingLists()
+
+proc appendDetached*(writer: var RlpDefaultWriter, data: byte) =
+  writer.output.add(data)
+
+  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # for special cases like transaction types
+  # writer.maybeClosePendingLists()
 
 proc startList*(self: var RlpDefaultWriter, listSize: int) =
   if listSize == 0:

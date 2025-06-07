@@ -14,7 +14,6 @@ type
   StaticRlpLengthTracker*[N: static int] = object
     pendingLists: StaticStackedCounters[N, PendingListItem]
     wrappedEncodings: DynamicStackedCounters[PendingWrapItem]
-    ignoreNextItem: bool
     lengths*: seq[int]
     wrapLengths*: seq[int]
     totalLength*: int
@@ -22,7 +21,6 @@ type
   DynamicRlpLengthTracker* = object
     pendingLists: DynamicStackedCounters[PendingListItem]
     wrappedEncodings: DynamicStackedCounters[PendingWrapItem]
-    ignoreNextItem: bool
     lengths*: seq[int]
     wrapLengths*: seq[int]
     totalLength*: int
@@ -78,10 +76,6 @@ proc processListCounter(self: var RlpLengthTracker, item: Opt[PendingListItem]):
     return false
 
 proc decrementCounters(self: var RlpLengthTracker, isSelfEncoding: bool) =
-  if self.ignoreNextItem:
-    self.ignoreNextItem = false
-    return
-
   var
     wrapStatus = true
     listStatus = true
@@ -133,8 +127,6 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     self.lengths.setLen(self.lengths.len + 1)
 
 # next item encoded will not decrement list or wrap counters
-proc ignoreNextItem*(self: var RlpLengthTracker) =
-  self.ignoreNextItem = true
 
 proc wrapEncoding*(self: var RlpLengthTracker, numOfEncodings: int) =
   self.wrappedEncodings.push(
@@ -163,6 +155,20 @@ func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
     self.totalLength += prefixLength(i.bytesNeeded) + i.bytesNeeded
 
   self.decrementCounters(isSelfEncoding)
+
+proc appendDetached*(self: var RlpLengthTracker, bytes: openArray[byte]) =
+  self.totalLength += bytes.len
+
+  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # for special cases like transaction types
+  # self.decrementCounters(false)
+
+proc appendDetached*(self: var RlpLengthTracker, data: byte) =
+  self.totalLength += 1
+
+  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # for special cases like transaction types
+  # self.decrementCounters(false)
 
 func initLengthTracker*(self: var RlpLengthTracker) =
   # we preset the lengths since we want to skip using add method for
