@@ -733,6 +733,7 @@ proc findNode*(
   ## Received ENRs are already validated and converted to `Node`.
 
   echo "----------------- calling findNode"
+  echo "------------- myNodeId: ", d.localNode.id
   echo "---------- toNode: ", $toNode.id
   echo "---------- distances: ", $distances
 
