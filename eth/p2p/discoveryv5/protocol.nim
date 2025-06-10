@@ -380,19 +380,29 @@ proc handleFindNode(
     fn: FindNodeMessage,
     reqId: RequestId,
 ) =
+  echo "------------- handleFindNode 1"
+  echo "------------- fromId: ", $fromId
+  echo "------------- fromAddr: ", $fromAddr
+  echo "------------- RequestId: ", $RequestId
+  echo "------------- myNodeId: ", d.localNode.id
+
   if fn.distances.len == 0:
+    echo "------------- handleFindNode 2"
     d.sendNodes(fromId, fromAddr, reqId, [])
   elif fn.distances.contains(0):
     # A request for our own record.
     # It would be a weird request if there are more distances next to 0
     # requested, so in this case lets just pass only our own. TODO: OK?
+    echo "------------- handleFindNode 3"
     d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
   else:
     # TODO: Still deduplicate also?
+    echo "------------- handleFindNode 4"
     if fn.distances.all(
       proc(x: uint16): bool =
         return x <= 256
     ):
+      echo "------------- handleFindNode 5"
       d.sendNodes(
         fromId,
         fromAddr,
@@ -402,6 +412,7 @@ proc handleFindNode(
     else:
       # At least one invalid distance, but the polite node we are, still respond
       # with empty nodes.
+      echo "------------- handleFindNode 6"
       d.sendNodes(fromId, fromAddr, reqId, [])
 
 proc handleTalkReq(
@@ -440,27 +451,38 @@ proc handleMessage(
     message: Message,
     node: Opt[Node] = Opt.none(Node),
 ) =
+  echo "------------- handleMessage 1"
+  echo "------------- srcId: ", $srcId
+  echo "------------- fromAddr: ", $fromAddr
+
   case message.kind
   of ping:
+    echo "------------- handleMessage 2"
     discovery_message_requests_incoming.inc()
     d.handlePing(srcId, fromAddr, message.ping, message.reqId)
   of findNode:
+    echo "------------- handleMessage 3"
     discovery_message_requests_incoming.inc()
     d.handleFindNode(srcId, fromAddr, message.findNode, message.reqId)
   of talkReq:
+    echo "------------- handleMessage 4"
     discovery_message_requests_incoming.inc()
     d.handleTalkReq(srcId, fromAddr, message.talkReq, message.reqId, node)
   of regTopic, topicQuery:
+    echo "------------- handleMessage 5"
     discovery_message_requests_incoming.inc()
     discovery_message_requests_incoming.inc(labelValues = ["no_response"])
     trace "Received unimplemented message kind", kind = message.kind, origin = fromAddr
   else:
+    echo "------------- handleMessage 6"
     var waiter: Future[Opt[Message]]
     if d.awaitedMessages.take((srcId, message.reqId), waiter):
+      echo "------------- handleMessage 7"
       waiter.complete(Opt.some(message))
     else:
+      echo "------------- handleMessage 8"
       discovery_unsolicited_messages.inc()
-      trace "Timed out or unrequested message", kind = message.kind, origin = fromAddr
+      debug "Timed out or unrequested message", kind = message.kind, origin = fromAddr
 
 func registerTalkProtocol*(
     d: Protocol, protocolId: seq[byte], protocol: TalkProtocol
@@ -526,27 +548,28 @@ proc isBanned*(d: Protocol, nodeId: NodeId): bool =
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
   discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
 
+  echo "------------------ receive 1"
   let decoded = d.codec.decodePacket(a, packet)
   if decoded.isOk:
     let packet = decoded[]
     case packet.flag
     of OrdinaryMessage:
       if d.isBanned(packet.srcId):
-        trace "Ignoring received OrdinaryMessage from banned node",
+        debug "Ignoring received OrdinaryMessage from banned node",
           nodeId = packet.srcId
         return
 
       if packet.messageOpt.isSome():
         let message = packet.messageOpt.get()
-        trace "Received message packet",
+        debug "Received message packet",
           srcId = packet.srcId, address = a, kind = message.kind
         d.handleMessage(packet.srcId, a, message)
       else:
-        trace "Not decryptable message packet received",
+        debug "Not decryptable message packet received",
           srcId = packet.srcId, address = a
         d.sendWhoareyou(packet.srcId, a, packet.requestNonce, d.getNode(packet.srcId))
     of Flag.Whoareyou:
-      trace "Received whoareyou packet", address = a
+      debug "Received whoareyou packet", address = a
       var pr: PendingRequest
       if d.pendingRequests.take(packet.whoareyou.requestNonce, pr):
         let toNode = pr.node
@@ -563,17 +586,17 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
           toNode.pubkey,
         )
 
-        trace "Send handshake message packet", dstId = toNode.id, address
+        debug "Send handshake message packet", dstId = toNode.id, address
         d.send(toNode, data)
       else:
         debug "Timed out or unrequested whoareyou packet", address = a
     of HandshakeMessage:
       if d.isBanned(packet.srcIdHs):
-        trace "Ignoring received HandshakeMessage from banned node",
+        debug "Ignoring received HandshakeMessage from banned node",
           nodeId = packet.srcIdHs
         return
 
-      trace "Received handshake message packet",
+      debug "Received handshake message packet",
         srcId = packet.srcIdHs, address = a, kind = packet.message.kind
       d.handleMessage(packet.srcIdHs, a, packet.message, packet.node)
       # For a handshake message it is possible that we received an newer ENR.
@@ -588,7 +611,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
           if d.addNode(node):
             trace "Added new node to routing table after handshake", node
   else:
-    trace "Packet decoding error", error = decoded.error, address = a
+    debug "Packet decoding error", error = decoded.error, address = a
 
 proc processClient(
     transp: DatagramTransport, raddr: TransportAddress
@@ -637,6 +660,7 @@ proc waitNodes(
   ## on that, more replies will be awaited.
   ## If one reply is lost here (timed out), others are ignored too.
   ## Same counts for out of order receival.
+  echo "------------ waitNodes reqId: ", $reqId
   var op = await d.waitMessage(fromNode, reqId)
   if op.isSome:
     if op.get.kind == nodes:
