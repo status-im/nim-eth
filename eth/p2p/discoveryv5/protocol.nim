@@ -555,9 +555,9 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
   if decoded.isOk:
     echo "------------------ receive 2"
     let packet = decoded[]
-    echo "------------------ packet.srcId: ", packet.srcId
     case packet.flag
     of OrdinaryMessage:
+      echo "------------------ packet.srcId: ", packet.srcId
       echo "------------------ receive 3"
       if d.isBanned(packet.srcId):
         echo "------------------ receive 4 banned node"
@@ -598,6 +598,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
         )
 
         echo "------------------ receive 10"
+        echo "------------------ receive toNode.id: ", $toNode.id
         debug "Send handshake message packet", dstId = toNode.id, address
         d.send(toNode, data)
       else:
