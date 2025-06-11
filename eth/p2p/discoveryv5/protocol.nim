@@ -633,7 +633,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
           if d.addNode(node):
             trace "Added new node to routing table after handshake", node
   else:
-    echo "------------------ receive decoding error"
+    echo "------------------ receive decoding error, error: ", decoded.error
     debug "Packet decoding error", error = decoded.error, address = a
 
 proc processClient(
