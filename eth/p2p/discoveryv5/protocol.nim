@@ -549,26 +549,37 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
   discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
 
   echo "------------------ receive 1"
+  echo "------------------- address: ", $a
+  echo "------------------- packet: ", $packet
   let decoded = d.codec.decodePacket(a, packet)
   if decoded.isOk:
+    echo "------------------ receive 2"
     let packet = decoded[]
+    echo "------------------ packet.srcId: ", packet.srcId
     case packet.flag
     of OrdinaryMessage:
+      echo "------------------ receive 3"
       if d.isBanned(packet.srcId):
+        echo "------------------ receive 4 banned node"
         debug "Ignoring received OrdinaryMessage from banned node",
           nodeId = packet.srcId
         return
 
+      echo "------------------ receive 5"
       if packet.messageOpt.isSome():
+        echo "------------------ receive 6"
         let message = packet.messageOpt.get()
         debug "Received message packet",
           srcId = packet.srcId, address = a, kind = message.kind
+        echo "------------------ receive 7"
         d.handleMessage(packet.srcId, a, message)
       else:
+        echo "------------------ receive 8 can't decrypt packet"
         debug "Not decryptable message packet received",
           srcId = packet.srcId, address = a
         d.sendWhoareyou(packet.srcId, a, packet.requestNonce, d.getNode(packet.srcId))
     of Flag.Whoareyou:
+      echo "------------------ receive 9"
       debug "Received whoareyou packet", address = a
       var pr: PendingRequest
       if d.pendingRequests.take(packet.whoareyou.requestNonce, pr):
@@ -586,31 +597,42 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
           toNode.pubkey,
         )
 
+        echo "------------------ receive 10"
         debug "Send handshake message packet", dstId = toNode.id, address
         d.send(toNode, data)
       else:
+        echo "------------------ receive 11"
         debug "Timed out or unrequested whoareyou packet", address = a
     of HandshakeMessage:
+      echo "------------------ receive 12"
+      echo "------------------ receive packet.srcIdHs: ", $packet.srcIdHs
       if d.isBanned(packet.srcIdHs):
+        echo "------------------ receive 13 banned handshake"
         debug "Ignoring received HandshakeMessage from banned node",
           nodeId = packet.srcIdHs
         return
 
+      echo "------------------ receive 14"
       debug "Received handshake message packet",
         srcId = packet.srcIdHs, address = a, kind = packet.message.kind
       d.handleMessage(packet.srcIdHs, a, packet.message, packet.node)
       # For a handshake message it is possible that we received an newer ENR.
       # In that case we can add/update it to the routing table.
+      echo "------------------ receive 15"
       if packet.node.isSome():
+        echo "------------------ receive 16"
         let node = packet.node.get()
         # Lets not add nodes without correct IP in the ENR to the routing table.
         # The ENR could contain bogus IPs and although they would get removed
         # on the next revalidation, one could spam these as the handshake
         # message occurs on (first) incoming messages.
+        echo "------------------ receive 17"
         if node.address.isSome() and a == node.address.get():
+          echo "------------------ receive 18"
           if d.addNode(node):
             trace "Added new node to routing table after handshake", node
   else:
+    echo "------------------ receive decoding error"
     debug "Packet decoding error", error = decoded.error, address = a
 
 proc processClient(
