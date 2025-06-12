@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -84,7 +84,7 @@ proc getUtpSocket[A](s: UtpRouter[A], k: UtpSocketKey[A]): Opt[UtpSocket[A]] =
 proc deRegisterUtpSocket[A](s: UtpRouter[A], socket: UtpSocket[A]) =
   s.sockets.del(socket.socketKey)
   utp_established_connections.set(int64(len(s.sockets)))
-  debug "Removed utp socket", dst = socket.socketKey, lenSockets = len(s.sockets)
+  trace "Removed utp socket from router", dst = socket.socketKey, lenSockets = len(s.sockets)
 
 iterator allSockets[A](s: UtpRouter[A]): UtpSocket[A] =
   for socket in s.sockets.values():
@@ -98,7 +98,7 @@ proc registerUtpSocket[A](p: UtpRouter, s: UtpSocket[A]) =
   ## Register socket, overwriting already existing one
   p.sockets[s.socketKey] = s
   utp_established_connections.set(int64(len(p.sockets)))
-  debug "Registered new uTP socket",
+  trace "Registered new uTP socket to router",
     dst = s.socketKey, totalSockets = len(p.sockets)
   # Install deregister handler so that when the socket gets closed, it gets
   # removed from open sockets table.
@@ -190,16 +190,16 @@ proc shouldAllowConnection[A](
 
 proc processPacket[A](
     r: UtpRouter[A], p: Packet, sender: A
-  ) {.async: (raises: [CancelledError]).}=
-  debug "Received packet ",
-    sender = sender,
+  ) {.async: (raises: [CancelledError]).} =
+  logScope:
+    sender = sender
     packetType = p.header.pType
 
   case p.header.pType
   of ST_RESET:
     let maybeSocket = r.getSocketOnReset(sender, p.header.connectionId)
     if maybeSocket.isSome():
-      debug "Received RST packet on known connection, closing socket"
+      debug "Received RST packet on known connection"
       let socket = maybeSocket.unsafeGet()
       # The reference implementation actually changes the socket state to reset
       # state unless the user explicitly closed the socket before. The only
@@ -246,7 +246,7 @@ proc processPacket[A](
     let socketKey = UtpSocketKey[A].init(sender, p.header.connectionId)
     let maybeSocket = r.getUtpSocket(socketKey)
     if (maybeSocket.isSome()):
-      debug "Received FIN/DATA/ACK packet on existing socket"
+      trace "Received FIN/DATA/ACK packet on existing socket"
       let socket = maybeSocket.unsafeGet()
       await socket.processPacket(p)
     else:
@@ -288,7 +288,6 @@ proc generateNewUniqueSocket[A](
   return Opt.none(UtpSocket[A])
 
 proc connect[A](s: UtpSocket[A]): Future[ConnectionResult[A]] {.async: (raises: [CancelledError]).} =
-  debug "Initiating connection", dst = s.socketKey
   try:
     await s.startOutgoingSocket()
     utp_success_outgoing.inc()

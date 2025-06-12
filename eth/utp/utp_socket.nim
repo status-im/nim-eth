@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -430,7 +430,7 @@ proc init*(
   )
 
 proc destroy*(s: UtpSocket) =
-  debug "Destroying socket", to = s.socketKey
+  debug "Destroying socket", socket = s.socketKey
   ## Moves socket to destroy state and clean all resources.
   ## Remote is not notified in any way about socket end of life.
   s.state = Destroy
@@ -509,8 +509,7 @@ proc flushPackets(socket: UtpSocket) =
             socket.outBuffer[i].transmissions == 0:
           socket.resetSendTimeout()
 
-        debug "Flushing packet",
-          pkSeqNr = i
+        trace "Flushing packet", pkSeqNr = i
         socket.sendPacket(i)
       else:
         debug "Should resend packet during flush but there is no place in send window",
@@ -808,7 +807,7 @@ proc ackPacket(socket: UtpSocket, seqNr: uint16, currentTime: Moment): AckResult
 
     socket.outBuffer.delete(seqNr)
 
-    debug "Acked packet (deleted from outgoing buffer)",
+    trace "Acked packet (deleted from outgoing buffer)",
       pkSeqNr = seqNr,
       pkTransmissions = packet.transmissions,
       pkNeedResend = packet.needResend
@@ -1201,7 +1200,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
     p.header.pType == ST_STATE:
       inc socket.duplicateAck
 
-      debug "Received duplicated ack",
+      trace "Received duplicated ack",
         pkAckNr = pkAckNr,
         duplicateAckCounter = socket.duplicateAck
   else:
@@ -1212,7 +1211,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
   # with a todo. Currently the reference implementation is follow and packets
   # are not resend in this case.
 
-  debug "Packet state variables", pastExpected, acks
+  trace "Packet state variables", pastExpected, acks
 
   # If packet is totally off the mark, short-circuit the processing
   if pastExpected >= reorderBufferMaxSize:
@@ -1238,13 +1237,13 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
   var (ackedBytes, minRtt) =
     socket.calculateAckedbytes(acks, timestampInfo.moment)
 
-  debug "Bytes acked by classic ack",
+  trace "Bytes acked by classic ack",
       bytesAcked = ackedBytes
 
   if (p.eack.isSome()):
     let selectiveAckedBytes =
       socket.calculateSelectiveAckBytes(pkAckNr, p.eack.unsafeGet())
-    debug "Bytes acked by selective ack",
+    trace "Bytes acked by selective ack",
       bytesAcked = selectiveAckedBytes
     ackedBytes = ackedBytes + selectiveAckedBytes
 
@@ -1309,7 +1308,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
   socket.slowStart = newSlowStart
   socket.slowStartThreshold = newSlowStartThreshold
 
-  debug "Applied ledbat congestion controller",
+  trace "Applied ledbat congestion controller",
     maxWindow = newMaxWindow,
     remoteWindow = p.header.wndSize,
     slowStartThreshold = newSlowStartThreshold,
@@ -1322,7 +1321,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
     socket.zeroWindowTimer =
       Opt.some(timestampInfo.moment + socket.socketConfig.remoteWindowResetTimeout)
 
-    debug "Remote window size dropped below packet size",
+    trace "Remote window size dropped below packet size",
       currentTime = timestampInfo.moment,
       resetZeroWindowTime = socket.zeroWindowTimer,
       currentPacketSize = currentPacketSize
@@ -1332,7 +1331,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
   # socket.curWindowPackets == acks means that this packet acked all remaining
   # packets including the sent FIN packets
   if (socket.finSent and socket.curWindowPackets == acks):
-    debug "FIN acked, destroying socket"
+    debug "FIN acked"
     socket.finAcked = true
     # this part of the uTP spec is a bit under specified, i.e there is no
     # specification at all. The reference implementation moves socket to destroy
@@ -1373,7 +1372,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
   while (socket.curWindowPackets > 0 and
       socket.outBuffer.get(socket.seqNr - socket.curWindowPackets).isNone()):
     dec socket.curWindowPackets
-    debug "Packet in front has been acked by selective ack. Decrease window",
+    trace "Packet in front has been acked by selective ack. Decrease window",
       windowPackets = socket.curWindowPackets
 
   # fast timeout
@@ -1417,7 +1416,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
 
     # we got in order packet
     if (pastExpected == 0 and (not socket.reachedFin)):
-      debug "Received in order packet"
+      trace "Received in order packet"
       let payloadLength = len(p.payload)
       if (payloadLength > 0 and (not socket.readShutdown)):
         # we need to sum both rcv buffer and reorder buffer
@@ -1450,7 +1449,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
       inc socket.ackNr
 
       # check if the following packets are in re-order buffer
-      debug "Looking for packets in re-order buffer",
+      trace "Looking for packets in re-order buffer",
         reorderCount = socket.reorderCount
 
       while true:
@@ -1485,7 +1484,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
         let reorderPacketPayloadLength = len(packet.payload)
 
         if (reorderPacketPayloadLength > 0 and (not socket.readShutdown)):
-          debug "Got packet from reorder buffer",
+          trace "Got packet from reorder buffer",
             packetBytes = len(packet.payload),
             packetSeqNr = packet.header.seqNr,
             packetAckNr = packet.header.ackNr,
@@ -1502,7 +1501,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
             unsafeAddr packet.payload[0], reorderPacketPayloadLength)
           socket.offset = socket.offset + reorderPacketPayloadLength
 
-        debug "Deleting packet",
+        trace "Deleting packet",
           seqNr = nextPacketNum
 
         socket.inBuffer.delete(nextPacketNum)
@@ -1511,7 +1510,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
         socket.inBufferBytes =
           socket.inBufferBytes - uint32(reorderPacketPayloadLength)
 
-      debug "Socket state after processing in order packet",
+      trace "Socket state after processing in order packet",
         socketKey = socket.socketKey,
         socketAckNr = socket.ackNr,
         reorderCount = socket.reorderCount,
@@ -1525,7 +1524,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
 
     # we got packet out of order
     else:
-      debug "Got out of order packet"
+      trace "Got out of order packet"
 
       if (socket.gotFin and pkSeqNr > socket.eofPktNr):
         debug "Got packet past eof",
@@ -1550,7 +1549,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
         if (totalReorderSize <= socket.socketConfig.maxSizeOfReorderBuffer and
             totalBufferSize <= socket.socketConfig.optRcvBuffer):
 
-          debug "store packet in reorder buffer",
+          debug "Store packet in reorder buffer",
             packetBytes = payloadLength,
             packetSeqNr = p.header.seqNr,
             packetAckNr = p.header.ackNr,
@@ -1562,7 +1561,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
           socket.inBuffer.put(pkSeqNr, p)
           inc socket.reorderCount
           socket.inBufferBytes = socket.inBufferBytes + payloadLength
-          debug "added out of order packet to reorder buffer",
+          trace "Added out of order packet to reorder buffer",
             reorderCount = socket.reorderCount
           # we send ack packet, as we reorder count is > 0, so the eack bitmask
           # will be generated
@@ -1582,7 +1581,7 @@ template shiftBuffer(t, c: untyped) =
     (t).offset = 0
 
 proc onRead(socket: UtpSocket, readReq: var ReadReq): ReadResult =
-  debug "Handling incoming read",
+  trace "Handling incoming read",
     rcvBufferSize = socket.offset,
     reorderBufferSize = socket.inBufferBytes,
     socketAtEOF = socket.atEof(),
@@ -1603,14 +1602,14 @@ proc onRead(socket: UtpSocket, readReq: var ReadReq): ReadResult =
     socket.shiftBuffer(socket.offset)
     if (socket.atEof()):
 
-      debug "Read finished",
+      trace "Read finished",
         bytesRead = len(readReq.bytesAvailable),
         socketAtEof = socket.atEof()
 
       readReq.reader.complete(readReq.bytesAvailable)
       return ReadFinished
     else:
-      debug "Read not finished",
+      trace "Read not finished",
         bytesRead = len(readReq.bytesAvailable),
         socketAtEof = socket.atEof()
 
@@ -1622,14 +1621,14 @@ proc onRead(socket: UtpSocket, readReq: var ReadReq): ReadResult =
     readReq.bytesAvailable.add(socket.rcvBuffer.toOpenArray(0, count - 1))
     socket.shiftBuffer(count)
     if (len(readReq.bytesAvailable) == readReq.bytesToRead):
-      debug "Read finished",
+      trace "Read finished",
         bytesRead = len(readReq.bytesAvailable),
         socketAtEof = socket.atEof()
 
       readReq.reader.complete(readReq.bytesAvailable)
       return ReadFinished
     else:
-      debug "Read not finished",
+      trace "Read not finished",
         bytesRead = len(readReq.bytesAvailable),
         socketAtEof = socket.atEof()
 
@@ -2075,6 +2074,7 @@ proc startOutgoingSocket*(socket: UtpSocket): Future[void] {.async: (raw: true, 
   let packet =
     synPacket(socket.seqNr, socket.connectionIdRcv, socket.getRcvWindowSize())
   debug "Sending SYN packet",
+    dst = socket.socketKey,
     seqNr = packet.header.seqNr,
     connectionId = packet.header.connectionId
   # set number of transmissions to 1 as syn packet will be send just after
