@@ -278,8 +278,12 @@ func get*(r: Record, key: string, T: type): EnrResult[T] =
       ? requireKind(f, kNum)
       ok(T(f.num))
     elif T is seq[byte]:
-      ? requireKind(f, kBytes)
-      ok(f.bytes)
+      if requireKind(f, kBytes).isOk:
+        ok(f.bytes)
+      elif requireKind(f, kList).isOk:
+        ok(f.listRaw)
+      else:
+        err("Invalid rlp type for seq[byte]")
     elif T is string:
       ? requireKind(f, kString)
       ok(f.str)
