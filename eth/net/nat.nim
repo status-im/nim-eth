@@ -224,7 +224,7 @@ var
   natThread: Thread[PortMappingArgs]
   natCloseChan: Channel[bool]
 
-proc repeatPortMapping(args: PortMappingArgs) {.thread, raises: [ValueError].} =
+proc repeatPortMapping(args: PortMappingArgs) {.thread.} =
   ignoreSignalsInThread()
   let
     (tcpPort, udpPort, description) = args
