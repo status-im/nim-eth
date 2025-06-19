@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,9 +9,10 @@
 {.push raises: [].}
 
 import
-  std/[options, strutils, tables, sets],
+  std/[strutils, sets],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
-  chronos, metrics, metrics/chronos_httpserver, stew/byteutils, stew/bitops2,
+  chronos, metrics, metrics/chronos_httpserver,
+  stew/[byteutils, bitops2],
   ../eth/keys, ../eth/net/nat,
   ../eth/p2p/discoveryv5/[enr, node],
   ../eth/p2p/discoveryv5/protocol as discv5_protocol
@@ -48,12 +49,14 @@ type
 
     persistingFile* {.
       defaultValue: "peerstore.csv",
-      desc: "File where the tool will keep the discovered records"
+      desc: "File path where discovered nodes and their ENRs will be stored",
       name: "persisting-file" .}: string
 
-    bootnodes* {.
-      desc: "ENR URI of node to bootstrap discovery with. Argument may be repeated"
-      name: "bootnode" .}: seq[enr.Record]
+    bootstrapNodes* {.
+      desc:
+        "ENR URI of node to bootstrap Discovery v5 network from. Argument may be repeated",
+      name: "bootstrap-node"
+    .}: seq[enr.Record]
 
     nat* {.
       desc: "Specify method to use for determining public address. " &
@@ -149,58 +152,130 @@ proc parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =
 proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
 
-proc discover(d: discv5_protocol.Protocol, psFile: string) {.async: (raises: [CancelledError]).} =
-  info "Starting peer-discovery in Ethereum - persisting peers at: ", psFile
+proc discover(
+    d: discv5_protocol.Protocol, psFile: string
+) {.async: (raises: [CancelledError]).} =
+  info "Starting node discovery - storing nodes at: ", psFile
 
-  var ethNodes: HashSet[seq[byte]]
+  var seenNodes = initHashSet[NodeId]()
 
-  let ps =
+  let f =
     try:
       open(psFile, fmWrite)
     except IOError as e:
       fatal "Failed to open file for writing", file = psFile, error = e.msg
       quit QuitFailure
-  defer: ps.close()
+
+  defer:
+    f.close()
+
   try:
-    ps.writeLine("pubkey,node_id,fork_digest,ip:port,attnets,attnets_number")
+    f.writeLine(
+      "node_id,seq_number,ip:port,eth2,fork_digest,attnets,attnets_number,syncnets,eth,fork_hash,ENR,pubkey"
+    )
   except IOError as e:
     fatal "Failed to write to file", file = psFile, error = e.msg
     quit QuitFailure
 
   while true:
-    let iTime = now(chronos.Moment)
+    let t0 = now(chronos.Moment)
     let discovered = await d.queryRandom()
-    let qDuration = now(chronos.Moment) - iTime
-    info "Lookup finished",  query_time = qDuration.secs, new_nodes = discovered.len, tot_peers=len(ethNodes)
+    let duration = now(chronos.Moment) - t0
 
-    for dNode in discovered:
-      let eth2 = dNode.record.tryGet("eth2", seq[byte])
-      let pubkey = dNode.record.tryGet("secp256k1", seq[byte])
-      let attnets = dNode.record.tryGet("attnets", seq[byte])
-      if eth2.isNone or attnets.isNone or pubkey.isNone: continue
+    var newNodes = 0
+    for n in discovered:
+      if n.id in seenNodes:
+        continue
 
-      if pubkey.get() in ethNodes: continue
-      ethNodes.incl(pubkey.get())
+      newNodes.inc()
 
-      let forkDigest = eth2.get()
+      let
+        # Known ENR fields used by Ethereum CL
+        eth2Field = n.record.tryGet("eth2", seq[byte])
+        attnetsField = n.record.tryGet("attnets", seq[byte])
+        syncnetsField = n.record.tryGet("syncnets", seq[byte])
+        # Known ENR fields used by Ethereum EL
+        ethField = n.record.tryGet("eth", seq[byte])
+        # There are more for the other rlpx protocols such as "snap"
 
-      var bits = 0
-      for byt in attnets.get():
-        bits.inc(countOnes(byt.uint))
+        eth2 =
+          if eth2Field.isSome:
+            eth2Field.get().to0xHex()
+          else:
+            ""
+        attnets =
+          if attnetsField.isSome:
+            attnetsField.get().to0xHex()
+          else:
+            ""
+        syncnets =
+          if syncnetsField.isSome:
+            syncnetsField.get().to0xHex()
+          else:
+            ""
+        eth =
+          if ethField.isSome:
+            ethField.get().to0xHex()
+          else:
+            ""
 
-      let str = "$#,$#,$#,$#,$#,$#"
-      let newLine =
-        try:
-          str % [pubkey.get().toHex, dNode.id.toHex, forkDigest[0..3].toHex, $dNode.address.get(), attnets.get().toHex, $bits]
-        except ValueError as e:
-          raiseAssert e.msg
+        forkDigest =
+          if eth2Field.isSome:
+            eth2Field.value()[0 .. 3].to0xHex()
+          else:
+            ""
+
+        attnetsAmount =
+          if attnetsField.isSome:
+            var bits = 0
+            for b in attnetsField.value():
+              bits.inc(countOnes(b.uint8))
+            $bits
+          else:
+            ""
+
+        forkHash =
+          if ethField.isSome:
+            var rlp = rlpFromBytes(ethField.value())
+            # It's a double RLP list, see
+            # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/enr-entries/eth.md#entry-format
+            if rlp.enterList and rlp.enterList:
+              try:
+                rlp.read(seq[byte]).to0xHex()
+              except RlpError:
+                "Invalid fork hash"
+            else:
+              "Invalid fork hash"
+          else:
+            ""
+
       try:
-        ps.writeLine(newLine)
+        f.writeLine(
+          [
+            n.id.toHex,
+            $n.record.seqNum,
+            $n.address.value(),
+            eth2,
+            forkDigest,
+            attnets,
+            attnetsAmount,
+            syncnets,
+            eth,
+            forkHash,
+            n.record.toURI(),
+            $n.record.publicKey,
+          ].join(",")
+        )
       except IOError as e:
         fatal "Failed to write to file", file = psFile, error = e.msg
         quit QuitFailure
-    await sleepAsync(1.seconds) # 1 sec of delay
 
+      seenNodes.incl(n.id)
+
+    info "Node random lookup finished",
+      query_time_ms = duration.millis, discovered_nodes = discovered.len, new_nodes = newNodes, total_nodes = len(seenNodes)
+
+    await sleepAsync(100.milliseconds) # 100 ms of idle time
 
 proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
   let
@@ -212,7 +287,7 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
 
   let d = newProtocol(config.nodeKey,
           extIp, Opt.none(Port), extUdpPort,
-          bootstrapRecords = config.bootnodes,
+          bootstrapRecords = config.bootstrapNodes,
           bindIp = bindIp, bindPort = udpPort,
           enrAutoUpdate = config.enrAutoUpdate)
 
