@@ -12,12 +12,12 @@ type RlpDefaultWriter* = object
   output: seq[byte]
 
 func writeCount(writer: var RlpDefaultWriter, count: int, baseMarker: byte) =
-  if count < THRESHOLD_LIST_LEN:
+  if count < THRESHOLD_LEN:
     writer.output.add(baseMarker + byte(count))
   else:
     let lenPrefixBytes = uint64(count).bytesNeeded
 
-    writer.output.add baseMarker + (THRESHOLD_LIST_LEN - 1) + byte(lenPrefixBytes)
+    writer.output.add baseMarker + (THRESHOLD_LEN - 1) + byte(lenPrefixBytes)
 
     writer.output.setLen(writer.output.len + lenPrefixBytes)
     writer.output.writeBigEndian(uint64(count), writer.output.len - 1, lenPrefixBytes)
@@ -37,7 +37,7 @@ proc maybeClosePendingLists(self: var RlpDefaultWriter) =
       let
         listLen = self.output.len - listStartPos
         totalPrefixBytes =
-          if listLen < int(THRESHOLD_LIST_LEN):
+          if listLen < int(THRESHOLD_LEN):
             1
           else:
             int(uint64(listLen).bytesNeeded) + 1
@@ -52,7 +52,7 @@ proc maybeClosePendingLists(self: var RlpDefaultWriter) =
       )
 
       # Write out the prefix length
-      if listLen < THRESHOLD_LIST_LEN:
+      if listLen < THRESHOLD_LEN:
         self.output[listStartPos] = LIST_START_MARKER + byte(listLen)
       else:
         let listLenBytes = totalPrefixBytes - 1
@@ -92,6 +92,24 @@ proc writeBlob*(self: var RlpDefaultWriter, bytes: openArray[byte]) =
   else:
     self.writeCount(bytes.len, BLOB_START_MARKER)
     self.appendRawBytes(bytes)
+
+proc appendDetached*(writer: var RlpDefaultWriter, bytes: openArray[byte]) =
+  writer.output.setLen(writer.output.len + bytes.len)
+  assign(
+    writer.output.toOpenArray(writer.output.len - bytes.len, writer.output.len - 1),
+    bytes,
+  )
+
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
+  # for special cases like transaction types
+  # writer.maybeClosePendingLists()
+
+proc appendDetached*(writer: var RlpDefaultWriter, data: byte) =
+  writer.output.add(data)
+
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
+  # for special cases like transaction types
+  # writer.maybeClosePendingLists()
 
 proc startList*(self: var RlpDefaultWriter, listSize: int) =
   if listSize == 0:
