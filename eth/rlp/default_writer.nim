@@ -93,6 +93,24 @@ proc writeBlob*(self: var RlpDefaultWriter, bytes: openArray[byte]) =
     self.writeCount(bytes.len, BLOB_START_MARKER)
     self.appendRawBytes(bytes)
 
+proc appendDetached*(writer: var RlpDefaultWriter, bytes: openArray[byte]) =
+  writer.output.setLen(writer.output.len + bytes.len)
+  assign(
+    writer.output.toOpenArray(writer.output.len - bytes.len, writer.output.len - 1),
+    bytes,
+  )
+
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
+  # for special cases like transaction types
+  # writer.maybeClosePendingLists()
+
+proc appendDetached*(writer: var RlpDefaultWriter, data: byte) =
+  writer.output.add(data)
+
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
+  # for special cases like transaction types
+  # writer.maybeClosePendingLists()
+
 proc startList*(self: var RlpDefaultWriter, listSize: int) =
   if listSize == 0:
     self.writeCount(0, LIST_START_MARKER)

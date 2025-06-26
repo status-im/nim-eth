@@ -15,6 +15,18 @@ proc push*[T](self: var StaticStackedCounters, item: T, count: int) =
 proc push*[T](self: var DynamicStackedCounters, item: T, count: int) =
   self.stack.add((item, count))
 
+proc peek*(self: var StaticStackedCounters, T: type): Opt[T] =
+  if self.top > 0:
+    return Opt.some(self.stack[self.top - 1].item)
+
+  return Opt.none(T)
+
+proc peek*(self: var DynamicStackedCounters, T: type): Opt[T] =
+  if self.stack.len > 0:
+    return Opt.some(self.stack[self.stack.len - 1].item)
+
+  return Opt.none(T)
+
 proc pop*(self: var StaticStackedCounters, T: type): Opt[T] =
   if self.top > 0:
     #decrement the counter

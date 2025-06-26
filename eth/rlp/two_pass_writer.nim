@@ -54,24 +54,34 @@ proc writeBlob*(writer: var RlpTwoPassWriter, bytes: openArray[byte]) =
     writer.writeLength(bytes.len, BLOB_START_MARKER)
     writer.appendRawBytes(bytes)
 
+template appendDetached*(writer: var RlpTwoPassWriter, bytes: openArray[byte]) =
+  writer.update(bytes)
+
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
+  # for special cases like transaction types
+  # self.decrementCounters(false)
+
+template appendDetached*(writer: var RlpTwoPassWriter, data: byte) =
+  writer.update(data)
+
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
+  # for special cases like transaction types
+  # self.decrementCounters(false)
+
 proc startList*(writer: var RlpTwoPassWriter, listSize: int) =
   mixin writeCount
 
   if listSize == 0:
     writer.writeLength(0, LIST_START_MARKER)
   else:
-    let
-      listLen = writer.lengths[writer.listCount]
-      prefixLen = prefixLength(listLen)
+    let listLen = writer.lengths[writer.listCount]
 
     writer.listCount += 1
 
     writer.writeLength(listLen, LIST_START_MARKER)
 
 proc wrapEncoding*(self: var RlpTwoPassWriter, numOfEncodings: int) =
-  let
-    encodingLen = self.wrapLengths[self.wrapCount]
-    prefixLen = prefixLength(encodingLen)
+  let encodingLen = self.wrapLengths[self.wrapCount]
 
   if encodingLen == 0:
     return # do nothing because nested encoding of a single byte <128 is the byte itself
