@@ -100,14 +100,14 @@ proc appendDetached*(writer: var RlpDefaultWriter, bytes: openArray[byte]) =
     bytes,
   )
 
-  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
   # for special cases like transaction types
   # writer.maybeClosePendingLists()
 
 proc appendDetached*(writer: var RlpDefaultWriter, data: byte) =
   writer.output.add(data)
 
-  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
   # for special cases like transaction types
   # writer.maybeClosePendingLists()
 

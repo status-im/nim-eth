@@ -57,14 +57,14 @@ proc writeBlob*(writer: var RlpTwoPassWriter, bytes: openArray[byte]) =
 template appendDetached*(writer: var RlpTwoPassWriter, bytes: openArray[byte]) =
   writer.update(bytes)
 
-  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
   # for special cases like transaction types
   # self.decrementCounters(false)
 
 template appendDetached*(writer: var RlpTwoPassWriter, data: byte) =
   writer.update(data)
 
-  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
   # for special cases like transaction types
   # self.decrementCounters(false)
 

@@ -159,14 +159,14 @@ func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
 proc appendDetached*(self: var RlpLengthTracker, bytes: openArray[byte]) =
   self.totalLength += bytes.len
 
-  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
   # for special cases like transaction types
   # self.decrementCounters(false)
 
 proc appendDetached*(self: var RlpLengthTracker, data: byte) =
   self.totalLength += 1
 
-  # INFO: normally we would update the list and wrap counters but this method avoids that
+  # INFO: normally we would update the list and wrap counters but this proc avoids that
   # for special cases like transaction types
   # self.decrementCounters(false)
 
