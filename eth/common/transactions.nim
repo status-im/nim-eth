@@ -24,7 +24,7 @@ type
     chainId*: ChainId
     address*: Address
     nonce*: AccountNonce
-    v*: uint64
+    yParity*: uint64
     r*: UInt256
     s*: UInt256
 
