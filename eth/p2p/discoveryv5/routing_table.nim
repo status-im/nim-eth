@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, times, sequtils, bitops, sets],
+  std/[algorithm, times, sequtils, bitops, sets, tables],
   bearssl/rand, results,
   stint, chronicles, metrics, chronos,
   ../../net/utils,
