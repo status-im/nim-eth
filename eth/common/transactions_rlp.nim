@@ -79,7 +79,7 @@ proc append*(w: var RlpWriter, x: Authorization) =
   w.append(x.chainId)
   w.append(x.address)
   w.append(x.nonce)
-  w.append(x.v)
+  w.append(x.yParity)
   w.append(x.r)
   w.append(x.s)
 
@@ -331,7 +331,7 @@ proc read*(rlp: var Rlp, T: type Authorization): T {.raises: [RlpError].} =
   result.chainId = rlp.read(ChainId)
   rlp.read(result.address)
   rlp.read(result.nonce)
-  rlp.read(result.v)
+  rlp.read(result.yParity)
   rlp.read(result.r)
   rlp.read(result.s)
 
