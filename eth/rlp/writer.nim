@@ -16,7 +16,8 @@ import
   default_writer,
   utils,
   stint,
-  ../common/hashes
+  ../common/hashes,
+  ssz_serialization  
 
 export arraybuf, default_writer, length_writer, two_pass_writer, hash_writer
 
@@ -42,6 +43,12 @@ proc appendInt(self: var RlpWriter, i: SomeUnsignedInt) =
 
 template appendImpl(self: var RlpWriter, data: openArray[byte]) =
   self.appendBlob(data)
+
+template appendImpl*[T; N: static[int]](self: var RlpWriter, data: List[T, N]) =
+  self.append(data.asSeq)
+
+template appendImpl*[N: static[int]](self: var RlpWriter, data: ByteList[N]) =
+  self.appendRawBytes(data.asSeq)
 
 template appendImpl(self: var RlpWriter, data: openArray[char]) =
   self.appendBlob(data.toOpenArrayByte(0, data.high))
