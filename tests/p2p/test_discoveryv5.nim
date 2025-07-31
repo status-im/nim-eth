@@ -701,7 +701,7 @@ suite "Discovery v5.1 Tests":
 
       let (packet, _) = encodeMessagePacket(rng[], codec,
         receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
-      receiveNode.receive(a, packet)
+      check receiveNode.receive(a, packet).isOk()
 
     # Checking different nodeIds but same address
     check receiveNode.codec.handshakes.len == 5
@@ -731,7 +731,7 @@ suite "Discovery v5.1 Tests":
       let a = localAddress(20303 + i)
       let (packet, _) = encodeMessagePacket(rng[], codec,
         receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
-      receiveNode.receive(a, packet)
+      check receiveNode.receive(a, packet).isOk()
 
     # Checking different nodeIds but same address
     check receiveNode.codec.handshakes.len == 5
@@ -763,7 +763,7 @@ suite "Discovery v5.1 Tests":
     for i in 0 ..< 5:
       let (packet, requestNonce) = encodeMessagePacket(rng[], codec,
         receiveNode.localNode.id, receiveNode.localNode.address.get(), @[])
-      receiveNode.receive(a, packet)
+      check receiveNode.receive(a, packet).isOk()
       if i == 0:
         firstRequestNonce = requestNonce
 
