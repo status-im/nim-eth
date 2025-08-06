@@ -470,12 +470,10 @@ proc isBanned*(d: Protocol, nodeId: NodeId): bool =
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) : DiscResult[void] =
   discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
 
-  let decoded = d.codec.decodePacket(a, packet)
-  if decoded.isErr:
-    trace "Packet decoding error", error = decoded.error, address = a
+  let decodedPacket = d.codec.decodePacket(a, packet).valueOr:
+    trace "Packet decoding error", error = error, address = a
     return err("Failed to decode packet")
   
-  let decodedPacket = decoded[]
   case decodedPacket.flag
   of OrdinaryMessage:
     if d.isBanned(decodedPacket.srcId):
@@ -564,9 +562,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
               warn "Transport getMessage", exception = e.name, msg = e.msg
               return
 
-  let res = proto.receive(Address(ip: raddr.toIpAddress(), port: raddr.port), buf)
-  if res.isErr:
-    debug "Failed to process received packet", error = res.error
+  discard proto.receive(Address(ip: raddr.toIpAddress(), port: raddr.port), buf)
 
 # TODO: This could be improved to do the clean-up immediately in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
@@ -1190,30 +1186,42 @@ proc newProtocol*(
     responseTimeout: config.responseTimeout,
     rng: rng)
 
-proc newDiscoveryV5*(
+# Alias for clarity
+type
+  DiscoveryV5Protocol* = Protocol
+
+proc new*(T: type DiscoveryV5Protocol,
     privKey: PrivateKey,
     enrIp: Opt[IpAddress],
     enrTcpPort: Opt[Port],
     enrUdpPort: Opt[Port],
-    bootstrapRecords: openArray[enr.Record] = [],
+    localEnrFields: openArray[(string, seq[byte])] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = Opt.none(enr.Record),
     bindPort: Port,
-    bindIp = IPv6_any(),
-    enrAutoUpdate = true,
-    rng = newRng(),
-): Protocol =
-  ## Create a new Discovery v5 protocol instance
+    bindIp = IPv4_any(),
+    enrAutoUpdate = false,
+    banNodes = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng()
+  ): DiscoveryV5Protocol =
+
   let protocol = newProtocol(
     privKey = privKey,
     enrIp = enrIp,
     enrTcpPort = enrTcpPort,
     enrUdpPort = enrUdpPort,
+    localEnrFields = localEnrFields,
     bootstrapRecords = bootstrapRecords,
+    previousRecord = previousRecord,
     bindPort = bindPort,
     bindIp = bindIp,
     enrAutoUpdate = enrAutoUpdate,
+    banNodes = banNodes,
+    config = config,
     rng = rng
   )
-  protocol.seedTable()
+
   return protocol
 
 proc newDiscoveryV5WithTransport*(
@@ -1242,7 +1250,7 @@ proc newDiscoveryV5WithTransport*(
   )
   
   protocol.transp = transp
-  protocol.seedTable()
+
   return protocol
 
 proc `$`*(a: OptAddress): string =
@@ -1293,3 +1301,24 @@ proc closeWait*(d: Protocol) {.async: (raises: []).} =
 
 proc close*(d: Protocol) {.deprecated: "Please use closeWait() instead".} =
   asyncSpawn d.closeWait()
+
+proc openWithTransport*(d: Protocol) =
+  ## Start the discovery protocol using an externally managed transport.
+  ## Does not create or bind a new transport.
+  info "Starting discovery node (with external transport)", node = d.localNode,
+    bindAddress = d.bindAddress
+  d.seedTable()
+
+proc closeWithTransport*(d: Protocol) {.async: (raises: []).} =
+  ## Stop the discovery protocol, but do not close the external transport.
+  doAssert(not d.transp.closed)
+  debug "Closing discovery node (with external transport)", node = d.localNode
+  var futures: seq[Future[void]]
+  if not d.revalidateLoop.isNil:
+    futures.add(d.revalidateLoop.cancelAndWait())
+  if not d.refreshLoop.isNil:
+    futures.add(d.refreshLoop.cancelAndWait())
+  if not d.ipMajorityLoop.isNil:
+    futures.add(d.ipMajorityLoop.cancelAndWait())
+  await noCancel(allFutures(futures))
+  # Do not close d.transp here, as it is managed externally
