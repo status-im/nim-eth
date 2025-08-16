@@ -48,11 +48,10 @@ type
     of rkCreate:  create*: CreateReceipt
     of rkSetCode: setcode*: SetCodeReceipt
 
-
-
 proc zeroAddress*: Address =
   zeroAddress
 
+# Overload for from keyword,can change to fromaddress in code too if required
 proc makeBasicReceipt*(
   fromAddr: Address,
   gasUsed: GasAmount,
@@ -106,7 +105,6 @@ proc makeSetCodeReceipt*(
       authorities: authorities
     )
   )
-
 
 # proc receiptsRoot*(receipts: seq[Receipt]): Hash32 =
 #   result = hash_tree_root(receipts)

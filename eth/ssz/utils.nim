@@ -10,15 +10,6 @@ const
 type
   Secp256k1ExecutionSignature* = array[SECP256K1_SIGNATURE_SIZE, byte]
 
-  FeePerGas* = UInt256
-
-  BasicFeesPerGas* = object
-    regular*: FeePerGas
-
-  BlobFeesPerGas* = object
-    regular*: FeePerGas
-    blob*: FeePerGas
-
 #TODO: add libsecp256k1 fn where necessary
 proc secp256k1Pack*(
     r, s: UInt256, yParity: uint8
@@ -56,3 +47,4 @@ proc secp256k1RecoverSigner*(
   let pk = recover(sig, SkMessage(sigHash.data)).valueOr:
     raise newException(ValueError, "recovery failed")
   pk.to(Address)
+

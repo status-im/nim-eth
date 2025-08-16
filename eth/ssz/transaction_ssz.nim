@@ -97,7 +97,10 @@ type
     input*: ProgressiveByteList
     access_list*: seq[AccessTuple]
 
-
+type
+  RlpAccessListBasicTransaction* = object
+    payload*: RlpAccessListBasicTransactionPayload
+    signature*: Secp256k1ExecutionSignature
 
   RlpAccessListCreateTransactionPayload* = object
     txType*: TransactionType            
@@ -179,13 +182,15 @@ type
 
 type
   RlpAuthorizationKind* {.pure.} = enum
-    ratReplayable = 0'u8
-    ratBasic      = 1'u8
+    Replayable = 0'u8
+    Basic      = 1'u8
 
   RlpAuthorization* = object
     case kind*: RlpAuthorizationKind
-    of replayable: replayableAuth*: RlpReplayableBasicAuthorizationPayload
-    of basic:      basicAuth*:      RlpBasicAuthorizationPayload
+    of Replayable:
+      replayableAuth*: RlpReplayableBasicAuthorizationPayload
+    of Basic:
+      basicAuth*:      RlpBasicAuthorizationPayload
 
 type
   RlpSetCodeTransactionPayload* = object
