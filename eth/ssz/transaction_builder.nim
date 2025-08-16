@@ -79,58 +79,24 @@ proc validate*(sig: Secp256k1ExecutionSignature) =
   if not secp256k1Validate(sig):
     fail("invalid secp256k1 signature")
 
+template defBuild(PayloadT, WrapperT, rlpKindSym, rlpFieldSym: untyped) =
+  proc build*(payload: PayloadT, signature: Secp256k1ExecutionSignature): Transaction {.inline.} =
+    validate(payload); validate(signature)
+    let inner = WrapperT(payload: payload, signature: signature)
+    Transaction(kind: txRlp, rlp: RlpTransaction(kind: rlpKindSym, rlpFieldSym: inner))
 
-# TODO: make a marco that does this to get rid of these many build
-proc build*(payload: RlpLegacyBasicTransactionPayload,
-            signature: Secp256k1ExecutionSignature): Transaction =
-  validate(payload); validate(signature)
-  let inner = RlpLegacyBasicTransaction(payload: payload, signature: signature)
-  Transaction(kind: txRlp, rlp: RlpTransaction(kind: legacyBasic, legacyBasicTx: inner))
-
-proc build*(payload: RlpLegacyCreateTransactionPayload,
-            signature: Secp256k1ExecutionSignature): Transaction =
-  validate(payload); validate(signature)
-  let inner = RlpLegacyCreateTransaction(payload: payload, signature: signature)
-  Transaction(kind: txRlp, rlp: RlpTransaction(kind: legacyCreate, legacyCreateTx: inner))
-
-proc build*(payload: RlpAccessListBasicTransactionPayload,
-            signature: Secp256k1ExecutionSignature): Transaction =
-  validate(payload); validate(signature)
-  let inner = RlpAccessListBasicTransaction(payload: payload, signature: signature)
-  Transaction(kind: txRlp, rlp: RlpTransaction(kind: accessListBasic, accessListBasicTx: inner))
-
-proc build*(payload: RlpAccessListCreateTransactionPayload,
-            signature: Secp256k1ExecutionSignature): Transaction =
-  validate(payload); validate(signature)
-  let inner = RlpAccessListCreateTransaction(payload: payload, signature: signature)
-  Transaction(kind: txRlp, rlp: RlpTransaction(kind: accessListCreate, accessListCreateTx: inner))
-
-proc build*(payload: RlpBasicTransactionPayload,
-            signature: Secp256k1ExecutionSignature): Transaction =
-  validate(payload); validate(signature)
-  let inner = RlpBasicTransaction(payload: payload, signature: signature)
-  Transaction(kind: txRlp, rlp: RlpTransaction(kind: basic1559, basic1559Tx: inner))
-
-proc build*(payload: RlpCreateTransactionPayload,
-            signature: Secp256k1ExecutionSignature): Transaction =
-  validate(payload); validate(signature)
-  let inner = RlpCreateTransaction(payload: payload, signature: signature)
-  Transaction(kind: txRlp, rlp: RlpTransaction(kind: create1559, create1559Tx: inner))
-
-proc build*(payload: RlpBlobTransactionPayload,
-            signature: Secp256k1ExecutionSignature): Transaction =
-  validate(payload); validate(signature)
-  let inner = RlpBlobTransaction(payload: payload, signature: signature)
-  Transaction(kind: txRlp, rlp: RlpTransaction(kind: blob4844, blobTx: inner))
-
-proc build*(payload: RlpSetCodeTransactionPayload,
-            signature: Secp256k1ExecutionSignature): Transaction =
-  validate(payload); validate(signature)
-  let inner = RlpSetCodeTransaction(payload: payload, signature: signature)
-  Transaction(kind: txRlp, rlp: RlpTransaction(kind: setCode7702, setCodeTx: inner))
+defBuild(RlpLegacyBasicTransactionPayload,      RlpLegacyBasicTransaction,      legacyBasic,     legacyBasicTx)
+defBuild(RlpLegacyCreateTransactionPayload,     RlpLegacyCreateTransaction,     legacyCreate,    legacyCreateTx)
+defBuild(RlpAccessListBasicTransactionPayload,  RlpAccessListBasicTransaction,  accessListBasic, accessListBasicTx)
+defBuild(RlpAccessListCreateTransactionPayload, RlpAccessListCreateTransaction, accessListCreate,accessListCreateTx)
+defBuild(RlpBasicTransactionPayload,            RlpBasicTransaction,            basic1559,       basic1559Tx)
+defBuild(RlpCreateTransactionPayload,           RlpCreateTransaction,           create1559,      create1559Tx)
+# Maybe a when compiles BlobFeesPerGas here
+defBuild(RlpBlobTransactionPayload,           RlpBlobTransaction,             blob4844,        blobTx)
+defBuild(RlpSetCodeTransactionPayload,          RlpSetCodeTransaction,          setCode7702,     setCodeTx)
 
 proc Transaction*(
-  txType: uint8,                                 # 0x00 legacy, 0x01 2930, 0x02 1559, 0x03 4844, 0x04 7702
+  txType: uint8,                                 
   chain_id: ChainId,
   nonce: uint64,
   gas: GasAmount,
