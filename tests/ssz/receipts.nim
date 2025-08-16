@@ -1,25 +1,19 @@
-import
-  unittest2,
-  macros,
-  ssz_serialization,
-  stew/byteutils,std/sequtils  
+import unittest2, macros, ssz_serialization, stew/byteutils, std/sequtils
 
-import
-  ../../eth/common/[addresses, base, hashes]
-import
-  ../../eth/ssz/[receipts,codec]
+import ../../eth/common/[addresses, base, hashes]
+import ../../eth/ssz/[receipts, codec]
 
 # Stand in as what the tests will be 
 # Need more work done 
 template roundTrip*(v: var untyped) =
   var bytes = SSZ.encode(v)
-  var v2     = SSZ.decode(bytes, v.type)
+  var v2 = SSZ.decode(bytes, v.type)
   var bytes2 = SSZ.encode(v2)
   check bytes == bytes2
 
 # Idea- pass only l values to this 
 macro testRT*(name: static[string], expr: var untyped): untyped =
-  result = quote do:
+  result = quote:
     test `name`:
       var v = `expr`
       roundTrip(v)
@@ -29,11 +23,8 @@ suite "SSZ Receipts (EIP-6466)":
   var addr22 = Address.copyFrom(newSeqWith(20, byte 0x22))
 
   test "Log: 0 topics, empty data":
-    var l = Log(
-      address: addr22,
-      topics: List[Hash32, MAX_TOPICS_PER_LOG](@[]),
-      data: @[]
-    )
+    var l =
+      Log(address: addr22, topics: List[Hash32, MAX_TOPICS_PER_LOG](@[]), data: @[])
     testRT("Log: 0 topics, empty data", l)
 
 #   # test "Log: 4 topics, some data":

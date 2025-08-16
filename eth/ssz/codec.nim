@@ -1,4 +1,4 @@
-import ".."/common/[addresses,hashes]
+import ".."/common/[addresses, hashes]
 
 # SSZ for addresses
 proc toSszType*(x: Address): var array[20, byte] {.inline.} =
@@ -16,5 +16,8 @@ proc fromSszBytes*(T: type Hash32, bytes: var openArray[byte]): Hash32 {.inline.
   doAssert bytes.len == 32
   Hash32.copyFrom(bytes)
 
-template toSszType*(T: type Address): untyped = array[20, byte]
-template toSszType*(T: type Hash32):  untyped = array[32, byte]
+template toSszType*(T: type Address): untyped =
+  array[20, byte]
+
+template toSszType*(T: type Hash32): untyped =
+  array[32, byte]

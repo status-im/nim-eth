@@ -2,22 +2,17 @@ import
   unittest2,
   stew/byteutils,
   stint,
-  ../../eth/ssz/[transaction_ssz,transaction_builder,utils],     
+  ../../eth/ssz/[transaction_ssz, transaction_builder, utils],
   ../../eth/common/[addresses, base, hashes]
 
 const
   recipient = address"095e7baea6a6c7c4c2dfeb977efac326af552d87"
-  source    = address"0x0000000000000000000000000000000000000001"
+  source = address"0x0000000000000000000000000000000000000001"
   storageKey = default(Bytes32)
-  abcdef    = hexToSeqByte("abcdef")
+  abcdef = hexToSeqByte("abcdef")
 
-let accesses: seq[AccessTuple] = @[
-  AccessTuple(
-    address: source,
-    storageKeys: @[Hash32(storageKey)]
-  )
-]
-
+let accesses: seq[AccessTuple] =
+  @[AccessTuple(address: source, storageKeys: @[Hash32(storageKey)])]
 
 proc dummySig(): Secp256k1ExecutionSignature =
   secp256k1_pack(1.u256, 1.u256, 0'u8)
@@ -33,7 +28,7 @@ suite "SSZ Transactions (constructor)":
       value = 0.u256,
       input = abcdef,
       max_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
-      signature = dummySig()
+      signature = dummySig(),
     )
     check tx.kind == txRlp
     check tx.rlp.kind == legacyBasic
@@ -45,11 +40,11 @@ suite "SSZ Transactions (constructor)":
       chain_id = ChainId(1.u256),
       nonce = 2'u64,
       gas = 50_000'u64,
-      to = Opt.none(Address),   # create
+      to = Opt.none(Address), # create
       value = 0.u256,
-      input = abcdef,           # initcode must be non-empty
+      input = abcdef, # initcode must be non-empty
       max_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
-      signature = dummySig()
+      signature = dummySig(),
     )
     check tx.kind == txRlp
     check tx.rlp.kind == legacyCreate
@@ -66,7 +61,7 @@ suite "SSZ Transactions (constructor)":
       input = abcdef,
       max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
       access_list = accesses,
-      signature = dummySig()
+      signature = dummySig(),
     )
     check tx.kind == txRlp
     check tx.rlp.kind == accessListBasic
@@ -83,7 +78,7 @@ suite "SSZ Transactions (constructor)":
       input = abcdef,
       max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
       # access_list defaults to @[]
-      signature = dummySig()
+      signature = dummySig(),
     )
     check tx.kind == txRlp
     check tx.rlp.kind == accessListCreate
@@ -101,7 +96,7 @@ suite "SSZ Transactions (constructor)":
       max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
       max_priority_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
       access_list = accesses,
-      signature = dummySig()
+      signature = dummySig(),
     )
     check tx.kind == txRlp
     check tx.rlp.kind == basic1559
@@ -118,7 +113,7 @@ suite "SSZ Transactions (constructor)":
       input = abcdef,
       max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
       max_priority_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
-      signature = dummySig()
+      signature = dummySig(),
     )
     check tx.kind == txRlp
     check tx.rlp.kind == create1559
@@ -139,9 +134,9 @@ suite "SSZ Transactions (constructor)":
         max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
         max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
         access_list = accesses,
-        blob_versioned_hashes = @[VersionedHash(d)], 
+        blob_versioned_hashes = @[VersionedHash(d)],
         blob_fee = 10.u256,
-        signature = dummySig()
+        signature = dummySig(),
       )
       check tx.kind == txRlp
       check tx.rlp.kind == blob4844
