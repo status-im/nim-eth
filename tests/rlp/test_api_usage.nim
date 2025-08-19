@@ -92,6 +92,34 @@ suite "test api usage":
     check:
       input == output
 
+  test "encode/decode u256 using all writers":
+    let bigInteger = u256("41264676679744500716811770511010812185591177620844949948278128119116121553882")
+
+    # use default writer
+    var writer = initRlpWriter()
+    writer.append(bigInteger)
+    let 
+      bytes1 = writer.finish()
+      # use two pass writer
+      bytes2 = rlp.encode(bigInteger)
+      # use default writer then hash
+      hash1 = keccak256(bytes2)
+      # use hash writer
+      hash2 = rlp.computeRlpHash(bigInteger)
+
+    check  bytes1 == bytes2
+
+    var 
+      r1 = rlpFromBytes(bytes1)
+      output1 = r1.read(UInt256)
+      r2 = rlpFromBytes(bytes2)
+      output2 = r2.read(UInt256)
+
+    check:
+      bigInteger == output1
+      bigInteger == output2
+      hash1 == hash2
+
   test "encode and decode lists":
     var writer = initRlpList(3)
     writer.append "foo"
