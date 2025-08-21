@@ -206,15 +206,10 @@ type
     signature*: Secp256k1ExecutionSignature
 
 type
-  AnyRlpTransaction* = RlpLegacyReplayableBasicTransaction |
-      RlpLegacyReplayableCreateTransaction |
-      RlpLegacyBasicTransaction |
-      RlpLegacyCreateTransaction |
-      RlpAccessListBasicTransaction |
-      RlpAccessListCreateTransaction |
-      RlpBasicTransaction |
-      RlpCreateTransaction |
-      RlpBlobTransaction |
-      RlpSetCodeTransaction
+  AnyRlpTransaction* =
+    RlpLegacyReplayableBasicTransaction | RlpLegacyReplayableCreateTransaction |
+    RlpLegacyBasicTransaction | RlpLegacyCreateTransaction |
+    RlpAccessListBasicTransaction | RlpAccessListCreateTransaction | RlpBasicTransaction |
+    RlpCreateTransaction | RlpBlobTransaction | RlpSetCodeTransaction
 
-  Transaction* =AnyRlpTransaction
+  Transaction* = AnyRlpTransaction

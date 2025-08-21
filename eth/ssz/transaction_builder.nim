@@ -8,86 +8,67 @@ type TxBuildError* = object of ValueError
 template fail(msg: string): untyped =
   raise newException(TxBuildError, msg)
 
+# template requireGasPositiveIfEnabled(payload: untyped, contextName: static[string]) =
+#     when compiles(payload.gas):
+#       if payload.gas == 0'u64:
+#         fail(contextName & ": gas must be > 0")
+
+template requirePriorityFeeNotAboveMax(payload: untyped, contextName: static[string]) =
+  when compiles(payload.max_priority_fees_per_gas):
+    if payload.max_priority_fees_per_gas.regular > payload.max_fees_per_gas.regular:
+      fail(contextName & ": max_fees_per_gas.regular < max_priority_fees_per_gas.regular")
+
+template validateCommonFields(
+  payload: untyped,
+  expectedTxType: static[uint8],
+  contextName: static[string],
+  txTypeErrorMsg: static[string]
+) =
+  if payload.txType != expectedTxType: fail(txTypeErrorMsg)
+  if payload.chain_id == ChainId(0.u256):
+    fail(contextName & ": chain_id must be non-zero")
+  # requireGasPositiveIfEnabled(payload, contextName)
+  requirePriorityFeeNotAboveMax(payload, contextName)
+ 
 # Legacy (EIP-155) — basic (call)
 proc validate*(p: RlpLegacyBasicTransactionPayload) =
-  if p.txType != TxLegacy:
-    fail("legacy basic: txType must be 0x00 (TxLegacy)")
-  if p.chain_id == ChainId(0.u256):
-    fail("legacy basic: chain_id must be non-zero")
-
-#   if not p.gas > 0'u64: fail("legacy basic: gas must be > 0")
+  validateCommonFields(p, 0x00'u8, "legacy basic","legacy basic: txType must be 0x00 (TxLegacy)")
 
 # Legacy (EIP-155) — create
 proc validate*(p: RlpLegacyCreateTransactionPayload) =
-  if p.txType != TxLegacy:
-    fail("legacy create: txType must be 0x00 (TxLegacy)")
-  if p.chain_id == ChainId(0.u256):
-    fail("legacy create: chain_id must be non-zero")
-  #   if not p.gas > 0'u64: fail("legacy create: gas must be > 0")
+  validateCommonFields(p, 0x00'u8, "legacy create","legacy create: txType must be 0x00 (TxLegacy)")
   if p.input.len == 0:
     fail("legacy create: initcode (input) must be non-empty")
 
 # 2930 — basic (call)
 proc validate*(p: RlpAccessListBasicTransactionPayload) =
-  if p.txType != TxAccessList:
-    fail("2930 basic: txType must be 0x01 (TxAccessList)")
-  if p.chain_id == ChainId(0.u256):
-    fail("2930 basic: chain_id must be non-zero")
-
-#   if not p.gas > 0'u64: fail("2930 basic: gas must be > 0")
+  validateCommonFields(p, 0x01'u8, "2930 basic","2930 basic: txType must be 0x01 (TxAccessList)")
 
 # 2930 — create
 proc validate*(p: RlpAccessListCreateTransactionPayload) =
-  if p.txType != TxAccessList:
-    fail("2930 create: txType must be 0x01 (TxAccessList)")
-  if p.chain_id == ChainId(0.u256):
-    fail("2930 create: chain_id must be non-zero")
-  #   if not p.gas > 0'u64: fail("2930 create: gas must be > 0")
+  validateCommonFields(p, 0x01'u8, "2930 create","2930 create: txType must be 0x01 (TxAccessList)")
   if p.input.len == 0:
     fail("2930 create: initcode (input) must be non-empty")
 
 # 1559 — basic (call)
 proc validate*(p: RlpBasicTransactionPayload) =
-  if p.txType != TxDynamicFee:
-    fail("1559 basic: txType must be 0x02 (TxDynamicFee)")
-  if p.chain_id == ChainId(0.u256):
-    fail("1559 basic: chain_id must be non-zero")
-  #   if not p.gas > 0'u64: fail("1559 basic: gas must be > 0")
-  if p.max_priority_fees_per_gas.regular > p.max_fees_per_gas.regular:
-    fail("1559 basic: max_fees_per_gas.regular < max_priority_fees_per_gas.regular")
+  validateCommonFields(p, 0x02'u8, "1559 basic","1559 basic: txType must be 0x02 (TxDynamicFee)")
 
 # 1559 — create
 proc validate*(p: RlpCreateTransactionPayload) =
-  if p.txType != TxDynamicFee:
-    fail("1559 create: txType must be 0x02 (TxDynamicFee)")
-  if p.chain_id == ChainId(0.u256):
-    fail("1559 create: chain_id must be non-zero")
-  #   if not p.gas > 0'u64: fail("1559 create: gas must be > 0")
+  validateCommonFields(p, 0x02'u8, "1559 create","1559 create: txType must be 0x02 (TxDynamicFee)")
   if p.input.len == 0:
     fail("1559 create: initcode (input) must be non-empty")
-  if p.max_priority_fees_per_gas.regular > p.max_fees_per_gas.regular:
-    fail("1559 create: max_fees_per_gas.regular < max_priority_fees_per_gas.regular")
 
-# 4844 — blob (call only per EIP-4844)
+# 4844 — blob (call-only)
 proc validate*(p: RlpBlobTransactionPayload) =
-  if p.txType != TxBlob:
-    fail("4844 blob: txType must be 0x03 (TxBlob)")
-  if p.chain_id == ChainId(0.u256):
-    fail("4844 blob: chain_id must be non-zero")
-  #   if not p.gas > 0'u64: fail("4844 blob: gas must be > 0")
+  validateCommonFields(p, 0x03'u8, "4844 blob","4844 blob: txType must be 0x03 (TxBlob)")
   if p.blob_versioned_hashes.len == 0:
     fail("4844 blob: blob_versioned_hashes must be non-empty")
-  if p.max_priority_fees_per_gas.regular > p.max_fees_per_gas.regular:
-    fail("4844 blob: max_fees_per_gas.regular < max_priority_fees_per_gas.regular")
-  # NOTE: The spec does not mandate blob fee > 0 — do not enforce here.
 
 # 7702 — setCode (call)
 proc validate*(p: RlpSetCodeTransactionPayload) =
-  if p.txType != 0x04'u8:
-    fail("7702: txType must be 0x04 (SetCode)")
-  if p.chain_id == ChainId(0.u256):
-    fail("7702: chain_id must be non-zero")
-  #   if not p.gas > 0'u64: fail("7702: gas must be > 0")
+  validateCommonFields(p, 0x04'u8, "7702","7702: txType must be 0x04 (SetCode)")
   if p.authorization_list.len == 0:
     fail("7702: authorization_list must be non-empty")
 
