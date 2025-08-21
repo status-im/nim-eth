@@ -206,38 +206,15 @@ type
     signature*: Secp256k1ExecutionSignature
 
 type
-  # the compilet would do these on thier own but still to be safe
-  RlpTransactionKind* {.pure.} = enum
-    legacyReplayableBasic = 0
-    legacyReplayableCreate = 1
-    legacyBasic = 2
-    legacyCreate = 3
-    accessListBasic = 4
-    accessListCreate = 5
-    basic1559 = 6
-    create1559 = 7
-    blob4844 = 8
-    setCode7702 = 9
+  AnyRlpTransaction* = RlpLegacyReplayableBasicTransaction |
+      RlpLegacyReplayableCreateTransaction |
+      RlpLegacyBasicTransaction |
+      RlpLegacyCreateTransaction |
+      RlpAccessListBasicTransaction |
+      RlpAccessListCreateTransaction |
+      RlpBasicTransaction |
+      RlpCreateTransaction |
+      RlpBlobTransaction |
+      RlpSetCodeTransaction
 
-  RlpTransaction* = object
-    case kind*: RlpTransactionKind
-    of legacyReplayableBasic:
-    legacyReplayableBasicTx*: RlpLegacyReplayableBasicTransaction
-    of legacyReplayableCreate:
-    legacyReplayableCreateTx*: RlpLegacyReplayableCreateTransaction
-    of legacyBasic: legacyBasicTx*: RlpLegacyBasicTransaction
-    of legacyCreate: legacyCreateTx*: RlpLegacyCreateTransaction
-    of accessListBasic: accessListBasicTx*: RlpAccessListBasicTransaction
-    of accessListCreate: accessListCreateTx*: RlpAccessListCreateTransaction
-    of basic1559: basic1559Tx*: RlpBasicTransaction
-    of create1559: create1559Tx*: RlpCreateTransaction
-    of blob4844: blobTx*: RlpBlobTransaction
-    of setCode7702: setCodeTx*: RlpSetCodeTransaction
-
-type
-  TransactionKind* {.pure.} = enum
-    txRlp = 0
-
-  Transaction* = object
-    case kind*: TransactionKind
-    of txRlp: rlp*: RlpTransaction
+  Transaction* =AnyRlpTransaction
