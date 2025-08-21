@@ -14,6 +14,7 @@ proc validate*(p: RlpLegacyBasicTransactionPayload) =
     fail("legacy basic: txType must be 0x00 (TxLegacy)")
   if p.chain_id == ChainId(0.u256):
     fail("legacy basic: chain_id must be non-zero")
+
 #   if not p.gas > 0'u64: fail("legacy basic: gas must be > 0")
 
 # Legacy (EIP-155) — create
@@ -32,6 +33,7 @@ proc validate*(p: RlpAccessListBasicTransactionPayload) =
     fail("2930 basic: txType must be 0x01 (TxAccessList)")
   if p.chain_id == ChainId(0.u256):
     fail("2930 basic: chain_id must be non-zero")
+
 #   if not p.gas > 0'u64: fail("2930 basic: gas must be > 0")
 
 # 2930 — create

@@ -121,7 +121,6 @@ suite "SSZ Transactions (constructor)":
 
   when compiles(BlobFeesPerGas):
     test "4844 Blob Tx":
-      # NOTE: blob_versioned_hashes expects seq[VersionedHash]
       const d = hash32"010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014"
       let tx = Transaction(
         txType = 0x03'u8,

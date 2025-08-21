@@ -1,17 +1,20 @@
-import unittest2, macros, ssz_serialization, stew/byteutils, std/sequtils
+import
+  unittest2,
+  ssz_serialization,
+  macros,
+  std/sequtils,
+  ../../eth/common/[addresses, base, hashes],
+  ../../eth/ssz/[receipts,codec]
 
-import ../../eth/common/[addresses, base, hashes]
-import ../../eth/ssz/[receipts, codec]
-
-# Stand in as what the tests will be 
-# Need more work done 
+## Stand in as what the tests will be
+## Need more work done
 template roundTrip*(v: var untyped) =
   var bytes = SSZ.encode(v)
   var v2 = SSZ.decode(bytes, v.type)
   var bytes2 = SSZ.encode(v2)
   check bytes == bytes2
 
-# Idea- pass only l values to this 
+# Idea- pass only l values to this
 macro testRT*(name: static[string], expr: var untyped): untyped =
   result = quote:
     test `name`:
@@ -19,13 +22,119 @@ macro testRT*(name: static[string], expr: var untyped): untyped =
       roundTrip(v)
       check sszSize(v) == SSZ.encode(v).len
 
-suite "SSZ Receipts (EIP-6466)":
-  var addr22 = Address.copyFrom(newSeqWith(20, byte 0x22))
+template topicFill(b: byte): untyped =
+  (block:
+    var a: array[32, byte]
+    for i in 0 ..< 32: a[i] = b
+    a.to(Hash32)
+  )
 
-  test "Log: 0 topics, empty data":
-    var l =
-      Log(address: addr22, topics: List[Hash32, MAX_TOPICS_PER_LOG](@[]), data: @[])
-    testRT("Log: 0 topics, empty data", l)
+suite "Log Construction (SSZ)":
+  test "Log: empty topics, empty data, zero address":
+    var l = Log(
+      address: addresses.zeroAddress,
+      topics: List[Hash32, MAX_TOPICS_PER_LOG](@[]),
+      data: @[]
+    )
+    # roundTrip(l)
+    # check l.topics.len == 0
+    # check l.data.len == 0
+
+  test "Log: max topics (=4), small data":
+    var addrAA = Address.copyFrom(newSeqWith(20, byte 0xAA))
+    var l = Log(
+      address: addrAA,
+      topics: List[Hash32, MAX_TOPICS_PER_LOG](@[
+        topicFill(0x10), topicFill(0x11), topicFill(0x12), topicFill(0x13)
+      ]),
+      data: @[byte 0xDE, 0xAD, 0xBE, 0xEF]
+    )
+    roundTrip(l)
+    check l.topics.len == 4
+    check l.topics[0] == topicFill(0x10) and l.topics[3] == topicFill(0x13)
+    
+  test "Log: large data (128 KiB)":
+    let addrBB = Address.copyFrom(newSeqWith(20, byte 0xBB))
+    var big = newSeq[byte](128 * 1024)
+    for i in 0 ..< big.len: big[i] = byte(i and 0xFF)
+    var l = Log(
+      address: addrBB,
+      topics: List[Hash32, MAX_TOPICS_PER_LOG](@[topicFill(1), topicFill(2)]),
+      data: big
+    )
+    # roundTrip(l)
+    # check l.data.len == big.len
+  
+  
+  suite "Receipts Construction (SSZ)":
+    test "Basic receipt":
+      var log0 = Log(
+        address: default(Address),
+        topics: default(List[Hash32, MAX_TOPICS_PER_LOG]),
+        data: @[]
+      )
+  
+      var rec = Receipt(
+        kind: rkBasic,
+        basic: BasicReceipt(
+          `from`: default(Address),
+          gas_used: 100'u64,
+          contract_address: default(Address),
+          logs: @[log0],
+          status: true
+        )
+      )
+
+  test "Create receipt":
+    var log1 = Log(
+      address: default(Address),
+      topics:default(List[Hash32, MAX_TOPICS_PER_LOG]),
+      data: @[byte 0x01, 0x02, 0x03],
+    )
+    var createdAddr = address"0x00000000000000000000000000000000000000aa"
+
+    var rec = Receipt(
+      kind: rkCreate,
+      create: CreateReceipt(
+        `from`: address"0x00000000000000000000000000000000000000bb",
+        gas_used: 21000'u64,
+        contract_address: createdAddr,
+        logs: @[log1],
+        status: false,
+      ),
+    )
+    # roundTrip(rec)
+
+  test "SetCode receipt":
+    var log2 = Log(
+      address: address"0x00000000000000000000000000000000000000cc",
+      topics: default(List[Hash32, MAX_TOPICS_PER_LOG]),
+    )
+
+    var rec = Receipt(
+      kind: rkSetCode,
+      setcode: SetCodeReceipt(
+        `from`: address"0x00000000000000000000000000000000000000dd",
+        gas_used: 42000'u64,
+        contract_address: address"0x00000000000000000000000000000000000000ee",
+        logs: @[log2],
+        status: true,
+        authorities:
+          @[
+            address"0x00000000000000000000000000000000000000f1",
+            address"0x00000000000000000000000000000000000000f2",
+          ],
+      ),
+    )
+
+
+# suite "SSZ Receipts (EIP-6466)":
+#   var addr22 = Address.copyFrom(newSeqWith(20, byte 0x22))
+
+#   test "Log: 0 topics, empty data":
+#     var l =
+#       Log(address: addr22, topics: List[Hash32, MAX_TOPICS_PER_LOG](@[]), data: @[])
+#     # testRT("Log: 0 topics, empty data", l)
 
 #   # test "Log: 4 topics, some data":
 #   #   let addr22 = Address.copyFrom(newSeqWith(20, byte 0x22))
