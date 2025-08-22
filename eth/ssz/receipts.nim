@@ -1,7 +1,4 @@
-import 
-  ssz_serialization,
-  ".."/common/[addresses, base, hashes]
-  # "."/codec
+import ssz_serialization, ".."/common/[addresses, base, hashes] # "."/codec
 
 const MAX_TOPICS_PER_LOG* = 4
 
@@ -35,16 +32,4 @@ type
     status*: bool
     authorities*: seq[Address]
 
-  ReceiptKind* {.pure.} = enum
-    rkBasic = 0
-    rkCreate = 1
-    rkSetCode = 2
-
-  Receipt* = object
-    case kind*: ReceiptKind
-    of rkBasic:
-      basic*: BasicReceipt
-    of rkCreate:
-      create*: CreateReceipt
-    of rkSetCode:
-      setcode*: SetCodeReceipt
+  Receipt* = BasicReceipt | CreateReceipt | SetCodeReceipt

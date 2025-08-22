@@ -1,4 +1,4 @@
-import ".."/common/[addresses, hashes,base]
+import ".."/common/[addresses, hashes, base]
 import ../rlp
 import ssz_serialization
 import json_serialization
@@ -7,7 +7,6 @@ import json_serialization
 
 # # SSZ for addresses
 # proc toSszType*(x: Address): var array[20, byte] {.inline.} =
-
 
 # proc fromSszBytes*(T: type Address, bytes: var openArray[byte]): Address {.inline.} =
 #   doAssert bytes.len == 20

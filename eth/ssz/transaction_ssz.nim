@@ -3,6 +3,10 @@ import stint
 import ".."/common/[addresses, base, hashes]
 import "."/utils
 
+type SignedTx*[P] = object
+  payload*: P
+  signature*: Secp256k1ExecutionSignature
+
 type
   TransactionType* = uint8
   GasAmount* = uint64
@@ -39,10 +43,6 @@ type
     value*: UInt256
     input*: ProgressiveByteList
 
-  RlpLegacyReplayableBasicTransaction* = object
-    payload*: RlpLegacyReplayableBasicTransactionPayload
-    signature*: Secp256k1ExecutionSignature
-
   RlpLegacyReplayableCreateTransactionPayload* = object
     txType*: TransactionType
     nonce*: uint64
@@ -50,10 +50,6 @@ type
     gas*: GasAmount
     value*: UInt256
     input*: ProgressiveByteList
-
-  RlpLegacyReplayableCreateTransaction* = object
-    payload*: RlpLegacyReplayableCreateTransactionPayload
-    signature*: Secp256k1ExecutionSignature
 
 type
   RlpLegacyBasicTransactionPayload* = object
@@ -66,10 +62,6 @@ type
     value*: UInt256
     input*: ProgressiveByteList
 
-  RlpLegacyBasicTransaction* = object
-    payload*: RlpLegacyBasicTransactionPayload
-    signature*: Secp256k1ExecutionSignature
-
   RlpLegacyCreateTransactionPayload* = object
     txType*: TransactionType
     chain_id*: ChainId
@@ -78,10 +70,6 @@ type
     gas*: GasAmount
     value*: UInt256
     input*: ProgressiveByteList
-
-  RlpLegacyCreateTransaction* = object
-    payload*: RlpLegacyCreateTransactionPayload
-    signature*: Secp256k1ExecutionSignature
 
 type RlpAccessListBasicTransactionPayload* = object
   txType*: TransactionType
@@ -94,24 +82,15 @@ type RlpAccessListBasicTransactionPayload* = object
   input*: ProgressiveByteList
   access_list*: seq[AccessTuple]
 
-type
-  RlpAccessListBasicTransaction* = object
-    payload*: RlpAccessListBasicTransactionPayload
-    signature*: Secp256k1ExecutionSignature
-
-  RlpAccessListCreateTransactionPayload* = object
-    txType*: TransactionType
-    chain_id*: ChainId
-    nonce*: uint64
-    max_fees_per_gas*: BasicFeesPerGas
-    gas*: GasAmount
-    value*: UInt256
-    input*: ProgressiveByteList
-    access_list*: seq[AccessTuple]
-
-  RlpAccessListCreateTransaction* = object
-    payload*: RlpAccessListCreateTransactionPayload
-    signature*: Secp256k1ExecutionSignature
+type RlpAccessListCreateTransactionPayload* = object
+  txType*: TransactionType
+  chain_id*: ChainId
+  nonce*: uint64
+  max_fees_per_gas*: BasicFeesPerGas
+  gas*: GasAmount
+  value*: UInt256
+  input*: ProgressiveByteList
+  access_list*: seq[AccessTuple]
 
 type
   RlpBasicTransactionPayload* = object
@@ -126,10 +105,6 @@ type
     access_list*: seq[AccessTuple]
     max_priority_fees_per_gas*: BasicFeesPerGas
 
-  RlpBasicTransaction* = object
-    payload*: RlpBasicTransactionPayload
-    signature*: Secp256k1ExecutionSignature
-
   RlpCreateTransactionPayload* = object
     txType*: TransactionType
     chain_id*: ChainId
@@ -141,27 +116,18 @@ type
     access_list*: seq[AccessTuple]
     max_priority_fees_per_gas*: BasicFeesPerGas
 
-  RlpCreateTransaction* = object
-    payload*: RlpCreateTransactionPayload
-    signature*: Secp256k1ExecutionSignature
-
-type
-  RlpBlobTransactionPayload* = object
-    txType*: TransactionType
-    chain_id*: ChainId
-    nonce*: uint64
-    max_fees_per_gas*: BlobFeesPerGas
-    gas*: GasAmount
-    to*: Address
-    value*: UInt256
-    input*: ProgressiveByteList
-    access_list*: seq[AccessTuple]
-    max_priority_fees_per_gas*: BasicFeesPerGas
-    blob_versioned_hashes*: seq[VersionedHash]
-
-  RlpBlobTransaction* = object
-    payload*: RlpBlobTransactionPayload
-    signature*: Secp256k1ExecutionSignature
+type RlpBlobTransactionPayload* = object
+  txType*: TransactionType
+  chain_id*: ChainId
+  nonce*: uint64
+  max_fees_per_gas*: BlobFeesPerGas
+  gas*: GasAmount
+  to*: Address
+  value*: UInt256
+  input*: ProgressiveByteList
+  access_list*: seq[AccessTuple]
+  max_priority_fees_per_gas*: BasicFeesPerGas
+  blob_versioned_hashes*: seq[VersionedHash]
 
 type
   RlpReplayableBasicAuthorizationPayload* = object
@@ -175,35 +141,35 @@ type
     address*: Address
     nonce*: uint64
 
+type RlpAuthorization* =
+  RlpReplayableBasicAuthorizationPayload | RlpBasicAuthorizationPayload
+
+type RlpSetCodeTransactionPayload* = object
+  txType*: TransactionType
+  chain_id*: ChainId
+  nonce*: uint64
+  max_fees_per_gas*: BasicFeesPerGas
+  gas*: GasAmount
+  to*: Address
+  value*: UInt256
+  input*: ProgressiveByteList
+  access_list*: seq[AccessTuple]
+  max_priority_fees_per_gas*: BasicFeesPerGas
+  authorization_list*: seq[RlpAuthorization]
+
 type
-  RlpAuthorizationKind* {.pure.} = enum
-    Replayable = 0'u8
-    Basic = 1'u8
-
-  RlpAuthorization* = object
-    case kind*: RlpAuthorizationKind
-    of Replayable:
-      replayableAuth*: RlpReplayableBasicAuthorizationPayload
-    of Basic:
-      basicAuth*: RlpBasicAuthorizationPayload
-
-type
-  RlpSetCodeTransactionPayload* = object
-    txType*: TransactionType
-    chain_id*: ChainId
-    nonce*: uint64
-    max_fees_per_gas*: BasicFeesPerGas
-    gas*: GasAmount
-    to*: Address
-    value*: UInt256
-    input*: ProgressiveByteList
-    access_list*: seq[AccessTuple]
-    max_priority_fees_per_gas*: BasicFeesPerGas
-    authorization_list*: seq[RlpAuthorization]
-
-  RlpSetCodeTransaction* = object
-    payload*: RlpSetCodeTransactionPayload
-    signature*: Secp256k1ExecutionSignature
+  RlpLegacyReplayableBasicTransaction* =
+    SignedTx[RlpLegacyReplayableBasicTransactionPayload]
+  RlpLegacyReplayableCreateTransaction* =
+    SignedTx[RlpLegacyReplayableCreateTransactionPayload]
+  RlpLegacyBasicTransaction* = SignedTx[RlpLegacyBasicTransactionPayload]
+  RlpLegacyCreateTransaction* = SignedTx[RlpLegacyCreateTransactionPayload]
+  RlpAccessListBasicTransaction* = SignedTx[RlpAccessListBasicTransactionPayload]
+  RlpAccessListCreateTransaction* = SignedTx[RlpAccessListCreateTransactionPayload]
+  RlpBasicTransaction* = SignedTx[RlpBasicTransactionPayload]
+  RlpCreateTransaction* = SignedTx[RlpCreateTransactionPayload]
+  RlpBlobTransaction* = SignedTx[RlpBlobTransactionPayload]
+  RlpSetCodeTransaction* = SignedTx[RlpSetCodeTransactionPayload]
 
 type
   AnyRlpTransaction* =
