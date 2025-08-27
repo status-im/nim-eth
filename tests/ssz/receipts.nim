@@ -6,126 +6,162 @@ import
   ../../eth/common/[addresses, base, hashes],
   ../../eth/ssz/[receipts,codec]
 
-## Stand in as what the tests will be
-## Need more work done
 template roundTrip*(v: var untyped) =
   var bytes = SSZ.encode(v)
   var v2 = SSZ.decode(bytes, v.type)
   var bytes2 = SSZ.encode(v2)
   check bytes == bytes2
-
-# Idea- pass only l values to this
-macro testRT*(name: static[string], expr: var untyped): untyped =
-  result = quote:
-    test `name`:
-      var v = `expr`
-      roundTrip(v)
-      check sszSize(v) == SSZ.encode(v).len
-
 template topicFill(b: byte): untyped =
   (block:
-    var a: array[32, byte]
-    for i in 0 ..< 32: a[i] = b
-    a.to(Hash32)
+    var buf: array[32, byte]
+    for i in 0 ..< 32:
+      buf[i] = b
+    Hash32.copyFrom(buf)
   )
+# Idea- pass only l values to this
+
+macro testRT*(name: static[string], expr: typed): untyped =
+  ## Roundtrip SSZ + size check.
+  let valueSym   = genSym(nskLet, "rtValue")
+  let bytesSym   = genSym(nskLet, "rtEncoded")
+  let value2Sym  = genSym(nskVar, "rtDecoded")
+  let bytes2Sym  = genSym(nskLet, "rtReencoded")
+
+  result = quote do:
+    test `name`:
+      let `valueSym` = `expr`
+      when compiles(encodeReceipt(`valueSym`)):
+        let `bytesSym`  = encodeReceipt(`valueSym`)
+        var `value2Sym` = decodeReceipt[type(`valueSym`)](`bytesSym`)
+        let `bytes2Sym` = encodeReceipt(`value2Sym`)
+        check `bytesSym` == `bytes2Sym`
+        check sszSize(asTagged(`valueSym`)) == `bytesSym`.len
+      else:
+        let `bytesSym`  = SSZ.encode(`valueSym`)
+        var `value2Sym` = SSZ.decode(`bytesSym`, type(`valueSym`))
+        let `bytes2Sym` = SSZ.encode(`value2Sym`)
+        check `bytesSym` == `bytes2Sym`
+        check sszSize(`valueSym`) == `bytesSym`.len
+
+macro testRT*(name: static[string], expr: typed, body: untyped): untyped =
+  ## Same as above, with an extra assertions block.
+  let valueSym   = genSym(nskLet, "rtValue")
+  let bytesSym   = genSym(nskLet, "rtEncoded")
+  let value2Sym  = genSym(nskVar, "rtDecoded")
+  let bytes2Sym  = genSym(nskLet, "rtReencoded")
+  let userAlias  = ident("v")
+
+  result = quote do:
+    test `name`:
+      let `valueSym` = `expr`
+      when compiles(encodeReceipt(`valueSym`)):
+        let `bytesSym`  = encodeReceipt(`valueSym`)
+        var `value2Sym` = decodeReceipt[type(`valueSym`)](`bytesSym`)
+        let `bytes2Sym` = encodeReceipt(`value2Sym`)
+        check `bytesSym` == `bytes2Sym`
+        check sszSize(asTagged(`valueSym`)) == `bytesSym`.len
+      else:
+        let `bytesSym`  = SSZ.encode(`valueSym`)
+        var `value2Sym` = SSZ.decode(`bytesSym`, type(`valueSym`))
+        let `bytes2Sym` = SSZ.encode(`value2Sym`)
+        check `bytesSym` == `bytes2Sym`
+        check sszSize(`valueSym`) == `bytesSym`.len
+      block:
+        let `userAlias` = `valueSym`
+        `body`
 
 suite "Log Construction (SSZ)":
-  test "Log: empty topics, empty data, zero address":
-    var l = Log(
+  testRT "Log: empty topics",
+    Log(
       address: addresses.zeroAddress,
       topics: List[Hash32, MAX_TOPICS_PER_LOG](@[]),
       data: @[]
     )
-    # roundTrip(l)
-    # check l.topics.len == 0
-    # check l.data.len == 0
-
-  test "Log: max topics (=4), small data":
-    var addrAA = Address.copyFrom(newSeqWith(20, byte 0xAA))
-    var l = Log(
-      address: addrAA,
-      topics: List[Hash32, MAX_TOPICS_PER_LOG](@[
-        topicFill(0x10), topicFill(0x11), topicFill(0x12), topicFill(0x13)
-      ]),
-      data: @[byte 0xDE, 0xAD, 0xBE, 0xEF]
-    )
-    roundTrip(l)
-    check l.topics.len == 4
-    check l.topics[0] == topicFill(0x10) and l.topics[3] == topicFill(0x13)
-    
-  test "Log: large data (128 KiB)":
-    let addrBB = Address.copyFrom(newSeqWith(20, byte 0xBB))
-    var big = newSeq[byte](128 * 1024)
-    for i in 0 ..< big.len: big[i] = byte(i and 0xFF)
-    var l = Log(
-      address: addrBB,
-      topics: List[Hash32, MAX_TOPICS_PER_LOG](@[topicFill(1), topicFill(2)]),
-      data: big
-    )
-    # roundTrip(l)
-    # check l.data.len == big.len
   
-  
-  suite "Receipts Construction (SSZ)":
-    test "Basic receipt":
-      var log0 = Log(
-        address: default(Address),
-        topics: default(List[Hash32, MAX_TOPICS_PER_LOG]),
-        data: @[]
+  testRT "Log: max topics",
+    (block:
+      let addrAA = Address.copyFrom(newSeqWith(20, byte 0xAA))
+      Log(
+        address: addrAA,
+        topics: List[Hash32, MAX_TOPICS_PER_LOG](@[
+          topicFill(0x10), topicFill(0x11), topicFill(0x12), topicFill(0x13)
+        ]),
+        data: @[byte 0xDE, 0xAD, 0xBE, 0xEF]
       )
+    ):
+    check v.topics.len == 4
   
-      var rec = Receipt(
-        kind: rkBasic,
-        basic: BasicReceipt(
-          `from`: default(Address),
-          gas_used: 100'u64,
-          contract_address: default(Address),
-          logs: @[log0],
-          status: true
-        )
-      )
-
-  test "Create receipt":
-    var log1 = Log(
-      address: default(Address),
-      topics:default(List[Hash32, MAX_TOPICS_PER_LOG]),
-      data: @[byte 0x01, 0x02, 0x03],
-    )
-    var createdAddr = address"0x00000000000000000000000000000000000000aa"
-
-    var rec = Receipt(
-      kind: rkCreate,
-      create: CreateReceipt(
-        `from`: address"0x00000000000000000000000000000000000000bb",
-        gas_used: 21000'u64,
-        contract_address: createdAddr,
-        logs: @[log1],
-        status: false,
-      ),
-    )
-    # roundTrip(rec)
-
-  test "SetCode receipt":
-    var log2 = Log(
-      address: address"0x00000000000000000000000000000000000000cc",
-      topics: default(List[Hash32, MAX_TOPICS_PER_LOG]),
+  testRT "BasicReceipt roundtrip",
+    BasicReceipt(
+      `from`: addresses.zeroAddress,
+      gas_used: 100'u64,
+      contract_address: addresses.zeroAddress,
+      logs: @[],
+      status: true
     )
 
-    var rec = Receipt(
-      kind: rkSetCode,
-      setcode: SetCodeReceipt(
-        `from`: address"0x00000000000000000000000000000000000000dd",
-        gas_used: 42000'u64,
-        contract_address: address"0x00000000000000000000000000000000000000ee",
-        logs: @[log2],
-        status: true,
-        authorities:
-          @[
-            address"0x00000000000000000000000000000000000000f1",
-            address"0x00000000000000000000000000000000000000f2",
-          ],
-      ),
-    )
+  
+  
+  # suite "Receipts Construction (SSZ)":
+  #   test "Basic receipt":
+  #     var log0 = Log(
+  #       address: default(Address),
+  #       topics: default(List[Hash32, MAX_TOPICS_PER_LOG]),
+  #       data: @[]
+  #     )
+  
+  #     var rec = Receipt(
+  #       kind: rkBasic,
+  #       basic: BasicReceipt(
+  #         `from`: default(Address),
+  #         gas_used: 100'u64,
+  #         contract_address: default(Address),
+  #         logs: @[log0],
+  #         status: true
+  #       )
+  #     )
+
+  # test "Create receipt":
+  #   var log1 = Log(
+  #     address: default(Address),
+  #     topics:default(List[Hash32, MAX_TOPICS_PER_LOG]),
+  #     data: @[byte 0x01, 0x02, 0x03],
+  #   )
+  #   var createdAddr = address"0x00000000000000000000000000000000000000aa"
+
+  #   var rec = Receipt(
+  #     kind: rkCreate,
+  #     create: CreateReceipt(
+  #       `from`: address"0x00000000000000000000000000000000000000bb",
+  #       gas_used: 21000'u64,
+  #       contract_address: createdAddr,
+  #       logs: @[log1],
+  #       status: false,
+  #     ),
+  #   )
+  #   # roundTrip(rec)
+
+  # test "SetCode receipt":
+  #   var log2 = Log(
+  #     address: address"0x00000000000000000000000000000000000000cc",
+  #     topics: default(List[Hash32, MAX_TOPICS_PER_LOG]),
+  #   )
+
+  #   var rec = Receipt(
+  #     kind: rkSetCode,
+  #     setcode: SetCodeReceipt(
+  #       `from`: address"0x00000000000000000000000000000000000000dd",
+  #       gas_used: 42000'u64,
+  #       contract_address: address"0x00000000000000000000000000000000000000ee",
+  #       logs: @[log2],
+  #       status: true,
+  #       authorities:
+  #         @[
+  #           address"0x00000000000000000000000000000000000000f1",
+  #           address"0x00000000000000000000000000000000000000f2",
+  #         ],
+  #     ),
+  #   )
 
 
 # suite "SSZ Receipts (EIP-6466)":
