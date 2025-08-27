@@ -4,10 +4,10 @@ import ssz_serialization
 import json_serialization
 
 # SSZ for Address
-template toSszType*(T: type Address): untyped = 
+template toSszType*(T: type Address): untyped =
   array[20, byte]
 
-template toSszType*(x: Address): untyped = 
+template toSszType*(x: Address): untyped =
   x.data
 
 proc toSszType*(x: var Address): var array[20, byte] {.inline.} =
@@ -18,10 +18,10 @@ proc fromSszBytes*(T: type Address, bytes: openArray[byte]): Address {.inline.} 
   Address.copyFrom(bytes)
 
 # SSZ for Hash32
-template toSszType*(T: type Hash32): untyped = 
+template toSszType*(T: type Hash32): untyped =
   array[32, byte]
 
-template toSszType*(x: Hash32): untyped = 
+template toSszType*(x: Hash32): untyped =
   x.data
 
 proc toSszType*(x: var Hash32): var array[32, byte] {.inline.} =
