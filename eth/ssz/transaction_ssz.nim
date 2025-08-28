@@ -141,8 +141,13 @@ type
     address*: Address
     nonce*: uint64
 
-type RlpAuthorization* =
-  RlpReplayableBasicAuthorizationPayload | RlpBasicAuthorizationPayload
+type
+  AuthKind = enum ReplayableBasic, Basic
+
+  RlpAuthorization* = object
+    case kind*: AuthKind
+    of ReplayableBasic: replayable*: RlpReplayableBasicAuthorizationPayload
+    of Basic:      basic*: RlpBasicAuthorizationPayload
 
 type RlpSetCodeTransactionPayload* = object
   txType*: TransactionType
