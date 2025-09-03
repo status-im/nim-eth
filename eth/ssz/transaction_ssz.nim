@@ -176,11 +176,55 @@ type
   RlpBlobTransaction* = SignedTx[RlpBlobTransactionPayload]
   RlpSetCodeTransaction* = SignedTx[RlpSetCodeTransactionPayload]
 
-type
+  # This doesnt do the ssz encode/decode stuff so we keep it here for now to swap in later
+  
   AnyRlpTransaction* =
     RlpLegacyReplayableBasicTransaction | RlpLegacyReplayableCreateTransaction |
     RlpLegacyBasicTransaction | RlpLegacyCreateTransaction |
     RlpAccessListBasicTransaction | RlpAccessListCreateTransaction | RlpBasicTransaction |
     RlpCreateTransaction | RlpBlobTransaction | RlpSetCodeTransaction
 
-  Transaction* = AnyRlpTransaction
+type
+  RLPTransactionKind* = enum
+    txLegacyReplayableBasic,
+    txLegacyReplayableCreate,
+    txLegacyBasic,
+    txLegacyCreate,
+    txAccessListBasic,
+    txAccessListCreate,
+    txBasic,
+    txCreate,
+    txBlob,
+    txSetCode
+
+  RlpTransactionObject* = object
+    case kind*: RLPTransactionKind
+    of txLegacyReplayableBasic:
+      legacyReplayableBasic*: RlpLegacyReplayableBasicTransaction
+    of txLegacyReplayableCreate:
+      legacyReplayableCreate*: RlpLegacyReplayableCreateTransaction
+    of txLegacyBasic:
+      legacyBasic*: RlpLegacyBasicTransaction
+    of txLegacyCreate:
+      legacyCreate*: RlpLegacyCreateTransaction
+    of txAccessListBasic:
+      accessListBasic*: RlpAccessListBasicTransaction
+    of txAccessListCreate:
+      accessListCreate*: RlpAccessListCreateTransaction
+    of txBasic:
+      basic*: RlpBasicTransaction
+    of txCreate:
+      create*: RlpCreateTransaction
+    of txBlob:
+      blob*: RlpBlobTransaction
+    of txSetCode:
+      setCode*: RlpSetCodeTransaction
+      
+type
+  TransactionKind* = enum
+    RlpTransaction
+    
+  Transaction* = object
+    case kind*: TransactionKind
+    of RlpTransaction:
+      rlp*: RlpTransactionObject

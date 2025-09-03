@@ -30,12 +30,3 @@ proc toSszType*(x: var Hash32): var array[32, byte] {.inline.} =
 proc fromSszBytes*(T: type Hash32, bytes: openArray[byte]): Hash32 {.inline.} =
   doAssert bytes.len == 32
   Hash32.copyFrom(bytes)
-
-proc rlpToSsz*[T](bytes: openArray[byte]): seq[byte] =
-  var r = rlpFromBytes(bytes)
-  let v = r.read(T)
-  SSZ.encode(v)
-
-proc jsonToSsz*[T](data: string): seq[byte] =
-  let v = Json.decode(data, T)
-  SSZ.encode(v)

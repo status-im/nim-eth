@@ -68,6 +68,9 @@ task test_common, "Run common tests":
 task test, "Run all tests":
   run "tests/test_bloom", ""
 
+task test_ssz, "Run SSZ tests":
+  run "tests/ssz/all_tests", "ssz"
+
   test_keyfile_task()
   test_rlp_task()
   test_discv5_task()

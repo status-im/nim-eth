@@ -64,9 +64,9 @@ proc signSszKeccak*(seckey: PrivateKey, payload: auto): Secp256k1ExecutionSignat
 proc recoverSszKeccakSigner*(signature: Secp256k1ExecutionSignature, payload: auto): Address =
   let h = computeSszKeccakSigHash(payload)
   let sigObj = Signature.fromRaw(signature).valueOr:
-  raise newException(ValueError, "invalid signature")
+    raise newException(ValueError, "invalid signature")
   let pk = recover(sigObj, SkMessage(h.data)).valueOr:
-  raise newException(ValueError, "recovery failed")
+    raise newException(ValueError, "recovery failed")
   pk.to(Address)
 
 # Verify against expected address
