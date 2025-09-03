@@ -1,4 +1,4 @@
-import stint, "."/transaction_ssz, "."/utils, ".."/common/[addresses, base, hashes]
+import stint, "."/transaction_ssz, "."/signatures, ".."/common/[addresses, base, hashes]
 
 # Builder helpers and validation for RLP transactions -> outer Transaction
 

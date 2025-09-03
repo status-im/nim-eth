@@ -1,0 +1,26 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "nim-eth tests ssz transactions_ssz",
+			"type": "shell",
+			"command": "nim r -d:release --hints:off --verbosity:0 tests/ssz/transactions_ssz.nim",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "nim-eth tests ssz transactions_ssz",
+			"type": "shell",
+			"command": "nim r -d:release --hints:off --verbosity:0 tests/ssz/transactions_ssz.nim",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "nim-eth tests ssz transactions_ssz",
+			"type": "shell",
+			"command": "nim r -d:release --hints:off --verbosity:0 tests/ssz/transactions_ssz.nim",
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}

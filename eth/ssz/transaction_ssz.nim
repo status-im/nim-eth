@@ -1,7 +1,7 @@
 import ssz_serialization
 import stint
 import ".."/common/[addresses, base, hashes]
-import "."/utils
+import "."/signatures
 
 type SignedTx*[P] = object
   payload*: P
@@ -177,7 +177,7 @@ type
   RlpSetCodeTransaction* = SignedTx[RlpSetCodeTransactionPayload]
 
   # This doesnt do the ssz encode/decode stuff so we keep it here for now to swap in later
-  
+
   AnyRlpTransaction* =
     RlpLegacyReplayableBasicTransaction | RlpLegacyReplayableCreateTransaction |
     RlpLegacyBasicTransaction | RlpLegacyCreateTransaction |
@@ -219,11 +219,11 @@ type
       blob*: RlpBlobTransaction
     of txSetCode:
       setCode*: RlpSetCodeTransaction
-      
+
 type
   TransactionKind* = enum
     RlpTransaction
-    
+
   Transaction* = object
     case kind*: TransactionKind
     of RlpTransaction:
