@@ -405,3 +405,12 @@ proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress,
           return (Opt.none(IpAddress), Opt.some(tcpPort), Opt.some(udpPort))
     of NatUpnp, NatPmp:
       return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
+
+
+func `==`*(a, b: NatConfig): bool =
+  if a.hasExtIp != b.hasExtIp:
+    return false
+
+  case a.hasExtIp:
+  of true: a.extIp == b.extIp
+  of false: a.nat == b.nat
