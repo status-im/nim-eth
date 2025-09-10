@@ -55,18 +55,6 @@ proc append*(w: var RlpWriter, value: StUint) =
   else:
     w.append(value.truncate(uint))
 
-proc read*(rlp: var Rlp, T: type StInt): T =
-  # The Ethereum Yellow Paper defines the RLP serialization only
-  # for unsigned integers:
-  {.fatal: "RLP serialization of signed integers is not allowed".}
-  discard
-
-proc append*(w: var RlpWriter, value: StInt) =
-  # The Ethereum Yellow Paper defines the RLP serialization only
-  # for unsigned integers:
-  {.fatal: "RLP serialization of signed integers is not allowed".}
-  discard
-
 proc append*(w: var RlpWriter, val: FixedBytes) =
   mixin append
   w.append(val.data())
