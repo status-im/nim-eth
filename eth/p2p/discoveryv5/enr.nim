@@ -243,7 +243,9 @@ func init*(
     extraFields: openArray[FieldPair] = []):
     EnrResult[T] =
   ## Initialize a `Record` with given sequence number, private key, optional
-  ## ip address, tcp port, udp port, and optional custom k:v pairs.
+  ## IP address, TCP port, UDP port, and optional custom k:v pairs.
+  ##
+  ## The IP address can be an IPv4 or IPv6 address.
   ##
   ## Can fail in case the record exceeds the `maxEnrSize`.
   doAssert(not hasPredefinedKey(extraFields), "Predefined key in custom pairs")
@@ -253,6 +255,51 @@ func init*(
   fields.insertAddress(ip, tcpPort, udpPort)
   fields.insert extraFields
   makeEnrAux(seqNum, "v4", pk, fields)
+
+func init*(
+    T: type Record,
+    seqNum: uint64, pk: PrivateKey,
+    ip4: array[4, byte],
+    ip6: array[16, byte],
+    tcp4Port: Opt[Port] = Opt.none(Port),
+    udp4Port: Opt[Port] = Opt.none(Port),
+    tcp6Port: Opt[Port] = Opt.none(Port),
+    udp6Port: Opt[Port] = Opt.none(Port),
+    extraFields: openArray[FieldPair] = []
+): EnrResult[T] =
+  ## Initialize a `Record` with given sequence number, private key, IPv4 and IPv6
+  ## address, optional TCP port and UDP port for both IPv4 and IPV6, and
+  ## optional custom k:v pairs.
+  ##
+  ## This function is to be used when running in IPv4 and IPv6 dual stack mode.
+  ## The tcp6 and udp6 fields will only be set if they differ from the tcp and udp
+  ## fields.
+  ##
+  ## Can fail in case the record exceeds the `maxEnrSize`.
+  doAssert(not hasPredefinedKey(extraFields), "Predefined key in custom pairs")
+
+  var fields = newSeq[FieldPair]()
+
+  fields.insert(("ip", ip4.toField))
+  fields.insert(("ip6", ip6.toField))
+
+  if tcp4Port.isSome():
+    fields.insert(("tcp", tcp4Port.value().uint16.toField))
+  if udp4Port.isSome():
+    fields.insert(("udp", udp4Port.value().uint16.toField))
+
+  # From the ENR specification:
+  # "Declaring the same port number in both tcp, tcp6 or udp, udp6 should be avoided
+  # but doesn't render the record invalid."
+  if tcp6Port.isSome():
+    if tcp6Port != tcp4Port:
+      fields.insert(("tcp6", tcp6Port.value().uint16.toField))
+  if udp6Port.isSome():
+    if udp6Port != udp4Port:
+      fields.insert(("udp6", udp6Port.value().uint16.toField))
+
+  fields.add extraFields
+  makeEnrAux(seqNum, "v4", pk, extraFields)
 
 func getField(r: Record, name: string, field: var Field): bool =
   # It might be more correct to do binary search,
@@ -350,6 +397,73 @@ func update*(
     return err("Public key does not correspond with given private key")
 
   r.pairs.insertAddress(ip, tcpPort, udpPort)
+  r.pairs.insert extraFields
+
+  if r.seqNum == high(type r.seqNum): # highly unlikely
+    return err("Maximum sequence number reached")
+  r.seqNum.inc()
+
+  r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
+  record = r
+
+  ok()
+
+func update*(
+    record: var Record,
+    pk: PrivateKey,
+    ip4: array[4, byte],
+    ip6: array[16, byte],
+    tcp4Port: Opt[Port] = Opt.none(Port),
+    udp4Port: Opt[Port] = Opt.none(Port),
+    tcp6Port: Opt[Port] = Opt.none(Port),
+    udp6Port: Opt[Port] = Opt.none(Port),
+    extraFields: openArray[FieldPair] = []):
+    EnrResult[void] =
+  ## Update a `Record` with given IPv4 and IPv6 address, optional TCP port and
+  ## UDP port for both IPv4 and IPV6, and optional custom k:v pairs.
+  ##
+  ## This function is to be used when running in IPv4 and IPv6 dual stack mode.
+  ## The tcp6 and udp6 fields will only be set if they differ from the tcp and udp
+  ## fields.
+  ##
+  ## If none of the k:v pairs are changed, the sequence number of the `Record`
+  ## will still be incremented and a new signature will be applied.
+  ##
+  ## Providing an `Opt.none` for `tcp4Port`/`udp4Port`/`tcp6Port`/`udp6Port`/
+  ## will leave the corresponding field untouched.
+  ##
+  ## Can fail in case of wrong `PrivateKey`, if the size of the resulting record
+  ## exceeds `maxEnrSize` or if maximum sequence number is reached. The `Record`
+  ## will not be altered in these cases.
+  # TODO: deprecate this call and have individual functions for updating?
+  doAssert(not hasPredefinedKey(extraFields), "Predefined key in custom pairs")
+
+  var r = record
+
+  let pubkey = r.get(PublicKey)
+  if pubkey.isNone() or pubkey.get() != pk.toPublicKey():
+    return err("Public key does not correspond with given private key")
+
+  var fields = newSeq[FieldPair]()
+
+  fields.insert(("ip", ip4.toField))
+  fields.insert(("ip6", ip6.toField))
+
+  if tcp4Port.isSome():
+    fields.insert(("tcp", tcp4Port.value().uint16.toField))
+  if udp4Port.isSome():
+    fields.insert(("udp", udp4Port.value().uint16.toField))
+
+  # From the ENR specification:
+  # "Declaring the same port number in both tcp, tcp6 or udp, udp6 should be avoided
+  # but doesn't render the record invalid."
+  if tcp6Port.isSome():
+    if tcp6Port != tcp4Port:
+      fields.insert(("tcp6", tcp6Port.value().uint16.toField))
+  if udp6Port.isSome():
+    if udp6Port != udp4Port:
+      fields.insert(("udp6", udp6Port.value().uint16.toField))
+
   r.pairs.insert extraFields
 
   if r.seqNum == high(type r.seqNum): # highly unlikely
