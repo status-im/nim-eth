@@ -14,6 +14,7 @@ import
   chronos, metrics, metrics/chronos_httpserver,
   stew/[byteutils, bitops2],
   ../eth/keys, ../eth/net/nat,
+  ../eth/common/hashes,
   ../eth/p2p/discoveryv5/[enr, node],
   ../eth/p2p/discoveryv5/protocol as discv5_protocol
 
@@ -29,6 +30,7 @@ type
     ping
     findNode
     talkReq
+    generateKeys
 
   DiscoveryConf* = object
     logLevel* {.
@@ -118,6 +120,11 @@ type
         argument
         desc: "ENR URI of the node to send a talkReq message"
         name: "node" .}: Node
+    of generateKeys:
+      numKeys* {.
+        argument
+        desc: "Number of evenly distributed keys to generate"
+        name: "n" .}: uint16
 
 proc parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
   let res = enr.Record.fromURI(p)
@@ -151,6 +158,37 @@ proc parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =
 
 proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
+
+proc generateDistributedNetKeys(
+    rng: var HmacDrbgContext, n: uint16
+): seq[PrivateKey] =
+  ## Generate n network keys evenly distributed over the node id keyspace.
+  ## Limited to only 2-byte precision
+  var res = newSeq[PrivateKey](n)
+
+  if n == 1:
+    res[0] = PrivateKey.random(rng)
+    return res
+
+  let stepSize = 65536 div n
+
+  for i in 0..<n.uint:
+    let
+      targetPrefix = (i * stepSize).uint16
+      targetByte1 = (targetPrefix shr 8).byte
+      targetByte2 = (targetPrefix and 0xFF).byte
+
+    while true:
+      let
+        privKey = PrivateKey.random(rng)
+        pubKey = privKey.toPublicKey.toRaw()
+        nodeIdBytes = keccak256(pubKey).data
+
+      if nodeIdBytes[0] == targetByte1 and nodeIdBytes[1] == targetByte2:
+        res[i] = privKey
+        break
+
+  res
 
 proc discover(
     d: discv5_protocol.Protocol, psFile: string
@@ -277,7 +315,7 @@ proc discover(
 
     await sleepAsync(100.milliseconds) # 100 ms of idle time
 
-proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
+proc setupNode(config: DiscoveryConf): discv5_protocol.Protocol {.raises: [CatchableError].} =
   let
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
@@ -290,7 +328,6 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
           bootstrapRecords = config.bootstrapNodes,
           bindIp = bindIp, bindPort = udpPort,
           enrAutoUpdate = config.enrAutoUpdate)
-
   d.open()
 
   if config.metricsEnabled:
@@ -310,14 +347,19 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
         url, error_msg = exc.msg, error_name = exc.name
       quit QuitFailure
 
+  d
+
+proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
   case config.cmd
   of ping:
+    let d = setupNode(config)
     let pong = waitFor d.ping(config.pingTarget)
     if pong.isOk():
       echo pong[]
     else:
       echo "No Pong message returned"
   of findNode:
+    let d = setupNode(config)
     let nodes = waitFor d.findNode(config.findNodeTarget, @[config.distance])
     if nodes.isOk():
       echo "Received valid records:"
@@ -326,14 +368,32 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
     else:
       echo "No Nodes message returned"
   of talkReq:
+    let d = setupNode(config)
     let talkresp = waitFor d.talkReq(config.talkReqTarget, @[], @[])
     if talkresp.isOk():
       echo talkresp[]
     else:
       echo "No Talk Response message returned"
   of noCommand:
+    let d = setupNode(config)
     d.start()
     waitFor(discover(d, config.persistingFile))
+  of generateKeys:
+    let keys = generateDistributedNetKeys(keys.newRng()[], uint16(config.numKeys))
+
+    echo "Generated ", keys.len, " evenly distributed keys:"
+    echo ""
+    for i, key in keys:
+      let
+        pubKey = key.toPublicKey.toRaw()
+        nodeId = keccak256(pubKey)
+        nodeIdHex = nodeId.toHex()
+
+      echo "Key ", i + 1, ":"
+      echo "Private Key: ", $key
+      echo "Node ID: ", nodeIdHex
+      echo "First 2 Bytes: 0x", nodeIdHex[0..3]
+      echo ""
 
 when isMainModule:
   {.pop.}
