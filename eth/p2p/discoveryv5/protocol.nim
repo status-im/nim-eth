@@ -1061,7 +1061,7 @@ proc newProtocol*(
     privKey: PrivateKey,
     enrIp: Opt[IpAddress],
     enrTcpPort, enrUdpPort: Opt[Port],
-    localEnrFields: openArray[(string, seq[byte])] = [],
+    localEnrFields: openArray[FieldPair] = [],
     bootstrapRecords: openArray[Record] = [],
     previousRecord = Opt.none(enr.Record),
     bindPort: Port,
@@ -1076,7 +1076,6 @@ proc newProtocol*(
   # Anyhow, nim-beacon-chain would also require some changes to support port
   # remapping through NAT and this API is also subject to change once we
   # introduce support for ipv4 + ipv6 binding/listening.
-  let customEnrFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
   # TODO:
   # - Defect as is now or return a result for enr errors?
   # - In case incorrect key, allow for new enr based on new key (new node id)?
@@ -1086,14 +1085,14 @@ proc newProtocol*(
     # TODO: this is faulty in case the intent is to remove a field with
     # opt.none
     record.update(privKey, enrIp, enrTcpPort, enrUdpPort,
-      customEnrFields).expect("Record within size limits and correct key")
+      localEnrFields).expect("Record within size limits and correct key")
   else:
     record = enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort,
-      customEnrFields).expect("Record within size limits")
+      localEnrFields).expect("Record within size limits")
 
   info "Discovery ENR initialized", enrAutoUpdate, seqNum = record.seqNum,
     ip = enrIp, tcpPort = enrTcpPort, udpPort = enrUdpPort,
-    customEnrFields, uri = toURI(record)
+    localEnrFields, uri = toURI(record)
   if enrIp.isNone():
     if enrAutoUpdate:
       notice "No external IP provided for the ENR, this node will not be " &
@@ -1121,6 +1120,26 @@ proc newProtocol*(
     handshakeTimeout: config.handshakeTimeout,
     responseTimeout: config.responseTimeout,
     rng: rng)
+
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
+    localEnrFields: openArray[(string, seq[byte])] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = Opt.none(enr.Record),
+    bindPort: Port,
+    bindIp = IPv4_any(),
+    enrAutoUpdate = false,
+    banNodes = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng(),
+): Protocol =
+  let customEnrFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
+  newProtocol(
+    privKey, enrIp, enrTcpPort, enrUdpPort, customEnrFields, bootstrapRecords,
+    previousRecord, bindPort, bindIp, enrAutoUpdate, banNodes, config, rng,
+  )
 
 proc newProtocol*(
     privKey: PrivateKey,
