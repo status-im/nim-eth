@@ -25,12 +25,12 @@ const
     chainID: chainId(1),
     address: source,
     nonce: 2.AccountNonce,
-    yParity: 3,
-    r: 4.u256,
-    s: 5.u256
+    yParity: 1,
+    r: 1.u256,
+    s: 1.u256
   )]
 
-proc tx0(i: int): Transaction =
+proc tx0*(i: int): Transaction =
   Transaction(
     txType:   TxLegacy,
     nonce:    i.AccountNonce,
@@ -39,7 +39,7 @@ proc tx0(i: int): Transaction =
     gasPrice: 2.GasInt,
     payload:  abcdef)
 
-proc tx1(i: int): Transaction =
+proc tx1*(i: int): Transaction =
   Transaction(
     # Legacy tx contract creation.
     txType:   TxLegacy,
@@ -48,7 +48,7 @@ proc tx1(i: int): Transaction =
     gasPrice: 2.GasInt,
     payload:  abcdef)
 
-proc tx2(i: int): Transaction =
+proc tx2*(i: int): Transaction =
   Transaction(
     # Tx with non-zero access list.
     txType:     TxEip2930,
@@ -60,7 +60,7 @@ proc tx2(i: int): Transaction =
     accessList: accesses,
     payload:    abcdef)
 
-proc tx3(i: int): Transaction =
+proc tx3*(i: int): Transaction =
   Transaction(
     # Tx with empty access list.
     txType:   TxEip2930,
@@ -71,7 +71,7 @@ proc tx3(i: int): Transaction =
     gasPrice: 10.GasInt,
     payload:  abcdef)
 
-proc tx4(i: int): Transaction =
+proc tx4*(i: int): Transaction =
   Transaction(
     # Contract creation with access list.
     txType:     TxEip2930,
@@ -81,7 +81,7 @@ proc tx4(i: int): Transaction =
     gasPrice:   10.GasInt,
     accessList: accesses)
 
-proc tx5(i: int): Transaction =
+proc tx5*(i: int): Transaction =
   Transaction(
     txType:     TxEip1559,
     chainId:    chainId(1),
@@ -91,7 +91,7 @@ proc tx5(i: int): Transaction =
     maxFeePerGas: 10.GasInt,
     accessList: accesses)
 
-proc tx6(i: int): Transaction =
+proc tx6*(i: int): Transaction =
   const
     digest = hash32"010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014"
 
@@ -105,7 +105,7 @@ proc tx6(i: int): Transaction =
     accessList:          accesses,
     versionedHashes:     @[digest])
 
-proc tx7(i: int): Transaction =
+proc tx7*(i: int): Transaction =
   const
     digest = hash32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
 
@@ -120,7 +120,7 @@ proc tx7(i: int): Transaction =
     versionedHashes:     @[digest],
     maxFeePerBlobGas:    10000000.u256)
 
-proc tx8(i: int): Transaction =
+proc tx8*(i: int): Transaction =
   const
     digest = hash32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
 
@@ -133,10 +133,11 @@ proc tx8(i: int): Transaction =
     maxPriorityFeePerGas:42.GasInt,
     maxFeePerGas:        10.GasInt,
     accessList:          accesses,
+    
     versionedHashes:     @[digest],
     maxFeePerBlobGas:    10000000.u256)
 
-proc txEip7702(i: int): Transaction =
+proc txEip7702*(i: int): Transaction =
   Transaction(
     txType:   TxEip7702,
     chainId:  chainId(1),

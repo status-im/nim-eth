@@ -54,5 +54,5 @@ suite "Stored Receipt":
       isHash: false,
       status: false,
       cumulativeGasUsed: 100.GasInt)
-    
+
     roundTrip(rec)
