@@ -186,7 +186,7 @@ proc deriveKey(password: string,
       discard ctx.pbkdf2(password, salt, c, output)
       ok(output)
     of HashSHA3_256:
-      var ctx: HMAC[sha3_256]
+      var ctx: HMAC[keccak.sha3_256]
       discard ctx.pbkdf2(password, salt, c, output)
       ok(output)
     of HashSHA3_384:
@@ -334,7 +334,7 @@ proc createKeyFileJson*(seckey: PrivateKey,
 
     ciphertext = ? encryptKey(seckey, cryptkind, dkey, iv)
 
-  var ctx: keccak256
+  var ctx: keccak.keccak256
   ctx.init()
   ctx.update(toOpenArray(dkey, 16, 31))
   ctx.update(ciphertext)
@@ -432,7 +432,7 @@ proc decodeScryptParams(params: JsonNode): KfResult[ScryptParams] =
   result = ok(p)
 
 func decryptPrivateKey(crypto: Crypto, dkey: DKey): KfResult[PrivateKey] =
-  var ctx: keccak256
+  var ctx: keccak.keccak256
   ctx.init()
   ctx.update(toOpenArray(dkey, 16, 31))
   ctx.update(crypto.cipher.text)
