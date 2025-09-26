@@ -103,6 +103,8 @@ func keccak256*(input: openArray[char]): Hash32 {.noinit.} =
   keccak256(input.toOpenArrayByte(0, input.high))
 
 template withKeccak256*(body: untyped): Hash32 =
-  var h {.inject.}: keccak.keccak256
+  var h {.inject.}: KECCACK256
   body
-  h.finish().to(Hash32)
+  var buff: array[32, byte]
+  h.finish(buff)
+  Hash32(buff)
