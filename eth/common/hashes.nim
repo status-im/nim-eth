@@ -75,13 +75,13 @@ template to*(s: static string, _: type Hash32): Hash32 =
 template hash32*(s: static string): Hash32 =
   s.to(Hash32)
 
-# template to*(v: MDigest[256], _: type Hash32): Hash32 =
-#   Hash32(v.data)
+template to*(v: MDigest[256], _: type Hash32): Hash32 =
+  Hash32(v.data)
 
-# template to*(v: Hash32, _: type MDigest[256]): MDigest[256] =
-#   var tmp {.noinit.}: MDigest[256]
-#   assign(tmp.data, v.data)
-#   tmp
+template to*(v: Hash32, _: type MDigest[256]): MDigest[256] =
+  var tmp {.noinit.}: MDigest[256]
+  assign(tmp.data, v.data)
+  tmp
 
 const
   emptyKeccak256* =
