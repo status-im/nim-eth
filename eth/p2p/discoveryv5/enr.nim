@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 ## ENR implementation according to specification in EIP-778:
 ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-778.md
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[strutils, sequtils, macros, algorithm, net],
@@ -537,17 +537,6 @@ func fromURI*(T: type Record, s: string): EnrResult[T] =
     Record.fromBase64(s[prefix.len .. ^1])
   else:
     err("Invalid URI prefix")
-
-
-func fromURI*(r: var Record, s: string): bool {.deprecated: "Use the Result[Record] version instead".} =
-  ## Loads ENR from its URI encoding: base64-encoded rlp-encoded bytes,
-  ## prefixed with "enr:". Verifies the signature.
-  r = Record.fromURI(s).valueOr:
-    return false
-  true
-
-template fromURI*(r: var Record, url: EnrUri): bool {.deprecated: "Use the Result[Record] version instead".} =
-  fromURI(r, string(url))
 
 func toBase64*(r: Record): string =
   Base64Url.encode(r.raw)
