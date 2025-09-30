@@ -15,7 +15,7 @@ import
   stew/[byteutils, bitops2],
   ../eth/keys, ../eth/net/nat,
   ../eth/common/hashes,
-  ../eth/p2p/discoveryv5/[enr, node],
+  ../eth/p2p/discoveryv5/node,
   ../eth/p2p/discoveryv5/protocol as discv5_protocol
 
 const

@@ -1,6 +1,6 @@
 import
   std/[os, strutils, net],
-  ../../../eth/keys, ../../../eth/p2p/discoveryv5/enr,
+  ../../../eth/enr/enr,
   ../fuzzing_helpers
 
 template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
