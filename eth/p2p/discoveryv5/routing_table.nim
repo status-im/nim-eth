@@ -12,7 +12,8 @@ import
   bearssl/rand, results,
   stint, chronicles, metrics, chronos,
   ../../net/utils,
-  "."/[node, random2, enr]
+  ../../enr/enr,
+  ./[node, random2]
 
 export results, chronos.timer
 

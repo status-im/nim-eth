@@ -3,7 +3,8 @@
 import
   std/os,
   unittest2,
-  ../../eth/common/keys, ../../eth/p2p/discoveryv5/[routing_table, node, enr],
+  ../../eth/enr/enr,
+  ../../eth/p2p/discoveryv5/[routing_table, node],
   ./discv5_test_helper
 
 func customDistance*(a, b: NodeId): UInt256 =
