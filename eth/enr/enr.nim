@@ -1,4 +1,4 @@
-# nim-eth - Node Discovery Protocol v5
+# nim-eth - enr
 # Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -16,9 +16,9 @@ import
   stew/base64,
   results,
   chronicles,
-  ../../rlp,
-  ../../common/keys,
-  ../../net/utils
+  ../rlp,
+  ../common/keys,
+  ../net/utils
 
 export results, rlp, keys
 

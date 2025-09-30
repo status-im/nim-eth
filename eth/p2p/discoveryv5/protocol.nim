@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -84,9 +84,8 @@ import
   std/[tables, sets, math, sequtils, algorithm],
   json_serialization/std/net,
   results, chronicles, chronos, stint, metrics,
-  ../../rlp,
-  ../../common/keys,
-  "."/[messages_encoding, encoding, node, routing_table, enr, random2, sessions,
+  ../../enr/enr,
+  ./[messages_encoding, encoding, node, routing_table, random2, sessions,
     ip_vote, nodes_verification]
 
 export

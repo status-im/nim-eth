@@ -1,3 +1,4 @@
+# nim-eth - enr
 # Copyright (c) 2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
