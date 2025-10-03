@@ -63,12 +63,6 @@ template view(input: openArray[byte], slice: Slice[int]): openArray[byte] =
 
   toOpenArray(input, slice.a, slice.b)
 
-template getPtr(x: untyped): auto =
-  when (NimMajor, NimMinor) <= (1, 6):
-    unsafeAddr(x)
-  else:
-    addr(x)
-
 func toString(self: Rlp, item: RlpItem): string =
   result = "" # TODO https://github.com/nim-lang/Nim/issues/23645
   if item.typ != rlpBlob:
@@ -76,7 +70,7 @@ func toString(self: Rlp, item: RlpItem): string =
 
   if 0 < item.payload.len:
     result = newString(item.payload.len)
-    copyMem(addr result[0], self.bytes.view(item.payload)[0].getPtr, result.len)
+    copyMem(addr result[0], self.bytes.view(item.payload)[0].addr, result.len)
 
 func decodeInteger(input: openArray[byte]): uint64 =
   # For a positive integer, it is converted to the the shortest byte array whose

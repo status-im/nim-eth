@@ -8,7 +8,8 @@
 import
   std/net,
   chronos,
-  ../../eth/p2p/discoveryv5/[enr, node, routing_table],
+  ../../eth/enr/enr,
+  ../../eth/p2p/discoveryv5/[node, routing_table],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol
 
 export net

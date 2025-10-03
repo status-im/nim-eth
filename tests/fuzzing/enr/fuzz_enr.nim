@@ -1,6 +1,6 @@
 import
   testutils/fuzzing, stew/byteutils,
-  ../../../eth/rlp, ../../../eth/p2p/discoveryv5/enr
+  ../../../eth/enr/enr
 
 test:
   block testBlock:
