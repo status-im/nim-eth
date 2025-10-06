@@ -13,6 +13,8 @@ and `rlp`.
 
 ## How to use
 
+### Standard usage 
+
 ```Nim
 let
   rng = keys.newRng
@@ -35,6 +37,18 @@ d = newProtocol(privKey, ip, tcpPort, udpPort,
       bootstrapRecords = bootnodes)
 d.open() # Start listening and add bootstrap nodes to the routing table.
 ```
+
+### Discovery v5 with shared transport 
+
+```Nim
+  d1 = newDiscoveryV5WithTransport(privKey1,  enrIp = Opt.some(ip),
+  enrTcpPort = Opt.some(port), enrUdpPort = Opt.some(port), transp = transport, bindAddress)
+  d2 = newDiscoveryV5WithTransport(privKey2,  enrIp = Opt.some(ip),
+  enrTcpPort = Opt.some(port), enrUdpPort = Opt.some(port), transp = transport, bindAddress)
+  d1.openWithTransport()  # Start listening with shared transport
+  d2.openWithTransport()  # Start listening with shared transport
+```
+This allows multiple Discovery v5 nodes to share the same UDP socket, useful for running multiple protocols on the same port.
 
 Next there are two ways to run the protocol.
 
