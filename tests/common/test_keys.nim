@@ -1,22 +1,24 @@
 #
 #                 Ethereum P2P
-#              (c) Copyright 2018
+#              (c) Copyright 2018-2025
 #       Status Research & Development GmbH
 #
 #    See the file "LICENSE", included in this
 #    distribution, for details about the copyright.
 #
 
+{.push raises: [].}
 {.used.}
 
 import
   unittest2,
-  nimcrypto/utils, stew/byteutils,
   ../../eth/common/[addresses, keys, hashes]
 
-from strutils import toLowerAscii
+from std/strutils import toLowerAscii
+from nimcrypto/utils import fromHex, stripSpaces
+from stew/byteutils import toBytes, toHex
 
-let message = "message".toBytes()
+const message = "message".toBytes()
 let rng = newRng()
 
 const
