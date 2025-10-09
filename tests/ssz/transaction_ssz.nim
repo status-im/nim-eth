@@ -80,179 +80,294 @@ suite "SSZ Transactions (round-trip)":
     check d.rlp.legacyBasic.payload.input == t.rlp.legacyBasic.payload.input
     check d.rlp.legacyBasic.signature == t.rlp.legacyBasic.signature
 
-  # txRT "SSZ: Legacy Create",
-  #   Transaction(
-  #     txType = 0x00'u8,
-  #     chain_id = ChainId(1.u256),
-  #     nonce = 2'u64,
-  #     gas = 50_000'u64,
-  #     to = Opt.none(Address),
-  #     value = 0.u256,
-  #     input = abcdef, # initcode present
-  #     max_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
-  #     signature = dummySig(),
-  #   ):
-  #   check d.rlp.legacyCreate.payload.txType == 0x00'u8
-  #   check d.rlp.legacyCreate.payload.input.len == abcdef.len
+  txRT "SSZ: Legacy Create",
+    Transaction(
+      txType = 0x00'u8,
+      chain_id = ChainId(1.u256),
+      nonce = 2'u64,
+      gas = 50_000'u64,
+      to = Opt.none(Address),
+      value = 0.u256,
+      input = abcdef, # initcode present
+      max_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
+      signature = dummySig(),
+    ):
+    check d.rlp.legacyCreate.payload.txType == 0x00'u8
+    check d.rlp.legacyCreate.payload.input.len == abcdef.len
 
-  # txRT "SSZ: 2930 Call",
-  #   Transaction(
-  #     txType = 0x01'u8,
-  #     chain_id = ChainId(1.u256),
-  #     nonce = 3'u64,
-  #     gas = 123_457'u64,
-  #     to = Opt.some(recipient),
-  #     value = 0.u256,
-  #     input = abcdef,
-  #     max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
-  #     access_list = accesses,
-  #     signature = dummySig(),
-  #   ):
-  #   check d.rlp.accessListBasic.payload.txType == 0x01'u8
-  #   check d.rlp.accessListBasic.payload.access_list.len == 1
-  #   check d.rlp.accessListBasic.payload.access_list[0].address == source
+  txRT "SSZ: 2930 Call",
+    Transaction(
+      txType = 0x01'u8,
+      chain_id = ChainId(1.u256),
+      nonce = 3'u64,
+      gas = 123_457'u64,
+      to = Opt.some(recipient),
+      value = 0.u256,
+      input = abcdef,
+      max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
+      access_list = accesses,
+      signature = dummySig(),
+    ):
+    check d.rlp.accessListBasic.payload.txType == 0x01'u8
+    check d.rlp.accessListBasic.payload.access_list.len == 1
+    check d.rlp.accessListBasic.payload.access_list[0].address == source
 
-  # txRT "SSZ: 2930 Create",
-  #   Transaction(
-  #     txType = 0x01'u8,
-  #     chain_id = ChainId(1.u256),
-  #     nonce = 4'u64,
-  #     gas = 123_457'u64,
-  #     to = Opt.none(Address),
-  #     value = 0.u256,
-  #     input = abcdef,
-  #     max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
-  #     signature = dummySig(),
-  #   ):
-  #   check d.rlp.accessListCreate.payload.txType == 0x01'u8
+  txRT "SSZ: 2930 Create",
+    Transaction(
+      txType = 0x01'u8,
+      chain_id = ChainId(1.u256),
+      nonce = 4'u64,
+      gas = 123_457'u64,
+      to = Opt.none(Address),
+      value = 0.u256,
+      input = abcdef,
+      max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
+      signature = dummySig(),
+    ):
+    check d.rlp.accessListCreate.payload.txType == 0x01'u8
 
-  # txRT "SSZ: 1559 Call",
-  #   Transaction(
-  #     txType = 0x02'u8,
-  #     chain_id = ChainId(1.u256),
-  #     nonce = 5'u64,
-  #     gas = 123_457'u64,
-  #     to = Opt.some(recipient),
-  #     value = 0.u256,
-  #     input = abcdef,
-  #     max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
-  #     max_priority_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
-  #     access_list = accesses,
-  #     signature = dummySig(),
-  #   ):
-  #   check d.rlp.basic.payload.txType == 0x02'u8
-  #   check d.rlp.basic.payload.max_priority_fees_per_gas.regular == 2.u256
+  txRT "SSZ: 1559 Call",
+    Transaction(
+      txType = 0x02'u8,
+      chain_id = ChainId(1.u256),
+      nonce = 5'u64,
+      gas = 123_457'u64,
+      to = Opt.some(recipient),
+      value = 0.u256,
+      input = abcdef,
+      max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
+      max_priority_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
+      access_list = accesses,
+      signature = dummySig(),
+    ):
+    check d.rlp.basic.payload.txType == 0x02'u8
+    check d.rlp.basic.payload.max_priority_fees_per_gas.regular == 2.u256
 
-  # txRT "SSZ: 1559 Create",
-  #   Transaction(
-  #     txType = 0x02'u8,
-  #     chain_id = ChainId(1.u256),
-  #     nonce = 6'u64,
-  #     gas = 123_457'u64,
-  #     to = Opt.none(Address),
-  #     value = 0.u256,
-  #     input = abcdef,
-  #     max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
-  #     max_priority_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
-  #     signature = dummySig(),
-  #   ):
-  #   check d.rlp.create.payload.txType == 0x02'u8
-  #   check d.rlp.create.payload.input.len == abcdef.len
+  txRT "SSZ: 1559 Create",
+    Transaction(
+      txType = 0x02'u8,
+      chain_id = ChainId(1.u256),
+      nonce = 6'u64,
+      gas = 123_457'u64,
+      to = Opt.none(Address),
+      value = 0.u256,
+      input = abcdef,
+      max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
+      max_priority_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
+      signature = dummySig(),
+    ):
+    check d.rlp.create.payload.txType == 0x02'u8
+    check d.rlp.create.payload.input.len == abcdef.len
 
   # # when compiles(BlobFeesPerGas):
-  #   txRT "SSZ: 4844 Blob Tx",
-  #     (
-  #       block:
-  #         const vh =
-  #           hash32"010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014"
-  #         Transaction(
-  #           txType = 0x03'u8,
-  #           chain_id = ChainId(1.u256),
-  #           nonce = 7'u64,
-  #           gas = 123_457'u64,
-  #           to = Opt.some(recipient),
-  #           value = 0.u256,
-  #           input = @[],
-  #           max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
-  #           max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
-  #           access_list = accesses,
-  #           blob_versioned_hashes = @[VersionedHash(vh)],
-  #           blob_fee = 10.u256,
-  #           signature = dummySig(),
-  #         )
-  #     ):
-  #     check d.rlp.blob.payload.txType == 0x03'u8
-  #     check d.rlp.blob.payload.blob_versioned_hashes.len == 1
+    txRT "SSZ: 4844 Blob Tx",
+      (
+        block:
+          const vh =
+            hash32"010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014"
+          Transaction(
+            txType = 0x03'u8,
+            chain_id = ChainId(1.u256),
+            nonce = 7'u64,
+            gas = 123_457'u64,
+            to = Opt.some(recipient),
+            value = 0.u256,
+            input = @[],
+            max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
+            max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
+            access_list = accesses,
+            blob_versioned_hashes = @[VersionedHash(vh)],
+            blob_fee = 10.u256,
+            signature = dummySig(),
+          )
+      ):
+      check d.rlp.blob.payload.txType == 0x03'u8
+      check d.rlp.blob.payload.blob_versioned_hashes.len == 1
 
-  # txRT "SSZ: SetCode (auth list)",
-  #   Transaction(
-  #     txType = 0x04'u8,
-  #     chain_id = ChainId(1.u256),
-  #     nonce = 8'u64,
-  #     gas = 123_457'u64,
-  #     to = Opt.some(recipient),
-  #     value = 0.u256,
-  #     input = @[],
-  #     max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
-  #     max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
-  #     authorization_list =
-  #       @[
-  #         Authorization(
-  #           kind: authReplayableBasic,
-  #           replayable: RlpReplayableBasicAuthorizationPayload(
-  #             magic: AuthMagic7702,
-  #             address: source,
-  #             nonce: 0'u64,
-  #           ),
-  #         )
-  #       ],
-  #     signature = dummySig(),
-  #   )
-    # check d.rlp.setCode.payload.txType == 0x04'u8
-    # check d.rlp.setCode.payload.authorization_list.len == 1
 
-# suite "SSZ seq[Transaction] round-trip":
-#   test "SSZ: seq[Transaction] roundtrip (mixed types)":
-#     let t0 = Transaction(
-#       txType = 0x00'u8,
-#       chain_id = ChainId(1.u256),
-#       nonce = 1'u64,
-#       gas = 21_000'u64,
-#       to = Opt.some(recipient),
-#       value = 0.u256,
-#       input = abcdef,
-#       max_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
-#       signature = dummySig(),
-#     )
-#     let t1 = Transaction(
-#       txType = 0x01'u8,
-#       chain_id = ChainId(1.u256),
-#       nonce = 2'u64,
-#       gas = 44_000'u64,
-#       to = Opt.none(Address),
-#       value = 0.u256,
-#       input = abcdef,
-#       max_fees_per_gas = BasicFeesPerGas(regular: 5.u256),
-#       signature = dummySig(),
-#     )
-#     let t2 = Transaction(
-#       txType = 0x02'u8,
-#       chain_id = ChainId(1.u256),
-#       nonce = 3'u64,
-#       gas = 50_000'u64,
-#       to = Opt.some(recipient),
-#       value = 0.u256,
-#       input = abcdef,
-#       max_fees_per_gas = BasicFeesPerGas(regular: 9.u256),
-#       max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
-#       access_list = accesses,
-#       signature = dummySig(),
-#     )
-#     let txs = @[t0, t1, t2]
-#     let enc = SSZ.encode(txs)
-#     echo "SSZ bytes (seq[Transaction]) [", enc.len, "]: 0x", enc.toHex()
-#     let dec = SSZ.decode(enc, type(txs))
-#     check enc == SSZ.encode(dec)
+suite "SSZ Transactions: 7702 SetCode (round-trip)":
+
+  txRT "SSZ: 7702 SetCode with replayable auth",
+    (
+      block:
+        let auths: seq[AuthTuple] = @[
+          (
+            chain_id: ChainId(0.u256),  # Replayable
+            address: source,
+            nonce: 0'u64,
+            y_parity: 0'u8,
+            r: 1.u256,
+            s: 1.u256
+          )
+        ]
+        Transaction(
+          txType = 0x04'u8,
+          chain_id = ChainId(1.u256),
+          nonce = 8'u64,
+          gas = 21001'u64,
+          to = Opt.some(recipient),
+          value = 0.u256,
+          input = @[],
+          max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
+          max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
+          access_list = @[],
+          authorization_list = auths,
+          signature = dummySig(),
+        )
+    ):
+    check d.rlp.setCode.payload.txType == 0x04'u8
+    check d.rlp.setCode.payload.authorization_list.len == 1
+    check d.rlp.setCode.payload.authorization_list[0].payload.kind == authReplayableBasic
+    check d.rlp.setCode.payload.authorization_list[0].payload.replayable.address == source
+    check d.rlp.setCode.payload.authorization_list[0].payload.replayable.nonce == 0
+
+  txRT "SSZ: 7702 SetCode with basic auth",
+    (
+      block:
+        let auths: seq[AuthTuple] = @[
+          (
+            chain_id: ChainId(1.u256),
+            address: recipient,
+            nonce: 5'u64,
+            y_parity: 1'u8,
+            r: 100.u256,
+            s: 200.u256
+          )
+        ]
+        Transaction(
+          txType = 0x04'u8,
+          chain_id = ChainId(1.u256),
+          nonce = 9'u64,
+          gas = 21001'u64,
+          to = Opt.some(recipient),
+          value = 0.u256,
+          input = @[],
+          max_fees_per_gas = BasicFeesPerGas(regular: 11.u256),
+          max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
+          access_list = @[],
+          authorization_list = auths,
+          signature = dummySig(),
+        )
+    ):
+    check d.rlp.setCode.payload.txType == 0x04'u8
+    check d.rlp.setCode.payload.authorization_list.len == 1
+    check d.rlp.setCode.payload.authorization_list[0].payload.kind == authBasic
+    check d.rlp.setCode.payload.authorization_list[0].payload.basic.chain_id == ChainId(1.u256)
+    check d.rlp.setCode.payload.authorization_list[0].payload.basic.address == recipient
+    check d.rlp.setCode.payload.authorization_list[0].payload.basic.nonce == 5
+
+  txRT "SSZ: 7702 SetCode with mixed auth list",
+    (
+      block:
+        let auths: seq[AuthTuple] = @[
+          (
+            chain_id: ChainId(0.u256),  # Replayable
+            address: source,
+            nonce: 1'u64,
+            y_parity: 0'u8,
+            r: 10.u256,
+            s: 20.u256
+          ),
+          (
+            chain_id: ChainId(1.u256),  # Basic
+            address: recipient,
+            nonce: 2'u64,
+            y_parity: 1'u8,
+            r: 30.u256,
+            s: 40.u256
+          ),
+          (
+            chain_id: ChainId(5.u256),  # Basic
+            address: source,
+            nonce: 3'u64,
+            y_parity: 0'u8,
+            r: 50.u256,
+            s: 60.u256
+          )
+        ]
+        Transaction(
+          txType = 0x04'u8,
+          chain_id = ChainId(1.u256),
+          nonce = 10'u64,
+          gas = 21001'u64,
+          to = Opt.some(recipient),
+          value = 100.u256,
+          input = abcdef,
+          max_fees_per_gas = BasicFeesPerGas(regular: 15.u256),
+          max_priority_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
+          access_list = accesses,
+          authorization_list = auths,
+          signature = dummySig(),
+        )
+    ):
+    check d.rlp.setCode.payload.txType == 0x04'u8
+    check d.rlp.setCode.payload.authorization_list.len == 3
+    check d.rlp.setCode.payload.authorization_list[0].payload.kind == authReplayableBasic
+    check d.rlp.setCode.payload.authorization_list[1].payload.kind == authBasic
+    check d.rlp.setCode.payload.authorization_list[2].payload.kind == authBasic
+    check d.rlp.setCode.payload.access_list.len == 1
+
+
+
+suite "SSZ: Mixed transaction lists ":
+  test "SSZ: seq[Transaction] ":
+    let auths: seq[AuthTuple] = @[
+      (
+        chain_id: ChainId(1.u256),
+        address: recipient,
+        nonce: 0'u64,
+        y_parity: 0'u8,
+        r: 1.u256,
+        s: 1.u256
+      )
+    ]
+
+    let t0 = Transaction(
+      txType = 0x00'u8,
+      chain_id = ChainId(1.u256),
+      nonce = 1'u64,
+      gas = 21_000'u64,
+      to = Opt.some(recipient),
+      value = 0.u256,
+      input = abcdef,
+      max_fees_per_gas = BasicFeesPerGas(regular: 2.u256),
+      signature = dummySig(),
+    )
+
+    let t1 = Transaction(
+      txType = 0x02'u8,
+      chain_id = ChainId(1.u256),
+      nonce = 2'u64,
+      gas = 44_000'u64,
+      to = Opt.some(recipient),
+      value = 0.u256,
+      input = abcdef,
+      max_fees_per_gas = BasicFeesPerGas(regular: 5.u256),
+      max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
+      signature = dummySig(),
+    )
+
+    let t2 = Transaction(
+      txType = 0x04'u8,  # 7702
+      chain_id = ChainId(1.u256),
+      nonce = 3'u64,
+      gas = 50_000'u64,
+      to = Opt.some(recipient),
+      value = 0.u256,
+      input = abcdef,
+      max_fees_per_gas = BasicFeesPerGas(regular: 9.u256),
+      max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
+      authorization_list = auths,
+      signature = dummySig(),
+    )
+
+    let txs = @[t0, t1, t2]
+    let enc = SSZ.encode(txs)
+    let dec = SSZ.decode(enc, type(txs))
+
+    check dec.len == 3
+    check dec[2].rlp.setCode.payload.authorization_list.len == 1
+    check enc == SSZ.encode(dec)
 
 suite "Block transactions root (SSZ sanity)":
   test "transactions root for 3 txs: non-zero and stable":
@@ -271,17 +386,3 @@ suite "Block transactions root (SSZ sanity)":
     var t2 = t0
     var txn = @[t0, t1, t2]
     let root1 = hash_tree_root(txn)
-
-# Failing
-# suite "SSZ: Authorization list":
-#   test "SSZ: Authorization list size parity":
-#     let al = @[
-#       Authorization(
-#         kind: authReplayableBasic,
-#         replayable: RlpReplayableBasicAuthorizationPayload(
-#         magic: AuthMagic7702,
-#         address: source,
-#         nonce: 0'u64)
-#       )
-#     ]
-#     check sszSize(al) == SSZ.encode(al).len

@@ -1,9 +1,9 @@
-import ssz_serialization
-import stint
-import ../common/[addresses, base, hashes]
-import ./signatures
-import ./adapter
-import   serialization/case_objects
+import
+  ssz_serialization, stint,
+  ../common/[addresses, base, hashes],
+  ./signatures,
+  ./adapter,
+  serialization/case_objects
 
 export adapter
 
@@ -146,7 +146,7 @@ type
     sszActiveFields: [1, 0, 1, 1]
   .} = object
     magic*: TransactionType   # 0x05 (Auth)
-    address*: Address         # ExecutionAddress
+    address*: Address
     nonce*: uint64
 
   RlpBasicAuthorizationPayload* {.
@@ -154,19 +154,23 @@ type
   .} = object
     magic*: TransactionType   # 0x05 (Auth)
     chain_id*: ChainId
-    address*: Address         # ExecutionAddress
+    address*: Address
     nonce*: uint64
 
   AuthorizationKind*  = enum
     authReplayableBasic
     authBasic
 
-  Authorization* = object
+  AuthorizationPayload* = object
     case kind*: AuthorizationKind
     of authReplayableBasic:
       replayable*: RlpReplayableBasicAuthorizationPayload
     of authBasic:
       basic*: RlpBasicAuthorizationPayload
+
+  Authorization* = object
+    payload*: AuthorizationPayload
+    signature*: Secp256k1ExecutionSignature
 
 type RlpSetCodeTransactionPayload* {.
   sszActiveFields: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
@@ -251,3 +255,13 @@ type
       discard
     of RlpTransaction:
       rlp*: RlpTransactionObject
+
+# Not importing from common/transaction as it would cause problem with the trensaction deffined in common/transactions
+type
+  AuthTuple* = tuple
+    chain_id: ChainId
+    address:  Address
+    nonce:    uint64
+    y_parity: uint8
+    r:        UInt256
+    s:        UInt256

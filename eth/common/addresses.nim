@@ -111,11 +111,3 @@ func hasValidChecksum*(_: type Address, a: string): bool =
     except ValueError:
       return false
   a == address.toChecksum0xHex()
-
-# template toSszType*(T: Address): auto =
-#   T.data()
-
-# func fromSszBytes*( T: type Address, bytes: openArray[byte]): T {.raises: [SszError].} =
-#   if bytes.len != sizeof(result.data()):
-#     raiseIncorrectSize T
-#   copyMem(addr result.data()[0], unsafeAddr bytes[0], sizeof(result.data()))

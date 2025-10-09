@@ -1,12 +1,11 @@
 import
-  std/[strutils, sequtils, options],
+  std/[sequtils],
   stint,
-  ssz_serialization/merkleization,
-  ./[signatures, receipts, transaction_builder],
+  ./signatures,
   ./transaction_ssz as ssz_tx,
+  ./transaction_builder,
   ../common/[addresses_rlp, base_rlp],
-  ../common/transactions as rlp_tx_mod,
-  ../rlp/[length_writer, two_pass_writer, hash_writer]
+  ../common/transactions as rlp_tx_mod
 
 # Gas -> FeePerGas
 proc feeFromGas(x: rlp_tx_mod.GasInt): ssz_tx.FeePerGas =
@@ -21,15 +20,8 @@ proc toGasInt(x: ssz_tx.FeePerGas): rlp_tx_mod.GasInt =
   # TODO:verify with etan+advaita(advaita say sanity check one is ok)
   rlp_tx_mod.GasInt(x.limbs[0])
 
- # Normalize any legacy V into 0/1
-func vToParity(v: uint8): uint8 =
-  if v == 27'u8: 0'u8
-  elif v == 28'u8: 1'u8
-  else: v and 1'u8
-
-
 proc accessTupleFrom(pair: rlp_tx_mod.AccessPair): ssz_tx.AccessTuple =
-  # Old storageKeys: seq[Bytes32]; new  seq[Hash32].( bruh )
+  # Old storageKeys: seq[Bytes32]; new  seq[Hash32]
   result.address = pair.address
   result.storage_keys = newSeq[Hash32](pair.storageKeys.len)
   for i, k in pair.storageKeys:
@@ -38,69 +30,79 @@ proc accessTupleFrom(pair: rlp_tx_mod.AccessPair): ssz_tx.AccessTuple =
 proc accessListFrom(al: rlp_tx_mod.AccessList): seq[ssz_tx.AccessTuple] =
   al.map(accessTupleFrom)
 
-proc ensureAuthMagic(m: TransactionType) =
-  if m != AuthMagic7702:
-    raise newException(ValueError, "authorization.magic must be 0x05")
-
+proc toAuthTuples*(al: seq[rlp_tx_mod.Authorization]): seq[ssz_tx.AuthTuple] =
+  ## Convert RLP-style authorizations -> AuthTuple expected by builder
+  result = newSeq[ssz_tx.AuthTuple](al.len)
+  for i, a in al:
+    result[i] = (
+      chain_id: a.chainId,
+      address: a.address,
+      nonce: uint64(a.nonce),
+      y_parity: a.yParity,
+      r: a.r,
+      s: a.s
+    )
 
 proc toSszSignedAuthList*(al: seq[rlp_tx_mod.Authorization]):
-                          seq[ssz_tx.SignedTx[ssz_tx.Authorization]] =
-  result = newSeq[ssz_tx.SignedTx[ssz_tx.Authorization]](al.len)
+    seq[ssz_tx.Authorization] =
+  result = newSeq[ssz_tx.Authorization](al.len)
   for i, a in al:
     let payload =
       if a.chainId == ChainId(0.u256):
-        ssz_tx.Authorization(
-          kind: authReplayableBasic,
+        ssz_tx.AuthorizationPayload(
+          kind: ssz_tx.authReplayableBasic,
           replayable: ssz_tx.RlpReplayableBasicAuthorizationPayload(
-            magic: AuthMagic7702,
+            magic: ssz_tx.AuthMagic7702,
             address: a.address,
-            nonce:   uint64(a.nonce),
+            nonce: uint64(a.nonce),
           )
         )
       else:
-        ssz_tx.Authorization(
-          kind: authBasic,
+        ssz_tx.AuthorizationPayload(
+          kind: ssz_tx.authBasic,
           basic: ssz_tx.RlpBasicAuthorizationPayload(
-            magic:    AuthMagic7702,
+            magic: ssz_tx.AuthMagic7702,
             chain_id: a.chainId,
-            address:  a.address,
-            nonce:    uint64(a.nonce),
+            address: a.address,
+            nonce: uint64(a.nonce),
           )
         )
 
-    let sig = secp256k1Pack(a.R, a.S, vToParity(a.yParity))
-    result[i] = ssz_tx.SignedTx[ssz_tx.Authorization](payload: payload, signature: sig)
+    let sig = secp256k1Pack(a.r, a.s, a.yParity)
+    result[i] = ssz_tx.Authorization(
+      payload: payload,
+      signature: sig
+    )
 
-# sszcodec.nim
-proc toRlpAuthList*(al: seq[ssz_tx.SignedTx[ssz_tx.Authorization]]):
-                    seq[rlp_tx_mod.Authorization] =
+proc toSszAuthList*(al: seq[rlp_tx_mod.Authorization]):
+    seq[ssz_tx.Authorization] =
+  toSszSignedAuthList(al)
+
+proc toRlpAuthList*(al: seq[ssz_tx.Authorization]): seq[rlp_tx_mod.Authorization] =
   result = newSeq[rlp_tx_mod.Authorization](al.len)
-  for i, sa in al:
-    let (R, S, parity) = secp256k1Unpack(sa.signature)
-    case sa.payload.kind
-    of authReplayableBasic:
-      let p = sa.payload.replayable
-      ensureAuthMagic(p.magic)
+  for i, a in al:
+    let (R, S, parity) = secp256k1Unpack(a.signature)
+    case a.payload.kind
+    of ssz_tx.authReplayableBasic:
+      let p = a.payload.replayable
       result[i] = rlp_tx_mod.Authorization(
-        chainId:  ChainId(0.u256),
-        address:  p.address,
-        nonce:    AccountNonce(p.nonce),
-        yParity:  parity,
-        r:        R,
-        s:        S,
+        chainId: ChainId(0.u256),
+        address: p.address,
+        nonce: AccountNonce(p.nonce),
+        yParity: parity,
+        r: R,
+        s: S
       )
-    of authBasic:
-      let p = sa.payload.basic
-      ensureAuthMagic(p.magic)
+    of ssz_tx.authBasic:
+      let p = a.payload.basic
       result[i] = rlp_tx_mod.Authorization(
-        chainId:  p.chain_id,
-        address:  p.address,
-        nonce:    AccountNonce(p.nonce),
-        yParity:  parity,
-        r:        R,
-        s:        S,
+        chainId: p.chain_id,
+        address: p.address,
+        nonce: AccountNonce(p.nonce),
+        yParity: parity,
+        r: R,
+        s: S
       )
-
 
 
 proc packSigFromTx(tx: rlp_tx_mod.Transaction): Secp256k1ExecutionSignature =
@@ -123,7 +125,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
 
   case tx.txType
   of rlp_tx_mod.TxLegacy:
-    return Transaction(
+    return transaction_builder.Transaction(
       txType = ssz_tx.TxLegacy,
       chain_id = legacyChain,
       nonce = tx.nonce,
@@ -135,7 +137,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
       signature = sig,
     )
   of rlp_tx_mod.TxEip2930:
-    return Transaction(
+    return transaction_builder.Transaction(
       txType = ssz_tx.TxAccessList,
       chain_id = tx.chainId,
       nonce = tx.nonce,
@@ -148,7 +150,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
       access_list = accessSSZ,
     )
   of rlp_tx_mod.TxEip1559:
-    return Transaction(
+    return transaction_builder.Transaction(
       txType = ssz_tx.TxDynamicFee,
       chain_id = tx.chainId,
       nonce = tx.nonce,
@@ -163,7 +165,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
       access_list = accessSSZ,
     )
   of rlp_tx_mod.TxEip4844:
-    return Transaction(
+    return transaction_builder.Transaction(
       txType = ssz_tx.TxBlob,
       chain_id = tx.chainId,
       nonce = tx.nonce,
@@ -182,7 +184,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
   of rlp_tx_mod.TxEip7702:
     if tx.to.isNone:
       raise newException(ValueError, "7702 setCode: requires 'to'")
-    return Transaction(
+    return transaction_builder.Transaction(
       txType = ssz_tx.TxSetCode,
       chain_id = tx.chainId,
       nonce = tx.nonce,
@@ -195,9 +197,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
         ssz_tx.BasicFeesPerGas(regular: feeFromGas(tx.maxPriorityFeePerGas)),
       signature = sig,
       access_list = accessSSZ,
-      # authorization_list = toAuthList()
-      #TODO
-      authorization_list = @[],
+      authorization_list = toAuthTuples(tx.authorizationList),
     )
 
 proc toOldTx*(tx: ssz_tx.Transaction): rlp_tx_mod.Transaction =
@@ -261,7 +261,6 @@ proc toOldTx*(tx: ssz_tx.Transaction): rlp_tx_mod.Transaction =
       value: p.value,
       payload: p.input,
       gasPrice: toGasInt(p.max_fees_per_gas.regular),
-      # Similar TODO for typecast
       V: rlp_tx_mod.EIP155_CHAIN_ID_OFFSET + ((2 * p.chain_id).limbs[0]) + uint64(y),
       R: R,
       S: S,
@@ -279,7 +278,6 @@ proc toOldTx*(tx: ssz_tx.Transaction): rlp_tx_mod.Transaction =
       value: p.value,
       payload: p.input,
       gasPrice: toGasInt(p.max_fees_per_gas.regular),
-      # Similar TODO for typecast
       V: rlp_tx_mod.EIP155_CHAIN_ID_OFFSET + ((2 * p.chain_id).limbs[0]) + uint64(y),
       R: R,
       S: S,
@@ -395,7 +393,7 @@ proc toOldTx*(tx: ssz_tx.Transaction): rlp_tx_mod.Transaction =
       maxPriorityFeePerGas: toGasInt(p.max_priority_fees_per_gas.regular),
       maxFeePerGas: toGasInt(p.max_fees_per_gas.regular),
       accessList: toOldAccessList(p.access_list),
-      authorizationList: @[],
+      authorizationList: toRlpAuthList(p.authorization_list),
       V: uint64(y),
       R: R,
       S: S,

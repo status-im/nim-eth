@@ -142,14 +142,14 @@ suite "SSZ Transactions (constructor)":
       check tx.rlp.blob.payload.blob_versioned_hashes.len == 1
 
   test "7702 SetCode with replayable-basic auth":
-    let auths = @[
-      Authorization(
-        kind: authReplayableBasic,
-        replayable: RlpReplayableBasicAuthorizationPayload(
-          magic: AuthMagic7702,
-          address: recipient,
-          nonce: 0'u64,
-        )
+    let auths: seq[AuthTuple] = @[
+      (
+        chain_id: ChainId(0.u256),
+        address: recipient,
+        nonce: 0'u64,
+        y_parity: 0'u8,
+        r: 1.u256,
+        s: 1.u256
       )
     ]
     let tx = Transaction(
@@ -169,18 +169,17 @@ suite "SSZ Transactions (constructor)":
     check tx.kind == RlpTransaction
     check tx.rlp.kind == txSetCode
     check tx.rlp.setCode.payload.authorization_list.len == 1
-    check tx.rlp.setCode.payload.authorization_list[0].kind == authReplayableBasic
+    check tx.rlp.setCode.payload.authorization_list[0].payload.kind == authReplayableBasic
 
   test "7702 SetCode with basic auth":
-    let auths = @[
-      Authorization(
-        kind: authBasic,
-        basic: RlpBasicAuthorizationPayload(
-          magic: AuthMagic7702,
-          chain_id: ChainId(1.u256),
-          address: recipient,
-          nonce: 0'u64,
-        )
+    let auths: seq[AuthTuple] = @[
+      (
+        chain_id: ChainId(1.u256),
+        address: recipient,
+        nonce: 0'u64,
+        y_parity: 0'u8,
+        r: 1.u256,
+        s: 1.u256
       )
     ]
     let tx = Transaction(
@@ -200,7 +199,7 @@ suite "SSZ Transactions (constructor)":
     check tx.kind == RlpTransaction
     check tx.rlp.kind == txSetCode
     check tx.rlp.setCode.payload.authorization_list.len == 1
-    check tx.rlp.setCode.payload.authorization_list[0].kind == authBasic
+    check tx.rlp.setCode.payload.authorization_list[0].payload.kind == authBasic
 
   test "7702 SetCode: fails when auth list empty":
     expect(TxBuildError):
