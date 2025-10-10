@@ -4,8 +4,31 @@ import
   ./signatures,
   ./transaction_ssz as ssz_tx,
   ./transaction_builder,
-  ../common/[addresses_rlp, base_rlp],
-  ../common/transactions as rlp_tx_mod
+  ../common/[addresses_rlp, base_rlp,blocks],
+  ../common/transactions as rlp_tx_mod,
+  ./blocks_ssz,
+  ssz_serialization/merkleization
+
+
+type
+  Withdrawal_SSZ* = blocks_ssz.Withdrawal
+  Withdrawal_RLP* = blocks.Withdrawal
+
+proc toSszWithdrawal*(w: Withdrawal_RLP): Withdrawal_SSZ =
+  Withdrawal_SSZ(
+    index: w.index,
+    validatorIndex: w.validatorIndex,
+    address: w.address,
+    amount: w.amount
+  )
+
+proc fromSszWithdrawal*(w: Withdrawal_SSZ): Withdrawal_RLP =
+  Withdrawal_RLP(
+    index: w.index,
+    validatorIndex: w.validatorIndex,
+    address: w.address,
+    amount: w.amount
+  )
 
 # Gas -> FeePerGas
 proc feeFromGas(x: rlp_tx_mod.GasInt): ssz_tx.FeePerGas =
@@ -398,3 +421,19 @@ proc toOldTx*(tx: ssz_tx.Transaction): rlp_tx_mod.Transaction =
       R: R,
       S: S,
     )
+
+proc computeTransactionsRootSsz*(txs: seq[transactions.Transaction]): Root =
+  var sszTxs: seq[ssz_tx.Transaction]
+  for tx in txs:
+    sszTxs.add(toSszTx(tx))
+  Root(sszTxs.hash_tree_root().data)
+
+proc computeWithdrawalsRootSsz*(withdrawals: Opt[seq[Withdrawal_RLP]]): Root =
+  if withdrawals.isNone:
+    return default(Root)
+
+  var sszWds: seq[Withdrawal_SSZ]
+  for w in withdrawals.get:
+    sszWds.add(toSszWithdrawal(w))
+  Root(sszWds.hash_tree_root().data)
+

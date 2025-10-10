@@ -2,9 +2,8 @@ import
   ssz_serialization, stint,
   ../common/[addresses, base, hashes],
   ./signatures,
-  ./adapter,
-  serialization/case_objects
-
+  ./adapter
+  
 export adapter
 
 type SignedTx*[P] = object

@@ -7,6 +7,7 @@ import
 const
   # Post-merge constants
   EMPTY_OMMERS_HASH* = hash32"1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+  MAX_BLOB_GAS_PER_BLOCK* = 786432'u64
 
 type
   Withdrawal* {.sszActiveFields: [1, 1, 1, 1].} = object
