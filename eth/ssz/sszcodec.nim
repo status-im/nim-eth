@@ -1,14 +1,13 @@
 import
   std/[sequtils],
   stint,
-  ./signatures,
-  ./transaction_ssz as ssz_tx,
-  ./transaction_builder,
-  ../common/[addresses_rlp, base_rlp,blocks],
+  ./[signatures, blocks_ssz, transaction_builder],
+  ../common/[addresses_rlp, base_rlp, blocks],
   ../common/transactions as rlp_tx_mod,
-  ./blocks_ssz,
+  ../common/receipts as rlp_receipts,
+  ./receipts_ssz as ssz_receipts,
+  ./transaction_ssz as ssz_tx,
   ssz_serialization/merkleization
-
 
 type
   Withdrawal_SSZ* = blocks_ssz.Withdrawal
@@ -19,7 +18,7 @@ proc toSszWithdrawal*(w: Withdrawal_RLP): Withdrawal_SSZ =
     index: w.index,
     validatorIndex: w.validatorIndex,
     address: w.address,
-    amount: w.amount
+    amount: w.amount,
   )
 
 proc fromSszWithdrawal*(w: Withdrawal_SSZ): Withdrawal_RLP =
@@ -27,7 +26,7 @@ proc fromSszWithdrawal*(w: Withdrawal_SSZ): Withdrawal_RLP =
     index: w.index,
     validatorIndex: w.validatorIndex,
     address: w.address,
-    amount: w.amount
+    amount: w.amount,
   )
 
 # Gas -> FeePerGas
@@ -63,11 +62,12 @@ proc toAuthTuples*(al: seq[rlp_tx_mod.Authorization]): seq[ssz_tx.AuthTuple] =
       nonce: uint64(a.nonce),
       y_parity: a.yParity,
       r: a.r,
-      s: a.s
+      s: a.s,
     )
 
-proc toSszSignedAuthList*(al: seq[rlp_tx_mod.Authorization]):
-    seq[ssz_tx.Authorization] =
+proc toSszSignedAuthList*(
+    al: seq[rlp_tx_mod.Authorization]
+): seq[ssz_tx.Authorization] =
   result = newSeq[ssz_tx.Authorization](al.len)
   for i, a in al:
     let payload =
@@ -75,10 +75,8 @@ proc toSszSignedAuthList*(al: seq[rlp_tx_mod.Authorization]):
         ssz_tx.AuthorizationPayload(
           kind: ssz_tx.authReplayableBasic,
           replayable: ssz_tx.RlpReplayableBasicAuthorizationPayload(
-            magic: ssz_tx.AuthMagic7702,
-            address: a.address,
-            nonce: uint64(a.nonce),
-          )
+            magic: ssz_tx.AuthMagic7702, address: a.address, nonce: uint64(a.nonce)
+          ),
         )
       else:
         ssz_tx.AuthorizationPayload(
@@ -88,17 +86,13 @@ proc toSszSignedAuthList*(al: seq[rlp_tx_mod.Authorization]):
             chain_id: a.chainId,
             address: a.address,
             nonce: uint64(a.nonce),
-          )
+          ),
         )
 
     let sig = secp256k1Pack(a.r, a.s, a.yParity)
-    result[i] = ssz_tx.Authorization(
-      payload: payload,
-      signature: sig
-    )
+    result[i] = ssz_tx.Authorization(payload: payload, signature: sig)
 
-proc toSszAuthList*(al: seq[rlp_tx_mod.Authorization]):
-    seq[ssz_tx.Authorization] =
+proc toSszAuthList*(al: seq[rlp_tx_mod.Authorization]): seq[ssz_tx.Authorization] =
   toSszSignedAuthList(al)
 
 proc toRlpAuthList*(al: seq[ssz_tx.Authorization]): seq[rlp_tx_mod.Authorization] =
@@ -114,7 +108,7 @@ proc toRlpAuthList*(al: seq[ssz_tx.Authorization]): seq[rlp_tx_mod.Authorization
         nonce: AccountNonce(p.nonce),
         yParity: parity,
         r: R,
-        s: S
+        s: S,
       )
     of ssz_tx.authBasic:
       let p = a.payload.basic
@@ -124,9 +118,8 @@ proc toRlpAuthList*(al: seq[ssz_tx.Authorization]): seq[rlp_tx_mod.Authorization
         nonce: AccountNonce(p.nonce),
         yParity: parity,
         r: R,
-        s: S
+        s: S,
       )
-
 
 proc packSigFromTx(tx: rlp_tx_mod.Transaction): Secp256k1ExecutionSignature =
   let y: uint8 =
@@ -436,4 +429,3 @@ proc computeWithdrawalsRootSsz*(withdrawals: Opt[seq[Withdrawal_RLP]]): Root =
   for w in withdrawals.get:
     sszWds.add(toSszWithdrawal(w))
   Root(sszWds.hash_tree_root().data)
-

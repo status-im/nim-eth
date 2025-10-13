@@ -1,8 +1,4 @@
-import
-  stint,
-  ./transaction_ssz,
-  ./signatures,
-  ../common/[addresses, base, hashes]
+import stint, ./transaction_ssz, ./signatures, ../common/[addresses, base, hashes]
 
 type TxBuildError* = object of ValueError
 
@@ -15,26 +11,18 @@ proc makeAuthorization*(t: AuthTuple): Authorization =
       AuthorizationPayload(
         kind: authReplayableBasic,
         replayable: RlpReplayableBasicAuthorizationPayload(
-          magic: AuthMagic7702,
-          address: t.address,
-          nonce:   t.nonce
-        )
+          magic: AuthMagic7702, address: t.address, nonce: t.nonce
+        ),
       )
     else:
       AuthorizationPayload(
         kind: authBasic,
         basic: RlpBasicAuthorizationPayload(
-          magic:    AuthMagic7702,
-          chain_id: t.chain_id,
-          address:  t.address,
-          nonce:    t.nonce
-        )
+          magic: AuthMagic7702, chain_id: t.chain_id, address: t.address, nonce: t.nonce
+        ),
       )
 
-  Authorization(
-    payload:    payload,
-    signature:  secp256k1Pack(t.r, t.s, t.y_parity)
-  )
+  Authorization(payload: payload, signature: secp256k1Pack(t.r, t.s, t.y_parity))
 
 proc makeAuthorizationList*(xs: openArray[AuthTuple]): seq[Authorization] =
   result = newSeqOfCap[Authorization](xs.len)
@@ -52,16 +40,34 @@ template BuildWrap(
       kind: RlpTransaction, rlp: RlpTransactionObject(kind: tag, fieldSym: inner)
     )
 
-BuildWrap( RlpLegacyBasicTransactionPayload, RlpLegacyBasicTransaction, txLegacyBasic, legacyBasic)
-BuildWrap( RlpLegacyCreateTransactionPayload, RlpLegacyCreateTransaction, txLegacyCreate, legacyCreate)
-BuildWrap(RlpAccessListBasicTransactionPayload, RlpAccessListBasicTransaction, txAccessListBasic, accessListBasic,)
-BuildWrap(RlpAccessListCreateTransactionPayload, RlpAccessListCreateTransaction, txAccessListCreate, accessListCreate,)
+BuildWrap(
+  RlpLegacyBasicTransactionPayload, RlpLegacyBasicTransaction, txLegacyBasic,
+  legacyBasic,
+)
+BuildWrap(
+  RlpLegacyCreateTransactionPayload, RlpLegacyCreateTransaction, txLegacyCreate,
+  legacyCreate,
+)
+BuildWrap(
+  RlpAccessListBasicTransactionPayload, RlpAccessListBasicTransaction,
+  txAccessListBasic, accessListBasic,
+)
+BuildWrap(
+  RlpAccessListCreateTransactionPayload, RlpAccessListCreateTransaction,
+  txAccessListCreate, accessListCreate,
+)
 BuildWrap(RlpBasicTransactionPayload, RlpBasicTransaction, txBasic, basic)
 BuildWrap(RlpCreateTransactionPayload, RlpCreateTransaction, txCreate, create)
 BuildWrap(RlpBlobTransactionPayload, RlpBlobTransaction, txBlob, blob)
 BuildWrap(RlpSetCodeTransactionPayload, RlpSetCodeTransaction, txSetCode, setCode)
-BuildWrap(RlpLegacyReplayableBasicTransactionPayload, RlpLegacyReplayableBasicTransaction, txLegacyReplayableBasic, legacyReplayableBasic)
-BuildWrap(RlpLegacyReplayableCreateTransactionPayload, RlpLegacyReplayableCreateTransaction, txLegacyReplayableCreate, legacyReplayableCreate)
+BuildWrap(
+  RlpLegacyReplayableBasicTransactionPayload, RlpLegacyReplayableBasicTransaction,
+  txLegacyReplayableBasic, legacyReplayableBasic,
+)
+BuildWrap(
+  RlpLegacyReplayableCreateTransactionPayload, RlpLegacyReplayableCreateTransaction,
+  txLegacyReplayableCreate, legacyReplayableCreate,
+)
 
 proc Transaction*(
     txType: uint8,
@@ -77,7 +83,7 @@ proc Transaction*(
     access_list: seq[AccessTuple] = @[],
     blob_versioned_hashes: seq[VersionedHash] = @[],
     blob_fee: FeePerGas = 0.u256,
-  authorization_list: seq[AuthTuple] = @[],
+    authorization_list: seq[AuthTuple] = @[],
 ): Transaction =
   let auths = makeAuthorizationList(authorization_list)
   case txType
@@ -183,21 +189,21 @@ proc Transaction*(
       )
       return build(p, signature)
   of TxBlob:
-      let blobFees = BlobFeesPerGas(regular: max_fees_per_gas.regular, blob: blob_fee)
-      let p = RlpBlobTransactionPayload(
-        txType: txType,
-        chain_id: chain_id,
-        nonce: nonce,
-        max_fees_per_gas: blobFees,
-        gas: gas,
-        to: to.get,
-        value: value,
-        input: @input,
-        access_list: access_list,
-        max_priority_fees_per_gas: max_priority_fees_per_gas,
-        blob_versioned_hashes: blob_versioned_hashes,
-      )
-      return build(p, signature)
+    let blobFees = BlobFeesPerGas(regular: max_fees_per_gas.regular, blob: blob_fee)
+    let p = RlpBlobTransactionPayload(
+      txType: txType,
+      chain_id: chain_id,
+      nonce: nonce,
+      max_fees_per_gas: blobFees,
+      gas: gas,
+      to: to.get,
+      value: value,
+      input: @input,
+      access_list: access_list,
+      max_priority_fees_per_gas: max_priority_fees_per_gas,
+      blob_versioned_hashes: blob_versioned_hashes,
+    )
+    return build(p, signature)
   of TxSetCode:
     let p = RlpSetCodeTransactionPayload(
       txType: TxSetCode,
@@ -215,4 +221,3 @@ proc Transaction*(
     return build(p, signature)
   else:
     fail("Unsupported txType (expected 0x00..0x04)")
-

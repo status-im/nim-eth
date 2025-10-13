@@ -3,8 +3,8 @@ import
   stew/[byteutils, io2],
   ssz_serialization,
   ../../eth/[common, rlp],
-  ../../eth/ssz/[sszcodec,adapter,blocks_ssz,transaction_ssz],
-   unittest2
+  ../../eth/ssz/[sszcodec, adapter, blocks_ssz, transaction_ssz],
+  unittest2
 
 type
   TxSSZ = transaction_ssz.Transaction
@@ -29,7 +29,8 @@ proc loadBlockFromFile*(path: string): EthBlock =
 
 proc listRlpFiles*(): seq[string] =
   let dir = rlpsDir()
-  if not dir.dirExists: return @[]
+  if not dir.dirExists:
+    return @[]
   for kind, path in walkDir(dir):
     if kind == pcFile and path.endsWith(".rlp"):
       result.add path
@@ -43,7 +44,6 @@ proc loadRlpBlocksFromFile*(path: string, limit: int = 0): seq[EthBlock] =
   while r.hasData and (limit <= 0 or taken < limit):
     result.add r.read(EthBlock)
     inc taken
-
 
 suite "Transaction List Roundtrip":
   test "Block 9: RLP → SSZ → RLP preserves all transactions":
@@ -62,7 +62,7 @@ suite "Transaction List Roundtrip":
     check reconstructed.len == originalTxs.len
 
     # Verify each transaction
-    for i in 0..<originalTxs.len:
+    for i in 0 ..< originalTxs.len:
       check reconstructed[i].txType == originalTxs[i].txType
       check reconstructed[i].chainId == originalTxs[i].chainId
       check reconstructed[i].nonce == originalTxs[i].nonce
@@ -72,7 +72,7 @@ suite "Transaction List Roundtrip":
       check reconstructed[i].payload == originalTxs[i].payload
 
   test "All blocks 0-9: Transaction count preserved":
-    for i in 0..9:
+    for i in 0 .. 9:
       let path = eip2718FilePath(i)
       if not path.fileExists:
         continue
@@ -118,7 +118,7 @@ suite "Transaction Root Computation (EIP-6404)":
 
   test "All blocks 0-9: Compute transaction roots":
     echo ""
-    for i in 0..9:
+    for i in 0 .. 9:
       let path = eip2718FilePath(i)
       if not path.fileExists:
         continue
@@ -133,9 +133,8 @@ suite "Transaction Root Computation (EIP-6404)":
       check root1 == root2
       check root1 != default(Root)
 
-      echo "Block ", i, " (", blk.transactions.len, " txs): 0x",
-           root1.data.toHex[0..15], "..."
-
+      echo "Block ",
+        i, " (", blk.transactions.len, " txs): 0x", root1.data.toHex[0 .. 15], "..."
 
 suite "SSZ Encoding/Decoding":
   test "Block 9: Individual transaction SSZ roundtrip":
@@ -147,7 +146,7 @@ suite "SSZ Encoding/Decoding":
     for i, rlpTx in blk.transactions:
       let sszTx = toSszTx(rlpTx)
       let encoded = SSZ.encode(sszTx)
-      let decoded = SSZ.decode(encoded, TxSSZ)  # ← FIXED: Use type, not variable
+      let decoded = SSZ.decode(encoded, TxSSZ) # ← FIXED: Use type, not variable
       let reconstructed = toOldTx(decoded)
 
       # Verify
@@ -166,5 +165,5 @@ suite "SSZ Encoding/Decoding":
     for tx in blk.transactions:
       sszTxs.add(toSszTx(tx))
     let encoded = SSZ.encode(sszTxs)
-    let decoded = SSZ.decode(encoded, seq[TxSSZ])  # ← FIXED: Use type
+    let decoded = SSZ.decode(encoded, seq[TxSSZ]) # ← FIXED: Use type
     check decoded.len == sszTxs.len

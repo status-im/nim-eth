@@ -2,20 +2,20 @@ import
   unittest,
   stew/byteutils,
   std/sequtils,
-  ../../eth/ssz/[sszcodec,transaction_ssz, transaction_builder, signatures, adapter],
+  ../../eth/ssz/[sszcodec, transaction_ssz, transaction_builder, signatures, adapter],
   ../../eth/common/[addresses, hashes, base, eth_types_json_serialization, transactions],
   ../../eth/rlp,
   ssz_serialization,
   ../common/test_transactions
 
-
 const
   recipient = address"095e7baea6a6c7c4c2dfeb977efac326af552d87"
-  zeroG1    = bytes48"0xc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-  source    = address"0x0000000000000000000000000000000000000001"
-  storageKey= default(Bytes32)
-  accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]
-  abcdef    = hexToSeqByte("abcdef")
+  zeroG1 =
+    bytes48"0xc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  source = address"0x0000000000000000000000000000000000000001"
+  storageKey = default(Bytes32)
+  accesses = @[AccessPair(address: source, storageKeys: @[storageKey])]
+  abcdef = hexToSeqByte("abcdef")
 
 template sszRoundTrip(txFunc: untyped, i: int) =
   let oldTx = txFunc(i)
@@ -64,17 +64,16 @@ suite "SSZ Transactions (full round-trip)":
   test "Dynamic Fee Tx":
     sszRoundTrip(tx5, 6)
 
-# Will never work as blob Txns must have a To
+  # Will never work as blob Txns must have a To
   # test "NetworkBlob Tx":
   #   sszRoundTrip(tx6, 7)
 
   # test "Minimal Blob Tx":
   #   sszRoundTrip(tx7, 8)
 
-# Will never work as blob Txns must have a To
+  # Will never work as blob Txns must have a To
   test "Minimal Blob Tx contract creation":
     sszRoundTrip(tx8, 9)
-
 
 suite "Transactions SSZ Codec: 7702 SetCode (RLP ↔ SSZ)":
   test "7702 with auth: RLP -> SSZ":
@@ -145,7 +144,8 @@ suite "Transactions SSZ Codec: 7702 SetCode (RLP ↔ SSZ)":
 
     let sszTx = toSszTx(tx)
     check sszTx.rlp.setCode.payload.authorization_list.len == 1
-    check sszTx.rlp.setCode.payload.authorization_list[0].payload.kind == authReplayableBasic
+    check sszTx.rlp.setCode.payload.authorization_list[0].payload.kind ==
+      authReplayableBasic
     let backTx = toOldTx(sszTx)
     check backTx.authorizationList[0].chainId == ChainId(0.u256)
     check backTx == tx
@@ -154,13 +154,13 @@ suite "Transactions SSZ Codec: 7702 SetCode (RLP ↔ SSZ)":
     var tx = txEip7702(1)
 
     tx.authorizationList.add transactions.Authorization(
-        chainId: ChainId(0.u256),
-        address: recipient,
-        nonce: 5.AccountNonce,
-        yParity: 1,
-        r: 999.u256,
-        s: 888.u256
-      )
+      chainId: ChainId(0.u256),
+      address: recipient,
+      nonce: 5.AccountNonce,
+      yParity: 1,
+      r: 999.u256,
+      s: 888.u256,
+    )
 
     let sszTx = toSszTx(tx)
     let authList = sszTx.rlp.setCode.payload.authorization_list
@@ -177,15 +177,15 @@ suite "Transactions SSZ Codec: 7702 SetCode (RLP ↔ SSZ)":
 
   test "7702 with multiple authorizations (5 entries)":
     var tx = txEip7702(1)
-    for i in 1..4:
+    for i in 1 .. 4:
       tx.authorizationList.add transactions.Authorization(
-            chainId: ChainId(u256(i)),
-            address: Address.copyFrom(newSeqWith(20, byte(i))),
-            nonce: AccountNonce(i * 10),
-            yParity: uint8(i mod 2),
-            r: u256(100 + i),
-            s: u256(200 + i)
-          )
+        chainId: ChainId(u256(i)),
+        address: Address.copyFrom(newSeqWith(20, byte(i))),
+        nonce: AccountNonce(i * 10),
+        yParity: uint8(i mod 2),
+        r: u256(100 + i),
+        s: u256(200 + i),
+      )
 
     let sszTx = toSszTx(tx)
     check sszTx.rlp.setCode.payload.authorization_list.len == 5
@@ -194,10 +194,8 @@ suite "Transactions SSZ Codec: 7702 SetCode (RLP ↔ SSZ)":
     check backTx.authorizationList.len == 5
     check backTx == tx
 
-    for i in 0..4:
+    for i in 0 .. 4:
       check backTx.authorizationList[i] == tx.authorizationList[i]
-
-
 
   test "7702 authorization with zero address":
     var tx = txEip7702(1)
@@ -234,7 +232,6 @@ suite "Transactions SSZ Codec: 7702 SetCode (RLP ↔ SSZ)":
     check backTx.authorizationList.len == tx.authorizationList.len
     check backTx == tx
 
-
 suite "Transactions SSZ Codec: Double Roundtrip":
   test "Legacy Call: double roundtrip":
     sszDoubleRoundTrip(tx0, 1)
@@ -257,16 +254,16 @@ suite "Transactions SSZ Codec: Double Roundtrip":
   test "7702 SetCode: double roundtrip":
     sszDoubleRoundTrip(txEip7702, 1)
 
-
 suite "Transactions SSZ Codec: Mixed Transaction Lists":
   test "Mixed list including 7702":
-    let txs = @[
-      tx0(1),      # Legacy
-      tx2(2),      # AccessList
-      tx5(3),      # DynamicFee
-      tx8(4),      # Blob
-      txEip7702(5) # 7702 SetCode
-    ]
+    let txs =
+      @[
+        tx0(1), # Legacy
+        tx2(2), # AccessList
+        tx5(3), # DynamicFee
+        tx8(4), # Blob
+        txEip7702(5), # 7702 SetCode
+      ]
 
     var sszTxs: seq[typeof(toSszTx(txs[0]))] = @[]
     for tx in txs:
@@ -274,14 +271,13 @@ suite "Transactions SSZ Codec: Mixed Transaction Lists":
 
     check sszTxs.len == 5
 
-
     var backTxs: seq[transactions.Transaction] = @[]
     for sszTx in sszTxs:
       backTxs.add toOldTx(sszTx)
 
     check backTxs.len == 5
 
-    for i in 0..<txs.len:
+    for i in 0 ..< txs.len:
       check backTxs[i].txType == txs[i].txType
       check backTxs[i].nonce == txs[i].nonce
 

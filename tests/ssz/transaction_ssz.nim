@@ -159,7 +159,7 @@ suite "SSZ Transactions (round-trip)":
     check d.rlp.create.payload.txType == 0x02'u8
     check d.rlp.create.payload.input.len == abcdef.len
 
-  # # when compiles(BlobFeesPerGas):
+    # # when compiles(BlobFeesPerGas):
     txRT "SSZ: 4844 Blob Tx",
       (
         block:
@@ -184,22 +184,21 @@ suite "SSZ Transactions (round-trip)":
       check d.rlp.blob.payload.txType == 0x03'u8
       check d.rlp.blob.payload.blob_versioned_hashes.len == 1
 
-
 suite "SSZ Transactions: 7702 SetCode (round-trip)":
-
   txRT "SSZ: 7702 SetCode with replayable auth",
     (
       block:
-        let auths: seq[AuthTuple] = @[
-          (
-            chain_id: ChainId(0.u256),  # Replayable
-            address: source,
-            nonce: 0'u64,
-            y_parity: 0'u8,
-            r: 1.u256,
-            s: 1.u256
-          )
-        ]
+        let auths: seq[AuthTuple] =
+          @[
+            (
+              chain_id: ChainId(0.u256), # Replayable
+              address: source,
+              nonce: 0'u64,
+              y_parity: 0'u8,
+              r: 1.u256,
+              s: 1.u256,
+            )
+          ]
         Transaction(
           txType = 0x04'u8,
           chain_id = ChainId(1.u256),
@@ -218,22 +217,24 @@ suite "SSZ Transactions: 7702 SetCode (round-trip)":
     check d.rlp.setCode.payload.txType == 0x04'u8
     check d.rlp.setCode.payload.authorization_list.len == 1
     check d.rlp.setCode.payload.authorization_list[0].payload.kind == authReplayableBasic
-    check d.rlp.setCode.payload.authorization_list[0].payload.replayable.address == source
+    check d.rlp.setCode.payload.authorization_list[0].payload.replayable.address ==
+      source
     check d.rlp.setCode.payload.authorization_list[0].payload.replayable.nonce == 0
 
   txRT "SSZ: 7702 SetCode with basic auth",
     (
       block:
-        let auths: seq[AuthTuple] = @[
-          (
-            chain_id: ChainId(1.u256),
-            address: recipient,
-            nonce: 5'u64,
-            y_parity: 1'u8,
-            r: 100.u256,
-            s: 200.u256
-          )
-        ]
+        let auths: seq[AuthTuple] =
+          @[
+            (
+              chain_id: ChainId(1.u256),
+              address: recipient,
+              nonce: 5'u64,
+              y_parity: 1'u8,
+              r: 100.u256,
+              s: 200.u256,
+            )
+          ]
         Transaction(
           txType = 0x04'u8,
           chain_id = ChainId(1.u256),
@@ -252,39 +253,41 @@ suite "SSZ Transactions: 7702 SetCode (round-trip)":
     check d.rlp.setCode.payload.txType == 0x04'u8
     check d.rlp.setCode.payload.authorization_list.len == 1
     check d.rlp.setCode.payload.authorization_list[0].payload.kind == authBasic
-    check d.rlp.setCode.payload.authorization_list[0].payload.basic.chain_id == ChainId(1.u256)
+    check d.rlp.setCode.payload.authorization_list[0].payload.basic.chain_id ==
+      ChainId(1.u256)
     check d.rlp.setCode.payload.authorization_list[0].payload.basic.address == recipient
     check d.rlp.setCode.payload.authorization_list[0].payload.basic.nonce == 5
 
   txRT "SSZ: 7702 SetCode with mixed auth list",
     (
       block:
-        let auths: seq[AuthTuple] = @[
-          (
-            chain_id: ChainId(0.u256),  # Replayable
-            address: source,
-            nonce: 1'u64,
-            y_parity: 0'u8,
-            r: 10.u256,
-            s: 20.u256
-          ),
-          (
-            chain_id: ChainId(1.u256),  # Basic
-            address: recipient,
-            nonce: 2'u64,
-            y_parity: 1'u8,
-            r: 30.u256,
-            s: 40.u256
-          ),
-          (
-            chain_id: ChainId(5.u256),  # Basic
-            address: source,
-            nonce: 3'u64,
-            y_parity: 0'u8,
-            r: 50.u256,
-            s: 60.u256
-          )
-        ]
+        let auths: seq[AuthTuple] =
+          @[
+            (
+              chain_id: ChainId(0.u256), # Replayable
+              address: source,
+              nonce: 1'u64,
+              y_parity: 0'u8,
+              r: 10.u256,
+              s: 20.u256,
+            ),
+            (
+              chain_id: ChainId(1.u256), # Basic
+              address: recipient,
+              nonce: 2'u64,
+              y_parity: 1'u8,
+              r: 30.u256,
+              s: 40.u256,
+            ),
+            (
+              chain_id: ChainId(5.u256), # Basic
+              address: source,
+              nonce: 3'u64,
+              y_parity: 0'u8,
+              r: 50.u256,
+              s: 60.u256,
+            ),
+          ]
         Transaction(
           txType = 0x04'u8,
           chain_id = ChainId(1.u256),
@@ -307,20 +310,19 @@ suite "SSZ Transactions: 7702 SetCode (round-trip)":
     check d.rlp.setCode.payload.authorization_list[2].payload.kind == authBasic
     check d.rlp.setCode.payload.access_list.len == 1
 
-
-
 suite "SSZ: Mixed transaction lists ":
   test "SSZ: seq[Transaction] ":
-    let auths: seq[AuthTuple] = @[
-      (
-        chain_id: ChainId(1.u256),
-        address: recipient,
-        nonce: 0'u64,
-        y_parity: 0'u8,
-        r: 1.u256,
-        s: 1.u256
-      )
-    ]
+    let auths: seq[AuthTuple] =
+      @[
+        (
+          chain_id: ChainId(1.u256),
+          address: recipient,
+          nonce: 0'u64,
+          y_parity: 0'u8,
+          r: 1.u256,
+          s: 1.u256,
+        )
+      ]
 
     let t0 = Transaction(
       txType = 0x00'u8,
@@ -348,7 +350,7 @@ suite "SSZ: Mixed transaction lists ":
     )
 
     let t2 = Transaction(
-      txType = 0x04'u8,  # 7702
+      txType = 0x04'u8, # 7702
       chain_id = ChainId(1.u256),
       nonce = 3'u64,
       gas = 50_000'u64,

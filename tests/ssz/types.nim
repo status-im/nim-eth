@@ -3,11 +3,9 @@ import
   ssz_serialization,
   ssz_serialization/merkleization,
   ../../eth/common/[addresses, base, hashes],
-  ../../eth/ssz/[ transaction_builder, signatures, adapter,sszcodec],
+  ../../eth/ssz/[transaction_builder, signatures, adapter, sszcodec],
   ../../eth/ssz/transaction_ssz as ssz_tx,
   ../../eth/common/transactions as rlp_tx_mod
-
-
 
 suite "SSZ: Hash32 distinct Bytes32 roundtrip":
   test "encode/decode parity":
@@ -65,7 +63,7 @@ suite "Authorization List Conversion":
       nonce: AccountNonce(5),
       yParity: 0,
       r: 123.u256,
-      s: 456.u256
+      s: 456.u256,
     )
     let sszAuths = toSszAuthList(@[rlpAuth])
     check sszAuths.len == 1
@@ -89,7 +87,7 @@ suite "Authorization List Conversion":
       nonce: AccountNonce(10),
       yParity: 1,
       r: 789.u256,
-      s: 101112.u256
+      s: 101112.u256,
     )
     let sszAuths = toSszAuthList(@[rlpAuth])
     check sszAuths.len == 1
@@ -100,23 +98,33 @@ suite "Authorization List Conversion":
     check backRlp[0] == rlpAuth
 
   test "Mixed auth list (2 replayable + 1 basic)":
-    let auths = @[
-      rlp_tx_mod.Authorization(
-        chainId: ChainId(0.u256),
-        address: address"0x1111111111111111111111111111111111111111",
-        nonce: AccountNonce(1), yParity: 0, r: 1.u256, s: 2.u256
-      ),
-      rlp_tx_mod.Authorization(
-        chainId: ChainId(0.u256),
-        address: address"0x2222222222222222222222222222222222222222",
-        nonce: AccountNonce(2), yParity: 1, r: 3.u256, s: 4.u256
-      ),
-      rlp_tx_mod.Authorization(
-        chainId: ChainId(5.u256),
-        address: address"0x3333333333333333333333333333333333333333",
-        nonce: AccountNonce(3), yParity: 0, r: 5.u256, s: 6.u256
-      )
-    ]
+    let auths =
+      @[
+        rlp_tx_mod.Authorization(
+          chainId: ChainId(0.u256),
+          address: address"0x1111111111111111111111111111111111111111",
+          nonce: AccountNonce(1),
+          yParity: 0,
+          r: 1.u256,
+          s: 2.u256,
+        ),
+        rlp_tx_mod.Authorization(
+          chainId: ChainId(0.u256),
+          address: address"0x2222222222222222222222222222222222222222",
+          nonce: AccountNonce(2),
+          yParity: 1,
+          r: 3.u256,
+          s: 4.u256,
+        ),
+        rlp_tx_mod.Authorization(
+          chainId: ChainId(5.u256),
+          address: address"0x3333333333333333333333333333333333333333",
+          nonce: AccountNonce(3),
+          yParity: 0,
+          r: 5.u256,
+          s: 6.u256,
+        ),
+      ]
     let sszAuths = toSszAuthList(auths)
     check sszAuths.len == 3
     check sszAuths[0].payload.kind == authReplayableBasic
@@ -125,7 +133,7 @@ suite "Authorization List Conversion":
 
     let backRlp = toRlpAuthList(sszAuths)
     check backRlp.len == 3
-    for i in 0..2:
+    for i in 0 .. 2:
       check backRlp[i] == auths[i]
 
   test "Authorization with max values":
@@ -135,7 +143,7 @@ suite "Authorization List Conversion":
       nonce: AccountNonce(high(uint64)),
       yParity: 1,
       r: u256(high(uint64)),
-      s: u256(high(uint64))
+      s: u256(high(uint64)),
     )
     let ssz = toSszSignedAuthList(@[auth])
     let back = toRlpAuthList(ssz)

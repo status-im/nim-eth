@@ -1,9 +1,6 @@
 import
-  ssz_serialization, stint,
-  ../common/[addresses, base, hashes],
-  ./signatures,
-  ./adapter
-  
+  ssz_serialization, stint, ../common/[addresses, base, hashes], ./signatures, ./adapter
+
 export adapter
 
 type SignedTx*[P] = object
@@ -141,22 +138,18 @@ type RlpBlobTransactionPayload* {.sszActiveFields: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1
   blob_versioned_hashes*: seq[VersionedHash]
 
 type
-  RlpReplayableBasicAuthorizationPayload* {.
-    sszActiveFields: [1, 0, 1, 1]
-  .} = object
-    magic*: TransactionType   # 0x05 (Auth)
+  RlpReplayableBasicAuthorizationPayload* {.sszActiveFields: [1, 0, 1, 1].} = object
+    magic*: TransactionType # 0x05 (Auth)
     address*: Address
     nonce*: uint64
 
-  RlpBasicAuthorizationPayload* {.
-    sszActiveFields: [1, 1, 1, 1]
-  .} = object
-    magic*: TransactionType   # 0x05 (Auth)
+  RlpBasicAuthorizationPayload* {.sszActiveFields: [1, 1, 1, 1].} = object
+    magic*: TransactionType # 0x05 (Auth)
     chain_id*: ChainId
     address*: Address
     nonce*: uint64
 
-  AuthorizationKind*  = enum
+  AuthorizationKind* = enum
     authReplayableBasic
     authBasic
 
@@ -208,19 +201,19 @@ type
   #   RlpCreateTransaction | RlpBlobTransaction | RlpSetCodeTransaction
 
 type
-  RLPTransactionKind*  = enum
-    txLegacyReplayableBasic=0
-    txLegacyReplayableCreate=1
-    txLegacyBasic=2
-    txLegacyCreate=3
-    txAccessListBasic=4
-    txAccessListCreate=5
-    txBasic=6
-    txCreate=7
-    txBlob=8
-    txSetCode=9
+  RLPTransactionKind* = enum
+    txLegacyReplayableBasic = 0
+    txLegacyReplayableCreate = 1
+    txLegacyBasic = 2
+    txLegacyCreate = 3
+    txAccessListBasic = 4
+    txAccessListCreate = 5
+    txBasic = 6
+    txCreate = 7
+    txBlob = 8
+    txSetCode = 9
 
-  RlpTransactionObject*  = object
+  RlpTransactionObject* = object
     case kind*: RLPTransactionKind
     of txLegacyReplayableBasic:
       legacyReplayableBasic*: RlpLegacyReplayableBasicTransaction
@@ -245,8 +238,8 @@ type
 
 type
   TransactionKind* {.pure.} = enum
-    TxNone=0
-    RlpTransaction=1
+    TxNone = 0
+    RlpTransaction = 1
 
   Transaction* = object
     case kind*: TransactionKind
@@ -256,11 +249,12 @@ type
       rlp*: RlpTransactionObject
 
 # Not importing from common/transaction as it would cause problem with the trensaction deffined in common/transactions
-type
-  AuthTuple* = tuple
-    chain_id: ChainId
-    address:  Address
-    nonce:    uint64
-    y_parity: uint8
-    r:        UInt256
-    s:        UInt256
+type AuthTuple* =
+  tuple[
+    chain_id: ChainId,
+    address: Address,
+    nonce: uint64,
+    y_parity: uint8,
+    r: UInt256,
+    s: UInt256,
+  ]

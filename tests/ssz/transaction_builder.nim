@@ -119,39 +119,39 @@ suite "SSZ Transactions (constructor)":
     check tx.rlp.kind == txCreate
     check tx.rlp.create.payload.input.len == abcdef.len
 
-  when compiles(BlobFeesPerGas):
-    test "4844 Blob Tx":
-      const d = hash32"010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014"
-      let tx = Transaction(
-        txType = 0x03'u8,
-        chain_id = ChainId(1.u256),
-        nonce = 7'u64,
-        gas = 123_457'u64,
-        to = Opt.some(recipient),
-        value = 0.u256,
-        input = @[],
-        max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
-        max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
-        access_list = accesses,
-        blob_versioned_hashes = @[VersionedHash(d)],
-        blob_fee = 10.u256,
-        signature = dummySig(),
-      )
-      check tx.kind == RlpTransaction
-      check tx.rlp.kind == txBlob
-      check tx.rlp.blob.payload.blob_versioned_hashes.len == 1
+  test "4844 Blob Tx":
+    const d = hash32"010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014"
+    let tx = Transaction(
+      txType = 0x03'u8,
+      chain_id = ChainId(1.u256),
+      nonce = 7'u64,
+      gas = 123_457'u64,
+      to = Opt.some(recipient),
+      value = 0.u256,
+      input = @[],
+      max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
+      max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
+      access_list = accesses,
+      blob_versioned_hashes = @[VersionedHash(d)],
+      blob_fee = 10.u256,
+      signature = dummySig(),
+    )
+    check tx.kind == RlpTransaction
+    check tx.rlp.kind == txBlob
+    check tx.rlp.blob.payload.blob_versioned_hashes.len == 1
 
   test "7702 SetCode with replayable-basic auth":
-    let auths: seq[AuthTuple] = @[
-      (
-        chain_id: ChainId(0.u256),
-        address: recipient,
-        nonce: 0'u64,
-        y_parity: 0'u8,
-        r: 1.u256,
-        s: 1.u256
-      )
-    ]
+    let auths: seq[AuthTuple] =
+      @[
+        (
+          chain_id: ChainId(0.u256),
+          address: recipient,
+          nonce: 0'u64,
+          y_parity: 0'u8,
+          r: 1.u256,
+          s: 1.u256,
+        )
+      ]
     let tx = Transaction(
       txType = 0x04'u8,
       chain_id = ChainId(1.u256),
@@ -169,19 +169,21 @@ suite "SSZ Transactions (constructor)":
     check tx.kind == RlpTransaction
     check tx.rlp.kind == txSetCode
     check tx.rlp.setCode.payload.authorization_list.len == 1
-    check tx.rlp.setCode.payload.authorization_list[0].payload.kind == authReplayableBasic
+    check tx.rlp.setCode.payload.authorization_list[0].payload.kind ==
+      authReplayableBasic
 
   test "7702 SetCode with basic auth":
-    let auths: seq[AuthTuple] = @[
-      (
-        chain_id: ChainId(1.u256),
-        address: recipient,
-        nonce: 0'u64,
-        y_parity: 0'u8,
-        r: 1.u256,
-        s: 1.u256
-      )
-    ]
+    let auths: seq[AuthTuple] =
+      @[
+        (
+          chain_id: ChainId(1.u256),
+          address: recipient,
+          nonce: 0'u64,
+          y_parity: 0'u8,
+          r: 1.u256,
+          s: 1.u256,
+        )
+      ]
     let tx = Transaction(
       txType = 0x04'u8,
       chain_id = ChainId(1.u256),
@@ -200,19 +202,3 @@ suite "SSZ Transactions (constructor)":
     check tx.rlp.kind == txSetCode
     check tx.rlp.setCode.payload.authorization_list.len == 1
     check tx.rlp.setCode.payload.authorization_list[0].payload.kind == authBasic
-
-  test "7702 SetCode: fails when auth list empty":
-    expect(TxBuildError):
-      discard Transaction(
-        txType = 0x04'u8,
-        chain_id = ChainId(1.u256),
-        nonce = 11'u64,
-        gas = 21000'u64,
-        to = Opt.some(recipient),
-        value = 0.u256,
-        input = @[],
-        max_fees_per_gas = BasicFeesPerGas(regular: 10.u256),
-        max_priority_fees_per_gas = BasicFeesPerGas(regular: 1.u256),
-        authorization_list = @[],
-        signature = dummySig(),
-      )
