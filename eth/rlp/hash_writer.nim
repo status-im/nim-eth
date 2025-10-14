@@ -8,7 +8,7 @@
 import nimcrypto/keccak, ./priv/defs, utils, ../common/hashes, length_writer
 
 type RlpHashWriter* = object
-  keccak: keccak.keccak256
+  keccak: KECCACK256
   lengths*: seq[int]
   wrapLengths*: seq[int]
   listCount: int
@@ -97,7 +97,9 @@ func reInit*(self: var RlpHashWriter, tracker: var RlpLengthTracker) =
   self.wrapLengths = move(tracker.wrapLengths)
 
 template finish*(self: var RlpHashWriter): Hash32 =
-  self.keccak.finish.to(Hash32)
+  var buff: array[32, byte]
+  self.keccak.finish(buff)
+  Hash32(buff)
 
 func clear*(self: var RlpHashWriter) =
   # Prepare writer for reuse
