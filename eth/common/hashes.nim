@@ -15,6 +15,8 @@
 ## replaced with proof-of-stake.
 
 import std/[typetraits, hashes], nimcrypto/keccak, ./base, stew/assign2
+import ssz_serialization/codec
+import ssz_serialization/merkleization
 
 export hashes, keccak.update, keccak.finish
 
@@ -102,3 +104,11 @@ template withKeccak256*(body: untyped): Hash32 =
   var h {.inject.}: keccak.keccak256
   body
   h.finish().to(Hash32)
+
+# template toSszType*(T: type Hash32): auto =
+#   T.data()
+
+# proc fromSszBytes*(T: type Hash32, bytes: openArray[byte]): T {.raises: [SszError].} =
+#   if bytes.len != sizeof(result.data()):
+#     raiseIncorrectSize T
+#     copyMem(addr result.data()[0], unsafeAddr bytes[0], sizeof(result.data()))
