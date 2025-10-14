@@ -1,7 +1,7 @@
 import
   std/net,
   testutils/fuzzing,
-  ../../../eth/p2p/discoveryv5/[encoding, enr, sessions, node]
+  ../../../eth/p2p/discoveryv5/[encoding, sessions, node]
 
 init:
   const

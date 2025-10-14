@@ -7,6 +7,8 @@
 #    http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
+
+{.push raises: [], gcsafe.}
 {.used.}
 
 import
@@ -16,7 +18,6 @@ import
 
 const
   recipient = address"095e7baea6a6c7c4c2dfeb977efac326af552d87"
-  zeroG1    = bytes48"0xc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
   source    = address"0x0000000000000000000000000000000000000001"
   storageKey= default(Bytes32)
   accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]

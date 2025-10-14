@@ -7,10 +7,12 @@
 {.used.}
 
 import
-  std/[sequtils, net],
+  std/[sequtils, net, math],
   stew/byteutils,
   unittest2,
-  ../../eth/p2p/discoveryv5/enr, ../../eth/rlp, ../../eth/common/keys
+  ../../eth/enr/enr,
+  ../../eth/p2p/discoveryv5/messages,
+  ../../eth/p2p/discoveryv5/messages_encoding
 
 let rng = newRng()
 
@@ -30,6 +32,27 @@ suite "ENR test vector tests":
     ip = "7f000001"
     secp256k1 = "03ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138"
     udp = 0x765f
+
+  test "Test vector full encode loop":
+    let res = Record.fromURI(uri)
+    check res.isOk()
+    let r = res.value()
+
+    const
+      maxNodesPerMessage = 3
+      nodesLen = 11
+
+    let reqId = RequestId.init(rng[])
+
+    var message: NodesMessage
+    message.total = ceil(nodesLen / maxNodesPerMessage).uint32
+
+    for i in 0 ..< nodesLen:
+      message.enrs.add(r)
+
+    if message.enrs.len != 0:
+      let z = encodeMessage(message, reqId)
+      discard z
 
   test "Test vector full encode loop":
     let res = Record.fromURI(uri)

@@ -11,7 +11,8 @@ import
   std/[options, sequtils, tables, net],
   unittest2,
   stint, stew/byteutils,
-  ../../eth/p2p/discoveryv5/[messages_encoding, encoding, enr, node, sessions],
+  ../../eth/enr/enr,
+  ../../eth/p2p/discoveryv5/[messages_encoding, encoding, node, sessions],
   ../stubloglevel
 
 let rng = newRng()
