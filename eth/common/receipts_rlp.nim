@@ -15,7 +15,7 @@ export addresses_rlp, base_rlp, hashes_rlp, receipts, rlp
 
 # RLP encoding for Receipt (eth/68)
 proc append*(w: var RlpWriter, rec: Receipt) =
-  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt}:
+  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip7807Receipt}:
     w.appendDetached(rec.receiptType.uint8)
 
   w.startList(4)
@@ -29,7 +29,15 @@ proc append*(w: var RlpWriter, rec: Receipt) =
 
 # RLP encoding for StoredReceipt (eth/69)
 proc append*(w: var RlpWriter, rec: StoredReceipt) =
-  w.startList(4)
+
+  let tailLen =
+    if rec.receiptType == Eip7807Receipt:
+      case rec.eip7807ReceiptType
+      of Eip7807Basic:   3        # subtype, origin, txGasUsed
+      of Eip7807Create:  4        # + contractAddress
+      of Eip7807SetCode: 4        # + authorities
+    else: 0
+  w.startList(4 + tailLen)
   w.append(rec.receiptType.uint)
   if rec.isHash:
     w.append(rec.hash)
@@ -37,6 +45,15 @@ proc append*(w: var RlpWriter, rec: StoredReceipt) =
     w.append(rec.status.uint8)
   w.append(rec.cumulativeGasUsed)
   w.append(rec.logs)
+
+  if rec.receiptType == Eip7807Receipt:
+    w.append(rec.eip7807ReceiptType.uint)
+    w.append(rec.origin)
+    w.append(rec.txGasUsed)
+    case rec.eip7807ReceiptType
+    of Eip7807Create:  w.append(rec.contactAddress)
+    of Eip7807SetCode: w.append(rec.authorities)
+    of Eip7807Basic:   discard
 
 # Decode legacy receipt (eth/68)
 proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].} =
@@ -71,7 +88,7 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].}
   var txVal: ReceiptType
   if checkedEnumAssign(txVal, recType):
     case txVal
-    of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt:
+    of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip7807Receipt:
       receipt.receiptType = txVal
     of LegacyReceipt:
       raise newException(MalformedRlpError, "Invalid ReceiptType: " & $recType)
@@ -115,6 +132,20 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpErr
 
   rlp.read(rec.cumulativeGasUsed)
   rlp.read(rec.logs)
+
+  if rec.receiptType == Eip7807Receipt:
+    let st = rlp.read(uint)
+    if not checkedEnumAssign(rec.eip7807ReceiptType, st):
+      raise newException(UnsupportedRlpError, "Bad Eip7807ReceiptType: " & $st)
+    rlp.read(rec.origin)
+    rlp.read(rec.txGasUsed)
+    case rec.eip7807ReceiptType
+    of Eip7807Create:  rlp.read(rec.contactAddress)
+    of Eip7807SetCode: rlp.read(rec.authorities)
+    of Eip7807Basic:   discard
+
+    if rlp.hasData:
+      raise newException(MalformedRlpError, "Trailing fields in StoredReceipt")
 
   rec
 

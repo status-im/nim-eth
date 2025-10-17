@@ -34,6 +34,7 @@ type
     TxEip1559   # 2
     TxEip4844   # 3
     TxEip7702   # 4
+    TxEip7807   # 5
 
   Transaction* = object
     txType*        : TxType               # EIP-2718
