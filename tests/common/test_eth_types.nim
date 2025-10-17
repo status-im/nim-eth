@@ -110,6 +110,56 @@ suite "Block encodings":
       check:
         dh.blockAccessListHash.isNone()
 
+  test "EIP-7928 block access lists":
+    let
+      accChanges = AccountChanges(
+        address: address"0x52908400098527886E0F7030069857D2E4169EE7",
+        codeChanges: @[(1.BlockAccessIndex, @[0x12.byte, 0x23, 0x34])]
+      )
+      bal = @[accChanges]
+
+    block:
+      let
+        rlpBytes = rlp.encode(bal)
+        dbal = rlp.decode(rlpBytes, BlockAccessList)
+
+      check:
+        dbal.len() == 1
+        dbal[0].address == address"0x52908400098527886E0F7030069857D2E4169EE7"
+        dbal[0].codeChanges.len() == 1
+        dbal[0].codeChanges[0].blockAccessIndex == 1.BlockAccessIndex
+        dbal[0].codeChanges[0].newCode == @[0x12.byte, 0x23, 0x34]
+
+    block:
+      let
+        blockBodyWithBal = BlockBody(
+          transactions: @[transactions.Transaction(nonce: 1)],
+          withdrawals: Opt.some(@[Withdrawal()]),
+          blockAccessList: Opt.some(bal)
+        )
+        rlpBytes = rlp.encode(blockBodyWithBal)
+        dblk = rlp.decode(rlpBytes, BlockBody)
+      check dblk.blockAccessList.isSome()
+
+      let dbal = dblk.blockAccessList.get()
+      check:
+        dbal.len() == 1
+        dbal[0].address == address"0x52908400098527886E0F7030069857D2E4169EE7"
+        dbal[0].codeChanges.len() == 1
+        dbal[0].codeChanges[0].blockAccessIndex == 1.BlockAccessIndex
+        dbal[0].codeChanges[0].newCode == @[0x12.byte, 0x23, 0x34]
+
+    block:
+      let
+        blockBodyNoBal = BlockBody(
+          transactions: @[transactions.Transaction(nonce: 1)]
+        )
+        rlpBytes = rlp.encode(blockBodyNoBal)
+        dblk = rlp.decode(rlpBytes, BlockBody)
+      check:
+        dblk.blockAccessList.isNone()
+        dblk == blockBodyNoBal
+
 suite "Address":
   test "Bytes conversion":
     let bytes =
