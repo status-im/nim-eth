@@ -66,7 +66,6 @@ type
   BlockHeader* {.deprecated: "Header".} = Header
   BlockNonce* {.deprecated: "Bytes8".} = Bytes8
   BloomFilter* {.deprecated: "Bloom".} = Bloom
-  StorageKey* {.deprecated: "Bytes32".} = Bytes32
   VersionedHashes* {.deprecated: "seq[VersionedHash]".} = seq[VersionedHash]
 
 func toBlockNonce*(n: uint64): Bytes8 {.deprecated.} =
