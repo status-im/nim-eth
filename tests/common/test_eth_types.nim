@@ -77,6 +77,39 @@ suite "Block encodings":
     check dh.parentBeaconBlockRoot.isSome
     check dh.parentBeaconBlockRoot.get == testHash
 
+  test "EIP-7928 blockAccessListHash field":
+    block:
+      let header = Header(
+        baseFeePerGas: Opt.some(0.u256),
+        withdrawalsRoot: Opt.some(testHash),
+        blobGasUsed: Opt.some(1'u64),
+        excessBlobGas: Opt.some(2'u64),
+        parentBeaconBlockRoot: Opt.some(testHash),
+        requestsHash: Opt.some(testHash),
+        blockAccessListHash: Opt.some(testHash)
+      )
+      let
+        rlpBytes = rlp.encode(header)
+        dh = rlp.decode(rlpBytes, Header)
+      check:
+        dh.blockAccessListHash.isSome()
+        dh.blockAccessListHash.get() == testHash
+
+    block:
+      let header = Header(
+        baseFeePerGas: Opt.some(0.u256),
+        withdrawalsRoot: Opt.some(testHash),
+        blobGasUsed: Opt.some(1'u64),
+        excessBlobGas: Opt.some(2'u64),
+        parentBeaconBlockRoot: Opt.some(testHash),
+        requestsHash: Opt.some(testHash)
+      )
+      let
+        rlpBytes = rlp.encode(header)
+        dh = rlp.decode(rlpBytes, Header)
+      check:
+        dh.blockAccessListHash.isNone()
+
 suite "Address":
   test "Bytes conversion":
     let bytes =
