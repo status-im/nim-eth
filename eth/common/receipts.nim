@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import 
+import
   ./[addresses, base, hashes, transactions],
   ../bloom
 
@@ -30,6 +30,7 @@ type
     # Eip1559Receipt = TxEip1559
     # Eip4844Receipt = TxEip4844
     # Eip7702Receipt = TxEip7702
+    # Eip7807Receipt = TxEip7807
 
   Receipt* = object
     receiptType*      : ReceiptType
@@ -39,6 +40,10 @@ type
     cumulativeGasUsed*: GasInt
     logsBloom*        : Bloom
     logs*             : seq[Log]
+    # authorities*      : seq[Address]
+    # txGasUsed*        : uint64 # Gas used by THIS transaction only
+    # contactAddress*   : Address # Address of the contract being called/created
+    # origin*           : Address #sender address of the transaction
 
   StoredReceipt* = object
     receiptType*      : ReceiptType
@@ -47,6 +52,17 @@ type
     hash*             : Hash32
     cumulativeGasUsed*: GasInt
     logs*             : seq[Log]
+    eip7807ReceiptType*: Eip7807ReceiptType
+    authorities*      : seq[Address]
+    txGasUsed*        : uint64 # Gas used by THIS transaction only
+    contactAddress*   : Address # Address of the contract being called/created
+    origin*           : Address #sender address of the transaction
+
+  Eip7807ReceiptType* = enum
+    Eip7807Create
+    Eip7807Basic
+    Eip7807SetCode
+
 
 const
   LegacyReceipt*  = TxLegacy
@@ -54,6 +70,7 @@ const
   Eip1559Receipt* = TxEip1559
   Eip4844Receipt* = TxEip4844
   Eip7702Receipt* = TxEip7702
+  Eip7807Receipt* = TxEip7807
 
 func hasStatus*(rec: Receipt): bool {.inline.} =
   rec.isHash == false
@@ -75,13 +92,18 @@ func logsBloom(logs: openArray[Log]): BloomFilter =
   res
 
 func to*(rec: Receipt, _: type StoredReceipt): StoredReceipt =
+  # fill in default values for the new fields
   StoredReceipt(
     receiptType       : rec.receiptType,
     isHash            : rec.isHash,
     status            : rec.status,
     hash              : rec.hash,
     cumulativeGasUsed : rec.cumulativeGasUsed,
-    logs              : rec.logs
+    logs              : rec.logs,
+    authorities       : @[],
+    txGasUsed         : 0'u64,
+    contactAddress    : default(Address), # default address
+    origin            : default(Address)  # default address
   )
 
 func to*(rec: StoredReceipt, _: type Receipt): Receipt =
