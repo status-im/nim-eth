@@ -22,14 +22,14 @@ type
     transactions*:    seq[Transaction]
     uncles*:          seq[Header]
     withdrawals*:     Opt[seq[Withdrawal]] # EIP-4895
-    blockAccessList*: BlockAccessList      # EIP-7928
+    blockAccessList*: Opt[BlockAccessList] # EIP-7928
 
   Block* = object
     header*     :     Header
     transactions*:    seq[Transaction]
     uncles*     :     seq[Header]
     withdrawals*:     Opt[seq[Withdrawal]] # EIP-4895
-    blockAccessList*: BlockAccessList      # EIP-7928
+    blockAccessList*: Opt[BlockAccessList] # EIP-7928
 
 const
   EMPTY_UNCLE_HASH* = hash32"1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"

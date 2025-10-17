@@ -7,11 +7,7 @@
 
 {.push raises: [], gcsafe.}
 
-# import
-#   "."/[addresses_rlp, base_rlp, hashes_rlp, transactions],
-#   ../rlp,
-#   ../rlp/[length_writer, two_pass_writer, hash_writer]
+import
+  ./[addresses_rlp, base_rlp, hashes_rlp, block_access_lists], ../rlp
 
-# from stew/objects import checkedEnumAssign
-
-# export addresses_rlp, base_rlp, hashes_rlp, transactions, rlp
+export addresses_rlp, base_rlp, hashes_rlp, block_access_lists, rlp
