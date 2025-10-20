@@ -6,34 +6,16 @@
 
 import
   "."/[
-    accounts_rlp,
-    addresses_rlp,
-    base_rlp,
-    block_access_lists_rlp,
-    eth_types,
-    hashes_rlp,
-    headers_rlp,
-    receipts_rlp,
-    times_rlp,
-    transactions_rlp,
+    accounts_rlp, addresses_rlp, base_rlp, block_access_lists_rlp, eth_types,
+    hashes_rlp, headers_rlp, receipts_rlp, times_rlp, transactions_rlp,
   ],
   ../rlp
 
 export
-  accounts_rlp,
-  addresses_rlp,
-  base_rlp,
-  block_access_lists_rlp,
-  eth_types,
-  hashes_rlp,
-  headers_rlp,
-  receipts_rlp,
-  times_rlp,
-  transactions_rlp,
-  rlp
+  accounts_rlp, addresses_rlp, base_rlp, block_access_lists_rlp, eth_types, hashes_rlp,
+  headers_rlp, receipts_rlp, times_rlp, transactions_rlp, rlp
 
-export
-  computeRlpHash
+export computeRlpHash
 
 proc append*(rlpWriter: var RlpWriter, value: BlockHashOrNumber) =
   case value.isHash

@@ -13,29 +13,13 @@ import
   stew/byteutils,
   std/strutils,
   "."/[
-    accounts,
-    addresses,
-    base,
-    block_access_lists,
-    blocks,
-    hashes,
-    headers,
-    receipts,
-    times,
-    transactions
+    accounts, addresses, base, blocks, block_access_lists, hashes, headers, receipts,
+    times, transactions,
   ]
 
 export
-  accounts,
-  addresses,
-  base,
-  block_access_lists,
-  blocks,
-  hashes,
-  headers,
-  receipts,
-  times,
-  transactions
+  accounts, addresses, base, blocks, block_access_lists, hashes, headers, receipts,
+  times, transactions
 
 type
   BlockHashOrNumber* = object

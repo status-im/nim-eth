@@ -7,7 +7,6 @@
 
 {.push raises: [], gcsafe.}
 
-import
-  ./[addresses_rlp, base_rlp, hashes_rlp, block_access_lists], ../rlp
+import ./[addresses_rlp, base_rlp, block_access_lists, hashes_rlp], ../rlp
 
-export addresses_rlp, base_rlp, hashes_rlp, block_access_lists, rlp
+export addresses_rlp, base_rlp, block_access_lists, hashes_rlp, rlp

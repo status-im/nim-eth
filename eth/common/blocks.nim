@@ -7,9 +7,9 @@
 
 {.push raises: [].}
 
-import "."/[addresses, base, headers, transactions, block_access_lists]
+import "."/[addresses, base, block_access_lists, headers, transactions]
 
-export addresses, base, headers, transactions, block_access_lists
+export addresses, base, block_access_lists, headers, transactions
 
 type
   Withdrawal* = object # EIP-4895
@@ -31,8 +31,8 @@ type
     withdrawals*: Opt[seq[Withdrawal]] # EIP-4895
     blockAccessList*: Opt[BlockAccessList] # EIP-7928
 
-const
-  EMPTY_UNCLE_HASH* = hash32"1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+const EMPTY_UNCLE_HASH* =
+  hash32"1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
 
 # TODO https://github.com/nim-lang/Nim/issues/23354 - parameters should be sink
 func init*(T: type Block, header: Header, body: BlockBody): T =

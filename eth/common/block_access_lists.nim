@@ -16,8 +16,8 @@ import "."/[addresses, base, hashes]
 
 export addresses, base, hashes
 
-const
-  EMPTY_BLOCK_ACCESS_LIST_HASH* = hash32"1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+const EMPTY_BLOCK_ACCESS_LIST_HASH* =
+  hash32"1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
 
 type
   StorageKey* = Bytes32
