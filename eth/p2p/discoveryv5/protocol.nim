@@ -1206,13 +1206,6 @@ proc `$`*(a: OptAddress): string =
 
 chronicles.formatIt(OptAddress): $it
 
-template listeningAddress*(p: Protocol): Address =
-  if p.bindAddress.ip.isNone():
-    let ta = getAutoAddress(p.bindAddress.port)
-    Address(ta.toIpAddress(), ta.port)
-  else:
-    Address(p.bindAddress.ip.get(), p.bindAddress.port)
-
 proc open*(d: Protocol) {.raises: [TransportOsError].} =
   info "Starting discovery node", node = d.localNode,
     bindAddress = d.bindAddress
