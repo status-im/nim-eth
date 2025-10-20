@@ -12,23 +12,23 @@ import "."/[addresses, base, headers, transactions, block_access_lists]
 export addresses, base, headers, transactions, block_access_lists
 
 type
-  Withdrawal* = object                     # EIP-4895
-    index*         : uint64
+  Withdrawal* = object # EIP-4895
+    index*: uint64
     validatorIndex*: uint64
-    address*       : Address
-    amount*        : uint64
+    address*: Address
+    amount*: uint64
 
   BlockBody* = object
-    transactions*:    seq[Transaction]
-    uncles*:          seq[Header]
-    withdrawals*:     Opt[seq[Withdrawal]] # EIP-4895
+    transactions*: seq[Transaction]
+    uncles*: seq[Header]
+    withdrawals*: Opt[seq[Withdrawal]] # EIP-4895
     blockAccessList*: Opt[BlockAccessList] # EIP-7928
 
   Block* = object
-    header*     :     Header
-    transactions*:    seq[Transaction]
-    uncles*     :     seq[Header]
-    withdrawals*:     Opt[seq[Withdrawal]] # EIP-4895
+    header*: Header
+    transactions*: seq[Transaction]
+    uncles*: seq[Header]
+    withdrawals*: Opt[seq[Withdrawal]] # EIP-4895
     blockAccessList*: Opt[BlockAccessList] # EIP-7928
 
 const
