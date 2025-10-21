@@ -12,7 +12,7 @@
 
 {.push raises: [], gcsafe.}
 
-import "."/[addresses, base, hashes]
+import ./[addresses, base, hashes]
 
 export addresses, base, hashes
 

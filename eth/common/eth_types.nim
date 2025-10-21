@@ -12,7 +12,7 @@
 import
   stew/byteutils,
   std/strutils,
-  "."/[
+  ./[
     accounts, addresses, base, blocks, block_access_lists, hashes, headers, receipts,
     times, transactions,
   ]

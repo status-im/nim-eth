@@ -5,7 +5,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  "."/[
+  ./[
     accounts_rlp, addresses_rlp, base_rlp, block_access_lists_rlp, eth_types,
     hashes_rlp, headers_rlp, receipts_rlp, times_rlp, transactions_rlp,
   ],

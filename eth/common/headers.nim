@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import "."/[addresses, base, hashes, times]
+import ./[addresses, base, hashes, times]
 
 export addresses, base, hashes, times
 

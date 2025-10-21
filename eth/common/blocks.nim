@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import "."/[addresses, base, block_access_lists, headers, transactions]
+import ./[addresses, base, block_access_lists, headers, transactions]
 
 export addresses, base, block_access_lists, headers, transactions
 
