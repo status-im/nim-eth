@@ -139,8 +139,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
       ChainId(0.u256)
   let accessSSZ = accessListFrom(tx.accessList)
 
-  case tx.txType
-  of rlp_tx_mod.TxLegacy:
+  if tx.txType == rlp_tx_mod.TxLegacy:
     return transaction_builder.Transaction(
       txType = ssz_tx.TxLegacy,
       chain_id = legacyChain,
@@ -152,7 +151,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
       max_fees_per_gas = ssz_tx.BasicFeesPerGas(regular: feeFromGas(tx.gasPrice)),
       signature = sig,
     )
-  of rlp_tx_mod.TxEip2930:
+  if tx.txType == rlp_tx_mod.TxEip2930:
     return transaction_builder.Transaction(
       txType = ssz_tx.TxAccessList,
       chain_id = tx.chainId,
@@ -165,7 +164,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
       signature = sig,
       access_list = accessSSZ,
     )
-  of rlp_tx_mod.TxEip1559:
+  if tx.txType == rlp_tx_mod.TxEip1559:
     return transaction_builder.Transaction(
       txType = ssz_tx.TxDynamicFee,
       chain_id = tx.chainId,
@@ -180,7 +179,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
       signature = sig,
       access_list = accessSSZ,
     )
-  of rlp_tx_mod.TxEip4844:
+  if tx.txType == rlp_tx_mod.TxEip4844:
     return transaction_builder.Transaction(
       txType = ssz_tx.TxBlob,
       chain_id = tx.chainId,
@@ -197,7 +196,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
       blob_versioned_hashes = tx.versionedHashes,
       blob_fee = tx.maxFeePerBlobGas,
     )
-  of rlp_tx_mod.TxEip7702:
+  if tx.txType == rlp_tx_mod.TxEip7702:
     if tx.to.isNone:
       raise newException(ValueError, "7702 setCode: requires 'to'")
     return transaction_builder.Transaction(
@@ -215,6 +214,7 @@ proc toSszTx*(tx: rlp_tx_mod.Transaction): ssz_tx.Transaction =
       access_list = accessSSZ,
       authorization_list = toAuthTuples(tx.authorizationList),
     )
+  raise newException(ValueError, "Unsupported transaction type: " & $tx.txType)
 
 proc toOldTx*(tx: ssz_tx.Transaction): rlp_tx_mod.Transaction =
   if tx.kind != RlpTransaction:
