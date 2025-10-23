@@ -101,6 +101,7 @@ func to*(rec: Receipt, _: type StoredReceipt): StoredReceipt =
     cumulativeGasUsed : rec.cumulativeGasUsed,
     logs              : rec.logs,
     authorities       : @[],
+    # https://github.com/ethereum/EIPs/blob/676604927b316a44195008e632778d4ca1101deb/EIPS/eip-6466.md?plain=1#L138
     txGasUsed         : 0'u64,
     contactAddress    : default(Address), # default address
     origin            : default(Address)  # default address
