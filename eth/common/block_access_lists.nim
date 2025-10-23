@@ -20,6 +20,7 @@ const EMPTY_BLOCK_ACCESS_LIST_HASH* =
   hash32"1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
 
 type
+  # Type aliases for clarity (matching EIP-7928 specification)
   StorageKey* = Bytes32
   StorageValue* = Bytes32
   CodeData* = Bytes

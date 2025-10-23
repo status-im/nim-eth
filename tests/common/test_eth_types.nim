@@ -120,8 +120,8 @@ suite "Block encodings":
 
     block:
       let
-        rlpBytes = rlp.encode(bal)
-        dbal = rlp.decode(rlpBytes, BlockAccessList)
+        rlpBytes = bal.encode()
+        dbal = BlockAccessList.decode(rlpBytes)
 
       check:
         dbal.len() == 1
@@ -129,6 +129,7 @@ suite "Block encodings":
         dbal[0].codeChanges.len() == 1
         dbal[0].codeChanges[0].blockAccessIndex == 1.BlockAccessIndex
         dbal[0].codeChanges[0].newCode == @[0x12.byte, 0x23, 0x34]
+        keccak256(rlpBytes) == bal.computeBlockAccessListHash()
 
     block:
       let

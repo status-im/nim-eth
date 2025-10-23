@@ -10,3 +10,12 @@
 import ./[addresses_rlp, base_rlp, block_access_lists, hashes_rlp], ../rlp
 
 export addresses_rlp, base_rlp, block_access_lists, hashes_rlp, rlp
+
+template computeBlockAccessListHash*(bal: BlockAccessList): Hash32 =
+  rlp.computeRlpHash(bal)
+
+template encode*(bal: BlockAccessList): seq[byte] =
+  rlp.encode(bal)
+
+template decode*(T: type BlockAccessList, bytes: openArray[byte]): BlockAccessList =
+  rlp.decode(bytes, T)
