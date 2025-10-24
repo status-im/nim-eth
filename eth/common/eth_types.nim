@@ -12,10 +12,14 @@
 import
   stew/byteutils,
   std/strutils,
-  "."/
-    [accounts, addresses, base, blocks, hashes, headers, receipts, times, transactions]
+  ./[
+    accounts, addresses, base, blocks, block_access_lists, hashes, headers, receipts,
+    times, transactions,
+  ]
 
-export accounts, addresses, base, blocks, hashes, headers, receipts, times, transactions
+export
+  accounts, addresses, base, blocks, block_access_lists, hashes, headers, receipts,
+  times, transactions
 
 type
   BlockHashOrNumber* = object
@@ -66,7 +70,6 @@ type
   BlockHeader* {.deprecated: "Header".} = Header
   BlockNonce* {.deprecated: "Bytes8".} = Bytes8
   BloomFilter* {.deprecated: "Bloom".} = Bloom
-  StorageKey* {.deprecated: "Bytes32".} = Bytes32
   VersionedHashes* {.deprecated: "seq[VersionedHash]".} = seq[VersionedHash]
 
 func toBlockNonce*(n: uint64): Bytes8 {.deprecated.} =
