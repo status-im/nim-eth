@@ -21,8 +21,8 @@ const EMPTY_BLOCK_ACCESS_LIST_HASH* =
 
 type
   # Type aliases for clarity (matching EIP-7928 specification)
-  StorageKey* = Bytes32
-  StorageValue* = Bytes32
+  StorageKey* = UInt256
+  StorageValue* = UInt256
   CodeData* = Bytes
   BlockAccessIndex* = uint16
   Balance* = UInt256
