@@ -22,7 +22,7 @@ type BlobFeesPerGas* {.sszActiveFields: [1, 1].} = object
 
 # EIP-7807: Execution Block Header
 type
-  Header* {.sszActiveFields: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1].} = object
+  Header* {.sszActiveFields: [1, 1,1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1].} = object
     parent_hash*: Root
     miner*: Address
     state_root*: Bytes32
@@ -39,7 +39,7 @@ type
     excess_gas*: GasAmounts
     parent_beacon_block_root*: Root
     requests_hash*: Bytes32 # EIP-6110 hash_tree_root
-    # Note: Field 16 (system_logs_root) not yet in use
+    system_logs_root*: Root
 
   BlockBody* = object
     transactions*: seq[Transaction]

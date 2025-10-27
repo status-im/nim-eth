@@ -39,6 +39,7 @@ type
     excessBlobGas*:   Opt[uint64]       # EIP-4844
     parentBeaconBlockRoot*: Opt[Hash32] # EIP-4788
     requestsHash*:    Opt[Hash32]       # EIP-7685
+    systemLogsRoot*:  Opt[Hash32]       # EIP-7685
 
 # starting from EIP-4399, `mixDigest` field is called `prevRandao`
 template prevRandao*(h: Header): Bytes32 =
