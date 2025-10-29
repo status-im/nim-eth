@@ -121,7 +121,7 @@ suite "Block encodings":
     block:
       let
         rlpBytes = bal.encode()
-        dbal = BlockAccessList.decode(rlpBytes)
+        dbal = BlockAccessList.decode(rlpBytes).expect("success")
 
       check:
         dbal.len() == 1

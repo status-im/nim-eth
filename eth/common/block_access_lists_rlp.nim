@@ -17,5 +17,8 @@ template computeBlockAccessListHash*(bal: BlockAccessList): Hash32 =
 template encode*(bal: BlockAccessList): seq[byte] =
   rlp.encode(bal)
 
-template decode*(T: type BlockAccessList, bytes: openArray[byte]): BlockAccessList =
-  rlp.decode(bytes, T)
+func decode*(T: type BlockAccessList, bytes: openArray[byte]): Result[T, string] =
+  try:
+    ok(rlp.decode(bytes, T))
+  except RlpError as e:
+    err(e.msg)
