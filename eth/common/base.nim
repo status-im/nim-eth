@@ -178,6 +178,8 @@ type
   Bytes* = seq[byte] # TODO distinct?
   KzgCommitment* = Bytes48
   KzgProof* = Bytes48
+  StorageKey* = Bytes32
+  StorageValue* = Bytes32
 
   ForkID* = tuple[crc: uint32, nextFork: uint64] ## EIP 2364/2124
 

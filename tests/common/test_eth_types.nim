@@ -114,7 +114,8 @@ suite "Block encodings":
     let
       accChanges = AccountChanges(
         address: address"0x52908400098527886E0F7030069857D2E4169EE7",
-        codeChanges: @[(1.BlockAccessIndex, @[0x12.byte, 0x23, 0x34])]
+        codeChanges: @[(1.BlockAccessIndex, @[0x12.byte, 0x23, 0x34])],
+        storageReads: @[u256(1).toBytesBE().Bytes32]
       )
       bal = @[accChanges]
 
@@ -129,6 +130,8 @@ suite "Block encodings":
         dbal[0].codeChanges.len() == 1
         dbal[0].codeChanges[0].blockAccessIndex == 1.BlockAccessIndex
         dbal[0].codeChanges[0].newCode == @[0x12.byte, 0x23, 0x34]
+        dbal[0].storageReads.len() == 1
+        dbal[0].storageReads[0] == u256(1).toBytesBE().Bytes32
         keccak256(rlpBytes) == bal.computeBlockAccessListHash()
 
     block:
