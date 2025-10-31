@@ -31,7 +31,7 @@ type
   StorageChange* = tuple[blockAccessIndex: BlockAccessIndex, newValue: StorageValue]
   BalanceChange* = tuple[blockAccessIndex: BlockAccessIndex, postBalance: Balance]
   NonceChange* = tuple[blockAccessIndex: BlockAccessIndex, newNonce: Nonce]
-  CodeChange* = tuple[blockAccessIndex: BlockAccessIndex, newCode: CodeData]
+  CodeChange* = tuple[blockAccessIndex: BlockAccessIndex, newCode: Bytecode]
   SlotChanges* = tuple[slot: StorageKey, changes: seq[StorageChange]]
 
   AccountChanges* = object
