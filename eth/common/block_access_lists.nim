@@ -23,7 +23,7 @@ type
   # Type aliases for clarity (matching EIP-7928 specification)
   StorageKey* = UInt256
   StorageValue* = UInt256
-  CodeData* = Bytes
+  Bytecode* = Bytes
   BlockAccessIndex* = uint16
   Balance* = UInt256
   Nonce* = AccountNonce
