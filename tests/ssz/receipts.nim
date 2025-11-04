@@ -156,7 +156,6 @@ suite "Receipts Construction (SSZ)":
     BasicReceipt(
       `from`: addresses.zeroAddress,
       gas_used: 100'u64,
-      contract_address: addresses.zeroAddress,
       logs: @[],
       status: true,
     )
@@ -168,14 +167,12 @@ suite "Receipts Construction (SSZ)":
         BasicReceipt(
           `from`: default(Address),
           gas_used: 100'u64,
-          contract_address: default(Address),
           logs: @[log0],
           status: true,
         )
     ):
     check v.gas_used == 100'u64
     check v.status == true
-    check v.contract_address == default(Address)
     check v.logs.len == 1
 
   testRT "CreateReceipt: no logs",
@@ -225,7 +222,6 @@ suite "Receipts Construction (SSZ)":
         SetCodeReceipt(
           `from`: address"0x00000000000000000000000000000000000000dd",
           gas_used: 42000'u64,
-          contract_address: address"0x00000000000000000000000000000000000000ee",
           logs: @[log2],
           status: true,
           authorities:
@@ -246,7 +242,6 @@ suite "Block receipts root (SSZ)":
       BasicReceipt(
         `from`: addresses.zeroAddress,
         gas_used: 21_000'u64,
-        contract_address: addresses.zeroAddress,
         logs: @[],
         status: true,
       )
@@ -264,7 +259,6 @@ suite "Block receipts root (SSZ)":
       SetCodeReceipt(
         `from`: address"0x00000000000000000000000000000000000000bb",
         gas_used: 63_000'u64,
-        contract_address: address"0x00000000000000000000000000000000000000cc",
         logs: @[],
         status: true,
         authorities: @[address"0x00000000000000000000000000000000000000f1"],
@@ -279,14 +273,12 @@ test "receipts root changes when a receipt changes":
       BasicReceipt(
         `from`: default(Address),
         gas_used: 1'u64,
-        contract_address: default(Address),
         logs: @[],
         status: true,
       ),
       BasicReceipt(
         `from`: default(Address),
         gas_used: 2'u64,
-        contract_address: default(Address),
         logs: @[],
         status: true,
       ),
@@ -300,14 +292,12 @@ test "receipts root is order-sensitive":
   let a = BasicReceipt(
     `from`: default(Address),
     gas_used: 1'u64,
-    contract_address: default(Address),
     logs: @[],
     status: true,
   )
   let b = BasicReceipt(
     `from`: default(Address),
     gas_used: 2'u64,
-    contract_address: default(Address),
     logs: @[],
     status: true,
   )
@@ -341,7 +331,6 @@ suite "SSZ root":
     let r = BasicReceipt(
       `from`: addresses.zeroAddress,
       gas_used: 100'u64,
-      contract_address: addresses.zeroAddress,
       logs: @[],
       status: true,
     )
@@ -361,7 +350,6 @@ suite "SSZ root":
     let r = SetCodeReceipt(
       `from`: address"0x00000000000000000000000000000000000000bb",
       gas_used: 63_000'u64,
-      contract_address: address"0x00000000000000000000000000000000000000cc",
       logs: @[],
       status: true,
       authorities: @[address"0x00000000000000000000000000000000000000f1"],

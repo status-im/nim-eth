@@ -15,24 +15,22 @@ type
     topics*: List[Bytes32, MAX_TOPICS_PER_LOG]
     data*: seq[byte]
 
-  BasicReceipt* = object
+  BasicReceipt* {.sszActiveFields: [1, 1, 0, 1, 1].} = object
+    `from`*: Address
+    gas_used*: GasAmount
+    logs*: seq[Log]
+    status*: bool
+
+  CreateReceipt* {.sszActiveFields: [1, 1, 1, 1, 1].} = object
     `from`*: Address
     gas_used*: GasAmount
     contract_address*: Address
     logs*: seq[Log]
     status*: bool
 
-  CreateReceipt* = object
+  SetCodeReceipt* {.sszActiveFields: [1, 1, 0, 1, 1, 1].} = object
     `from`*: Address
     gas_used*: GasAmount
-    contract_address*: Address
-    logs*: seq[Log]
-    status*: bool
-
-  SetCodeReceipt* = object
-    `from`*: Address
-    gas_used*: GasAmount
-    contract_address*: Address
     logs*: seq[Log]
     status*: bool
     authorities*: seq[Address]
@@ -77,7 +75,6 @@ proc toSszReceipt*(
     let sszRec = SetCodeReceipt(
       `from`: sender,
       gas_used: gasUsed,
-      contract_address: contractAddress,
       logs: sszLogs,
       status: rec.status,
       authorities: authorities,
@@ -96,7 +93,6 @@ proc toSszReceipt*(
     let sszRec = BasicReceipt(
       `from`: sender,
       gas_used: gasUsed,
-      contract_address: default(Address),
       logs: sszLogs,
       status: rec.status,
     )
