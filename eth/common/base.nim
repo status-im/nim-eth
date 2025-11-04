@@ -46,7 +46,7 @@ type
     ## Often has the same value as ChainId, but not always
 
   GasInt* = uint64
-    ## Integer used to comput gas usage in individual blocks / transactions -
+    ## Integer used to compute gas usage in individual blocks / transactions -
     ## here, a smaller type is convenient since gas computations are expensive.
     ##
     ## Care must be taken since the sum of gas usage across many blocks may
@@ -179,7 +179,15 @@ type
   KzgCommitment* = Bytes48
   KzgProof* = Bytes48
 
-  ForkID* = tuple[crc: uint32, nextFork: uint64] ## EIP 2364/2124
+  ## Chain fork identifier as per EIP-2124/2364/6122
+  ForkId* = object
+    hash*: Bytes4
+    next*: uint64
 
 func chainId*(x: SomeInteger): ChainId =
   x.u256
+
+# Provide `==` for ForkId to avoid relying on system `==` as that appears
+# to not see FixedBytes `==` in some modules, e.g. in peer_pool.nim
+func `==`*(a, b: ForkId): bool {.inline.} =
+  a.next == b.next and a.hash == b.hash

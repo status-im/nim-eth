@@ -246,3 +246,44 @@ template genTestOpt(TT) =
 
 genTestOpt(BlockBodyOpt)
 genTestOpt(EthBlockOpt)
+
+suite "ForkId RLP encoding":
+  # RLP test cases from https://eips.ethereum.org/EIPS/eip-2124#test-cases
+  test "ForkId test case 1":
+    const
+      hash = 0'u32.to(Bytes4)
+      next = 0'u64
+      id = "c6840000000080"
+
+    let forkId = ForkId(hash: hash, next: next)
+    let encoded = rlp.encode(forkId)
+    check toHex(encoded) == id
+
+    let decoded = rlp.decode(encoded, ForkId)
+    check decoded == forkId
+
+  test "ForkId test case 2":
+    const
+      hash = 0xdeadbeef'u32.to(Bytes4)
+      next = 0xBADDCAFE'u64
+      id = "ca84deadbeef84baddcafe"
+
+    let forkId = ForkId(hash: hash, next: next)
+    let encoded = rlp.encode(forkId)
+    check toHex(encoded) == id
+
+    let decoded = rlp.decode(encoded, ForkId)
+    check decoded == forkId
+
+  test "ForkId test case 3":
+    const
+      hash = uint32.high().to(Bytes4)
+      next = uint64.high()
+      id = "ce84ffffffff88ffffffffffffffff"
+
+    let forkId = ForkId(hash: hash, next: next)
+    let encoded = rlp.encode(forkId)
+    check toHex(encoded) == id
+
+    let decoded = rlp.decode(encoded, ForkId)
+    check decoded == forkId
