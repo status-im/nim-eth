@@ -186,8 +186,3 @@ type
 
 func chainId*(x: SomeInteger): ChainId =
   x.u256
-
-# Provide `==` for ForkId to avoid relying on system `==` as that appears
-# to not see FixedBytes `==` in some modules, e.g. in peer_pool.nim
-func `==`*(a, b: ForkId): bool {.inline.} =
-  a.next == b.next and a.hash == b.hash
