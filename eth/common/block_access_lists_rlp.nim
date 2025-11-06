@@ -1,0 +1,24 @@
+# eth
+# Copyright (c) 2025 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.push raises: [], gcsafe.}
+
+import ./[addresses_rlp, base_rlp, block_access_lists, hashes_rlp], ../rlp
+
+export addresses_rlp, base_rlp, block_access_lists, hashes_rlp, rlp
+
+template computeBlockAccessListHash*(bal: BlockAccessList): Hash32 =
+  rlp.computeRlpHash(bal)
+
+template encode*(bal: BlockAccessList): seq[byte] =
+  rlp.encode(bal)
+
+func decode*(T: type BlockAccessList, bytes: openArray[byte]): Result[T, string] =
+  try:
+    ok(rlp.decode(bytes, T))
+  except RlpError as e:
+    err(e.msg)

@@ -11,7 +11,7 @@
 
 import
   unittest2,
-  ../../eth/common/[receipts_rlp]
+  ../../eth/common/receipts_rlp
 
 template roundTrip(v: untyped) =
   let bytes = rlp.encode(v)
@@ -54,5 +54,5 @@ suite "Stored Receipt":
       isHash: false,
       status: false,
       cumulativeGasUsed: 100.GasInt)
-    
+
     roundTrip(rec)

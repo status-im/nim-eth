@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -84,9 +84,8 @@ import
   std/[tables, sets, math, sequtils, algorithm],
   json_serialization/std/net,
   results, chronicles, chronos, stint, metrics,
-  ../../rlp,
-  ../../common/keys,
-  "."/[messages_encoding, encoding, node, routing_table, enr, random2, sessions,
+  ../../enr/enr,
+  ./[messages_encoding, encoding, node, routing_table, random2, sessions,
     ip_vote, nodes_verification]
 
 export
@@ -1061,7 +1060,7 @@ proc newProtocol*(
     privKey: PrivateKey,
     enrIp: Opt[IpAddress],
     enrTcpPort, enrUdpPort: Opt[Port],
-    localEnrFields: openArray[(string, seq[byte])] = [],
+    localEnrFields: openArray[FieldPair] = [],
     bootstrapRecords: openArray[Record] = [],
     previousRecord = Opt.none(enr.Record),
     bindPort: Port,
@@ -1076,7 +1075,6 @@ proc newProtocol*(
   # Anyhow, nim-beacon-chain would also require some changes to support port
   # remapping through NAT and this API is also subject to change once we
   # introduce support for ipv4 + ipv6 binding/listening.
-  let customEnrFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
   # TODO:
   # - Defect as is now or return a result for enr errors?
   # - In case incorrect key, allow for new enr based on new key (new node id)?
@@ -1086,14 +1084,14 @@ proc newProtocol*(
     # TODO: this is faulty in case the intent is to remove a field with
     # opt.none
     record.update(privKey, enrIp, enrTcpPort, enrUdpPort,
-      customEnrFields).expect("Record within size limits and correct key")
+      localEnrFields).expect("Record within size limits and correct key")
   else:
     record = enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort,
-      customEnrFields).expect("Record within size limits")
+      localEnrFields).expect("Record within size limits")
 
   info "Discovery ENR initialized", enrAutoUpdate, seqNum = record.seqNum,
     ip = enrIp, tcpPort = enrTcpPort, udpPort = enrUdpPort,
-    customEnrFields, uri = toURI(record)
+    localEnrFields, uri = toURI(record)
   if enrIp.isNone():
     if enrAutoUpdate:
       notice "No external IP provided for the ENR, this node will not be " &
@@ -1121,6 +1119,26 @@ proc newProtocol*(
     handshakeTimeout: config.handshakeTimeout,
     responseTimeout: config.responseTimeout,
     rng: rng)
+
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
+    localEnrFields: openArray[(string, seq[byte])] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = Opt.none(enr.Record),
+    bindPort: Port,
+    bindIp = IPv4_any(),
+    enrAutoUpdate = false,
+    banNodes = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng(),
+): Protocol =
+  let customEnrFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
+  newProtocol(
+    privKey, enrIp, enrTcpPort, enrUdpPort, customEnrFields, bootstrapRecords,
+    previousRecord, bindPort, bindIp, enrAutoUpdate, banNodes, config, rng,
+  )
 
 proc newProtocol*(
     privKey: PrivateKey,
@@ -1187,13 +1205,6 @@ proc `$`*(a: OptAddress): string =
     $a.ip.get() & ":" & $a.port
 
 chronicles.formatIt(OptAddress): $it
-
-template listeningAddress*(p: Protocol): Address =
-  if p.bindAddress.ip.isNone():
-    let ta = getAutoAddress(p.bindAddress.port)
-    Address(ta.toIpAddress(), ta.port)
-  else:
-    Address(p.bindAddress.ip.get(), p.bindAddress.port)
 
 proc open*(d: Protocol) {.raises: [TransportOsError].} =
   info "Starting discovery node", node = d.localNode,
