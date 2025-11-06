@@ -11,7 +11,7 @@
 
 import
   unittest2,
-  ../../eth/common/[receipts_rlp]
+  ../../eth/common/receipts_rlp
 
 template roundTrip(v: untyped) =
   let bytes = rlp.encode(v)
