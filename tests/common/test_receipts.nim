@@ -56,3 +56,64 @@ suite "Stored Receipt":
       cumulativeGasUsed: 100.GasInt)
 
     roundTrip(rec)
+
+  test "EIP-7807 StoredReceipt: Basic":
+    let rec = StoredReceipt(
+      receiptType: Eip7807Receipt,
+      isHash: false,
+      status: true,
+      cumulativeGasUsed: 777.GasInt,
+      eip7807ReceiptType: Eip7807Basic,
+      origin: default(Address),
+      txGasUsed: 555'u64
+    )
+    roundTrip(rec)
+
+  test "EIP-7807 StoredReceipt: Create":
+    let rec = StoredReceipt(
+      receiptType: Eip7807Receipt,
+      isHash: false,
+      status: true,
+      cumulativeGasUsed: 888.GasInt,
+      logs: @[],
+      eip7807ReceiptType: Eip7807Create,
+      origin: default(Address),
+      txGasUsed: 666'u64,
+      contactAddress: default(Address)
+    )
+    roundTrip(rec)
+
+  test "EIP-7807 StoredReceipt: SetCode":
+    let rec = StoredReceipt(
+      receiptType: Eip7807Receipt,
+      isHash: false,
+      status: true,
+      cumulativeGasUsed: 999.GasInt,
+      logs: @[],
+      eip7807ReceiptType: Eip7807SetCode,
+      origin: default(Address),
+      txGasUsed: 333'u64,
+      authorities: @[default(Address)]
+    )
+    roundTrip(rec)
+
+  test "StoredReceipt seq roundtrip (mixed types)":
+    let a = StoredReceipt(
+      receiptType: Eip7702Receipt,
+      isHash: false,
+      status: false,
+      cumulativeGasUsed: 1.GasInt,
+      logs: @[]
+    )
+    let b = StoredReceipt(
+      receiptType: Eip7807Receipt,
+      isHash: false,
+      status: true,
+      cumulativeGasUsed: 2.GasInt,
+      logs: @[],
+      eip7807ReceiptType: Eip7807Basic,
+      origin: default(Address),
+      txGasUsed: 42'u64
+    )
+    let arr = @[a, b]
+    roundTrip(arr)
