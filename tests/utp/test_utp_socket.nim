@@ -59,7 +59,7 @@ procSuite "uTP socket":
       defaultRcvOutgoingId,
       rng[]
     )
-    let fut1 =  socket.startOutgoingSocket()
+    let fut1 = socket.startOutgoingSocket()
     let initialPacket = await q.get()
 
     check:
@@ -515,7 +515,7 @@ procSuite "uTP socket":
       rng[]
     )
 
-    let fut1 = outgoingSocket.startOutgoingSocket()
+    let _ = outgoingSocket.startOutgoingSocket()
 
     let initialPacket = await q.get()
 
@@ -1417,7 +1417,7 @@ procSuite "uTP socket":
 
     let socket = newOutgoingSocket[TransportAddress](testAddress, initTestSnd(q), cfg, defaultRcvOutgoingId, rng[])
 
-    asyncSpawn socket.startOutgoingSocket()
+    let _ = socket.startOutgoingSocket()
 
     let initialPacket = await q.get()
 

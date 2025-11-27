@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
@@ -7,16 +7,14 @@
 {.used.}
 
 import
-  std/[sequtils, net, math],
+  std/[sequtils, net],
   stew/byteutils,
   unittest2,
-  ../../eth/enr/enr,
-  ../../eth/p2p/discoveryv5/messages,
-  ../../eth/p2p/discoveryv5/messages_encoding
+  ../eth/enr/enr
 
 let rng = newRng()
 
-proc testRlpEncodingLoop*(r: enr.Record): bool =
+func testRlpEncodingLoop(r: enr.Record): bool =
   let encoded = rlp.encode(r)
   let decoded = rlp.decode(encoded, enr.Record)
   decoded == r
@@ -33,28 +31,7 @@ suite "ENR test vector tests":
     secp256k1 = "03ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138"
     udp = 0x765f
 
-  test "Test vector full encode loop":
-    let res = Record.fromURI(uri)
-    check res.isOk()
-    let r = res.value()
-
-    const
-      maxNodesPerMessage = 3
-      nodesLen = 11
-
-    let reqId = RequestId.init(rng[])
-
-    var message: NodesMessage
-    message.total = ceil(nodesLen / maxNodesPerMessage).uint32
-
-    for i in 0 ..< nodesLen:
-      message.enrs.add(r)
-
-    if message.enrs.len != 0:
-      let z = encodeMessage(message, reqId)
-      discard z
-
-  test "Test vector full encode loop":
+  test "Test vector full decode - encode loop":
     let res = Record.fromURI(uri)
     check res.isOk()
     let r = res.value()
@@ -71,7 +48,7 @@ suite "ENR test vector tests":
 
       r.toURI() == uri
 
-  test "Test vector Record.init":
+  test "Test vector Record.init - encode":
     let privKey = PrivateKey.fromHex(
       pk).expect("valid private key")
 
