@@ -11,6 +11,8 @@
 ## https://ethereum.org/en/developers/docs/accounts/#account-creation
 
 import std/[typetraits, hashes as std_hashes], "."/[base, hashes], stew/assign2
+import ssz_serialization/codec
+import ssz_serialization/merkleization
 
 export hashes
 

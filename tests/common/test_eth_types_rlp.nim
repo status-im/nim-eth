@@ -195,6 +195,7 @@ type
     withdrawalsRoot*: Opt[Hash32]
     blobGasUsed*:     Opt[GasInt]
     excessBlobGas*:   Opt[GasInt]
+    systemLogsRoot*:  Opt[Hash32]
 
   BlockBodyOpt* = object
     transactions*:  seq[Transaction]

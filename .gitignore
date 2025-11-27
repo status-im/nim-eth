@@ -21,3 +21,5 @@ nimble.paths
 
 #OS specific files
 **/.DS_Store
+
+.claude/
