@@ -1,249 +1,517 @@
-# eth
-# Copyright (c) 2024 Status Research & Development GmbH
-# Licensed and distributed under either of
-#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
-#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
-
 {.push raises: [].}
 
-# This module contains adaptations of the general secp interface to help make
-# working with keys and signatures as they appear in Ethereum in particular:
-#
-# * Public keys as serialized in uncompressed format without the initial byte
-# * Shared secrets are serialized in raw format without the initial byte
-# * distinct types are used to avoid confusion with the "standard" secp types
 
-import
-  std/strformat,
-  secp256k1, bearssl/rand,
-  stew/[byteutils, objects, ptrops],
-  results,
-  "."/[hashes, addresses]
+import std/[
+  sequtils, sets, strutils, streams, times, monotimes]
 
-from nimcrypto/utils import burnMem
-
-export secp256k1, results, rand
-
-const
-  KeyLength* = SkEcdhSecretSize
-    ## Ecdh shared secret key length without leading byte
-    ## (publicKey * privateKey).x, where length of x is 32 bytes
-
-  FullKeyLength* = KeyLength + 1
-    ## Ecdh shared secret with leading byte 0x02 or 0x03
-
-  RawPublicKeySize* = SkRawPublicKeySize - 1
-    ## Size of uncompressed public key without format marker (0x04)
-
-  RawSignatureSize* = SkRawRecoverableSignatureSize
-
-  RawSignatureNRSize* = SkRawSignatureSize
+when declared(stdout):
+  import std/os
 
 type
-  PrivateKey* = distinct SkSecretKey
+  OutputLevel = enum  ## The output verbosity of the tests.
+    VERBOSE,     ## Print as much as possible.
+    COMPACT      ## Print failures and compact success information
+    FAILURES,    ## Print only failures
+    NONE         ## Print nothing.
 
-  PublicKey* = distinct SkPublicKey
-    ## Public key that's serialized to raw format without 0x04 marker
-  Signature* = distinct SkRecoverableSignature
-    ## Ethereum uses recoverable signatures allowing some space savings
-  SignatureNR* = distinct SkSignature
-    ## ...but ENR uses non-recoverable signatures!
+const
+  outputLevelDefault = COMPACT
+  nimUnittestOutputLevel {.strdefine.} = $outputLevelDefault
+  nimUnittestColor {.strdefine.} = "auto" ## auto|on|off
+  nimUnittestAbortOnError {.booldefine.} = false
+  unittest2ListTests {.booldefine.} = false
 
-  SharedSecretFull* = object
-    ## Representation of ECDH shared secret, with leading `y` byte
-    ## (`y` is 0x02 when (publicKey * privateKey).y is even or 0x03 when odd)
-    data*: array[FullKeyLength, byte]
+import std/terminal
 
-  SharedSecret* = object
-    ## Representation of ECDH shared secret, without leading `y` byte
-    data*: array[KeyLength, byte]
+type
+  Test = object
+    suiteName: string
+    testName: string
+    impl: proc(suite, name: string): TestStatus
+    lineInfo: int
 
-  KeyPair* = distinct SkKeyPair
+  TestStatus = enum ## The status of a test when it is done.
+    OK,
+    FAILED,
+    SKIPPED
 
-template pubkey*(v: KeyPair): PublicKey = PublicKey(SkKeyPair(v).pubkey)
-template seckey*(v: KeyPair): PrivateKey = PrivateKey(SkKeyPair(v).seckey)
+  TestResult = object
+    suiteName: string
+    testName: string
+    status: TestStatus
+    output: string
+    errors: string
 
-proc newRng*(): ref HmacDrbgContext =
-  # You should only create one instance of the RNG per application / library
-  # Ref is used so that it can be shared between components
-  HmacDrbgContext.new()
+  OutputFormatter = ref object of RootObj
 
-proc random*(T: type PrivateKey, rng: var HmacDrbgContext): T =
-  let rngPtr = unsafeAddr rng # doesn't escape
-  proc callRng(data: var openArray[byte]) =
-    generate(rngPtr[], data)
+  ConsoleOutputFormatter = ref object of OutputFormatter
+    colorOutput: bool
+    outputLevel: OutputLevel
 
-  T(SkSecretKey.random(callRng))
+    curSuiteName: string
+    curSuite: int
+    curTestName: string
+    curTest: int
 
-func fromRaw*(T: type PrivateKey, data: openArray[byte]): SkResult[T] =
-  SkSecretKey.fromRaw(data).mapConvert(T)
+    statuses: array[TestStatus, int]
 
-func fromHex*(T: type PrivateKey, data: string): SkResult[T] =
-  SkSecretKey.fromHex(data).mapConvert(T)
+    totalDuration: Duration
 
-func toRaw*(seckey: PrivateKey): array[SkRawSecretKeySize, byte] =
-  SkSecretKey(seckey).toRaw()
+    results: seq[TestResult]
 
-func toPublicKey*(seckey: PrivateKey): PublicKey {.borrow.}
+    failures: seq[TestResult]
 
-func fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
-  if data.len() == SkRawCompressedPublicKeySize:
-    return SkPublicKey.fromRaw(data).mapConvert(T)
+    errors: string
 
-  if len(data) < SkRawPublicKeySize - 1:
-    return err(static(
-      &"keys: raw eth public key should be {SkRawPublicKeySize - 1} bytes"))
+  JUnitTest = object
+    name: string
+    result: TestResult
+    error: (seq[string], string)
+    failures: seq[seq[string]]
 
-  var d: array[SkRawPublicKeySize, byte]
-  d[0] = 0x04'u8
-  copyMem(addr d[1], unsafeAddr data[0], 64)
+  JUnitSuite = object
+    name: string
+    tests: seq[JUnitTest]
 
-  SkPublicKey.fromRaw(d).mapConvert(T)
+  JUnitOutputFormatter = ref object of OutputFormatter
+    stream: Stream
+    defaultSuite: JUnitSuite
+    suites: seq[JUnitSuite]
+    currentSuite: int
 
-func fromHex*(T: type PublicKey, data: string): SkResult[T] =
-  T.fromRaw(? seq[byte].fromHex(data))
 
-func toRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] =
-  let tmp = SkPublicKey(pubkey).toRaw()
-  copyMem(addr result[0], unsafeAddr tmp[1], 64)
+var
+  abortOnError: bool
 
-func toRawCompressed*(pubkey: PublicKey): array[33, byte] {.borrow.}
+  checkpoints: seq[string]
+  formatters: seq[OutputFormatter]
+  testsFilters: HashSet[string]
 
-proc random*(T: type KeyPair, rng: var HmacDrbgContext): T =
-  let seckey = SkSecretKey(PrivateKey.random(rng))
-  KeyPair(SkKeyPair(
-    seckey: seckey,
-    pubkey: seckey.toPublicKey()
+  currentSuite: string
+  testStatus: TestStatus
+
+abortOnError = nimUnittestAbortOnError
+
+method suiteStarted(formatter: OutputFormatter, suiteName: string) {.base, gcsafe.} =
+  discard
+method testStarted(formatter: OutputFormatter, testName: string) {.base, gcsafe.} =
+  discard
+method failureOccurred(formatter: OutputFormatter, checkpoints: seq[string],
+    stackTrace: string) {.base, gcsafe.} =
+  discard
+method testEnded(formatter: OutputFormatter, testResult: TestResult) {.base, gcsafe.} =
+  discard
+method suiteEnded(formatter: OutputFormatter) {.base, gcsafe.} =
+  discard
+
+method testRunEnded(formatter: OutputFormatter) {.base, gcsafe.} =
+  discard
+
+proc suiteStarted(name: string) =
+  for formatter in formatters:
+    formatter.suiteStarted(name)
+
+proc testStarted(name: string) =
+  for formatter in formatters:
+    formatter.testStarted(name)
+
+proc testEnded(testResult: TestResult) =
+  for formatter in formatters:
+    formatter.testEnded(testResult)
+
+proc suiteEnded() =
+  for formatter in formatters:
+    formatter.suiteEnded()
+
+proc newConsoleOutputFormatter(outputLevel: OutputLevel = outputLevelDefault,
+                                colorOutput = true): ConsoleOutputFormatter =
+  ConsoleOutputFormatter(
+    outputLevel: outputLevel,
+    colorOutput: colorOutput,
+  )
+
+proc defaultColorOutput(): bool =
+  let color = nimUnittestColor
+  case color
+  of "auto":
+    when declared(stdout): result = isatty(stdout)
+    else: result = false
+  of "on": result = true
+  of "off": result = false
+  else: raiseAssert "Unrecognised nimUnittestColor setting: " & color
+
+  when declared(stdout):
+    if existsEnv("NIMTEST_COLOR"):
+      let colorEnv = getEnv("NIMTEST_COLOR")
+      if colorEnv == "never":
+        result = false
+      elif colorEnv == "always":
+        result = true
+    elif existsEnv("NIMTEST_NO_COLOR"):
+      result = false
+
+proc defaultOutputLevel(): OutputLevel =
+  when declared(stdout):
+    const levelEnv = "UNITTEST2_OUTPUT_LVL"
+    const nimtestEnv = "NIMTEST_OUTPUT_LVL"
+    if existsEnv(levelEnv):
+      try:
+        parseEnum[OutputLevel](getEnv(levelEnv))
+      except ValueError:
+        echo "Cannot parse UNITTEST2_OUTPUT_LVL: ", getEnv(levelEnv)
+        quit 1
+    elif existsEnv(nimtestEnv):
+      case toUpper(getEnv(nimtestEnv))
+      of "PRINT_ALL": OutputLevel.VERBOSE
+      of "PRINT_FAILURES": OutputLevel.FAILURES
+      of "PRINT_NONE": OutputLevel.NONE
+      else:
+        echo "Cannot parse NIMTEST_OUTPUT_LVL: ", getEnv(nimtestEnv)
+        quit 1
+    else:
+      const defaultLevel = static: nimUnittestOutputLevel.parseEnum[:OutputLevel]
+      defaultLevel
+
+proc defaultConsoleFormatter(): ConsoleOutputFormatter =
+  newConsoleOutputFormatter(defaultOutputLevel(), defaultColorOutput())
+
+const
+  maxStatusLen = 7
+  maxDurationLen = 6
+
+func formatStatus(status: string): string =
+  "[" & alignLeft(status, maxStatusLen) & "]"
+
+template write(
+    formatter: ConsoleOutputFormatter, styled: untyped, unstyled: untyped) =
+  template ignoreExceptions(body: untyped) =
+    try: body except CatchableError: discard
+
+  if formatter.colorOutput:
+    ignoreExceptions: styled
+  else: ignoreExceptions: unstyled
+
+method suiteStarted(formatter: ConsoleOutputFormatter, suiteName: string) =
+  formatter.curSuiteName = suiteName
+  formatter.curSuite += 1
+
+  formatter.curTest.reset()
+
+  if formatter.outputLevel in {OutputLevel.FAILURES, OutputLevel.NONE}:
+    return
+
+  let
+    counter =
+      if formatter.outputLevel == VERBOSE: formatStatus("Suite") & " " else: ""
+    maxNameLen = 0
+    eol = if formatter.outputLevel == VERBOSE: "\n" else: " "
+  formatter.write do:
+    stdout.styledWrite(styleBright, fgBlue, counter, alignLeft(suiteName, maxNameLen), eol)
+  do:
+    stdout.write(counter, alignLeft(suiteName, maxNameLen), eol)
+  stdout.flushFile()
+
+proc writeTestName(formatter: ConsoleOutputFormatter, testName: string) =
+  formatter.write do:
+    stdout.styledWrite fgBlue, testName
+  do:
+    stdout.write(testName)
+
+method testStarted(formatter: ConsoleOutputFormatter, testName: string) =
+  formatter.curTestName = testName
+  formatter.curTest += 1
+
+  if formatter.outputLevel != VERBOSE:
+    return
+
+  let
+    counter = formatStatus("Test")
+
+  formatter.write do:
+    stdout.styledWrite "  ", fgBlue, alignLeft(counter, maxStatusLen + maxDurationLen + 7)
+  do:
+    stdout.write "  ", alignLeft(counter, maxStatusLen + maxDurationLen + 7)
+
+  writeTestName(formatter, testName)
+  echo ""
+
+method failureOccurred(formatter: ConsoleOutputFormatter,
+                        checkpoints: seq[string], stackTrace: string) = discard
+proc color(status: TestStatus): ForegroundColor = discard
+proc marker(status: TestStatus): string = discard
+proc getAppFilename2(): string =
+  try:
+    getAppFilename()
+  except OSError:
+    ""
+
+proc printFailureInfo(formatter: ConsoleOutputFormatter, testResult: TestResult) =
+  echo repeat('=', testResult.testName.len)
+  echo "  ", getAppFilename2(), " ", quoteShell(testResult.suiteName & "::" & testResult.testName)
+  echo repeat('-', testResult.testName.len)
+
+  if testResult.output.len > 0:
+    echo testResult.output
+  if testResult.errors.len > 0:
+    echo testResult.errors
+
+proc printTestResultStatus(formatter: ConsoleOutputFormatter, testResult: TestResult) = discard
+method testEnded(formatter: ConsoleOutputFormatter, testResult: TestResult) =
+  if formatter.outputLevel == NONE:
+    return
+
+  var testResult = testResult
+  testResult.errors = move(formatter.errors)
+
+  formatter.results.add(testResult)
+
+  if formatter.outputLevel == VERBOSE and testResult.status == TestStatus.FAILED:
+    formatter.failures.add testResult
+
+  let
+    marker = testResult.status.marker()
+    color = testResult.status.color()
+  formatter.write do:
+      stdout.styledWrite styleBright, color, marker
+  do:
+    stdout.write marker
+  stdout.flushFile()
+
+method suiteEnded(formatter: ConsoleOutputFormatter) =
+  if formatter.outputLevel == OutputLevel.NONE:
+    return
+
+  var failed = false
+  if formatter.outputLevel notin {VERBOSE, FAILURES}:
+    for testResult in formatter.results:
+      if testResult.status == TestStatus.FAILED:
+        failed = true
+        formatter.printFailureInfo(testResult)
+        formatter.printTestResultStatus(testResult)
+        echo ""
+
+  formatter.results.reset()
+
+method testRunEnded(formatter: ConsoleOutputFormatter) = discard
+
+template suite(formatter: JUnitOutputFormatter): untyped =
+  if formatter.currentSuite == -1:
+    addr formatter.defaultSuite
+  else:
+    addr formatter.suites[formatter.currentSuite]
+
+method failureOccurred(formatter: JUnitOutputFormatter,
+                        checkpoints: seq[string], stackTrace: string) =
+  if stackTrace.len > 0:
+    formatter.suite().tests[^1].error = (checkpoints, stackTrace)
+  else:
+    formatter.suite().tests[^1].failures.add(checkpoints)
+
+proc glob(matcher, filter: string): bool =
+  if filter.len == 0:
+    return true
+
+  if not filter.contains('*'):
+    return matcher == filter
+
+  let beforeAndAfter = filter.split('*', maxsplit=1)
+  if beforeAndAfter.len == 1:
+    return matcher.startsWith(beforeAndAfter[0])
+
+  if matcher.len < filter.len - 1:
+    return false  # "12345" should not match "123*345"
+
+  return matcher.startsWith(beforeAndAfter[0]) and matcher.endsWith(
+      beforeAndAfter[1])
+
+proc matchFilter(suiteName, testName, filter: string): bool =
+  if filter == "":
+    return true
+  if testName == filter:
+    return true
+  let suiteAndTestFilters = filter.split("::", maxsplit=1)
+
+  if suiteAndTestFilters.len == 1:
+    let testFilter = suiteAndTestFilters[0]
+    return glob(testName, testFilter)
+
+  return glob(suiteName, suiteAndTestFilters[0]) and
+         glob(testName, suiteAndTestFilters[1])
+
+proc shouldRun(currentSuiteName, testName: string): bool =
+  when nimvm:
+    true
+  else:
+    if testsFilters.len == 0:
+      return true
+
+    for f in testsFilters:
+      if matchFilter(currentSuiteName, testName, f):
+        return true
+
+    return false
+
+proc ensureInitialized() =
+  formatters = @[OutputFormatter(defaultConsoleFormatter())]
+
+ensureInitialized() # Run once!
+
+template suite(nameParam: string, body: untyped) {.dirty.} =
+  bind currentSuite, suiteStarted, suiteEnded
+
+  block:
+    template setup(setupBody: untyped) {.dirty, used.} =
+      var testSetupIMPLFlag {.used.} = true
+      template testSetupIMPL: untyped {.dirty.} = setupBody
+
+    when nimvm:
+      discard
+    else:
+      let suiteName {.inject.} = nameParam
+      if currentSuite.len > 0:
+        suiteEnded()
+        currentSuite.reset()
+      currentSuite = suiteName
+
+      suiteStarted(suiteName)
+
+    body
+
+    when nimvm:
+      discard
+    else:
+      suiteEnded()
+      currentSuite.reset()
+
+template fail =
+  when nimvm:
+    echo "Tests failed"
+    quit 1
+  else:
+    testStatus = TestStatus.FAILED
+
+    for formatter in formatters:
+      let formatter = formatter # avoid lent iterator
+      formatter.failureOccurred(checkpoints, "")
+
+    if abortOnError: quit(1)
+
+    checkpoints.reset()
+
+proc runDirect(test: Test) =
+  let startTime = getMonoTime()
+  testStarted(test.testName)
+
+  {.gcsafe.}:
+    let
+      status = test.impl(test.suiteName, test.testName)
+      _ = getMonoTime() - startTime
+
+  testEnded(TestResult(
+    suiteName: test.suiteName,
+    testName: test.testName,
+    status: status,
   ))
 
-func toKeyPair*(seckey: PrivateKey): KeyPair =
-  KeyPair(SkKeyPair(
-    seckey: SkSecretKey(seckey), pubkey: SkSecretKey(seckey).toPublicKey()))
+template runtimeTest(nameParam: string, body: untyped) =
+  bind runDirect, shouldRun, checkpoints
 
-func fromRaw*(T: type Signature, data: openArray[byte]): SkResult[T] =
-  SkRecoverableSignature.fromRaw(data).mapConvert(T)
+  proc runTest(suiteName, testName: string): TestStatus {.raises: [], gensym.} =
+    testStatus = TestStatus.OK
+    template testStatusIMPL: var TestStatus {.inject, used.} = testStatus
+    let suiteName {.inject, used.} = suiteName
+    let testName {.inject, used.} = testName
 
-func fromHex*(T: type Signature, data: string): SkResult[T] =
-  T.fromRaw(? seq[byte].fromHex(data))
+    template fail(prefix: string, eClass: string, e: auto): untyped =
+      let eName {.used.} = "[" & $e.name & "]"
+      var stackTrace {.inject, used.} = e.getStackTrace()
+      fail()
 
-func toRaw*(sig: Signature): array[RawSignatureSize, byte] {.borrow.}
+    template failingOnExceptions(prefix: string, code: untyped): untyped =
+      try:
+        block:
+          code
+      except CatchableError as e:
+        prefix.fail("error", e)
 
-func fromRaw*(T: type SignatureNR, data: openArray[byte]): SkResult[T] =
-  SkSignature.fromRaw(data).mapConvert(T)
+    failingOnExceptions("[setup] "):
+      when declared(testSetupIMPLFlag): testSetupIMPL()
+      defer: failingOnExceptions("[teardown] "):
+        when declared(testTeardownIMPLFlag): testTeardownIMPL()
+      failingOnExceptions(""):
+        when not unittest2ListTests:
+          body
 
-func toRaw*(sig: SignatureNR): array[RawSignatureNRSize, byte] {.borrow.}
+    checkpoints = @[]
 
-func to*(pubkey: PublicKey, _: type Address): Address =
-  ## Convert public key to canonical address.
-  let hash = keccak256(pubkey.toRaw())
-  hash.to(Address)
+    testStatus
 
-func toAddress*(pubkey: PublicKey): string {.deprecated.} =
-  ## Convert public key to hexadecimal string address.
-  pubkey.to(Address).to0xHex()
+  let
+    localSuiteName =
+      when declared(suiteName):
+        suiteName
+      else: instantiationInfo().filename
+    localTestName = nameParam
+  if shouldRun(localSuiteName, localTestName):
+    let
+      instance =
+        Test(
+          testName: localTestName, 
+          suiteName: localSuiteName, 
+          impl: runTest,
+          lineInfo: instantiationInfo().line,
+        )
+    runDirect(instance)
 
-func toChecksumAddress*(pubkey: PublicKey): string =
-  ## Convert public key to checksumable mixed-case address (EIP-55).
-  pubkey.to(Address).toChecksum0xHex()
+{.pop.} # raises: []
 
-func validateChecksumAddress*(a: string): bool =
-  ## Validate checksumable mixed-case address (EIP-55).
-  Address.hasValidChecksum(a)
+iterator unittest2EvalOnceIter[T](x: T): auto =
+  yield x
+template unittest2EvalOnce(name: untyped, param: typed, blk: untyped) =
+  for name in unittest2EvalOnceIter(param):
+    blk
 
-template toCanonicalAddress*(pubkey: PublicKey): Address =
-  ## Convert public key to canonical address.
-  pubkey.to(Address)
+import
+  secp256k1,
+  "."/hashes,
+  std/net,
+  ../trie/[hexary, db, hexary_proof_verification]
 
-func `$`*(pubkey: PublicKey): string =
-  ## Convert public key to hexadecimal string representation.
-  toHex(pubkey.toRaw())
+discard SkSecretKey.fromHex("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 
-func `$`*(sig: Signature): string =
-  ## Convert signature to hexadecimal string representation.
-  toHex(sig.toRaw())
+suite "MPT trie proof verification":
+  runtimeTest "Validate proof for existing value":
+    block:
+      var db = newMemoryDB()
+      var trie = initHexaryTrie(db)
 
-func `$`*(seckey: PrivateKey): string =
-  ## Convert private key to hexadecimal string representation
-  toHex(seckey.toRaw())
+      const bytes = @[0'u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+      trie.put(bytes, bytes)
 
-func `==`*(lhs, rhs: PublicKey): bool {.borrow.}
-func `==`*(lhs, rhs: Signature): bool {.borrow.}
-func `==`*(lhs, rhs: SignatureNR): bool {.borrow.}
+      for _ in [0]:
+        let
+          proof = @[@[248'u8, 67, 161, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]] # trie.getBranch(bytes)
+          root = Hash32([0x04'u8, 0xf4, 0xd4, 0x00, 0x43, 0x78, 0xc7, 0x62, 0xb2, 0xd8, 0xe0, 0x8f, 0x4b, 0x7c, 0xd6, 0xf2, 0xce, 0x43, 0x98, 0xb5, 0x7f, 0x3c, 0x62, 0xf4, 0x49, 0x0f, 0xc7, 0x3b, 0x7a, 0x0b, 0x2f, 0x4c]) # trie.rootHash()
+          res = verifyMptProof(proof, root, bytes, bytes)
 
-func clear*(v: var PrivateKey) {.borrow.}
-func clear*(v: var KeyPair) =
-  v.seckey.clear()
+        doAssert res.isValid()
+        unittest2EvalOnce(foobar, res.value) do:
+          block:
+            if not(foobar == bytes):
+              discard
 
-func clear*(v: var SharedSecret) = burnMem(v.data)
-func clear*(v: var SharedSecretFull) = burnMem(v.data)
+    block:
+      var db = newMemoryDB()
+      var trie = initHexaryTrie(db)
 
-func sign*(seckey: PrivateKey, msg: SkMessage): Signature =
-  Signature(signRecoverable(SkSecretKey(seckey), msg))
+      const bytes = @[0'u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+      trie.put(bytes, bytes)
 
-func sign*(seckey: PrivateKey, msg: openArray[byte]): Signature =
-  let hash = keccak256(msg)
-  sign(seckey, SkMessage(hash.data))
+      let
+        nonExistingKey = toSeq([0'u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2])
+        proof = trie.getBranch(nonExistingKey)
+        # proof = @[@[248'u8, 67, 161, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]] # trie.getBranch(nonExistingKey)
+        root = Hash32([0x04'u8, 0xf4, 0xd4, 0x00, 0x43, 0x78, 0xc7, 0x62, 0xb2, 0xd8, 0xe0, 0x8f, 0x4b, 0x7c, 0xd6, 0xf2, 0xce, 0x43, 0x98, 0xb5, 0x7f, 0x3c, 0x62, 0xf4, 0x49, 0x0f, 0xc7, 0x3b, 0x7a, 0x0b, 0x2f, 0x4c]) # trie.rootHash()
+        res = verifyMptProof(proof, root, nonExistingKey, nonExistingKey)
 
-func signNR*(seckey: PrivateKey, msg: SkMessage): SignatureNR =
-  SignatureNR(sign(SkSecretKey(seckey), msg))
-
-func signNR*(seckey: PrivateKey, msg: openArray[byte]): SignatureNR =
-  let hash = keccak256(msg)
-  signNR(seckey, SkMessage(hash.data))
-
-func recover*(sig: Signature, msg: SkMessage): SkResult[PublicKey] =
-  recover(SkRecoverableSignature(sig), msg).mapConvert(PublicKey)
-
-func recover*(sig: Signature, msg: openArray[byte]): SkResult[PublicKey] =
-  let hash = keccak256(msg)
-  recover(sig, SkMessage(hash.data))
-
-func verify*(sig: SignatureNR, msg: SkMessage, key: PublicKey): bool =
-  verify(SkSignature(sig), msg, SkPublicKey(key))
-
-func verify*(sig: SignatureNR, msg: openArray[byte], key: PublicKey): bool =
-  let hash = keccak256(msg)
-  verify(sig, SkMessage(hash.data), key)
-
-proc ecdhSharedSecretHash(output: ptr byte, x32, y32: ptr byte, data: pointer): cint
-                    {.cdecl, raises: [].} =
-  ## Hash function used by `ecdhSharedSecret` below
-  # `x32` and `y32` are result of scalar multiplication of publicKey * privateKey.
-  # Both `x32` and `y32` are 32 bytes length.
-  # Take the `x32` part as ecdh shared secret.
-
-  # output length is derived from x32 length and taken from ecdh
-  # generic parameter `KeyLength`
-  copyMem(output, x32, KeyLength)
-  return 1
-
-func ecdhSharedSecret*(seckey: PrivateKey, pubkey: PublicKey): SharedSecret =
-  ## Compute ecdh agreed shared secret.
-  let res = ecdh[KeyLength](SkSecretKey(seckey), SkPublicKey(pubkey), ecdhSharedSecretHash, nil)
-  # This function only fail if the hash function return zero.
-  # Because our hash function always success, we can turn the error into defect
-  doAssert res.isOk, $res.error
-  SharedSecret(data: res.get)
-
-proc ecdhSharedSecretFullHash(output: ptr byte, x32, y32: ptr byte, data: pointer): cint
-                    {.cdecl, raises: [].} =
-  ## Hash function used by `ecdhSharedSecretFull` below
-  # `x32` and `y32` are result of scalar multiplication of publicKey * privateKey.
-  # Leading byte is 0x02 if `y32` is even and 0x03 if odd. Then concat with `x32`.
-
-  # output length is derived from `x32` length + 1 and taken from ecdh
-  # generic parameter `FullKeyLength`
-
-  # output[0] = 0x02 | (y32[31] & 1)
-  output[] = 0x02 or (y32.offset(31)[] and 0x01)
-  copyMem(output.offset(1), x32, KeyLength)
-  return 1
-
-func ecdhSharedSecretFull*(seckey: PrivateKey, pubkey: PublicKey): SharedSecretFull =
-  ## Compute ecdh agreed shared secret with leading byte.
-  let res = ecdh[FullKeyLength](SkSecretKey(seckey), SkPublicKey(pubkey), ecdhSharedSecretFullHash, nil)
-  # This function only fail if the hash function return zero.
-  # Because our hash function always success, we can turn the error into defect
-  doAssert res.isOk, $res.error
-  SharedSecretFull(data: res.get)
+      doAssert res.isMissing()
