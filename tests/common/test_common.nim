@@ -10,7 +10,7 @@ import
   std/[os, json],
   unittest2,
   stew/byteutils,
-  ../../eth/[common, rlp]
+  ../../eth/[common, rlp, common/ssz_utils]
 
 type
   EthHeader = object
