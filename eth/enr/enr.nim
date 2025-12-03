@@ -12,10 +12,11 @@
 
 import
   std/[strutils, sequtils, macros, algorithm, net],
-  nimcrypto/[keccak, utils],
+  nimcrypto/utils,
   stew/base64,
   results,
   chronicles,
+  ../keccak/keccak,
   ../rlp,
   ../common/keys,
   ../net/utils
@@ -395,7 +396,7 @@ func verifySignatureV4(
     publicKey: PublicKey, sigData: openArray[byte], content: openArray[byte]): EnrResult[void] =
   ## Verify the signature for the "v4" identity scheme
   let signature = ?SignatureNR.fromRaw(sigData)
-  let hash = keccak256.digest(content)
+  let hash = Keccak256.digest(content)
   if verify(signature, SkMessage(hash.data), publicKey):
     ok()
   else:

@@ -9,7 +9,8 @@
 
 import
   std/[hashes, net],
-  nimcrypto/keccak, stint, chronos, chronicles, results,
+  stint, chronos, chronicles, results,
+  ../../keccak/keccak,
   ../../net/utils,
   ../../enr/enr
 
@@ -35,7 +36,7 @@ func toNodeId*(pk: PublicKey): NodeId =
   # Keccak256 hash is used as defined in ENR spec for scheme v4:
   # https://github.com/ethereum/devp2p/blob/master/enr.md#v4-identity-scheme
   # The raw key used is the uncompressed public key.
-  readUintBE[256](keccak256.digest(pk.toRaw()).data)
+  readUintBE[256](Keccak256.digest(pk.toRaw()).data)
 
 func fromRecord*(T: type Node, r: Record): T =
   ## Create a new `Node` from a `Record`.
