@@ -8,13 +8,13 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-from std/times import getTime, toUnix
+# from std/times import getTime, toUnix
 
 type
   EthTime* = distinct uint64
 
-proc now*(_: type EthTime): EthTime =
-  getTime().toUnix.EthTime
+# proc now*(_: type EthTime): EthTime =
+#   getTime().toUnix.EthTime
 
 func `+`*(a: EthTime, b: EthTime): EthTime =
   EthTime(a.uint64 + b.uint64)
