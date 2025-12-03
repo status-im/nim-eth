@@ -14,11 +14,12 @@
 ## Its usage was limited to ethash, the proof-of-work algorithm that has been
 ## replaced with proof-of-stake.
 
-import std/[typetraits, hashes], nimcrypto/keccak, ./base, stew/assign2
+import std/[typetraits, hashes], ./base, stew/assign2, constantine/hashes/h_keccak, nimcrypto/keccak
 
-export hashes, keccak.update, keccak.finish
+export hashes, keccak.update, keccak.finish, h_keccak
 
 type
+  KECCACK256* = h_keccak.KeccakContext[256, 0x01]
   Hash32* = distinct Bytes32
     ## https://github.com/ethereum/execution-specs/blob/51fac24740e662844446439ceeb96a460aae0ba0/src/ethereum/crypto/hash.py#L19
   Root* = Hash32
@@ -91,14 +92,19 @@ const
     ## of an empty MPT trie
 
 func keccak256*(input: openArray[byte]): Hash32 {.noinit.} =
-  var ctx: keccak.keccak256
+  var
+    ctx: KECCACK256
+    buff: array[32, byte]
   ctx.update(input)
-  ctx.finish().to(Hash32)
+  ctx.finish(buff)
+  Hash32(buff)
 
 func keccak256*(input: openArray[char]): Hash32 {.noinit.} =
   keccak256(input.toOpenArrayByte(0, input.high))
 
 template withKeccak256*(body: untyped): Hash32 =
-  var h {.inject.}: keccak.keccak256
+  var h {.inject.}: KECCACK256
   body
-  h.finish().to(Hash32)
+  var buff: array[32, byte]
+  h.finish(buff)
+  Hash32(buff)
