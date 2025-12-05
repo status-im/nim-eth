@@ -30,11 +30,11 @@ type
     BindAddressIsPublic
     BindAddressIsPrivate
 
-  PortProtocol* = enum
+  PortProtocol* {.pure.} = enum
     UDP
     TCP
 
-  PortType* = tuple[port: Port, protocol: PortProtocol]
+  PortSpec* = tuple[port: Port, protocol: PortProtocol]
 
 const
   UPNP_TIMEOUT = 200 # ms
@@ -45,7 +45,7 @@ var
   upnp {.threadvar.}: Miniupnp
   npmp {.threadvar.}: NatPmp
   strategy = NatNone
-  portMapping = initTable[PortType, PortType]()
+  portMapping = initTable[PortSpec, PortSpec]()
 
 logScope:
   topics = "eth net nat"
@@ -170,8 +170,8 @@ proc getPublicRoutePrefSrcOrExternalIP*(
       if extIp.isSome:
         return Opt.some(extIp.get)
 
-proc doPortMapping(ports: seq[PortType], description: string): Opt[seq[PortType]] {.gcsafe.} =
-  var ret = newSeq[PortType]()
+proc doPortMapping(ports: seq[PortSpec], description: string): Opt[seq[PortSpec]] {.gcsafe.} =
+  var ret = newSeq[PortSpec]()
   if strategy == NatUpnp:
     for p in ports:
       let
@@ -217,7 +217,7 @@ proc doPortMapping(ports: seq[PortType], description: string): Opt[seq[PortType]
         ret.add((port: extPort, protocol: p.protocol))
   return Opt.some(ret)
 
-type PortMappingArgs = tuple[ports: seq[PortType], description: string]
+type PortMappingArgs = tuple[ports: seq[PortSpec], description: string]
 var
   natThread: Thread[PortMappingArgs]
   natCloseChan: Channel[bool]
@@ -300,17 +300,17 @@ proc stopNatThread() {.noconv.} =
           debug "NAT-PMP: deleted port mapping", externalPort = external.port, internalPort = internal.port, protocol = protocol
     portMapping.clear()
 
-proc redirectPorts*(ports: seq[PortType], description: string): Opt[seq[PortType]] =
-  for p in ports:
+proc redirectPorts*(internalPorts: seq[PortSpec], description: string): Opt[seq[PortSpec]] =
+  for p in internalPorts:
     if portMapping.hasKey(p):
       error "Port mapping already exists", port = p.port, protocol = p.protocol
-      return Opt.none(seq[PortType])
+      return Opt.none(seq[PortSpec])
 
-  result = doPortMapping(ports, description)
+  result = doPortMapping(internalPorts, description)
   if result.isSome:
     let externalPorts = result.get()
-    for i in 0..<ports.len:
-      portMapping[ports[i]] = externalPorts[i]
+    for i in 0..<internalPorts.len:
+      portMapping[internalPorts[i]] = externalPorts[i]
     # Port mapping works. Let's launch a thread that repeats it, in case the
     # NAT-PMP lease expires or the router is rebooted and forgets all about
     # these mappings.
@@ -320,9 +320,11 @@ proc redirectPorts*(ports: seq[PortType], description: string): Opt[seq[PortType
       # atexit() in disguise
       addQuitProc(stopNatThread)
     except Exception as exc:
+      for p in internalPorts:
+        portMapping.del(p)
       warn "Failed to create NAT port mapping renewal thread", exc = exc.msg
 
-proc redirectPorts*(tcpPort, udpPort: Port, description: string): Opt[(Port, Port)] {.deprecated: "Please use redirectPorts with a sequence of PortType instead".} =
+proc redirectPorts*(tcpPort, udpPort: Port, description: string): Opt[(Port, Port)] {.deprecated: "Please use redirectPorts with a sequence of PortSpec instead".} =
   let portsOpt = redirectPorts(@[(port: tcpPort, protocol: PortProtocol.TCP), (port: udpPort, protocol: PortProtocol.UDP)], description)
   if portsOpt.isSome:
     let ports = portsOpt.get()
@@ -330,7 +332,7 @@ proc redirectPorts*(tcpPort, udpPort: Port, description: string): Opt[(Port, Por
 
 proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
     clientId: string):
-    tuple[ip: Opt[IpAddress], tcpPort, udpPort: Opt[Port]] {.deprecated: "Please use setupNat with a sequence of PortType instead".} =
+    tuple[ip: Opt[IpAddress], tcpPort, udpPort: Opt[Port]] {.deprecated: "Please use setupNat with a sequence of PortSpec instead".} =
   ## Setup NAT port mapping and get external IP address.
   ## If any of this fails, we don't return any IP address but do return the
   ## original ports as best effort.
@@ -352,28 +354,24 @@ proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
     warn "UPnP/NAT-PMP not available"
     (ip: Opt.none(IpAddress), tcpPort: Opt.some(tcpPort), udpPort: Opt.some(udpPort))
 
-proc setupNat*(natStrategy: NatStrategy, ports: seq[PortType],
+proc setupNat*(natStrategy: NatStrategy, ports: seq[PortSpec],
     clientId: string):
-    tuple[ip: Opt[IpAddress], ports: seq[Opt[PortType]]] =
+    tuple[ip: Opt[IpAddress], ports: seq[Opt[PortSpec]]] =
   ## Setup NAT port mapping and get external IP address.
   ## If any of this fails, we don't return any IP address but do return the
   ## original ports as best effort.
-  ## TODO: Allow for tcp or udp port mapping to be optional.
-  let extIp = getExternalIP(natStrategy)
-  if extIp.isSome:
-    let ip = extIp.get
-    let extPorts = ({.gcsafe.}:
-      redirectPorts(ports,
-                    description = clientId))
-    if extPorts.isSome:
-      (ip: Opt.some(ip), ports: extPorts.get().mapIt(Opt.some(it)))
-    else:
-      warn "UPnP/NAT-PMP available but port forwarding failed"
-      (ip: Opt.none(IpAddress), ports: ports.mapIt(Opt.some(it)))
-  else:
+  let extIp =  getExternalIP(natStrategy).valueOr:
     warn "UPnP/NAT-PMP not available"
-    (ip: Opt.none(IpAddress), ports: ports.mapIt(Opt.some(it)))
+    return (ip: Opt.none(IpAddress), ports: ports.mapIt(Opt.some(it)))
 
+  let extPorts = ({.gcsafe.}:
+    redirectPorts(ports,
+                  description = clientId)).valueOr:
+    warn "UPnP/NAT-PMP available but port forwarding failed"
+    return (ip: Opt.none(IpAddress), ports: ports.mapIt(Opt.some(it)))
+  
+  (ip: Opt.some(extIp), ports: extPorts.mapIt(Opt.some(it)))
+  
 type
   NatConfig* = object
     case hasExtIp*: bool
@@ -408,7 +406,7 @@ func completeCmdArg*(T: type NatConfig, val: string): seq[string] =
 proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress,
     tcpPort, udpPort: Port, clientId: string):
     tuple[ip: Opt[IpAddress], tcpPort, udpPort: Opt[Port]]
-    {.gcsafe, deprecated: "Please use setupAddress with a sequence of PortType instead".} =
+    {.gcsafe, deprecated: "Please use setupAddress with a sequence of PortSpec instead".} =
   ## Set-up of the external address via any of the ways as configured in
   ## `NatConfig`. In case all fails an error is logged and the bind ports are
   ## selected also as external ports, as best effort and in hope that the
@@ -443,8 +441,8 @@ proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress,
     of NatUpnp, NatPmp:
       return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
 
-proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress, ports: seq[PortType], clientId: string):
-    tuple[ip: Opt[IpAddress], ports: seq[Opt[PortType]]]
+proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress, ports: seq[PortSpec], clientId: string):
+    tuple[ip: Opt[IpAddress], ports: seq[Opt[PortSpec]]]
     {.gcsafe.} =
   ## Set-up of the external address via any of the ways as configured in
   ## `NatConfig`. In case all fails an error is logged and the bind ports are
