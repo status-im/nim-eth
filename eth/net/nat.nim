@@ -460,3 +460,12 @@ func `==`*(a, b: NatConfig): bool =
   case a.hasExtIp:
   of true: a.extIp == b.extIp
   of false: a.nat == b.nat
+
+proc toPort*(p: PortSpec): Port =
+  p.port
+
+proc toPort*(p: Opt[PortSpec]): Opt[Port] =
+  if p.isSome:
+    Opt.some(p.get().port)
+  else:
+    Opt.none(Port)
