@@ -27,6 +27,7 @@ typedef struct {
 
 void keccak_init(keccak_st *ctx);
 void keccak_update(keccak_st *ctx, const uint8_t *in, size_t in_len);
+#define keccak_update_char(ctx, in, len) keccak_update(ctx, (const uint8_t *) in, in_len)
 void keccak_finish(keccak_st *ctx, uint8_t *out, size_t out_len);
 void keccak256_20(const uint8_t *in, uint8_t *out);
 void keccak256_32(const uint8_t *in, uint8_t *out);

@@ -19,7 +19,7 @@ type
 func init(h: var Keccak256) {.cdecl, importc: "keccak_init", kheader.}
 func finish(h: var Keccak256, val: var openArray[byte]) {.cdecl, importc: "keccak_finish", kheader.}
 func update*(h: var Keccak256, data: openArray[byte]) {.cdecl, importc: "keccak_update", kheader.}
-
+func update*(h: var Keccak256, data: openArray[char]) {.cdecl, importc: "keccak_update_char", kheader.}
 func keccak256_20*(data: ptr byte, output: ptr byte) {.cdecl, importc: "keccak256_20", kheader.}
 func keccak256_32*(data: ptr byte, output: ptr byte) {.cdecl, importc: "keccak256_32", kheader.}
 
