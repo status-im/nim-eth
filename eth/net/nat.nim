@@ -330,30 +330,6 @@ proc redirectPorts*(tcpPort, udpPort: Port, description: string): Opt[(Port, Por
     let ports = portsOpt.get()
     return Opt.some((ports[0].port, ports[1].port))
 
-proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
-    clientId: string):
-    tuple[ip: Opt[IpAddress], tcpPort, udpPort: Opt[Port]] {.deprecated: "Please use setupNat with a sequence of PortSpec instead".} =
-  ## Setup NAT port mapping and get external IP address.
-  ## If any of this fails, we don't return any IP address but do return the
-  ## original ports as best effort.
-  ## TODO: Allow for tcp or udp port mapping to be optional.
-  let extIp = getExternalIP(natStrategy)
-  if extIp.isSome:
-    let ip = extIp.get
-    let extPorts = ({.gcsafe.}:
-      redirectPorts(tcpPort = tcpPort,
-                    udpPort = udpPort,
-                    description = clientId))
-    if extPorts.isSome:
-      let (extTcpPort, extUdpPort) = extPorts.get()
-      (ip: Opt.some(ip), tcpPort: Opt.some(extTcpPort), udpPort: Opt.some(extUdpPort))
-    else:
-      warn "UPnP/NAT-PMP available but port forwarding failed"
-      (ip: Opt.none(IpAddress), tcpPort: Opt.some(tcpPort), udpPort: Opt.some(udpPort))
-  else:
-    warn "UPnP/NAT-PMP not available"
-    (ip: Opt.none(IpAddress), tcpPort: Opt.some(tcpPort), udpPort: Opt.some(udpPort))
-
 proc setupNat*(natStrategy: NatStrategy, ports: seq[PortSpec],
     clientId: string):
     tuple[ip: Opt[IpAddress], ports: seq[Opt[PortSpec]]] =
@@ -371,7 +347,25 @@ proc setupNat*(natStrategy: NatStrategy, ports: seq[PortSpec],
     return (ip: Opt.none(IpAddress), ports: ports.mapIt(Opt.some(it)))
   
   (ip: Opt.some(extIp), ports: extPorts.mapIt(Opt.some(it)))
-  
+
+proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
+    clientId: string):
+    tuple[ip: Opt[IpAddress], tcpPort, udpPort: Opt[Port]] {.deprecated: "Please use setupNat with a sequence of PortSpec instead".} =
+  let
+    ports: seq[PortSpec] = @[(tcpPort, PortProtocol.TCP), (udpPort, PortProtocol.UDP)]
+    setupNatRet = setupNat(natStrategy, ports, clientId)
+    tcpPortRet =
+      if setupNatRet.ports[0].isSome:
+        Opt.some(setupNatRet.ports[0].get().port)
+      else:
+        Opt.none(Port)
+    udpPortRet =
+      if setupNatRet.ports[1].isSome:
+        Opt.some(setupNatRet.ports[1].get().port)
+      else:
+        Opt.none(Port)
+  (setupNatRet.ip, tcpPortRet, udpPortRet)
+
 type
   NatConfig* = object
     case hasExtIp*: bool
@@ -402,44 +396,6 @@ func parseCmdArg*(T: type NatConfig, p: string): T {.raises: [ValueError].} =
 
 func completeCmdArg*(T: type NatConfig, val: string): seq[string] =
   return @[]
-
-proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress,
-    tcpPort, udpPort: Port, clientId: string):
-    tuple[ip: Opt[IpAddress], tcpPort, udpPort: Opt[Port]]
-    {.gcsafe, deprecated: "Please use setupAddress with a sequence of PortSpec instead".} =
-  ## Set-up of the external address via any of the ways as configured in
-  ## `NatConfig`. In case all fails an error is logged and the bind ports are
-  ## selected also as external ports, as best effort and in hope that the
-  ## external IP can be figured out by other means at a later stage.
-  ## TODO: Allow for tcp or udp bind ports to be optional.
-
-  if natConfig.hasExtIp:
-    # any required port redirection must be done by hand
-    return (Opt.some(natConfig.extIp), Opt.some(tcpPort), Opt.some(udpPort))
-
-  case natConfig.nat:
-    of NatAny:
-      let (prefSrcIp, prefSrcStatus) = getRoutePrefSrc(bindIp)
-
-      case prefSrcStatus:
-        of NoRoutingInfo, PrefSrcIsPublic, BindAddressIsPublic:
-          return (prefSrcIp, Opt.some(tcpPort), Opt.some(udpPort))
-        of PrefSrcIsPrivate, BindAddressIsPrivate:
-          return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
-    of NatNone:
-      let (prefSrcIp, prefSrcStatus) = getRoutePrefSrc(bindIp)
-
-      case prefSrcStatus:
-        of NoRoutingInfo, PrefSrcIsPublic, BindAddressIsPublic:
-          return (prefSrcIp, Opt.some(tcpPort), Opt.some(udpPort))
-        of PrefSrcIsPrivate:
-          error "No public IP address found. Should not use --nat:none option"
-          return (Opt.none(IpAddress), Opt.some(tcpPort), Opt.some(udpPort))
-        of BindAddressIsPrivate:
-          error "Bind IP is not a public IP address. Should not use --nat:none option"
-          return (Opt.none(IpAddress), Opt.some(tcpPort), Opt.some(udpPort))
-    of NatUpnp, NatPmp:
-      return setupNat(natConfig.nat, tcpPort, udpPort, clientId)
 
 proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress, ports: seq[PortSpec], clientId: string):
     tuple[ip: Opt[IpAddress], ports: seq[Opt[PortSpec]]]
@@ -476,6 +432,26 @@ proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress, ports: seq[PortSpec]
           return (Opt.none(IpAddress), ports.mapIt(Opt.some(it)))
     of NatUpnp, NatPmp:
       return setupNat(natConfig.nat, ports, clientId)
+
+proc setupAddress*(
+    natConfig: NatConfig, bindIp: IpAddress, tcpPort, udpPort: Port, clientId: string
+): tuple[ip: Opt[IpAddress], tcpPort, udpPort: Opt[Port]] {.
+    gcsafe, deprecated: "Please use setupAddress with a sequence of PortSpec instead"
+.} =
+  let
+    ports: seq[PortSpec] = @[(tcpPort, PortProtocol.TCP), (udpPort, PortProtocol.UDP)]
+    setupAddressRet = setupAddress(natConfig, bindIp, ports, clientId)
+    tcpPortRet =
+      if setupAddressRet.ports[0].isSome:
+        Opt.some(setupAddressRet.ports[0].get().port)
+      else:
+        Opt.none(Port)
+    udpPortRet =
+      if setupAddressRet.ports[1].isSome:
+        Opt.some(setupAddressRet.ports[1].get().port)
+      else:
+        Opt.none(Port)
+  (setupAddressRet.ip, tcpPortRet, udpPortRet)
 
 func `==`*(a, b: NatConfig): bool =
   if a.hasExtIp != b.hasExtIp:
