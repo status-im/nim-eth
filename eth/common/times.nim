@@ -18,6 +18,10 @@ when not defined(`any`) and not defined(standalone):
   proc now*(_: type EthTime): EthTime =
     getTime().toUnix.EthTime
 
+func fromUnix*(_: type EthTime, time: int64): EthTime =
+  doAssert(time >= 0)
+  time.EthTime
+
 func `+`*(a: EthTime, b: EthTime): EthTime =
   EthTime(a.uint64 + b.uint64)
 
