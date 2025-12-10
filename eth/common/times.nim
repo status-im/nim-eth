@@ -8,13 +8,19 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-from std/times import getTime, toUnix
-
 type
   EthTime* = distinct uint64
 
-proc now*(_: type EthTime): EthTime =
-  getTime().toUnix.EthTime
+# Getting the current time is not supported when compiling to bare metal
+when not defined(`any`) and not defined(standalone):
+  from std/times import getTime, toUnix
+
+  proc now*(_: type EthTime): EthTime {.deprecated.} =
+    getTime().toUnix.EthTime
+
+func fromUnix*(_: type EthTime, time: int64): EthTime =
+  doAssert(time >= 0)
+  time.EthTime
 
 func `+`*(a: EthTime, b: EthTime): EthTime =
   EthTime(a.uint64 + b.uint64)
