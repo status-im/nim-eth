@@ -14,7 +14,8 @@
 ## Its usage was limited to ethash, the proof-of-work algorithm that has been
 ## replaced with proof-of-stake.
 
-import std/[typetraits, hashes], nimcrypto/keccak, ./base, stew/assign2
+import std/[typetraits, hashes], ../keccak/keccak, ./base, stew/assign2
+import nimcrypto/keccak as slow_keccak
 
 export hashes, keccak.update, keccak.finish
 
@@ -32,7 +33,7 @@ type
 const zeroHash32* = system.default(Hash32) ## Hash32 value consisting of all zeroes
 
 template to*(v: array[32, byte], _: type Hash32): Hash32 =
-  Address(v)
+  Hash32(v)
 
 template data*(v: Hash32): array[32, byte] =
   distinctBase(v)
@@ -91,14 +92,29 @@ const
     ## of an empty MPT trie
 
 func keccak256*(input: openArray[byte]): Hash32 {.noinit.} =
-  var ctx: keccak.keccak256
-  ctx.update(input)
-  ctx.finish().to(Hash32)
+  when nimvm:
+    var c: slow_keccak.keccak256
+    c.update(input)
+    c.finish().to(Hash32)
+  else:
+    var ctx: keccak.Keccak256
+    ctx.update(input)
+    ctx.finish().to(Hash32)
 
 func keccak256*(input: openArray[char]): Hash32 {.noinit.} =
   keccak256(input.toOpenArrayByte(0, input.high))
 
+template keccak256*[N: static[int]](input: array[N, byte]): Hash32 =
+  when N == 20:
+    keccak256_20(input).to(Hash32)
+  elif N == 32:
+    keccak256_32(input).to(Hash32)
+  else:
+    var ctx: keccak.Keccak256
+    ctx.update(input)
+    ctx.finish().to(Hash32)
+
 template withKeccak256*(body: untyped): Hash32 =
-  var h {.inject.}: keccak.keccak256
+  var h {.inject.}: keccak.Keccak256
   body
   h.finish().to(Hash32)
