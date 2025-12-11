@@ -32,11 +32,15 @@ func validIp(sender, address: IpAddress): bool =
       false
 
 proc verifyNodesRecords(
-    enrs: openArray[Record], src: Node, nodesLimit: int,
+    enrs: openArray[Record], src: Node, local: Node, nodesLimit: int,
     distances: Opt[seq[uint16]]): seq[Node] =
   ## Verify and convert ENRs to a sequence of nodes. Only ENRs that pass
   ## verification will be added. ENRs are verified for duplicates, invalid
   ## addresses and invalid distances if those are specified.
+  ## The src Node must always have an address set as this call is to be used
+  ## when verifying nodes returned from a FindNodes request.
+  ## The local Node is used to ensure we can actually communicate with the
+  ## returned nodes (i.e., we have a matching address family).
   logScope:
     sender = src.record.toURI
 
@@ -66,9 +70,15 @@ proc verifyNodesRecords(
     # Check if the node has an address and if the address is public or from
     # the same local network or lo network as the sender. The latter allows
     # for local testing.
-    if not n.address.isSome() or not
-        validIp(src.address.get().ip, n.address.get().ip):
-      trace "Invalid ip-address", record = n.record.toURI, node = n
+    if preferredAddress(n, src).isNone():
+      trace "Invalid ip-address from src perspective", record = n.record.toURI, node = n
+      continue
+    # Check if local node can actually communicate with this node
+    # (i.e., has a compatible address family)
+    # TODO: This is not sufficient, as the local node can also not have an ENR IP set but still contact
+    # nodes over IPv4/IPv6
+    if preferredAddress(n, local).isNone():
+      trace "No compatible address family with local node", record = n.record.toURI, node = n
       continue
     # Check if returned node has one of the requested distances.
     if distances.isSome():
@@ -84,10 +94,10 @@ proc verifyNodesRecords(
     result.add(n)
 
 proc verifyNodesRecords*(
-    enrs: openArray[Record], src: Node, nodesLimit: int): seq[Node] =
-  verifyNodesRecords(enrs, src, nodesLimit, Opt.none(seq[uint16]))
+    enrs: openArray[Record], src: Node, local: Node, nodesLimit: int): seq[Node] =
+  verifyNodesRecords(enrs, src, local, nodesLimit, Opt.none(seq[uint16]))
 
 proc verifyNodesRecords*(
-    enrs: openArray[Record], src: Node, nodesLimit: int,
+    enrs: openArray[Record], src: Node, local: Node, nodesLimit: int,
     distances: seq[uint16]): seq[Node] =
-  verifyNodesRecords(enrs, src, nodesLimit, Opt.some(distances))
+  verifyNodesRecords(enrs, src, local, nodesLimit, Opt.some(distances))

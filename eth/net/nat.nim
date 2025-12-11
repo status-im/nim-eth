@@ -156,6 +156,25 @@ proc getRoutePrefSrc(bindIp: IpAddress): (Opt[IpAddress], PrefSrcStatus) =
   else:
     return (Opt.none(IpAddress), BindAddressIsPrivate)
 
+proc getRoutePrefSrcv6*(bindIp: IpAddress): Opt[IpAddress] =
+  let bindAddress = initTAddress(bindIp, Port(0))
+
+  if bindAddress.isAnyLocal():
+    let ip = getRouteIpv6()
+    if ip.isErr():
+      # No route was found, log error and continue without IP.
+      error "No routable IP address found, check your network connection",
+        error = ip.error
+      Opt.none(IpAddress)
+    elif ip.get().isGlobalUnicast():
+      Opt.some(ip.get())
+    else:
+      Opt.none(IpAddress)
+  elif bindAddress.isGlobalUnicast():
+    Opt.some(bindIp)
+  else:
+    Opt.none(IpAddress)
+
 # Try to detect a public IP assigned to this host, before trying NAT traversal.
 proc getPublicRoutePrefSrcOrExternalIP*(
     natStrategy: NatStrategy, bindIp: IpAddress, quiet = true):

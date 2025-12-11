@@ -21,9 +21,7 @@ import
   ../eth/p2p/discoveryv5/protocol as discv5_protocol
 
 const
-  defaultListenAddress* = (static parseIpAddress("0.0.0.0"))
   defaultAdminListenAddress* = (static parseIpAddress("127.0.0.1"))
-  defaultListenAddressDesc = $defaultListenAddress
   defaultAdminListenAddressDesc = $defaultAdminListenAddress
 
 type
@@ -46,10 +44,9 @@ type
       name: "udp-port" .}: uint16
 
     listenAddress* {.
-      defaultValue: defaultListenAddress
-      defaultValueDesc: $defaultListenAddressDesc
       desc: "Listening address for the Discovery v5 traffic"
-      name: "listen-address" }: IpAddress
+      defaultValueDesc: "*"
+      name: "listen-address" .}: Option[IpAddress]
 
     persistingFile* {.
       defaultValue: "peerstore.csv",
@@ -67,6 +64,12 @@ type
             "Must be one of: any, none, upnp, pmp, extip:<IP>"
       defaultValue: NatConfig(hasExtIp: false, nat: NatAny)
       name: "nat" .}: NatConfig
+
+    enrIpv6Address* {.
+      hidden,
+      desc: "Specifies the IPv6 address to be advertised in the node’s ENR",
+      name: "debug-enr-ipv6-address"
+    .}: Option[IpAddress]
 
     enrAutoUpdate* {.
       defaultValue: false
@@ -352,21 +355,62 @@ proc discover(
 
 proc setupNode(config: DiscoveryConf): discv5_protocol.Protocol {.raises: [CatchableError].} =
   let
-    bindIp = config.listenAddress
+    listenAddress =
+      if config.listenAddress.isSome():
+        config.listenAddress.get()
+      else:
+        getAutoAddress(Port(0)).toIpAddress()
     udpPort = Port(config.udpPort)
-    (extIp, extPorts) = setupAddress(
-      config.nat,
-      config.listenAddress,
-      @[(port: udpPort, protocol: PortProtocol.UDP)],
-      "dcli",
-    )
-    extUdpPort = extPorts[0].toPort()
+    (extIp4, extIp6, extUdpPort) =
+      if listenAddress == AnyAddress6.toIpAddress():
+        let
+          extIp6 =
+            if config.enrIpv6Address.isSome():
+              Opt.some(config.enrIpv6Address.get())
+            else:
+              getRoutePrefSrcv6(listenAddress)
 
-  let d = newProtocol(config.nodeKey,
-          extIp, Opt.none(Port), extUdpPort,
-          bootstrapRecords = config.bootstrapNodes,
-          bindIp = bindIp, bindPort = udpPort,
-          enrAutoUpdate = config.enrAutoUpdate)
+          (extIp4, extPorts) = setupAddress(
+            config.nat,
+            listenAddress,
+            @[(port: udpPort, protocol: PortProtocol.UDP)],
+            "dcli",
+          )
+          extUdpPort = extPorts[0].toPort()
+
+        (extIp4, extIp6, extUdpPort)
+      elif listenAddress.family == IpAddressFamily.IPv6:
+        let extIp6 =
+          if config.enrIpv6Address.isSome():
+            Opt.some(config.enrIpv6Address.get())
+          else:
+            getRoutePrefSrcv6(listenAddress)
+        (Opt.none(IpAddress), extIp6, Opt.some(udpPort))
+      else: # listenAddress.family == IpAddressFamily.IPv4
+        let
+          (extIp4, extPorts) = setupAddress(
+            config.nat,
+            listenAddress,
+            @[(port: udpPort, protocol: PortProtocol.UDP)],
+            "dcli",
+          )
+          extUdpPort = extPorts[0].toPort()
+
+        (extIp4, Opt.none(IpAddress), extUdpPort)
+
+  let d = newProtocol(
+    config.nodeKey,
+    extIp4,
+    Opt.none(Port),
+    extUdpPort,
+    extIp6,
+    Opt.none(Port),
+    extUdpPort,
+    bootstrapRecords = config.bootstrapNodes,
+    bindIp = Opt.some(listenAddress),
+    bindPort = udpPort,
+    enrAutoUpdate = config.enrAutoUpdate,
+  )
   d.open()
 
   if config.metricsEnabled:
