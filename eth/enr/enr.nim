@@ -255,6 +255,41 @@ func insertAddress(
   if quicPort.isSome():
     fields.insert(("quic", quicPort.get().uint16.toField))
 
+func insertAddressDS(
+    fields: var seq[FieldPair],
+    ip4: Opt[IpAddress],
+    tcp4Port, udp4Port, quic4Port: Opt[Port],
+    ip6: Opt[IpAddress],
+    tcp6Port, udp6Port, quic6Port: Opt[Port],
+) =
+  ## Insert dual stack address data.
+  ## Incomplete address information is allowed (example: Port but not IP) as
+  ## that information might be already in the ENR or added later.
+  ##
+  ## The tcp6, udp6 and quic6 fields will only be set if they differ from the
+  ## tcp, udp and quic fields.
+  if ip4.isSome() and ip4.value().family == IpAddressFamily.IPv4:
+    fields.insert(("ip", ip4.value().address_v4.toField))
+  if ip6.isSome() and ip6.value().family == IpAddressFamily.IPv6:
+    fields.insert(("ip6", ip6.value().address_v6.toField))
+
+  if tcp4Port.isSome():
+    fields.insert(("tcp", tcp4Port.value().uint16.toField))
+  if udp4Port.isSome():
+    fields.insert(("udp", udp4Port.value().uint16.toField))
+  if quic4Port.isSome():
+    fields.insert(("quic", quic4Port.value().uint16.toField))
+
+  # From the ENR specification:
+  # "Declaring the same port number in both tcp, tcp6 or udp, udp6 should be avoided
+  # but doesn't render the record invalid."
+  if tcp6Port.isSome() and tcp6Port != tcp4Port:
+    fields.insert(("tcp6", tcp6Port.value().uint16.toField))
+  if udp6Port.isSome() and udp6Port != udp4Port:
+    fields.insert(("udp6", udp6Port.value().uint16.toField))
+  if quic6Port.isSome() and quic6Port != quic4Port:
+    fields.insert(("quic6", quic6Port.value().uint16.toField))
+
 func init*(
     T: type Record,
     seqNum: uint64, pk: PrivateKey,
@@ -267,12 +302,45 @@ func init*(
   ## Initialize a `Record` with given sequence number, private key, optional
   ## ip address, tcp port, udp port, quic port, and optional custom k:v pairs.
   ##
+  ## The IP address can be an IPv4 or IPv6 address.
   ## Can fail in case the record exceeds the `maxEnrSize`.
   doAssert(not hasPredefinedKey(extraFields), "Predefined key in custom pairs")
 
   var fields = newSeq[FieldPair]()
 
   fields.insertAddress(ip, tcpPort, udpPort, quicPort)
+  fields.insert extraFields
+  makeEnrAux(seqNum, "v4", pk, fields)
+
+func initDS*(
+    T: type Record,
+    seqNum: uint64,
+    pk: PrivateKey,
+    ip4: Opt[IpAddress] = Opt.none(IpAddress),
+    tcp4Port: Opt[Port] = Opt.none(Port),
+    udp4Port: Opt[Port] = Opt.none(Port),
+    quic4Port: Opt[Port] = Opt.none(Port),
+    ip6: Opt[IpAddress] = Opt.none(IpAddress),
+    tcp6Port: Opt[Port] = Opt.none(Port),
+    udp6Port: Opt[Port] = Opt.none(Port),
+    quic6Port: Opt[Port] = Opt.none(Port),
+    extraFields: openArray[FieldPair] = [],
+): EnrResult[T] =
+  ## Initialize a `Record` with given sequence number, private key, IPv4 and IPv6
+  ## address, optional TCP, UDP and QUIC port for both IPv4 and IPv6, and
+  ## optional custom k:v pairs.
+  ##
+  ## The tcp6, udp6 and quic6 fields will only be set if they differ from the
+  ## tcp, udp and quic fields.
+  ##
+  ## Can fail in case the record exceeds the `maxEnrSize`.
+  doAssert(not hasPredefinedKey(extraFields), "Predefined key in custom pairs")
+
+  var fields = newSeq[FieldPair]()
+
+  fields.insertAddressDS(
+    ip4, tcp4Port, udp4Port, quic4Port, ip6, tcp6Port, udp6Port, quic6Port
+  )
   fields.insert extraFields
   makeEnrAux(seqNum, "v4", pk, fields)
 
@@ -381,6 +449,58 @@ func update*(
   r.seqNum.inc()
 
   r.raw = ? makeEnrRaw(r.seqNum, pk, r.pairs)
+  record = r
+
+  ok()
+
+func updateDS*(
+    record: var Record,
+    pk: PrivateKey,
+    ip4: Opt[IpAddress] = Opt.none(IpAddress),
+    tcp4Port: Opt[Port] = Opt.none(Port),
+    udp4Port: Opt[Port] = Opt.none(Port),
+    quic4Port: Opt[Port] = Opt.none(Port),
+    ip6: Opt[IpAddress] = Opt.none(IpAddress),
+    tcp6Port: Opt[Port] = Opt.none(Port),
+    udp6Port: Opt[Port] = Opt.none(Port),
+    quic6Port: Opt[Port] = Opt.none(Port),
+    extraFields: openArray[FieldPair] = [],
+): EnrResult[void] =
+  ## Update a `Record` with given IPv4 and IPv6 address, optional TCP, UDP and
+  ## QUIC port for both IPv4 and IPv6, and optional custom k:v pairs.
+  ##
+  ## This function is to be used when running in IPv4 and IPv6 dual stack mode.
+  ## The tcp6, udp6 and quic6 fields will only be set if they differ from the
+  ## tcp, udp and quic fields.
+  ##
+  ## If none of the k:v pairs are changed, the sequence number of the `Record`
+  ## will still be incremented and a new signature will be applied.
+  ##
+  ## Providing an `Opt.none` for `tcp4Port`/`udp4Port`/`quic4Port`/`tcp6Port`/
+  ## `udp6Port`/`quic6Port` will leave the corresponding field untouched.
+  ##
+  ## Can fail in case of wrong `PrivateKey`, if the size of the resulting record
+  ## exceeds `maxEnrSize` or if maximum sequence number is reached. The `Record`
+  ## will not be altered in these cases.
+  # TODO: deprecate this call and have individual functions for updating?
+  doAssert(not hasPredefinedKey(extraFields), "Predefined key in custom pairs")
+
+  var r = record
+
+  let pubkey = r.get(PublicKey)
+  if pubkey.isNone() or pubkey.get() != pk.toPublicKey():
+    return err("Public key does not correspond with given private key")
+
+  r.pairs.insertAddressDS(
+    ip4, tcp4Port, udp4Port, quic4Port, ip6, tcp6Port, udp6Port, quic6Port
+  )
+  r.pairs.insert extraFields
+
+  if r.seqNum == high(type r.seqNum): # highly unlikely
+    return err("Maximum sequence number reached")
+  r.seqNum.inc()
+
+  r.raw = ?makeEnrRaw(r.seqNum, pk, r.pairs)
   record = r
 
   ok()
