@@ -174,7 +174,7 @@ func ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
   ## the specified `Node` its ip.
   ## When one of the ip limits is reached return false, else increment them and
   ## return true.
-  let ip = n.address.get().ip # Node from table should always have an address
+  let ip = n.preferredAddress(r.localNode).get().ip # Node from table should always have an address
 
   # Apply IP limits only to public addresses. The limits defend against Sybil
   # attacks from a single public IP, which is not meaningful on a private
@@ -194,9 +194,10 @@ func ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
 func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   ## Decrement the ip limits of the routing table and the bucket for the
   ## specified `Node` its ip.
-  let ip = n.address.get().ip # Node from table should always have an address
+  let ip = n.preferredAddress(r.localNode).get().ip # Node from table should always have an address
   if not ip.isPublic():
     return
+
   b.ipLimits.dec(ip)
   r.ipLimits.dec(ip)
 
@@ -260,7 +261,7 @@ proc remove(k: KBucket, n: Node): bool =
   else:
     false
 
-func split(k: KBucket): tuple[lower, upper: KBucket] =
+func split(r: var RoutingTable, k: KBucket): tuple[lower, upper: KBucket] =
   ## Split the kbucket `k` at the median id.
   let splitid = k.midpoint
   result.lower = KBucket.new(k.istart, splitid, k.ipLimits.limit)
@@ -272,15 +273,17 @@ func split(k: KBucket): tuple[lower, upper: KBucket] =
     # increment again for each added node. It should however never fail as the
     # previous bucket had the same limits. IP limits only track public addresses
     # so non-public addresses are not counted.
-    if node.address.get().ip.isPublic():
-      doAssert(bucket.ipLimits.inc(node.address.get().ip),
+    let nodeIp = node.preferredAddress(r.localNode).get().ip
+    if nodeIp.isPublic():
+      doAssert(bucket.ipLimits.inc(nodeIp),
         "IpLimit increment should work as all buckets have the same limits")
 
   for node in k.replacementCache:
     let bucket = if node.id <= splitid: result.lower else: result.upper
     bucket.replacementCache.add(node)
-    if node.address.get().ip.isPublic():
-      doAssert(bucket.ipLimits.inc(node.address.get().ip),
+    let nodeIp = node.preferredAddress(r.localNode).get().ip
+    if nodeIp.isPublic():
+      doAssert(bucket.ipLimits.inc(nodeIp),
         "IpLimit increment should work as all buckets have the same limits")
 
 func inRange(k: KBucket, n: Node): bool =
@@ -338,7 +341,7 @@ func init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop
 
 func splitBucket(r: var RoutingTable, index: int) =
   let bucket = r.buckets[index]
-  let (a, b) = bucket.split()
+  let (a, b) = r.split(bucket)
   r.buckets[index] = a
   r.buckets.insert(b, index + 1)
 
@@ -360,7 +363,7 @@ func addReplacement(r: var RoutingTable, k: KBucket, n: Node): NodeStatus =
     if k.replacementCache[nodeIdx].record.seqNum <= n.record.seqNum:
       # In case the record sequence number is higher or the same, the new node
       # gets moved to the tail.
-      if k.replacementCache[nodeIdx].address.get().ip != n.address.get().ip:
+      if k.replacementCache[nodeIdx].preferredAddress(r.localNode).get().ip != n.preferredAddress(r.localNode).get().ip:
         if not ipLimitInc(r, k, n):
           return IpLimitReached
         ipLimitDec(r, k, k.replacementCache[nodeIdx])
@@ -397,7 +400,7 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   # Don't allow nodes without an address field in the ENR to be added.
   # This could also be reworked by having another Node type that always has an
   # address.
-  if n.address.isNone():
+  if n.preferredAddress(r.localNode).isNone():
     return NoAddress
 
   if n == r.localNode:
@@ -414,7 +417,7 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   if nodeIdx != -1:
     if bucket.nodes[nodeIdx].record.seqNum < n.record.seqNum:
       # In case of a newer record, it gets replaced.
-      if bucket.nodes[nodeIdx].address.get().ip != n.address.get().ip:
+      if bucket.nodes[nodeIdx].preferredAddress(r.localNode).get().ip != n.preferredAddress(r.localNode).get().ip:
         if not ipLimitInc(r, bucket, n):
           return IpLimitReached
         ipLimitDec(r, bucket, bucket.nodes[nodeIdx])
