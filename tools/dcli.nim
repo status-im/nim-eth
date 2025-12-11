@@ -13,7 +13,7 @@ import
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver,
   stew/[byteutils, bitops2],
-  ../eth/keys, ../eth/net/nat,
+  ../eth/common/keys, ../eth/net/nat,
   ../eth/common/hashes,
   ../eth/p2p/discoveryv5/node,
   ../eth/p2p/discoveryv5/protocol as discv5_protocol
@@ -319,9 +319,13 @@ proc setupNode(config: DiscoveryConf): discv5_protocol.Protocol {.raises: [Catch
   let
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
-    # TODO: allow for no TCP port mapping!
-    (extIp, _, extUdpPort) = setupAddress(config.nat,
-      config.listenAddress, udpPort, udpPort, "dcli")
+    (extIp, extPorts) = setupAddress(
+      config.nat,
+      config.listenAddress,
+      @[(port: udpPort, protocol: PortProtocol.UDP)],
+      "dcli",
+    )
+    extUdpPort = extPorts[0].toPort()
 
   let d = newProtocol(config.nodeKey,
           extIp, Opt.none(Port), extUdpPort,
