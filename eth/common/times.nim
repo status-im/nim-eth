@@ -15,7 +15,7 @@ type
 when not defined(`any`) and not defined(standalone):
   from std/times import getTime, toUnix
 
-  proc now*(_: type EthTime): EthTime {.deprecated.} =
+  proc now*(_: type EthTime): EthTime =
     getTime().toUnix.EthTime
 
 func fromUnix*(_: type EthTime, time: int64): EthTime =
