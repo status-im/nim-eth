@@ -9,12 +9,14 @@
 {.push raises: [].}
 
 import
-  std/[strutils, sets],
+  std/[strutils, sets, sugar],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver,
-  stew/[byteutils, bitops2],
-  ../eth/common/keys, ../eth/net/nat,
+  stew/[byteutils, bitops2, endians2],
+  ../eth/common/keys,
   ../eth/common/hashes,
+  ../eth/net/nat,
+  ../eth/net/utils,
   ../eth/p2p/discoveryv5/node,
   ../eth/p2p/discoveryv5/protocol as discv5_protocol
 
@@ -190,6 +192,9 @@ proc generateDistributedNetKeys(
 
   res
 
+template mapStr(opt, fn: untyped): string =
+  opt.map(fn).get("")
+
 proc discover(
     d: discv5_protocol.Protocol, psFile: string
 ) {.async: (raises: [CancelledError]).} =
@@ -209,7 +214,7 @@ proc discover(
 
   try:
     f.writeLine(
-      "node_id,seq_number,ip:port,eth2,fork_digest,attnets,attnets_number,syncnets,eth,fork_hash,ENR,pubkey"
+      "node_id,seq_number,ip,ip6,tcp,udp,tcp6,udp6,quic,quic6,eth,eth2,attnets,syncnets,cgc,nfd,fork_hash,fork_digest,attnets_number,ENR,pubkey"
     )
   except IOError as e:
     fatal "Failed to write to file", file = psFile, error = e.msg
@@ -228,53 +233,59 @@ proc discover(
       newNodes.inc()
 
       let
-        # Known ENR fields used by Ethereum CL
+        # TypedRecord holds all predefined keys
+        typedRecord = TypedRecord.fromRecord(n.record)
+
+        # Get ENR fields with keys from Ethereum EL specifications
+        ethField = n.record.tryGet("eth", seq[byte])
+        # Note: there are more keys for the other rlpx protocols such as "snap"
+
+        # Get ENR fields with keys from Ethereum CL specifications
         eth2Field = n.record.tryGet("eth2", seq[byte])
         attnetsField = n.record.tryGet("attnets", seq[byte])
         syncnetsField = n.record.tryGet("syncnets", seq[byte])
-        # Known ENR fields used by Ethereum EL
-        ethField = n.record.tryGet("eth", seq[byte])
-        # There are more for the other rlpx protocols such as "snap"
+        cgcField = n.record.tryGet("cgc", seq[byte])
+        nfdField = n.record.tryGet("nfd", seq[byte])
+        quicField = n.record.tryGet("quic", seq[byte])
+        quic6Field = n.record.tryGet("quic6", seq[byte])
 
-        eth2 =
-          if eth2Field.isSome:
-            eth2Field.get().to0xHex()
-          else:
-            ""
-        attnets =
-          if attnetsField.isSome:
-            attnetsField.get().to0xHex()
-          else:
-            ""
-        syncnets =
-          if syncnetsField.isSome:
-            syncnetsField.get().to0xHex()
-          else:
-            ""
-        eth =
-          if ethField.isSome:
-            ethField.get().to0xHex()
-          else:
-            ""
+        # predefined
+        ip = typedRecord.ip.mapStr((v) => $ipv4(v))
+        ip6 = typedRecord.ip6.mapStr((v) => $ipv6(v))
+        tcp = typedRecord.tcp.mapStr((v) => $v)
+        udp = typedRecord.udp.mapStr((v) => $v)
+        tcp6 = typedRecord.tcp6.mapStr((v) => $v)
+        udp6 = typedRecord.udp6.mapStr((v) => $v)
 
-        forkDigest =
-          if eth2Field.isSome:
-            eth2Field.value()[0 .. 3].to0xHex()
-          else:
-            ""
+        # EL
+        eth = ethField.mapStr((v) => v.to0xHex())
 
-        attnetsAmount =
-          if attnetsField.isSome:
-            var bits = 0
-            for b in attnetsField.value():
-              bits.inc(countOnes(b.uint8))
-            $bits
-          else:
-            ""
+        # CL
+        quic = quicField.mapStr(
+          proc(v: seq[byte]): string =
+            if v.len == 2:
+              $uint16.fromBytesBE(v)
+            else:
+              ""
+        )
+        quic6 = quic6Field.mapStr(
+          proc(v: seq[byte]): string =
+            if v.len == 2:
+              $uint16.fromBytesBE(v)
+            else:
+              ""
+        )
 
-        forkHash =
-          if ethField.isSome:
-            var rlp = rlpFromBytes(ethField.value())
+        eth2 = eth2Field.mapStr((v) => v.to0xHex())
+        attnets = attnetsField.mapStr((v) => v.to0xHex())
+        syncnets = syncnetsField.mapStr((v) => v.to0xHex())
+        cgc = cgcField.mapStr((v) => v.to0xHex())
+        nfd = nfdField.mapStr((v) => v.to0xHex())
+
+        # Further derived values
+        forkHash = ethField.mapStr(
+          proc(v: seq[byte]): string =
+            var rlp = rlpFromBytes(v)
             # It's a double RLP list, see
             # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/enr-entries/eth.md#entry-format
             if rlp.enterList and rlp.enterList:
@@ -284,22 +295,46 @@ proc discover(
                 "Invalid fork hash"
             else:
               "Invalid fork hash"
-          else:
-            ""
+        )
+
+        forkDigest = eth2Field.mapStr(
+          proc(v: seq[byte]): string =
+            if v.len >= 4:
+              v[0 .. 3].to0xHex()
+            else:
+              ""
+        )
+
+        attnetsAmount = attnetsField.mapStr(
+          proc(v: seq[byte]): string =
+            var bits = 0
+            for b in v:
+              bits.inc(countOnes(b.uint8))
+            $bits
+        )
 
       try:
         f.writeLine(
           [
             n.id.toHex,
             $n.record.seqNum,
-            $n.address.value(),
-            eth2,
-            forkDigest,
-            attnets,
-            attnetsAmount,
-            syncnets,
+            ip,
+            ip6,
+            tcp,
+            udp,
+            tcp6,
+            udp6,
+            quic,
+            quic6,
             eth,
+            eth2,
+            attnets,
+            syncnets,
+            cgc,
+            nfd,
             forkHash,
+            forkDigest,
+            attnetsAmount,
             n.record.toURI(),
             $n.record.publicKey,
           ].join(",")
