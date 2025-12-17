@@ -1059,7 +1059,7 @@ func init*(
 proc newProtocol*(
     privKey: PrivateKey,
     enrIp: Opt[IpAddress],
-    enrTcpPort, enrUdpPort: Opt[Port],
+    enrTcpPort, enrUdpPort, enrQuicPort: Opt[Port],
     localEnrFields: openArray[FieldPair] = [],
     bootstrapRecords: openArray[Record] = [],
     previousRecord = Opt.none(enr.Record),
@@ -1083,14 +1083,14 @@ proc newProtocol*(
     record = previousRecord.get()
     # TODO: this is faulty in case the intent is to remove a field with
     # opt.none
-    record.update(privKey, enrIp, enrTcpPort, enrUdpPort,
+    record.update(privKey, enrIp, enrTcpPort, enrUdpPort, enrQuicPort,
       localEnrFields).expect("Record within size limits and correct key")
   else:
-    record = enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort,
+    record = enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort, enrQuicPort,
       localEnrFields).expect("Record within size limits")
 
   info "Discovery ENR initialized", enrAutoUpdate, seqNum = record.seqNum,
-    ip = enrIp, tcpPort = enrTcpPort, udpPort = enrUdpPort,
+    ip = enrIp, tcpPort = enrTcpPort, udpPort = enrUdpPort, quicPort = enrQuicPort,
     localEnrFields, uri = toURI(record)
   if enrIp.isNone():
     if enrAutoUpdate:
@@ -1124,6 +1124,26 @@ proc newProtocol*(
     privKey: PrivateKey,
     enrIp: Opt[IpAddress],
     enrTcpPort, enrUdpPort: Opt[Port],
+    localEnrFields: openArray[FieldPair] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = Opt.none(enr.Record),
+    bindPort: Port,
+    bindIp = IPv4_any(),
+    enrAutoUpdate = false,
+    banNodes = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng()):
+    Protocol =
+  newProtocol(
+    privKey, enrIp, enrTcpPort, enrUdpPort, Opt.none(Port), localEnrFields,
+    bootstrapRecords, previousRecord, bindPort, bindIp, enrAutoUpdate,
+    banNodes, config, rng
+  )
+
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort, enrQuicPort: Opt[Port],
     localEnrFields: openArray[(string, seq[byte])] = [],
     bootstrapRecords: openArray[Record] = [],
     previousRecord = Opt.none(enr.Record),
@@ -1136,7 +1156,7 @@ proc newProtocol*(
 ): Protocol =
   let customEnrFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
   newProtocol(
-    privKey, enrIp, enrTcpPort, enrUdpPort, customEnrFields, bootstrapRecords,
+    privKey, enrIp, enrTcpPort, enrUdpPort, enrQuicPort, customEnrFields, bootstrapRecords,
     previousRecord, bindPort, bindIp, enrAutoUpdate, banNodes, config, rng,
   )
 
@@ -1144,6 +1164,26 @@ proc newProtocol*(
     privKey: PrivateKey,
     enrIp: Opt[IpAddress],
     enrTcpPort, enrUdpPort: Opt[Port],
+    localEnrFields: openArray[(string, seq[byte])] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = Opt.none(enr.Record),
+    bindPort: Port,
+    bindIp = IPv4_any(),
+    enrAutoUpdate = false,
+    banNodes = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng(),
+): Protocol =
+  newProtocol(
+    privKey, enrIp, enrTcpPort, enrUdpPort, Opt.none(Port), localEnrFields,
+    bootstrapRecords, previousRecord, bindPort, bindIp, enrAutoUpdate, banNodes,
+    config, rng
+  )
+
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort, enrQuicPort: Opt[Port],
     localEnrFields: openArray[(string, seq[byte])] = [],
     bootstrapRecords: openArray[Record] = [],
     previousRecord = Opt.none(enr.Record),
@@ -1159,15 +1199,15 @@ proc newProtocol*(
         var res = previousRecord.get()
         # TODO: this is faulty in case the intent is to remove a field with
         # opt.none
-        res.update(privKey, enrIp, enrTcpPort, enrUdpPort,
+        res.update(privKey, enrIp, enrTcpPort, enrUdpPort, enrQuicPort,
           customEnrFields).expect("Record within size limits and correct key")
         res
       else:
-        enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort,
+        enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort, enrQuicPort,
           customEnrFields).expect("Record within size limits")
 
   info "Discovery ENR initialized", enrAutoUpdate, seqNum = record.seqNum,
-    ip = enrIp, tcpPort = enrTcpPort, udpPort = enrUdpPort,
+    ip = enrIp, tcpPort = enrTcpPort, udpPort = enrUdpPort, quicPort = enrQuicPort,
     customEnrFields, uri = toURI(record)
 
   if enrIp.isNone():
@@ -1197,6 +1237,24 @@ proc newProtocol*(
     handshakeTimeout: config.handshakeTimeout,
     responseTimeout: config.responseTimeout,
     rng: rng)
+
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
+    localEnrFields: openArray[(string, seq[byte])] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = Opt.none(enr.Record),
+    bindPort: Port,
+    bindIp: Opt[IpAddress],
+    enrAutoUpdate = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng()): Protocol =
+  newProtocol(
+    privKey, enrIp, enrTcpPort, enrUdpPort, Opt.none(Port), localEnrFields,
+    bootstrapRecords, previousRecord, bindPort, bindIp, enrAutoUpdate,
+    config, rng
+  )
 
 proc `$`*(a: OptAddress): string =
   if a.ip.isNone():

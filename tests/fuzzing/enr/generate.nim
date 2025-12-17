@@ -14,10 +14,12 @@ proc generate() =
     port = Opt.some(Port(20301))
 
   block:
-    let record = enr.Record.init(1, privKey, ip, port, port)[]
+    let record = enr.Record.init(1, privKey, ip, port, port, port)[]
     record.raw.toFile(inputsDir / "enr1")
   block:
-    let record = enr.Record.init(1, privKey, ip, port, port, [toFieldPair("test", 1'u)])[]
+    let record = enr.Record.init(
+      1, privKey, ip, port, port, port, [toFieldPair("test", 1'u)]
+    )[]
     record.raw.toFile(inputsDir / "enr2")
 
 discard existsOrCreateDir(inputsDir)

@@ -32,7 +32,9 @@ proc initDiscoveryNode*(
   let protocol = newProtocol(
     privKey,
     Opt.some(address.ip),
-    Opt.some(address.port), Opt.some(address.port),
+    Opt.some(address.port),
+    Opt.some(address.port),
+    Opt.some(address.port),
     bindPort = address.port,
     bootstrapRecords = bootstrapRecords,
     localEnrFields = localEnrFields,
@@ -54,7 +56,7 @@ func generateNode*(privKey: PrivateKey, port: int = 20302,
     localEnrFields: openArray[FieldPair] = []): Node =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, Opt.some(ip),
-    Opt.some(port), Opt.some(port), localEnrFields).expect("Properly initialized private key")
+    Opt.some(port), Opt.some(port), Opt.some(port), localEnrFields).expect("Properly initialized private key")
   result = Node.fromRecord(enr)
 
 proc generateNRandomNodes*(rng: var HmacDrbgContext, n: int): seq[Node] =
