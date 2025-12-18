@@ -133,33 +133,13 @@ suite "Block encodings":
 
     block:
       let
-        blockBodyWithBal = BlockBody(
-          transactions: @[transactions.Transaction(nonce: 1)],
-          withdrawals: Opt.some(@[Withdrawal()]),
-          blockAccessList: Opt.some(bal)
-        )
-        rlpBytes = rlp.encode(blockBodyWithBal)
-        dblk = rlp.decode(rlpBytes, BlockBody)
-      check dblk.blockAccessList.isSome()
-
-      let dbal = dblk.blockAccessList.get()
-      check:
-        dbal.len() == 1
-        dbal[0].address == address"0x52908400098527886E0F7030069857D2E4169EE7"
-        dbal[0].codeChanges.len() == 1
-        dbal[0].codeChanges[0].blockAccessIndex == 1.BlockAccessIndex
-        dbal[0].codeChanges[0].newCode == @[0x12.byte, 0x23, 0x34]
-
-    block:
-      let
-        blockBodyNoBal = BlockBody(
+        blockBody = BlockBody(
           transactions: @[transactions.Transaction(nonce: 1)]
         )
-        rlpBytes = rlp.encode(blockBodyNoBal)
+        rlpBytes = rlp.encode(blockBody)
         dblk = rlp.decode(rlpBytes, BlockBody)
       check:
-        dblk.blockAccessList.isNone()
-        dblk == blockBodyNoBal
+        dblk == blockBody
 
 suite "Address":
   test "Bytes conversion":
