@@ -9,11 +9,11 @@
 
 import
   ./[
-    addresses_rlp, base_rlp, blocks, block_access_lists_rlp, hashes_rlp, headers_rlp,
+    addresses_rlp, base_rlp, blocks, hashes_rlp, headers_rlp,
     transactions_rlp,
   ],
   ../rlp
 
 export
-  addresses_rlp, base_rlp, blocks, block_access_lists_rlp, hashes_rlp, headers_rlp,
+  addresses_rlp, base_rlp, blocks, hashes_rlp, headers_rlp,
   transactions_rlp, rlp
