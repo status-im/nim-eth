@@ -43,3 +43,5 @@ type
     codeChanges*: seq[CodeChange]
 
   BlockAccessList* = seq[AccountChanges]
+
+  BlockAccessListRef* = ref BlockAccessList

@@ -7,9 +7,9 @@
 
 {.push raises: [].}
 
-import ./[addresses, base, block_access_lists, headers, transactions]
+import ./[addresses, base, headers, transactions]
 
-export addresses, base, block_access_lists, headers, transactions
+export addresses, base, headers, transactions
 
 type
   Withdrawal* = object # EIP-4895
@@ -22,14 +22,12 @@ type
     transactions*: seq[Transaction]
     uncles*: seq[Header]
     withdrawals*: Opt[seq[Withdrawal]] # EIP-4895
-    blockAccessList*: Opt[BlockAccessList] # EIP-7928
 
   Block* = object
     header*: Header
     transactions*: seq[Transaction]
     uncles*: seq[Header]
     withdrawals*: Opt[seq[Withdrawal]] # EIP-4895
-    blockAccessList*: Opt[BlockAccessList] # EIP-7928
 
 const EMPTY_UNCLE_HASH* =
   hash32"1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
@@ -41,7 +39,6 @@ func init*(T: type Block, header: Header, body: BlockBody): T =
     transactions: body.transactions,
     uncles: body.uncles,
     withdrawals: body.withdrawals,
-    blockAccessList: body.blockAccessList,
   )
 
 template txs*(blk: Block): seq[Transaction] =
