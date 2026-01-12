@@ -122,7 +122,7 @@ const
   ## whoareyou message
   defaultResponseTimeout* = 4.seconds ## timeout for the response of a request-response
   ## call
-  defaultSessionsSize = 256 ## Size of the session cache
+  defaultSessionsSize* = 256 ## Size of the session cache
 
   ## Ban durations for banned nodes in the routing table
   NodeBanDurationInvalidResponse = 15.minutes
@@ -138,6 +138,7 @@ type
     handshakeTimeout: Duration
     responseTimeout: Duration
     sessionsSize*: int
+    banNodes*: bool
 
   Protocol* = ref object
     transp: DatagramTransport
@@ -188,7 +189,8 @@ const
     bitsPerHop: DefaultBitsPerHop,
     handshakeTimeout: defaultHandshakeTimeout,
     responseTimeout: defaultResponseTimeout,
-    sessionsSize: defaultSessionsSize
+    sessionsSize: defaultSessionsSize,
+    banNodes: false
   )
 
 chronicles.formatIt(Opt[Port]): $it
@@ -1027,6 +1029,7 @@ func init*(
     handshakeTimeout: Duration,
     responseTimeout: Duration,
     sessionsSize: int,
+    banNodes: bool
     ): T =
 
   DiscoveryConfig(
@@ -1036,7 +1039,8 @@ func init*(
     bitsPerHop: bitsPerHop,
     handshakeTimeout: handshakeTimeout,
     responseTimeout: responseTimeout,
-    sessionsSize: sessionsSize
+    sessionsSize: sessionsSize,
+    banNodes: banNodes
   )
 
 func init*(
@@ -1044,7 +1048,8 @@ func init*(
     tableIpLimit: uint,
     bucketIpLimit: uint,
     bitsPerHop: int,
-    sessionsSize = defaultSessionsSize
+    sessionsSize = defaultSessionsSize,
+    banNodes = false,
     ): T =
 
   DiscoveryConfig.init(
@@ -1053,91 +1058,8 @@ func init*(
     bitsPerHop,
     defaultHandshakeTimeout,
     defaultResponseTimeout,
-    sessionsSize
-  )
-
-proc newProtocol*(
-    privKey: PrivateKey,
-    enrIp: Opt[IpAddress],
-    enrTcpPort, enrUdpPort: Opt[Port],
-    localEnrFields: openArray[FieldPair] = [],
-    bootstrapRecords: openArray[Record] = [],
-    previousRecord = Opt.none(enr.Record),
-    bindPort: Port,
-    bindIp = IPv4_any(),
-    enrAutoUpdate = false,
-    banNodes = false,
-    config = defaultDiscoveryConfig,
-    rng = newRng()):
-    Protocol =
-  # TODO: Tried adding bindPort = udpPort as parameter but that gave
-  # "Error: internal error: environment misses: udpPort" in nim-beacon-chain.
-  # Anyhow, nim-beacon-chain would also require some changes to support port
-  # remapping through NAT and this API is also subject to change once we
-  # introduce support for ipv4 + ipv6 binding/listening.
-  # TODO:
-  # - Defect as is now or return a result for enr errors?
-  # - In case incorrect key, allow for new enr based on new key (new node id)?
-  var record: Record
-  if previousRecord.isSome():
-    record = previousRecord.get()
-    # TODO: this is faulty in case the intent is to remove a field with
-    # opt.none
-    record.update(privKey, enrIp, enrTcpPort, enrUdpPort,
-      localEnrFields).expect("Record within size limits and correct key")
-  else:
-    record = enr.Record.init(1, privKey, enrIp, enrTcpPort, enrUdpPort,
-      localEnrFields).expect("Record within size limits")
-
-  info "Discovery ENR initialized", enrAutoUpdate, seqNum = record.seqNum,
-    ip = enrIp, tcpPort = enrTcpPort, udpPort = enrUdpPort,
-    localEnrFields, uri = toURI(record)
-  if enrIp.isNone():
-    if enrAutoUpdate:
-      notice "No external IP provided for the ENR, this node will not be " &
-        "discoverable until the ENR is updated with the discovered external IP address"
-    else:
-      warn "No external IP provided for the ENR, this node will not be discoverable"
-
-  let node = Node.fromRecord(record)
-
-  # TODO Consider whether this should be a Defect
-  doAssert rng != nil, "RNG initialization failed"
-
-  Protocol(
-    privateKey: privKey,
-    localNode: node,
-    bindAddress: OptAddress(ip: Opt.some(bindIp), port: bindPort),
-    codec: Codec(localNode: node, privKey: privKey,
-      sessions: Sessions.init(config.sessionsSize)),
-    bootstrapRecords: @bootstrapRecords,
-    ipVote: IpVote.init(),
-    enrAutoUpdate: enrAutoUpdate,
-    routingTable: RoutingTable.init(
-      node, config.bitsPerHop, config.tableIpLimits, rng),
-    banNodes: banNodes,
-    handshakeTimeout: config.handshakeTimeout,
-    responseTimeout: config.responseTimeout,
-    rng: rng)
-
-proc newProtocol*(
-    privKey: PrivateKey,
-    enrIp: Opt[IpAddress],
-    enrTcpPort, enrUdpPort: Opt[Port],
-    localEnrFields: openArray[(string, seq[byte])] = [],
-    bootstrapRecords: openArray[Record] = [],
-    previousRecord = Opt.none(enr.Record),
-    bindPort: Port,
-    bindIp = IPv4_any(),
-    enrAutoUpdate = false,
-    banNodes = false,
-    config = defaultDiscoveryConfig,
-    rng = newRng(),
-): Protocol =
-  let customEnrFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
-  newProtocol(
-    privKey, enrIp, enrTcpPort, enrUdpPort, customEnrFields, bootstrapRecords,
-    previousRecord, bindPort, bindIp, enrAutoUpdate, banNodes, config, rng,
+    sessionsSize,
+    banNodes
   )
 
 proc newProtocol*(
@@ -1194,9 +1116,67 @@ proc newProtocol*(
     enrAutoUpdate: enrAutoUpdate,
     routingTable: RoutingTable.init(
       node, config.bitsPerHop, config.tableIpLimits, rng),
+    banNodes: config.banNodes,
     handshakeTimeout: config.handshakeTimeout,
     responseTimeout: config.responseTimeout,
     rng: rng)
+
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
+    localEnrFields: openArray[FieldPair] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = Opt.none(enr.Record),
+    bindPort: Port,
+    bindIp: Opt[IpAddress],
+    enrAutoUpdate = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng()):
+    Protocol =
+  let customEnrFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
+  newProtocol(
+    privKey, enrIp, enrTcpPort, enrUdpPort, customEnrFields, bootstrapRecords,
+    previousRecord, bindPort, bindIp, enrAutoUpdate, config, rng,
+  )
+
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
+    localEnrFields: openArray[FieldPair] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = Opt.none(enr.Record),
+    bindPort: Port,
+    bindIp = IPv4_any(),
+    enrAutoUpdate = false,
+    banNodes = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng()):
+    Protocol =
+  newProtocol(
+    privKey, enrIp, enrTcpPort, enrUdpPort, localEnrFields, bootstrapRecords,
+    previousRecord, bindPort, Opt.some(bindIp), enrAutoUpdate, config, rng,
+  )
+
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
+    localEnrFields: openArray[(string, seq[byte])] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = Opt.none(enr.Record),
+    bindPort: Port,
+    bindIp = IPv4_any(),
+    enrAutoUpdate = false,
+    banNodes = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng(),
+): Protocol =
+  newProtocol(
+    privKey, enrIp, enrTcpPort, enrUdpPort, localEnrFields, bootstrapRecords,
+    previousRecord, bindPort, Opt.some(bindIp), enrAutoUpdate, config, rng,
+  )
 
 proc `$`*(a: OptAddress): string =
   if a.ip.isNone():
@@ -1212,6 +1192,7 @@ proc open*(d: Protocol) {.raises: [TransportOsError].} =
 
   # TODO allow binding to specific IP / IPv6 / etc
   d.transp =
+    # Note: This will set auto address when ip is none
     newDatagramTransport(processClient, udata = d,
                          localPort = d.bindAddress.port,
                          local = d.bindAddress.ip)
