@@ -43,6 +43,7 @@ suite "ENR test vector tests":
       typedRecord.secp256k1.value() == array[33, byte].fromHex(secp256k1)
       typedRecord.udp.value() == udp
       typedRecord.tcp.isNone()
+      typedRecord.quic.isNone()
 
       $r == """(1, id: "v4", ip: 127.0.0.1, secp256k1: 0x03CA634CAE0D49ACB401D8A4C6B6FE8C55B70D115BF400769CC1400F3258CD3138, udp: 30303)"""
 
@@ -107,7 +108,7 @@ suite "ENR encoding tests":
       port = Opt.some(Port(1234))
       customPairs = [toFieldPair("some_list", rlpList)]
       enr = Record.init(
-        123, pk, Opt.some(ip), Opt.none(Port), port, customPairs)
+        123, pk, Opt.some(ip), Opt.none(Port), port, Opt.none(Port), customPairs)
 
     check:
       enr.isOk()
@@ -131,7 +132,7 @@ suite "ENR encoding tests":
       ip = parseIpAddress("1.2.3.4")
       port = Opt.some(Port(9000))
       res = Record.init(
-        100, keypair.seckey, Opt.some(ip), port, port)
+        100, keypair.seckey, Opt.some(ip), port, port, port)
     check res.isOk()
     let enr = res.value()
     let uri = enr.toURI()
@@ -152,7 +153,7 @@ suite "ENR init tests":
       keypair = KeyPair.random(rng[])
       port = Opt.none(Port)
       enr = Record.init(
-        100, keypair.seckey, Opt.none(IpAddress), port, port)[]
+        100, keypair.seckey, Opt.none(IpAddress), port, port, port)[]
       typedEnr = TypedRecord.fromRecord(enr)
 
     check:
@@ -164,10 +165,12 @@ suite "ENR init tests":
       typedEnr.ip.isNone()
       typedEnr.tcp.isNone()
       typedEnr.udp.isNone()
+      typedEnr.quic.isNone()
 
       typedEnr.ip6.isNone()
       typedEnr.tcp6.isNone()
       typedEnr.udp6.isNone()
+      typedEnr.quic6.isNone()
 
   test "Record.init only ipv4":
     let
@@ -175,7 +178,7 @@ suite "ENR init tests":
       ip = parseIpAddress("1.2.3.4")
       port = Opt.some(Port(9000))
       enr = Record.init(
-        100, keypair.seckey, Opt.some(ip), port, port)[]
+        100, keypair.seckey, Opt.some(ip), port, port, port)[]
       typedEnr = TypedRecord.fromRecord(enr)
 
     check:
@@ -188,13 +191,16 @@ suite "ENR init tests":
       typedEnr.udp.isSome()
       typedEnr.udp.get() == 9000
 
+      typedEnr.quic.isSome()
+      typedEnr.quic.get() == 9000
+
   test "Record.init only ipv6":
     let
       keypair = KeyPair.random(rng[])
       ip = parseIpAddress("::1")
       port = Opt.some(Port(9000))
       enr = Record.init(
-        100, keypair.seckey, Opt.some(ip), port, port)[]
+        100, keypair.seckey, Opt.some(ip), port, port, port)[]
       typedEnr = TypedRecord.fromRecord(enr)
 
     check:
@@ -203,12 +209,14 @@ suite "ENR init tests":
       typedEnr.tcp.value() == 9000
       typedEnr.udp.isSome()
       typedEnr.udp.value() == 9000
-
+      typedEnr.quic.isSome()
+      typedEnr.quic.value() == 9000
       typedEnr.ip6.isSome()
       typedEnr.ip6.get() == [byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
 
       typedEnr.tcp6.isNone()
       typedEnr.udp6.isNone()
+      typedEnr.quic6.isNone()
 
   test "Record.init max ENR size":
     let
@@ -281,7 +289,7 @@ suite "ENR update tests":
       pk = PrivateKey.fromHex(
         "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
       newField = toFieldPair("test", 123'u)
-    var r = Record.init(1, pk, Opt.none(IpAddress), Opt.none(Port), Opt.none(Port))[]
+    var r = Record.init(1, pk, Opt.none(IpAddress), Opt.none(Port), Opt.none(Port), Opt.none(Port))[]
 
     block: # Insert new k:v pair, update of seqNum should occur.
       let updated = r.update(pk, extraFields = [newField])
@@ -363,7 +371,7 @@ suite "ENR update tests":
       pk = PrivateKey.fromHex(
         "5d2908f3f09ea1ff2e327c3f623159639b00af406e9009de5fd4b910fc34049d")[]
     var r = Record.init(1, pk, Opt.none(IpAddress),
-      Opt.some(Port(9000)), Opt.some(Port(9000)))[]
+      Opt.some(Port(9000)), Opt.some(Port(9000)), Opt.some(Port(9000)))[]
 
     block:
       let updated = r.update(pk, Opt.none(IpAddress),
@@ -373,21 +381,23 @@ suite "ENR update tests":
         r.tryGet("ip", uint).isNone()
         r.tryGet("tcp", uint).isSome()
         r.tryGet("udp", uint).isSome()
+        r.tryGet("quic", uint).isSome()
         r.seqNum == 2
 
     block:
       let updated = r.update(pk, Opt.none(IpAddress),
-        Opt.some(Port(9001)), Opt.some(Port(9002)))
+        Opt.some(Port(9001)), Opt.some(Port(9002)), Opt.some(Port(9002)))
       check updated.isOk()
       check:
         r.tryGet("ip", uint).isNone()
         r.tryGet("tcp", uint).isSome()
         r.tryGet("udp", uint).isSome()
+        r.tryGet("quic", uint).isSome()
         r.seqNum == 3
 
     block:
       let updated = r.update(pk, Opt.some(parseIpAddress("10.20.30.40")),
-        Opt.some(Port(9000)), Opt.some(Port(9000)))
+        Opt.some(Port(9000)), Opt.some(Port(9000)), Opt.some(Port(9000)))
       check updated.isOk()
 
       let typedEnr = TypedRecord.fromRecord(r)
@@ -402,11 +412,14 @@ suite "ENR update tests":
         typedEnr.udp.isSome()
         typedEnr.udp.get() == 9000
 
+        typedEnr.quic.isSome()
+        typedEnr.quic.get() == 9000
+
         r.seqNum == 4
 
     block:
       let updated = r.update(pk, Opt.some(parseIpAddress("1.2.3.4")),
-        Opt.some(Port(9001)), Opt.some(Port(9001)))
+        Opt.some(Port(9001)), Opt.some(Port(9001)), Opt.some(Port(9001)))
       check updated.isOk()
 
       let typedEnr = TypedRecord.fromRecord(r)
@@ -420,5 +433,8 @@ suite "ENR update tests":
 
         typedEnr.udp.isSome()
         typedEnr.udp.get() == 9001
+
+        typedEnr.quic.isSome()
+        typedEnr.quic.get() == 9001
 
         r.seqNum == 5

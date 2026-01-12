@@ -428,15 +428,17 @@ suite "Discovery v5.1 Tests":
       privKey = PrivateKey.random(rng[])
       ip = Opt.some(parseIpAddress("127.0.0.1"))
       port = Port(20301)
-      node = newProtocol(privKey, ip, Opt.some(port), Opt.some(port), bindPort = port,
-        rng = rng)
+      node = newProtocol(privKey, ip, Opt.some(port), Opt.some(port), 
+        Opt.some(port), bindPort = port, rng = rng)
       noUpdatesNode = newProtocol(privKey, ip, Opt.some(port), Opt.some(port),
-        bindPort = port, rng = rng, previousRecord = Opt.some(node.getRecord()))
+        Opt.some(port), bindPort = port, rng = rng, 
+        previousRecord = Opt.some(node.getRecord()))
       updatesNode = newProtocol(privKey, ip, Opt.some(port), Opt.some(Port(20302)),
-        bindPort = port, rng = rng,
+        Opt.some(port), bindPort = port, rng = rng,
         previousRecord = Opt.some(noUpdatesNode.getRecord()))
       moreUpdatesNode = newProtocol(privKey, ip, Opt.some(port), Opt.some(port),
-        bindPort = port, rng = rng, localEnrFields = {"addfield": @[byte 0]},
+        Opt.some(port), bindPort = port, rng = rng, 
+        localEnrFields = {"addfield": @[byte 0]},
         previousRecord = Opt.some(updatesNode.getRecord()))
     check:
       node.getRecord().seqNum == 1
@@ -447,7 +449,7 @@ suite "Discovery v5.1 Tests":
     # Defect (for now?) on incorrect key use
     expect ResultDefect:
       discard newProtocol(PrivateKey.random(rng[]),
-        ip, Opt.some(port), Opt.some(port), bindPort = port, rng = rng,
+        ip, Opt.some(port), Opt.some(port), Opt.some(port), bindPort = port, rng = rng,
         previousRecord = Opt.some(updatesNode.getRecord()))
 
   asyncTest "Update node record with revalidate":

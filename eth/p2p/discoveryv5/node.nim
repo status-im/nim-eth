@@ -57,8 +57,9 @@ func newNode*(r: Record): Result[Node, cstring] {.deprecated: "Use TypedRecord.f
 func update*(n: Node, pk: PrivateKey, ip: Opt[IpAddress],
     tcpPort: Opt[Port] = Opt.none(Port),
     udpPort: Opt[Port] = Opt.none(Port),
+    quicPort: Opt[Port] = Opt.none(Port),
     extraFields: openArray[FieldPair] = []): Result[void, cstring] =
-  ? n.record.update(pk, ip, tcpPort, udpPort, extraFields)
+  ? n.record.update(pk, ip, tcpPort, udpPort, quicPort, extraFields)
 
   if ip.isSome():
     if udpPort.isSome():

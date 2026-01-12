@@ -76,6 +76,8 @@ type
     udp*: Opt[int]
     tcp6*: Opt[int]
     udp6*: Opt[int]
+    quic*: Opt[int]
+    quic6*: Opt[int]
 
   EnrResult*[T] = Result[T, cstring]
 
@@ -219,7 +221,7 @@ macro initRecord*(
 func insertAddress(
     fields: var seq[FieldPair],
     ip: Opt[IpAddress],
-    tcpPort, udpPort: Opt[Port]) =
+    tcpPort, udpPort, quicPort: Opt[Port]) =
   ## Insert address data.
   ## Incomplete address information is allowed (example: Port but not IP) as
   ## that information might be already in the ENR or added later.
@@ -234,6 +236,8 @@ func insertAddress(
     fields.insert(("tcp", tcpPort.get().uint16.toField))
   if udpPort.isSome():
     fields.insert(("udp", udpPort.get().uint16.toField))
+  if quicPort.isSome():
+    fields.insert(("quic", quicPort.get().uint16.toField))
 
 func init*(
     T: type Record,
@@ -241,17 +245,18 @@ func init*(
     ip: Opt[IpAddress] = Opt.none(IpAddress),
     tcpPort: Opt[Port] = Opt.none(Port),
     udpPort: Opt[Port] = Opt.none(Port),
+    quicPort: Opt[Port] = Opt.none(Port),
     extraFields: openArray[FieldPair] = []):
     EnrResult[T] =
   ## Initialize a `Record` with given sequence number, private key, optional
-  ## ip address, tcp port, udp port, and optional custom k:v pairs.
+  ## ip address, tcp port, udp port, quic port, and optional custom k:v pairs.
   ##
   ## Can fail in case the record exceeds the `maxEnrSize`.
   doAssert(not hasPredefinedKey(extraFields), "Predefined key in custom pairs")
 
   var fields = newSeq[FieldPair]()
 
-  fields.insertAddress(ip, tcpPort, udpPort)
+  fields.insertAddress(ip, tcpPort, udpPort, quicPort)
   fields.insert extraFields
   makeEnrAux(seqNum, "v4", pk, fields)
 
@@ -327,16 +332,17 @@ func update*(
     ip: Opt[IpAddress] = Opt.none(IpAddress),
     tcpPort: Opt[Port] = Opt.none(Port),
     udpPort: Opt[Port] = Opt.none(Port),
+    quicPort: Opt[Port] = Opt.none(Port),
     extraFields: openArray[FieldPair] = []):
     EnrResult[void] =
-  ## Update a `Record` with given ip address, tcp port, udp port and optional
-  ## custom k:v pairs.
+  ## Update a `Record` with given ip address, tcp port, udp port, quic port
+  ## and optional custom k:v pairs.
   ##
   ## If none of the k:v pairs are changed, the sequence number of the `Record`
   ## will still be incremented and a new signature will be applied.
   ##
-  ## Providing an `Opt.none` for `ip`, `tcpPort` or `udpPort` will leave the
-  ## corresponding field untouched.
+  ## Providing an `Opt.none` for `ip`, `tcpPort`, `udpPort` or `quicPort` will
+  ## leave the corresponding field untouched.
   ##
   ## Can fail in case of wrong `PrivateKey`, if the size of the resulting record
   ## exceeds `maxEnrSize` or if maximum sequence number is reached. The `Record`
@@ -350,7 +356,7 @@ func update*(
   if pubkey.isNone() or pubkey.get() != pk.toPublicKey():
     return err("Public key does not correspond with given private key")
 
-  r.pairs.insertAddress(ip, tcpPort, udpPort)
+  r.pairs.insertAddress(ip, tcpPort, udpPort, quicPort)
   r.pairs.insert extraFields
 
   if r.seqNum == high(type r.seqNum): # highly unlikely
@@ -377,7 +383,9 @@ func fromRecord*(T: type TypedRecord, r: Record): T =
     tcp: r.tryGet("tcp", int),
     tcp6: r.tryGet("tcp6", int),
     udp: r.tryGet("udp", int),
-    udp6: r.tryGet("udp6", int)
+    udp6: r.tryGet("udp6", int),
+    quic: r.tryGet("quic", int),
+    quic6: r.tryGet("quic6", int)
   )
 
 func toTypedRecord*(r: Record): EnrResult[TypedRecord] {.deprecated: "Please use TypedRecord.fromRecord instead".} =
@@ -463,7 +471,7 @@ func fromBytesAux(T: type Record, s: openArray[byte]): EnrResult[T] =
     of "secp256k1":
       pkRaw = Opt.some rlpResult rlp.read(seq[byte])
       pairs.add((k, Field(kind: kBytes, bytes: pkRaw.value())))
-    of "tcp", "udp", "tcp6", "udp6":
+    of "tcp", "udp", "tcp6", "udp6", "quic", "quic6":
       let v = rlpResult rlp.read(uint16)
       pairs.add((k, Field(kind: kNum, num: v)))
     else:
