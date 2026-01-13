@@ -1062,7 +1062,7 @@ proc newProtocol*(
     bootstrapRecords: openArray[Record] = [],
     previousRecord = Opt.none(enr.Record),
     bindPort: Port,
-    bindIp: Opt[IpAddress],
+    bindIp: Opt[IpAddress] = Opt.none(IpAddress),
     enrAutoUpdate = false,
     config = defaultDiscoveryConfig,
     rng = newRng(),
@@ -1135,7 +1135,7 @@ proc newProtocol*(
     bootstrapRecords: openArray[Record] = [],
     previousRecord = Opt.none(enr.Record),
     bindPort: Port,
-    bindIp: Opt[IpAddress],
+    bindIp: Opt[IpAddress] = Opt.none(IpAddress),
     enrAutoUpdate = false,
     config = defaultDiscoveryConfig,
     rng = newRng(),
@@ -1168,7 +1168,7 @@ proc newProtocol*(
     bootstrapRecords: openArray[Record] = [],
     previousRecord = Opt.none(enr.Record),
     bindPort: Port,
-    bindIp: Opt[IpAddress],
+    bindIp: Opt[IpAddress] = Opt.none(IpAddress),
     enrAutoUpdate = false,
     config = defaultDiscoveryConfig,
     rng = newRng(),
@@ -1195,36 +1195,6 @@ proc newProtocol*(
 proc newProtocol*(
     privKey: PrivateKey,
     enrIp: Opt[IpAddress],
-    enrTcpPort, enrUdpPort, enrQuicPort: Opt[Port],
-    localEnrFields: openArray[FieldPair] = [],
-    bootstrapRecords: openArray[Record] = [],
-    previousRecord = Opt.none(enr.Record),
-    bindPort: Port,
-    bindIp = IPv4_any(),
-    enrAutoUpdate = false,
-    banNodes = false, # Deprecated parameter, ignored
-    config = defaultDiscoveryConfig,
-    rng = newRng(),
-): Protocol =
-  newProtocol(
-    privKey,
-    enrIp,
-    enrTcpPort,
-    enrUdpPort,
-    enrQuicPort,
-    localEnrFields,
-    bootstrapRecords,
-    previousRecord,
-    bindPort,
-    Opt.some(bindIp),
-    enrAutoUpdate,
-    config,
-    rng,
-  )
-
-proc newProtocol*(
-    privKey: PrivateKey,
-    enrIp: Opt[IpAddress],
     enrTcpPort, enrUdpPort: Opt[Port],
     localEnrFields: openArray[FieldPair] = [],
     bootstrapRecords: openArray[Record] = [],
@@ -1235,7 +1205,7 @@ proc newProtocol*(
     banNodes = false, # Deprecated parameter, ignored
     config = defaultDiscoveryConfig,
     rng = newRng(),
-): Protocol =
+): Protocol {.deprecated.} =
   newProtocol(
     privKey,
     enrIp,
@@ -1255,36 +1225,6 @@ proc newProtocol*(
 proc newProtocol*(
     privKey: PrivateKey,
     enrIp: Opt[IpAddress],
-    enrTcpPort, enrUdpPort, enrQuicPort: Opt[Port],
-    localEnrFields: openArray[(string, seq[byte])] = [],
-    bootstrapRecords: openArray[Record] = [],
-    previousRecord = Opt.none(enr.Record),
-    bindPort: Port,
-    bindIp = IPv4_any(),
-    enrAutoUpdate = false,
-    banNodes = false, # Deprecated parameter, ignored
-    config = defaultDiscoveryConfig,
-    rng = newRng(),
-): Protocol =
-  newProtocol(
-    privKey,
-    enrIp,
-    enrTcpPort,
-    enrUdpPort,
-    enrQuicPort,
-    localEnrFields,
-    bootstrapRecords,
-    previousRecord,
-    bindPort,
-    Opt.some(bindIp),
-    enrAutoUpdate,
-    config,
-    rng,
-  )
-
-proc newProtocol*(
-    privKey: PrivateKey,
-    enrIp: Opt[IpAddress],
     enrTcpPort, enrUdpPort: Opt[Port],
     localEnrFields: openArray[(string, seq[byte])] = [],
     bootstrapRecords: openArray[Record] = [],
@@ -1295,7 +1235,7 @@ proc newProtocol*(
     banNodes = false, # Deprecated parameter, ignored
     config = defaultDiscoveryConfig,
     rng = newRng(),
-): Protocol =
+): Protocol {.deprecated.} =
   newProtocol(
     privKey,
     enrIp,
