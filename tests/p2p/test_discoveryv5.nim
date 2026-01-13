@@ -428,15 +428,17 @@ suite "Discovery v5.1 Tests":
       privKey = PrivateKey.random(rng[])
       ip = Opt.some(parseIpAddress("127.0.0.1"))
       port = Port(20301)
-      node = newProtocol(privKey, ip, Opt.some(port), Opt.some(port), bindPort = port,
-        rng = rng)
+      node = newProtocol(privKey, ip, Opt.some(port), Opt.some(port),
+        Opt.some(port), bindPort = port, rng = rng)
       noUpdatesNode = newProtocol(privKey, ip, Opt.some(port), Opt.some(port),
-        bindPort = port, rng = rng, previousRecord = Opt.some(node.getRecord()))
+        Opt.some(port), bindPort = port, rng = rng,
+        previousRecord = Opt.some(node.getRecord()))
       updatesNode = newProtocol(privKey, ip, Opt.some(port), Opt.some(Port(20302)),
-        bindPort = port, rng = rng,
+        Opt.some(port), bindPort = port, rng = rng,
         previousRecord = Opt.some(noUpdatesNode.getRecord()))
       moreUpdatesNode = newProtocol(privKey, ip, Opt.some(port), Opt.some(port),
-        bindPort = port, rng = rng, localEnrFields = {"addfield": @[byte 0]},
+        Opt.some(port), bindPort = port, rng = rng,
+        localEnrFields = {"addfield": @[byte 0]},
         previousRecord = Opt.some(updatesNode.getRecord()))
     check:
       node.getRecord().seqNum == 1
@@ -447,7 +449,7 @@ suite "Discovery v5.1 Tests":
     # Defect (for now?) on incorrect key use
     expect ResultDefect:
       discard newProtocol(PrivateKey.random(rng[]),
-        ip, Opt.some(port), Opt.some(port), bindPort = port, rng = rng,
+        ip, Opt.some(port), Opt.some(port), Opt.some(port), bindPort = port, rng = rng,
         previousRecord = Opt.some(updatesNode.getRecord()))
 
   asyncTest "Update node record with revalidate":
@@ -929,7 +931,8 @@ suite "Discovery v5.1 Tests":
 
   asyncTest "Banned nodes are removed and cannot be added":
     let
-      node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302), banNodes = true)
+      config = DiscoveryConfig.init(DefaultTableIpLimit, DefaultBucketIpLimit, DefaultBitsPerHop, defaultSessionsSize, true)
+      node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302), config = config)
       targetNode = generateNode(PrivateKey.random(rng[]))
 
     # add the node
@@ -950,10 +953,11 @@ suite "Discovery v5.1 Tests":
 
   asyncTest "FindNode filters out banned nodes":
     let
+      config = DiscoveryConfig.init(DefaultTableIpLimit, DefaultBucketIpLimit, DefaultBitsPerHop, defaultSessionsSize, true)
       mainNode = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301),
-          banNodes = true)
+          config = config)
       testNode = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302),
-          @[mainNode.localNode.record], banNodes = true)
+          @[mainNode.localNode.record], config = config)
 
     # Generate 100 random nodes and add to our main node's routing table
     for i in 0 ..< 100:
@@ -984,11 +988,11 @@ suite "Discovery v5.1 Tests":
 
   asyncTest "Cannot send messages to banned nodes":
     let
+      config = DiscoveryConfig.init(DefaultTableIpLimit, DefaultBucketIpLimit, DefaultBitsPerHop, defaultSessionsSize, true)
       node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302),
-          banNodes = true)
+          config = config)
       node2 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301),
-          banNodes = true)
-
+          config = config)
     # ban node2 in node1's routing table
     node1.banNode(node2.localNode, 1.minutes)
 
@@ -1013,10 +1017,11 @@ suite "Discovery v5.1 Tests":
 
   asyncTest "Ignore messages from banned nodes":
     let
+      config = DiscoveryConfig.init(DefaultTableIpLimit, DefaultBucketIpLimit, DefaultBitsPerHop, defaultSessionsSize, true)
       node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302),
-          banNodes = true)
+          config = config)
       node2 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301),
-          banNodes = true)
+          config = config)
 
     # ban node1 in node2's routing table
     node2.banNode(node1.localNode, 1.minutes)

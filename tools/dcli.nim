@@ -352,7 +352,7 @@ proc discover(
 
 proc setupNode(config: DiscoveryConf): discv5_protocol.Protocol {.raises: [CatchableError].} =
   let
-    bindIp = config.listenAddress
+    bindIp = Opt.some(config.listenAddress)
     udpPort = Port(config.udpPort)
     (extIp, extPorts) = setupAddress(
       config.nat,
@@ -363,7 +363,7 @@ proc setupNode(config: DiscoveryConf): discv5_protocol.Protocol {.raises: [Catch
     extUdpPort = extPorts[0].toPort()
 
   let d = newProtocol(config.nodeKey,
-          extIp, Opt.none(Port), extUdpPort,
+          extIp, Opt.none(Port), extUdpPort, Opt.none(Port),
           bootstrapRecords = config.bootstrapNodes,
           bindIp = bindIp, bindPort = udpPort,
           enrAutoUpdate = config.enrAutoUpdate)
