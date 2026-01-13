@@ -24,11 +24,8 @@ proc initDiscoveryNode*(
     bootstrapRecords: openArray[Record] = [],
     localEnrFields: openArray[(string, seq[byte])] = [],
     previousRecord = Opt.none(enr.Record),
-    banNodes = false):
+    config: DiscoveryConfig = DiscoveryConfig.init(1000, 24, 5)): # default increase bucketIpLimit to allow bucket split
     discv5_protocol.Protocol =
-  # set bucketIpLimit to allow bucket split
-  let config = DiscoveryConfig.init(1000, 24, 5)
-
   let protocol = newProtocol(
     privKey,
     Opt.some(address.ip),
@@ -40,8 +37,7 @@ proc initDiscoveryNode*(
     localEnrFields = localEnrFields,
     previousRecord = previousRecord,
     config = config,
-    rng = rng,
-    banNodes = banNodes)
+    rng = rng)
 
   protocol.open()
 
