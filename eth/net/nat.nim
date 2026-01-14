@@ -217,19 +217,66 @@ proc doPortMapping(ports: seq[PortSpec], description: string): Opt[seq[PortSpec]
         ret.add((port: extPort, protocol: p.protocol))
   return Opt.some(ret)
 
-type PortMappingArgs = tuple[ports: seq[PortSpec], description: string]
+type
+  PortMappingsArg = object
+    portsLen: int
+    portsPtr: ptr PortSpec
+    descLen: int
+    descPtr: ptr char
+
+  PortMappingsArgPtr = ptr PortMappingsArg
+
 var
-  natThread: Thread[PortMappingArgs]
+  natThread: Thread[PortMappingsArgPtr]
   natCloseChan: Channel[bool]
 
-proc repeatPortMapping(args: PortMappingArgs) {.thread.} =
+
+proc freePortMappingsArgPtr(args: PortMappingsArgPtr) =
+  if args == nil:
+    return
+  if args.portsPtr != nil:
+    deallocShared(args.portsPtr)
+  if args.descPtr != nil:
+    deallocShared(args.descPtr)
+  deallocShared(args)
+
+proc allocPortMappingsArgPtr(
+    ports: seq[PortSpec], description: string
+): PortMappingsArgPtr =
+  let args = cast[PortMappingsArgPtr](allocShared(sizeof(PortMappingsArg)))
+
+  args.portsLen = ports.len
+  if ports.len > 0:
+    args.portsPtr = cast[ptr PortSpec](allocShared(sizeof(PortSpec) * ports.len))
+    copyMem(args.portsPtr, unsafeAddr ports[0], sizeof(PortSpec) * ports.len)
+  else:
+    args.portsPtr = nil
+
+  args.descLen = description.len
+  if description.len > 0:
+    args.descPtr = cast[ptr char](allocShared(description.len))
+    copyMem(args.descPtr, unsafeAddr description[0], description.len)
+  else:
+    args.descPtr = nil
+
+  args
+
+proc repeatPortMapping(args: PortMappingsArgPtr) {.thread.} =
   ignoreSignalsInThread()
   let
-    (ports, description) = args
     interval = initDuration(seconds = PORT_MAPPING_INTERVAL)
     sleepDuration = 1_000 # in ms, also the maximum delay after pressing Ctrl-C
 
   var lastUpdate = now()
+
+  var ports = newSeq[PortSpec](args.portsLen)
+  var description = newString(args.descLen)
+  if args.portsLen > 0 and args.portsPtr != nil:
+    copyMem(addr ports[0], args.portsPtr, sizeof(PortSpec) * args.portsLen)
+  if args.descLen > 0 and args.descPtr != nil:
+    copyMem(addr description[0], args.descPtr, args.descLen)
+
+  freePortMappingsArgPtr(args)
 
   # We can't use copies of Miniupnp and NatPmp objects in this thread, because they share
   # C pointers with other instances that have already been garbage collected, so
@@ -315,11 +362,16 @@ proc redirectPorts*(internalPorts: seq[PortSpec], description: string): Opt[seq[
     # NAT-PMP lease expires or the router is rebooted and forgets all about
     # these mappings.
     natCloseChan.open()
+    var sharedArgs: PortMappingsArgPtr = nil
     try:
-      natThread.createThread(repeatPortMapping, (externalPorts, description))
+      sharedArgs = allocPortMappingsArgPtr(externalPorts, description)
+      natThread.createThread(repeatPortMapping, sharedArgs)
+      # the thread now owns sharedArgs from this point
+      sharedArgs = nil
       # atexit() in disguise
       addQuitProc(stopNatThread)
     except Exception as exc:
+      freePortMappingsArgPtr(sharedArgs)
       for p in internalPorts:
         portMapping.del(p)
       warn "Failed to create NAT port mapping renewal thread", exc = exc.msg
