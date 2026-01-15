@@ -362,9 +362,8 @@ proc redirectPorts*(internalPorts: seq[PortSpec], description: string): Opt[seq[
     # NAT-PMP lease expires or the router is rebooted and forgets all about
     # these mappings.
     natCloseChan.open()
-    var sharedArgs: PortMappingsArgPtr = nil
+    var sharedArgs: PortMappingsArgPtr = allocPortMappingsArgPtr(externalPorts, description)
     try:
-      sharedArgs = allocPortMappingsArgPtr(externalPorts, description)
       natThread.createThread(repeatPortMapping, sharedArgs)
       # the thread now owns sharedArgs from this point
       sharedArgs = nil
