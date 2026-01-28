@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import 
+import
   ./[addresses, base, hashes, transactions],
   ../bloom
 
@@ -39,6 +39,7 @@ type
     cumulativeGasUsed*: GasInt
     logsBloom*        : Bloom
     logs*             : seq[Log]
+    gasSpent*         : Opt[GasInt]
 
   StoredReceipt* = object
     receiptType*      : ReceiptType
@@ -47,6 +48,7 @@ type
     hash*             : Hash32
     cumulativeGasUsed*: GasInt
     logs*             : seq[Log]
+    gasSpent*         : Opt[GasInt]
 
 const
   LegacyReceipt*  = TxLegacy
@@ -81,7 +83,8 @@ func to*(rec: Receipt, _: type StoredReceipt): StoredReceipt =
     status            : rec.status,
     hash              : rec.hash,
     cumulativeGasUsed : rec.cumulativeGasUsed,
-    logs              : rec.logs
+    logs              : rec.logs,
+    gasSpent          : rec.gasSpent,
   )
 
 func to*(rec: StoredReceipt, _: type Receipt): Receipt =
@@ -92,7 +95,8 @@ func to*(rec: StoredReceipt, _: type Receipt): Receipt =
     hash              : rec.hash,
     cumulativeGasUsed : rec.cumulativeGasUsed,
     logsBloom         : logsBloom(rec.logs).value.to(Bloom),
-    logs              : rec.logs
+    logs              : rec.logs,
+    gasSpent          : rec.gasSpent,
   )
 
 func to*(list: openArray[Receipt], _: type seq[StoredReceipt]): seq[StoredReceipt] =

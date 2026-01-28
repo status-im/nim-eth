@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -26,6 +26,7 @@ proc append*(w: var RlpWriter, rec: Receipt) =
   w.append(rec.cumulativeGasUsed)
   w.append(rec.logsBloom)
   w.append(rec.logs)
+  w.append(rec.gasSpent)
 
 # RLP encoding for StoredReceipt (eth/69)
 proc append*(w: var RlpWriter, rec: StoredReceipt) =
@@ -37,6 +38,7 @@ proc append*(w: var RlpWriter, rec: StoredReceipt) =
     w.append(rec.status.uint8)
   w.append(rec.cumulativeGasUsed)
   w.append(rec.logs)
+  w.append(rec.gasSpent)
 
 # Decode legacy receipt (eth/68)
 proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].} =
@@ -56,6 +58,7 @@ proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].
   rlp.read(receipt.cumulativeGasUsed)
   rlp.read(receipt.logsBloom)
   rlp.read(receipt.logs)
+  rlp.read(receipt.gasSpent)
 
 # Decode typed receipt (eth/68)
 proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].} =
@@ -94,6 +97,7 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].}
   rlp.read(receipt.cumulativeGasUsed)
   rlp.read(receipt.logsBloom)
   rlp.read(receipt.logs)
+  rlp.read(receipt.gasSpent)
 
 # Decode eth/69 StoredReceipt
 proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpError].} =
@@ -115,6 +119,7 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpErr
 
   rlp.read(rec.cumulativeGasUsed)
   rlp.read(rec.logs)
+  rlp.read(receipt.gasSpent)
 
   rec
 
