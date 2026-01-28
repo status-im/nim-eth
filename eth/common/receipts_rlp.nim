@@ -119,7 +119,7 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpErr
 
   rlp.read(rec.cumulativeGasUsed)
   rlp.read(rec.logs)
-  rlp.read(receipt.gasSpent)
+  rlp.read(rec.gasSpent)
 
   rec
 
