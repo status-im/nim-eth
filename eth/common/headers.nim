@@ -40,6 +40,7 @@ type
     parentBeaconBlockRoot*: Opt[Hash32]  # EIP-4788
     requestsHash*: Opt[Hash32]  # EIP-7685
     blockAccessListHash*: Opt[Hash32]  # EIP-7928
+    slotNumber*: Opt[uint64] # EIP-7843
 
 # starting from EIP-4399, `mixDigest` field is called `prevRandao`
 template prevRandao*(h: Header): Bytes32 =
