@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -40,6 +40,7 @@ type
     parentBeaconBlockRoot*: Opt[Hash32]  # EIP-4788
     requestsHash*: Opt[Hash32]  # EIP-7685
     blockAccessListHash*: Opt[Hash32]  # EIP-7928
+    slotNumber*: Opt[uint64] # EIP-7843
 
 # starting from EIP-4399, `mixDigest` field is called `prevRandao`
 template prevRandao*(h: Header): Bytes32 =
