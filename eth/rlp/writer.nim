@@ -16,7 +16,8 @@ import
   default_writer,
   utils,
   stint,
-  ../common/hashes
+  ../common/hashes,
+  ssz_serialization  
 
 export arraybuf, default_writer, length_writer, two_pass_writer, hash_writer
 
@@ -42,6 +43,12 @@ proc appendInt(self: var RlpWriter, i: SomeUnsignedInt) =
 
 template appendImpl(self: var RlpWriter, data: openArray[byte]) =
   self.appendBlob(data)
+
+template appendImpl*[T; N: static[int]](self: var RlpWriter, data: List[T, N]) =
+  self.append(data.asSeq)
+
+template appendImpl*[N: static[int]](self: var RlpWriter, data: ByteList[N]) =
+  self.appendRawBytes(data.asSeq)
 
 template appendImpl(self: var RlpWriter, data: openArray[char]) =
   self.appendBlob(data.toOpenArrayByte(0, data.high))
@@ -79,6 +86,13 @@ proc countNestedListsDepth(T: type): int {.compileTime.} =
 
   when T is Option or T is Opt:
     result += countNestedListsDepth(innerType(dummy))
+  elif T is List:
+    # Handle SSZ List[T, N] types - safely count depth without using elementType
+    inc result
+    # For SSZ List, we know it's one level of list nesting, but we can't safely
+    # access the element type here due to compilation issues, so we assume
+    # simple element types (like Hash32) which don't add additional depth
+    discard
   elif T is UInt256:
     discard
   elif T is object or T is tuple:
@@ -90,6 +104,10 @@ proc countNestedListsDepth(T: type): int {.compileTime.} =
 
 proc countNestedListsDepth[E](T: type openArray[E]): int =
   countNestedListsDepth(seq[E])
+
+# Specialized overload for SSZ List types
+proc countNestedListsDepth[T; N: static[int]](L: type List[T, N]): int =
+  1 + countNestedListsDepth(T)
 
 proc countOptionalFields(T: type): int {.compileTime.} =
   mixin enumerateRlpFields

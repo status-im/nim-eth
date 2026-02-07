@@ -14,7 +14,8 @@ import
   stew/[byteutils, shims/macros],
   results,
   ./rlp/[writer, object_serialization],
-  ./rlp/priv/defs
+  ./rlp/priv/defs,
+  ssz_serialization  
 
 from stew/objects import checkedEnumAssign
 
@@ -413,6 +414,13 @@ func readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
       inc i
 
   rlp.positionAfter(item)
+
+func readImpl*[E; N: static[int]](rlp: var Rlp, T: type List[E, N]): List[E, N] =
+  mixin read
+  T.init(rlp.read(seq[E]))
+
+func readImpl*[N: static[int]](rlp: var Rlp, T: type ByteList[N]): ByteList[N] =
+  T.init(rlp.read(seq[byte]))
 
 func readImpl[E](rlp: var Rlp, T: type seq[E]): T =
   mixin read
