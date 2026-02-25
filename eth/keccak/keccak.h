@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #ifndef KECCAK_INTERNAL_H
-#define ECCAK_INTERNAL_H
+#define KECCAK_INTERNAL_H
 
 #include <stdint.h>
 
