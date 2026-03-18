@@ -1149,7 +1149,7 @@ proc newProtocol*(
     enrIp,
     enrTcpPort,
     enrUdpPort,
-    Opt.none(Port),
+    enrQuicPort,
     customEnrFields,
     bootstrapRecords,
     previousRecord,
