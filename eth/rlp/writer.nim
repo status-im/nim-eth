@@ -14,6 +14,7 @@ import
   length_writer,
   two_pass_writer,
   default_writer,
+  arraybuf_writer,
   utils,
   stint,
   ../common/hashes
@@ -21,7 +22,7 @@ import
 export arraybuf, default_writer, length_writer, two_pass_writer, hash_writer
 
 type
-  RlpWriter* = RlpDefaultWriter | RlpTwoPassWriter | RlpLengthTracker | RlpHashWriter
+  RlpWriter* = RlpDefaultWriter | RlpTwoPassWriter | RlpLengthTracker | RlpHashWriter | RlpArrayBufWriter
 
   RlpIntBuf* = ArrayBuf[9, byte] ## Small buffer for holding a single RLP-encoded integer
 
@@ -231,6 +232,13 @@ proc encode*[T](v: T): seq[byte] =
     var writer = initTwoPassWriter(tracker)
     writer.append(v)
     move(writer.finish)
+
+proc encodeToArrayBuf*[N: static int, T](v: T): ArrayBuf[N, byte] =
+  mixin append
+
+  var writer = RlpArrayBufWriter[N]()
+  writer.append(v)
+  move(writer.finish)
 
 proc computeRlpHash*[T](v: T): Hash32 =
   mixin append

@@ -265,3 +265,8 @@ suite "test api usage":
     for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:
       check:
         encode(i) == encodeInt(i).data()
+
+  test "encodeToArrayBuf":
+    for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:
+      check:
+        encodeToArrayBuf[10, uint64](i).data() == encodeInt(i).data()
