@@ -266,7 +266,23 @@ suite "test api usage":
       check:
         encode(i) == encodeInt(i).data()
 
-  test "encodeToArrayBuf":
+  test "encodeToArrayBuf - uint64":
     for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:
       check:
         encodeToArrayBuf[10, uint64](i).data() == encodeInt(i).data()
+
+  test "encodeToArrayBuf - UInt256":
+    for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:
+      check:
+        encodeToArrayBuf[100, UInt256](i.u256).data() == encode(i.u256)
+
+  test "encodeToArrayBuf - Account":
+    for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:
+      let acc = Account(
+        nonce: i.uint64,
+        balance: i.u256,
+        storageRoot: default(Hash32),
+        codeHash: default(Hash32)
+      )
+      check:
+        encodeToArrayBuf[111, Account](acc).data() == encode(acc)

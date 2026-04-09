@@ -83,7 +83,7 @@ func writeInt*(writer: var RlpArrayBufWriter, i: SomeUnsignedInt) =
 func appendRawBytes*(self: var RlpArrayBufWriter, bytes: openArray[byte]) =
   self.output.setLen(self.output.len + bytes.len)
   assign(
-    self.output.toOpenArray(self.output.len - bytes.len, self.output.len - 1), bytes
+    self.output.buf.toOpenArray(self.output.len - bytes.len, self.output.len - 1), bytes
   )
   self.maybeClosePendingLists()
 
@@ -98,7 +98,7 @@ proc writeBlob*(self: var RlpArrayBufWriter, bytes: openArray[byte]) =
 proc appendDetached*(writer: var RlpArrayBufWriter, bytes: openArray[byte]) =
   writer.output.setLen(writer.output.len + bytes.len)
   assign(
-    writer.output.toOpenArray(writer.output.len - bytes.len, writer.output.len - 1),
+    writer.output.buf.toOpenArray(writer.output.len - bytes.len, writer.output.len - 1),
     bytes,
   )
 
