@@ -19,7 +19,7 @@ import
   stint,
   ../common/hashes
 
-export arraybuf, default_writer, length_writer, two_pass_writer, hash_writer
+export arraybuf, default_writer, length_writer, two_pass_writer, hash_writer, arraybuf_writer
 
 type
   RlpWriter* = RlpDefaultWriter | RlpTwoPassWriter | RlpLengthTracker | RlpHashWriter | RlpArrayBufWriter
