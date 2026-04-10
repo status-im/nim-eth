@@ -233,13 +233,6 @@ proc encode*[T](v: T): seq[byte] =
     writer.append(v)
     move(writer.finish)
 
-proc encodeToArrayBuf*[N: static int, T](v: T): ArrayBuf[N, byte] =
-  mixin append
-
-  var writer = RlpArrayBufWriter[N]()
-  writer.append(v)
-  move(writer.finish)
-
 proc computeRlpHash*[T](v: T): Hash32 =
   mixin append
 

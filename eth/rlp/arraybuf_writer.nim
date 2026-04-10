@@ -7,10 +7,8 @@
 
 import stew/[arraybuf, assign2], ./priv/defs, utils
 
-const MAX_PENDING_LISTS = 10
-
-type RlpArrayBufWriter*[N: static int] = object
-  pendingLists: ArrayBuf[MAX_PENDING_LISTS, tuple[remainingItems, startPos: int]]
+type RlpArrayBufWriter*[N: static int, MAX_DEPTH: static int = 10] = object
+  pendingLists: ArrayBuf[MAX_DEPTH, tuple[remainingItems, startPos: int]]
   output: ArrayBuf[N, byte]
 
 func writeCount(writer: var RlpArrayBufWriter, count: int, baseMarker: byte) =
@@ -120,10 +118,13 @@ proc startList*(self: var RlpArrayBufWriter, listSize: int) =
   else:
     self.pendingLists.add((listSize, self.output.len))
 
-template finish*[N](self: RlpArrayBufWriter[N]): ArrayBuf[N, byte] =
+template finish*(self: RlpArrayBufWriter, asOpenArray: static bool = false): auto =
   doAssert self.pendingLists.len == 0,
     "Insufficient number of elements written to a started list"
-  self.output
+  when asOpenArray:
+    self.output.buf.toOpenArray(0, self.output.n - 1)
+  else:
+    @(self.output.buf.toOpenArray(0, self.output.n - 1))
 
 func clear*(w: var RlpArrayBufWriter) =
   # Prepare writer for reuse
