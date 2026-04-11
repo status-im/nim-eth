@@ -3,12 +3,13 @@ import
   testutils/fuzzing,
   ../../../eth/p2p/discoveryv5/[encoding, sessions, node]
 
+var rng = newRng()
+
 init:
   const
     nodeAKey = "0xeef77acb6c6a6eebc5b363a475ac583ec7eccdb42b6481424c60f59aa326547f"
     nodeBKey = "0x66fb62bfbd66b9177a138c1e5cddbe4f7c30c343e94e68df8769459cb1cde628"
   let
-    rng = newRng()
     privKeyA = PrivateKey.fromHex(nodeAKey)[] # sender -> encode
     privKeyB = PrivateKey.fromHex(nodeBKey)[] # receive -> decode
 
