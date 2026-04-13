@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import ./priv/defs, utils, pkg/results, stacked_counters
+import ./priv/defs, utils, pkg/results, stacked_counters, static_encoder
 
 type
   PendingListItem = tuple[idx, startLen: int]
@@ -136,24 +136,12 @@ proc wrapEncoding*(self: var RlpLengthTracker, numOfEncodings: int) =
 
 func writeBlob*(self: var RlpLengthTracker, data: openArray[byte]) =
   let isSelfEncoding = data.len == 1 and byte(data[0]) < BLOB_START_MARKER
-
-  if isSelfEncoding:
-    self.totalLength += data.len
-  else:
-    self.totalLength += prefixLength(data.len) + data.len
-
+  self.totalLength += rlpBlobEncodedLen(data)
   self.decrementCounters(isSelfEncoding)
 
 func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
   let isSelfEncoding = i < typeof(i)(BLOB_START_MARKER) and i > typeof(i)(0)
-
-  if isSelfEncoding:
-    self.totalLength += 1
-  elif i == typeof(i)(0):
-    self.totalLength += 1
-  else:
-    self.totalLength += prefixLength(i.bytesNeeded) + i.bytesNeeded
-
+  self.totalLength += rlpIntEncodedLen(i)
   self.decrementCounters(isSelfEncoding)
 
 proc appendDetached*(self: var RlpLengthTracker, bytes: openArray[byte]) =

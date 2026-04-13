@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import ../keccak/keccak, ./priv/defs, utils, ../common/hashes, length_writer
+import ../keccak/keccak, ./priv/defs, utils, ../common/hashes, length_writer, static_encoder
 
 type RlpHashWriter* = object
   keccak: keccak.Keccak256
@@ -13,7 +13,6 @@ type RlpHashWriter* = object
   wrapLengths*: seq[int]
   listCount: int
   wrapCount: int
-  bigEndianBuf: array[8, byte]
 
 template update(writer: var RlpHashWriter, data: byte) =
   writer.keccak.update([data])
@@ -21,36 +20,17 @@ template update(writer: var RlpHashWriter, data: byte) =
 template update(writer: var RlpHashWriter, data: openArray[byte]) =
   writer.keccak.update(data)
 
-template updateBigEndian(writer: var RlpHashWriter, i: SomeUnsignedInt, length: int) =
-  writer.bigEndianBuf.writeBigEndian(i, length - 1, length)
-  writer.update(writer.bigEndianBuf.toOpenArray(0, length - 1))
-
 func writeLength(writer: var RlpHashWriter, dataLen: int, baseMarker: byte) =
-  if dataLen < THRESHOLD_LEN:
-    writer.update(baseMarker + byte(dataLen))
-  else:
-    writer.update(baseMarker + (THRESHOLD_LEN - 1) + byte(uint64(dataLen).bytesNeeded))
-    writer.updateBigEndian(uint64(dataLen), uint64(dataLen).bytesNeeded)
+  writer.keccak.rlpHashLength(dataLen, baseMarker)
 
 func writeInt*(writer: var RlpHashWriter, i: SomeUnsignedInt) =
-  if i == typeof(i)(0):
-    writer.update BLOB_START_MARKER
-  elif i < typeof(i)(BLOB_START_MARKER):
-    writer.update byte(i)
-  else:
-    let bytesNeeded = i.bytesNeeded
-    writer.writeLength(bytesNeeded, BLOB_START_MARKER)
-    writer.updateBigEndian(uint64(i), bytesNeeded)
+  writer.keccak.rlpHashInt(i)
 
 template appendRawBytes*(writer: var RlpHashWriter, bytes: openArray[byte]) =
   writer.update(bytes)
 
 proc writeBlob*(writer: var RlpHashWriter, bytes: openArray[byte]) =
-  if bytes.len == 1 and byte(bytes[0]) < BLOB_START_MARKER:
-    writer.update byte(bytes[0])
-  else:
-    writer.writeLength(bytes.len, BLOB_START_MARKER)
-    writer.appendRawBytes(bytes)
+  writer.keccak.rlpHashBlob(bytes)
 
 template appendDetached*(writer: var RlpHashWriter, bytes: openArray[byte]) =
   writer.update(bytes)

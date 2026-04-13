@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import stew/assign2, ./priv/defs, utils, length_writer
+import stew/assign2, ./priv/defs, utils, length_writer, static_encoder
 
 type RlpTwoPassWriter* = object
   output*: seq[byte]
@@ -23,36 +23,17 @@ template update(self: var RlpTwoPassWriter, data: openArray[byte]) =
   assign(self.output.toOpenArray(self.fillLevel, self.fillLevel + data.len - 1), data)
   self.fillLevel += data.len
 
-template updateBigEndian(self: var RlpTwoPassWriter, i: SomeUnsignedInt, length: int) =
-  self.fillLevel += length
-  self.output.writeBigEndian(i, self.fillLevel - 1, length)
-
 func writeLength(writer: var RlpTwoPassWriter, dataLen: int, baseMarker: byte) =
-  if dataLen < THRESHOLD_LEN:
-    writer.update(baseMarker + byte(dataLen))
-  else:
-    writer.update(baseMarker + (THRESHOLD_LEN - 1) + byte(uint64(dataLen).bytesNeeded))
-    writer.updateBigEndian(uint64(dataLen), uint64(dataLen).bytesNeeded)
+  rlpWriteLength(writer.output, writer.fillLevel, dataLen, baseMarker)
 
 func writeInt*(writer: var RlpTwoPassWriter, i: SomeUnsignedInt) =
-  if i == typeof(i)(0):
-    writer.update BLOB_START_MARKER
-  elif i < typeof(i)(BLOB_START_MARKER):
-    writer.update byte(i)
-  else:
-    let bytesNeeded = i.bytesNeeded
-    writer.writeLength(bytesNeeded, BLOB_START_MARKER)
-    writer.updateBigEndian(uint64(i), bytesNeeded)
+  rlpWriteInt(writer.output, writer.fillLevel, uint64(i))
 
 template appendRawBytes*(writer: var RlpTwoPassWriter, bytes: openArray[byte]) =
   writer.update(bytes)
 
 proc writeBlob*(writer: var RlpTwoPassWriter, bytes: openArray[byte]) =
-  if bytes.len == 1 and byte(bytes[0]) < BLOB_START_MARKER:
-    writer.update byte(bytes[0])
-  else:
-    writer.writeLength(bytes.len, BLOB_START_MARKER)
-    writer.appendRawBytes(bytes)
+  rlpWriteBlob(writer.output, writer.fillLevel, bytes)
 
 template appendDetached*(writer: var RlpTwoPassWriter, bytes: openArray[byte]) =
   writer.update(bytes)
