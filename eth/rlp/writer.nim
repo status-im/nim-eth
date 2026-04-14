@@ -14,14 +14,15 @@ import
   length_writer,
   two_pass_writer,
   default_writer,
+  arraybuf_writer,
   utils,
   stint,
   ../common/hashes
 
-export arraybuf, default_writer, length_writer, two_pass_writer, hash_writer
+export arraybuf, default_writer, length_writer, two_pass_writer, hash_writer, arraybuf_writer
 
 type
-  RlpWriter* = RlpDefaultWriter | RlpTwoPassWriter | RlpLengthTracker | RlpHashWriter
+  RlpWriter* = RlpDefaultWriter | RlpTwoPassWriter | RlpLengthTracker | RlpHashWriter | RlpArrayBufWriter
 
   RlpIntBuf* = ArrayBuf[9, byte] ## Small buffer for holding a single RLP-encoded integer
 

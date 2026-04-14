@@ -265,3 +265,33 @@ suite "test api usage":
     for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:
       check:
         encode(i) == encodeInt(i).data()
+
+  test "encodeToArrayBuf - uint64":
+    for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:
+      var writer = RlpArrayBufWriter[9]()
+      writer.append(i)
+
+      check writer.finish() == encodeInt(i).data()
+
+  test "encodeToArrayBuf - UInt256":
+    for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:
+      var writer = RlpArrayBufWriter[33]()
+      writer.append(i)
+
+      check:
+        writer.finish() == encode(i.u256)
+
+  test "encodeToArrayBuf - Account":
+    for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:
+      let acc = Account(
+        nonce: i.uint64,
+        balance: i.u256,
+        storageRoot: default(Hash32),
+        codeHash: default(Hash32)
+      )
+
+      var writer = RlpArrayBufWriter[111]()
+      writer.append(acc)
+
+      check:
+        writer.finish() == encode(acc)
