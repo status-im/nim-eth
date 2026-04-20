@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -24,7 +24,7 @@ type
   StorageKey* = UInt256
   StorageValue* = UInt256
   Bytecode* = Bytes
-  BlockAccessIndex* = uint16
+  BlockAccessIndex* = uint64
   Balance* = UInt256
   Nonce* = AccountNonce
 
