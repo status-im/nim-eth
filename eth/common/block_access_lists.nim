@@ -24,7 +24,7 @@ type
   StorageKey* = UInt256
   StorageValue* = UInt256
   Bytecode* = Bytes
-  BlockAccessIndex* = uint64
+  BlockAccessIndex* = uint32
   Balance* = UInt256
   Nonce* = AccountNonce
 
