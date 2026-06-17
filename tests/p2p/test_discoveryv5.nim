@@ -339,7 +339,9 @@ suite "Discovery v5.1 Tests":
         n.isSome()
         n.get().id == targetId
         n.get().record.seqNum == targetSeqNum
-    # Node will be removed because of failed findNode request.
+
+    # Remove the target node from the main node routing table
+    mainNode.routingTable.removeNode(targetNode.localNode)
 
     # Bring target back online, update seqNum in ENR, check if we get the
     # updated ENR.
@@ -389,6 +391,12 @@ suite "Discovery v5.1 Tests":
       await targetNode.closeWait()
 
       check mainNode.addNode(lookupNode.localNode.record)
+
+      # Remove the target node from the mainNode routing table
+      # so that in the call to resolve below the lookupNode node
+      # is used to fetch the updated ENR.
+      mainNode.routingTable.removeNode(targetNode.localNode)
+
       let n = await mainNode.resolve(targetId)
       check:
         n.isSome()
