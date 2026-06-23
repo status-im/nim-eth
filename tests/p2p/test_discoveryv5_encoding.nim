@@ -8,7 +8,7 @@
 {.used.}
 
 import
-  std/[options, sequtils, tables, net],
+  std/[sequtils, tables, net],
   unittest2,
   stint, stew/byteutils,
   ../../eth/enr/enr,

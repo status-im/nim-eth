@@ -123,6 +123,8 @@ const
   defaultResponseTimeout* = 4.seconds ## timeout for the response of a request-response
   ## call
   defaultSessionsSize* = 256 ## Size of the session cache
+  maxQueuedRequestsPerPeer* = 8 ## Max outbound requests queued per peer while
+  ## a handshake is in progress
 
   ## Ban durations for banned nodes in the routing table
   NodeBanDurationInvalidResponse = 15.minutes
@@ -162,7 +164,7 @@ type
     handshakeTimeout: Duration
     responseTimeout: Duration
     rng*: ref HmacDrbgContext
-
+    requestQueues: Table[HandshakeKey, seq[seq[byte]]]
 
   PendingRequest = object
     node: Node
@@ -468,6 +470,16 @@ proc banNode*(d: Protocol, n: Node, banPeriod: chronos.Duration) =
 proc isBanned*(d: Protocol, nodeId: NodeId): bool =
   d.banNodes and d.routingTable.isBanned(nodeId)
 
+# TODO: This could be improved to do the clean-up immediately in case a non
+# whoareyou response does arrive, but we would need to store the AuthTag
+# somewhere
+proc registerRequest(d: Protocol, n: Node, message: seq[byte],
+    nonce: AESGCMNonce) =
+  let request = PendingRequest(node: n, message: message)
+  if not d.pendingRequests.hasKeyOrPut(nonce, request):
+    sleepAsync(d.responseTimeout).addCallback() do(data: pointer):
+      d.pendingRequests.del(nonce)
+
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
   discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
 
@@ -508,6 +520,20 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
 
         trace "Send handshake message packet", dstId = toNode.id, address
         d.send(toNode, data)
+
+        # Session is now established on our side. Drain any requests that were
+        # queued while the handshake was in progress, these will be encrypted
+        # with the new session key.
+        let key = HandshakeKey(nodeId: toNode.id, address: address)
+        var queued: seq[seq[byte]]
+        if d.requestQueues.pop(key, queued):
+          for qmsg in queued:
+            let (qdata, qnonce) = encodeMessagePacket(d.rng[], d.codec,
+              toNode.id, address, qmsg)
+            d.registerRequest(toNode, qmsg, qnonce)
+            trace "Send queued message packet", dstId = toNode.id, address
+            d.send(toNode, qdata)
+            discovery_message_requests_outgoing.inc()
       else:
         debug "Timed out or unrequested whoareyou packet", address = a
     of HandshakeMessage:
@@ -559,16 +585,6 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
 
   proto.receive(Address(ip: raddr.toIpAddress(), port: raddr.port), buf)
 
-# TODO: This could be improved to do the clean-up immediately in case a non
-# whoareyou response does arrive, but we would need to store the AuthTag
-# somewhere
-proc registerRequest(d: Protocol, n: Node, message: seq[byte],
-    nonce: AESGCMNonce) =
-  let request = PendingRequest(node: n, message: message)
-  if not d.pendingRequests.hasKeyOrPut(nonce, request):
-    sleepAsync(d.responseTimeout).addCallback() do(data: pointer):
-      d.pendingRequests.del(nonce)
-
 proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
     Future[Opt[Message]] {.async: (raw: true, raises: [CancelledError]).} =
   let retFuture = Future[Opt[Message]].Raising([CancelledError]).init("discv5.waitMessage")
@@ -617,15 +633,40 @@ proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
     address = toNode.address.get()
     reqId = RequestId.init(d.rng[])
     message = encodeMessage(m, reqId)
+    key = HandshakeKey(nodeId: toNode.id, address: address)
+
+  if key in d.requestQueues:
+    # A handshake is already in progress with this peer. Queue the request and
+    # send it once the session is established.
+    if d.requestQueues.getOrDefault(key).len < maxQueuedRequestsPerPeer:
+      d.requestQueues.mgetOrPut(key, @[]).add(message)
+      trace "Queued request during handshake", dstId = toNode.id,
+        address, kind = messageKind(T)
+    else:
+      # Note: if request queue gets full this gets silently dropped. For the
+      # API caller this will look like a timeout.
+      trace "Request queue full, dropping request", dstId = toNode.id,
+        address, kind = messageKind(T)
+    return reqId
 
   let (data, nonce) = encodeMessagePacket(d.rng[], d.codec, toNode.id,
     address, message)
-
   d.registerRequest(toNode, message, nonce)
+
+  if d.codec.sessions.load(toNode.id, address).isNone():
+    # Sending message packet without a session, mark this peer as having a
+    # handshake in progress so subsequent requests are queued rather than
+    # sent randomly encrypted and either dropped at receipient or causing
+    # too many concurrent handshakes/whoareyous.
+    d.requestQueues[key] = @[]
+    sleepAsync(d.responseTimeout).addCallback() do(data: pointer):
+      d.requestQueues.del(key)
+
   trace "Send message packet", dstId = toNode.id, address, kind = messageKind(T)
   d.send(toNode, data)
   discovery_message_requests_outgoing.inc()
-  return reqId
+
+  reqId
 
 proc ping*(d: Protocol, toNode: Node):
     Future[DiscResult[PongMessage]] {.async: (raises: [CancelledError]).} =
