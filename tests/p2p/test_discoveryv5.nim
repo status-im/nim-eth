@@ -746,13 +746,14 @@ suite "Discovery v5.1 Tests":
     await receiveNode.closeWait()
 
   asyncTest "Handshake duplicates":
-    # Node to test the handshakes on.
-    let receiveNode = initDiscoveryNode(
-      rng, PrivateKey.random(rng[]), localAddress(20302))
-
-    # Create random packets with same node ids and same ips
-    # and "receive" them on receiveNode
+    # When multiple undecryptable packets arrive from the same peer while a
+    # challenge is already outstanding, the receiver:
+    # 1. Keeps exactly one handshake entry, keyed to the first packet's nonce.
+    # 2. Stores the original WHOAREYOU bytes for retransmission.
     let
+      receiveNode = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+
       a = localAddress(20303)
       privKey = PrivateKey.random(rng[])
       enrRec = enr.Record.init(1, privKey,
@@ -775,6 +776,14 @@ suite "Discovery v5.1 Tests":
     let key = HandshakeKey(nodeId: sendNode.id, address: a)
     check receiveNode.codec.handshakes[key].whoareyouData.requestNonce ==
       firstRequestNonce
+
+    let storedPacket = receiveNode.codec.handshakes[key].packet
+    check storedPacket.len > 0
+    let decoded = codec.decodePacket(a, storedPacket)
+    check:
+      decoded.isOk()
+      decoded[].flag == Whoareyou
+      decoded[].whoareyou.requestNonce == firstRequestNonce
 
     await receiveNode.closeWait()
 
