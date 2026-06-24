@@ -108,7 +108,7 @@ const
   alpha = 3 ## Kademlia concurrency factor
   lookupRequestLimit = 3 ## Amount of distances requested in a single Findnode
   ## message for a lookup or query
-  findNodeResultLimit = 16 ## Maximum amount of ENRs in the total Nodes messages
+  findNodeResultLimit* = 16 ## Maximum amount of ENRs in the total Nodes messages
   ## that will be processed
   maxNodesPerMessage = 3 ## Maximum amount of ENRs per individual Nodes message
   refreshInterval = 5.minutes ## Interval of launching a random query to
@@ -360,7 +360,7 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
     # TODO: Still deduplicate also?
     if fn.distances.all(proc (x: uint16): bool = return x <= 256):
       d.sendNodes(fromId, fromAddr, reqId,
-        d.routingTable.neighboursAtDistances(fn.distances, seenOnly = true))
+        d.routingTable.neighboursAtDistances(fn.distances, seenOnly = true, k = findNodeResultLimit))
     else:
       # At least one invalid distance, but the polite node we are, still respond
       # with empty nodes.

@@ -245,7 +245,31 @@ suite "Discovery v5.1 Tests":
     discovered =
       await findNode(testNode, mainNode.localNode, @[dist])
     check discovered.isOk
-    check discovered[].len == 16
+    check discovered[].len == findNodeResultLimit
+
+    await mainNode.closeWait()
+    await testNode.closeWait()
+
+  asyncTest "FindNode limit across multiple distances":
+    const
+      dist1 = 253'u16
+      dist2 = 254'u16
+    let
+      mainNode = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301))
+      testNode = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
+
+    # 10 nodes at each distance = 20 total, which exceeds findNodeResultLimit.
+    for n in nodesAtDistance(mainNode.localNode, rng[], dist1, 10) &
+             nodesAtDistance(mainNode.localNode, rng[], dist2, 10):
+      discard mainNode.addSeenNode(n)
+
+    check (await testNode.ping(mainNode.localNode)).isOk()
+    check (await mainNode.ping(testNode.localNode)).isOk()
+
+    let discovered = await findNode(testNode, mainNode.localNode, @[dist1, dist2])
+    check:
+      discovered.isOk()
+      discovered[].len == findNodeResultLimit
 
     await mainNode.closeWait()
     await testNode.closeWait()
