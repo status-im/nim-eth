@@ -81,6 +81,8 @@ type
   Challenge* = object
     whoareyouData*: WhoareyouData
     pubkey*: Opt[PublicKey]
+    packet*: seq[byte] ## Exact encoded bytes of the WHOAREYOU packet ready for
+    ## retransmission.
 
   StaticHeader* = object
     flag: Flag
@@ -296,7 +298,8 @@ proc encodeWhoareyouPacket*(rng: var HmacDrbgContext, c: var Codec,
       idNonce: idNonce,
       recordSeq: recordSeq,
       challengeData: @iv & header)
-    challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey)
+    challenge = Challenge(whoareyouData: whoareyouData, pubkey: pubkey,
+      packet: packet)
     key = HandshakeKey(nodeId: toId, address: toAddr)
 
   c.handshakes[key] = challenge

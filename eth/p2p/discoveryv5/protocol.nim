@@ -425,26 +425,33 @@ func registerTalkProtocol*(d: Protocol, protocolId: seq[byte],
 proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
     requestNonce: AESGCMNonce, node: Opt[Node]) =
   let key = HandshakeKey(nodeId: toId, address: a)
-  if not d.codec.hasHandshake(key):
-    let
-      recordSeq =
-        if node.isSome():
-          node.get().record.seqNum
-        else:
-          0
-      pubkey = node.map(proc(node: Node): PublicKey = node.pubkey)
+  if d.codec.hasHandshake(key):
+    # A challenge is already outstanding for this peer. We only allow
+    # for one handshake per peer at a time. Could drop this but instead
+    # retransmit the original whoareyou so that the initiator can finish
+    # the handshake in case the first got lost.
+    # This is similar to behaviour of go-ethereum discv5 implementation.
+    trace "Resending whoareyou", dstId = toId, address = a
+    d.send(a, d.codec.handshakes.getOrDefault(key).packet)
+    return
 
-    let data = encodeWhoareyouPacket(d.rng[], d.codec, toId, a, requestNonce,
-      recordSeq, pubkey)
-    sleepAsync(d.handshakeTimeout).addCallback() do(data: pointer):
+  let
+    recordSeq =
+      if node.isSome():
+        node.get().record.seqNum
+      else:
+        0
+    pubkey = node.map(proc(node: Node): PublicKey = node.pubkey)
+
+  let data = encodeWhoareyouPacket(d.rng[], d.codec, toId, a, requestNonce,
+    recordSeq, pubkey)
+  sleepAsync(d.handshakeTimeout).addCallback() do(data: pointer):
     # TODO: should we still provide cancellation in case handshake completes
     # correctly?
-      d.codec.handshakes.del(key)
+    d.codec.handshakes.del(key)
 
-    trace "Send whoareyou", dstId = toId, address = a
-    d.send(a, data)
-  else:
-    debug "Node with this id already has ongoing handshake, ignoring packet"
+  trace "Send whoareyou", dstId = toId, address = a
+  d.send(a, data)
 
 proc replaceNode(d: Protocol, n: Node) =
   if n.record notin d.bootstrapRecords:
