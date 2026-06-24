@@ -1044,3 +1044,30 @@ suite "Discovery v5.1 Tests":
 
     await node2.closeWait()
     await node1.closeWait()
+
+  asyncTest "Concurrent requests to a peer without a session are queued":
+    let
+      # Short response timeout so dropped pings fail fast in the test.
+      config = DiscoveryConfig.init(
+        DefaultTableIpLimit, DefaultBucketIpLimit, DefaultBitsPerHop,
+        defaultHandshakeTimeout, 500.milliseconds, defaultSessionsSize, false)
+      node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20308),
+        config = config)
+      node2 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20309),
+        config = config)
+
+    # All pings are fired before yielding to the event loop.
+    let handshakeFuture = node1.ping(node2.localNode)
+    var queuedFutures: seq[Future[DiscResult[PongMessage]]]
+    for _ in 0..<maxQueuedRequestsPerPeer:
+      queuedFutures.add(node1.ping(node2.localNode))
+    let overflowFuture = node1.ping(node2.localNode)
+
+    check (await handshakeFuture).isOk()
+    for f in queuedFutures:
+      check (await f).isOk()
+
+    check (await overflowFuture).isErr()
+
+    await node1.closeWait()
+    await node2.closeWait()
