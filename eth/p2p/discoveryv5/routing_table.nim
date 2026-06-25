@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2025 Status Research & Development GmbH
+# Copyright (c) 2020-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -175,6 +175,12 @@ func ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
   ## When one of the ip limits is reached return false, else increment them and
   ## return true.
   let ip = n.address.get().ip # Node from table should always have an address
+
+  # Apply IP limits only to public addresses. The limits defend against Sybil
+  # attacks from a single public IP, which is not meaningful on a private
+  # network. go-ethereum applies the same exemption.
+  if not ip.isPublic():
+    return true
   # Check ip limit for bucket
   if not b.ipLimits.inc(ip):
     return false
@@ -189,7 +195,8 @@ func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   ## Decrement the ip limits of the routing table and the bucket for the
   ## specified `Node` its ip.
   let ip = n.address.get().ip # Node from table should always have an address
-
+  if not ip.isPublic():
+    return
   b.ipLimits.dec(ip)
   r.ipLimits.dec(ip)
 
@@ -263,15 +270,18 @@ func split(k: KBucket): tuple[lower, upper: KBucket] =
     bucket.nodes.add(node)
     # Ip limits got reset because of the KBucket.new, so there is the need to
     # increment again for each added node. It should however never fail as the
-    # previous bucket had the same limits.
-    doAssert(bucket.ipLimits.inc(node.address.get().ip),
-      "IpLimit increment should work as all buckets have the same limits")
+    # previous bucket had the same limits. IP limits only track public addresses
+    # so non-public addresses are not counted.
+    if node.address.get().ip.isPublic():
+      doAssert(bucket.ipLimits.inc(node.address.get().ip),
+        "IpLimit increment should work as all buckets have the same limits")
 
   for node in k.replacementCache:
     let bucket = if node.id <= splitid: result.lower else: result.upper
     bucket.replacementCache.add(node)
-    doAssert(bucket.ipLimits.inc(node.address.get().ip),
-      "IpLimit increment should work as all buckets have the same limits")
+    if node.address.get().ip.isPublic():
+      doAssert(bucket.ipLimits.inc(node.address.get().ip),
+        "IpLimit increment should work as all buckets have the same limits")
 
 func inRange(k: KBucket, n: Node): bool =
   k.istart <= n.id and n.id <= k.iend

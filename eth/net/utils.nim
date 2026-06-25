@@ -1,5 +1,5 @@
 # nim-eth
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -47,6 +47,11 @@ func isGlobalUnicast*(address: TransportAddress): bool =
 func isGlobalUnicast*(address: IpAddress): bool =
   let a = initTAddress(address, Port(0))
   a.isGlobalUnicast()
+
+func isPublic*(address: IpAddress): bool =
+  ## Returns true for globally routable (public) addresses
+  let a = initTAddress(address, Port(0))
+  not (a.isLoopback() or a.isSiteLocal() or a.isLinkLocal())
 
 proc getRouteIpv4*(): Result[IpAddress, cstring] =
   # Avoiding Exception with initTAddress and can't make it work with static.
