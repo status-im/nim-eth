@@ -1,3 +1,10 @@
+# nim-eth
+# Copyright (c) 2020-2026 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 {.used.}
 
 import
@@ -276,14 +283,20 @@ suite "Routing Table Tests":
     # bitsPerHop = 1 -> Split only the branch in range of own id
     var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
 
+    # Use public IPs: LAN/loopback/link-local addresses are not added to IP limits
+    const
+      pubIp1 = parseIpAddress("1.2.3.4")   # public IP to hit the bucket limit
+      pubBaseIp1 = parseIpAddress("2.3.4.0") # base for unique-IP fill in bucket 1
+      pubBaseIp2 = parseIpAddress("3.4.5.0") # base for unique-IP fill in bucket 2
+
     block: # First bucket
       let sameIpNodes = node.nodesAtDistance(rng[], 256,
-        int(DefaultTableIpLimits.bucketIpLimit))
+        int(DefaultTableIpLimits.bucketIpLimit), pubIp1)
       for n in sameIpNodes:
         check table.addNode(n) == Added
 
       # Try to add a node, which should fail due to ip bucket limit
-      let anotherSameIpNode = node.nodeAtDistance(rng[], 256)
+      let anotherSameIpNode = node.nodeAtDistance(rng[], 256, pubIp1)
       check table.addNode(anotherSameIpNode) == IpLimitReached
 
       # Remove one and try add again
@@ -292,31 +305,29 @@ suite "Routing Table Tests":
 
       # Further fill the bucket with nodes with different ip.
       let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256,
-        int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit),
-        parseIpAddress("192.168.0.1"))
+        int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit), pubBaseIp1)
       for n in diffIpNodes:
         check table.addNode(n) == Added
 
     block: # Second bucket
       # Try to add another node with the same IP, but different distance.
       # This should split the bucket and add it.
-      let anotherSameIpNode = node.nodeAtDistance(rng[], 255)
+      let anotherSameIpNode = node.nodeAtDistance(rng[], 255, pubIp1)
       check table.addNode(anotherSameIpNode) == Added
 
       # Add more nodes with different ip and distance 255 to get in the new bucket
       let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 255,
-        int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit - 1),
-        parseIpAddress("192.168.1.1"))
+        int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit - 1), pubBaseIp2)
       for n in diffIpNodes:
         check table.addNode(n) == Added
 
       let sameIpNodes = node.nodesAtDistance(rng[], 255,
-        int(DefaultTableIpLimits.bucketIpLimit - 1))
+        int(DefaultTableIpLimits.bucketIpLimit - 1), pubIp1)
       for n in sameIpNodes:
         check table.addNode(n) == Added
 
       # Adding in another one should fail again
-      let anotherSameIpNode2 = node.nodeAtDistance(rng[], 255)
+      let anotherSameIpNode2 = node.nodeAtDistance(rng[], 255, pubIp1)
       check table.addNode(anotherSameIpNode2) == IpLimitReached
 
   test "Ip limits on routing table":
@@ -324,58 +335,65 @@ suite "Routing Table Tests":
     # bitsPerHop = 1 -> Split only the branch in range of own id
     var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
 
+    # Use public IPs: LAN/loopback/link-local addresses are not added to IP limits
+    const
+      pubIp1 = parseIpAddress("1.2.3.4")   # public IP to exhaust the table limit
+      pubBaseIp1 = parseIpAddress("2.3.4.0") # base for unique-IP fill
+      pubIp2 = parseIpAddress("3.4.5.1")   # a second distinct public IP
+
     let amount = uint32(DefaultTableIpLimits.tableIpLimit div
       DefaultTableIpLimits.bucketIpLimit)
     # Fill `amount` of buckets, each with 14 nodes with different ips and 2
     # with equal ones.
     for j in 0..<amount:
       let nodes = node.nodesAtDistanceUniqueIp(rng[], 256 - j,
-        int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit),
-        parseIpAddress("192.168.0.1"))
+        int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit), pubBaseIp1)
       for n in nodes:
         check table.addNode(n) == Added
 
       let sameIpNodes = node.nodesAtDistance(rng[], 256 - j,
-        int(DefaultTableIpLimits.bucketIpLimit))
+        int(DefaultTableIpLimits.bucketIpLimit), pubIp1)
       for n in sameIpNodes:
         check table.addNode(n) == Added
 
     # Add a node with a different IP, should work and split a bucket once more.
-    let anotherDiffIpNode = node.nodeAtDistance(rng[], 256 - amount,
-      parseIpAddress("192.168.1.1"))
+    let anotherDiffIpNode = node.nodeAtDistance(rng[], 256 - amount, pubIp2)
     check table.addNode(anotherDiffIpNode) == Added
 
     let amountLeft = int(DefaultTableIpLimits.tableIpLimit mod
       DefaultTableIpLimits.bucketIpLimit)
 
-    let sameIpNodes = node.nodesAtDistance(rng[], 256 - amount, amountLeft)
+    let sameIpNodes = node.nodesAtDistance(rng[], 256 - amount, amountLeft, pubIp1)
     for n in sameIpNodes:
       check table.addNode(n) == Added
 
     # Add a node with same ip to this fresh bucket, should fail because of total
     # ip limit of routing table is reached.
-    let anotherSameIpNode = node.nodeAtDistance(rng[], 256 - amount)
+    let anotherSameIpNode = node.nodeAtDistance(rng[], 256 - amount, pubIp1)
     check table.addNode(anotherSameIpNode) == IpLimitReached
 
   test "Ip limits on replacement cache":
     let node = generateNode(PrivateKey.random(rng[]))
     var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
 
+    const
+      pubIp1 = parseIpAddress("1.2.3.4")
+      pubBaseIp1 = parseIpAddress("2.3.4.0")
+
     let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256,
-      int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit + 1),
-      parseIpAddress("192.168.0.1"))
+      int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit + 1), pubBaseIp1)
     for n in diffIpNodes:
       check table.addNode(n) == Added
 
     let sameIpNodes = node.nodesAtDistance(rng[], 256,
-      int(DefaultTableIpLimits.bucketIpLimit - 1))
+      int(DefaultTableIpLimits.bucketIpLimit - 1), pubIp1)
     for n in sameIpNodes:
       check table.addNode(n) == Added
 
-    let anotherSameIpNode1 = node.nodeAtDistance(rng[], 256)
+    let anotherSameIpNode1 = node.nodeAtDistance(rng[], 256, pubIp1)
     check table.addNode(anotherSameIpNode1) == ReplacementAdded
 
-    let anotherSameIpNode2 = node.nodeAtDistance(rng[], 256)
+    let anotherSameIpNode2 = node.nodeAtDistance(rng[], 256, pubIp1)
     check table.addNode(anotherSameIpNode2) == IpLimitReached
 
     block: # Replace node to see if the first one becomes available
@@ -397,35 +415,38 @@ suite "Routing Table Tests":
     let node = generateNode(PrivateKey.random(rng[]))
     var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
 
+    const
+      pubIp1 = parseIpAddress("1.2.3.4")
+      pubBaseIp1 = parseIpAddress("2.3.4.0")
+      pubBaseIp2 = parseIpAddress("3.4.5.0")
+      pubIp2 = parseIpAddress("4.5.6.7")
+
     block: # Fill bucket
       let sameIpNodes = node.nodesAtDistance(rng[], 256,
-        int(DefaultTableIpLimits.bucketIpLimit - 1))
+        int(DefaultTableIpLimits.bucketIpLimit - 1), pubIp1)
       for n in sameIpNodes:
         check table.addNode(n) == Added
 
       let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256,
-        int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit + 1),
-        parseIpAddress("192.168.0.1"))
+        int(BUCKET_SIZE - DefaultTableIpLimits.bucketIpLimit + 1), pubBaseIp1)
       for n in diffIpNodes:
         check table.addNode(n) == Added
 
     block: # Fill bucket replacement cache
-      let sameIpNode = node.nodeAtDistance(rng[], 256)
+      let sameIpNode = node.nodeAtDistance(rng[], 256, pubIp1)
       check table.addNode(sameIpNode) == ReplacementAdded
 
       let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256,
-        int(REPLACEMENT_CACHE_SIZE - 1),
-        parseIpAddress("192.168.1.1"))
+        int(REPLACEMENT_CACHE_SIZE - 1), pubBaseIp2)
       for n in diffIpNodes:
         check table.addNode(n) == ReplacementAdded
 
     # Try to add node to replacement, but limit is reached
-    let sameIpNode = node.nodeAtDistance(rng[], 256)
+    let sameIpNode = node.nodeAtDistance(rng[], 256, pubIp1)
     check table.addNode(sameIpNode) == IpLimitReached
 
     # Add one with different ip, to remove the first
-    let diffIpNode = node.nodeAtDistance(rng[], 256,
-      parseIpAddress("192.168.2.1"))
+    let diffIpNode = node.nodeAtDistance(rng[], 256, pubIp2)
     check table.addNode(diffIpNode) == ReplacementAdded
 
     # Now the add should work
@@ -435,20 +456,24 @@ suite "Routing Table Tests":
     let node = generateNode(PrivateKey.random(rng[]))
     var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
 
+    const
+      pubIp1 = parseIpAddress("1.2.3.4")
+      pubBaseIp1 = parseIpAddress("2.3.4.0")
+
     # Fill bucket
     let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256, BUCKET_SIZE,
-      parseIpAddress("192.168.0.1"))
+      pubBaseIp1)
     for n in diffIpNodes:
       check table.addNode(n) == Added
 
     # Test if double add does not account for the ip limits.
     for i in 0..<DefaultTableIpLimits.bucketIpLimit:
-      let sameIpNode = node.nodeAtDistance(rng[], 256)
+      let sameIpNode = node.nodeAtDistance(rng[], 256, pubIp1)
       check table.addNode(sameIpNode) == ReplacementAdded
       # Add it again
       check table.addNode(sameIpNode) == ReplacementExisting
 
-    let sameIpNode = node.nodeAtDistance(rng[], 256)
+    let sameIpNode = node.nodeAtDistance(rng[], 256, pubIp1)
     check table.addNode(sameIpNode) == IpLimitReached
 
   test "Ip limits on bucket: double add with new ip":
