@@ -115,6 +115,8 @@ const
   ## refresh the routing table.
   revalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
+  pingBackMax* = 5000 ## When a node completes an inbound handshake and is newly
+  ## added to the routing table, it is pinged back within this many milliseconds
   ipMajorityInterval = 5.minutes ## Interval for checking the latest IP:Port
   ## majority and updating this when ENR auto update is set.
   initialLookups = 1 ## Amount of lookups done when populating the routing table
@@ -141,6 +143,7 @@ type
     responseTimeout: Duration
     sessionsSize*: int
     banNodes*: bool
+    pingBackMax*: int
 
   Protocol* = ref object
     transp: DatagramTransport
@@ -163,6 +166,7 @@ type
     # overkill here, use sequence
     handshakeTimeout: Duration
     responseTimeout: Duration
+    pingBackMax: int
     rng*: ref HmacDrbgContext
     requestQueues: Table[HandshakeKey, seq[seq[byte]]]
 
@@ -192,7 +196,8 @@ const
     handshakeTimeout: defaultHandshakeTimeout,
     responseTimeout: defaultResponseTimeout,
     sessionsSize: defaultSessionsSize,
-    banNodes: false
+    banNodes: false,
+    pingBackMax: pingBackMax,
   )
 
 chronicles.formatIt(Opt[Port]): $it
@@ -487,6 +492,8 @@ proc registerRequest(d: Protocol, n: Node, message: seq[byte],
     sleepAsync(d.responseTimeout).addCallback() do(data: pointer):
       d.pendingRequests.del(nonce)
 
+proc pingBack(d: Protocol, node: Node) {.async: (raises: [CancelledError]).}
+
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
   discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
 
@@ -562,6 +569,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
         if node.address.isSome() and a == node.address.get():
           if d.addNode(node):
             trace "Added new node to routing table after handshake", node
+            asyncSpawn d.pingBack(node)
 
         # Received an ENR in the handshake, add it to the session that was just
         # created in the session cache.
@@ -700,6 +708,13 @@ proc ping*(d: Protocol, toNode: Node):
     d.replaceNode(toNode)
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Pong message not received in time")
+
+proc pingBack(d: Protocol, node: Node) {.async: (raises: [CancelledError]).} =
+  ## Ping back a node after an inbound session setup, with a random delay.
+  await sleepAsync(milliseconds(d.rng[].rand(d.pingBackMax)))
+  let res = await d.ping(node)
+  if res.isErr():
+    trace "Ping back failed", node, err = res.error
 
 proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
     Future[DiscResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
@@ -1078,6 +1093,7 @@ func init*(
     responseTimeout: Duration,
     sessionsSize: int,
     banNodes: bool,
+    pingBackMax = pingBackMax,
 ): T =
   DiscoveryConfig(
     tableIpLimits:
@@ -1087,6 +1103,7 @@ func init*(
     responseTimeout: responseTimeout,
     sessionsSize: sessionsSize,
     banNodes: banNodes,
+    pingBackMax: pingBackMax,
   )
 
 func init*(
@@ -1096,10 +1113,11 @@ func init*(
     bitsPerHop: int,
     sessionsSize = defaultSessionsSize,
     banNodes = false,
+    pingBackMax = pingBackMax,
 ): T =
   DiscoveryConfig.init(
     tableIpLimit, bucketIpLimit, bitsPerHop, defaultHandshakeTimeout,
-    defaultResponseTimeout, sessionsSize, banNodes,
+    defaultResponseTimeout, sessionsSize, banNodes, pingBackMax,
   )
 
 proc newProtocol*(
@@ -1172,6 +1190,7 @@ proc newProtocol*(
     banNodes: config.banNodes,
     handshakeTimeout: config.handshakeTimeout,
     responseTimeout: config.responseTimeout,
+    pingBackMax: config.pingBackMax,
     rng: rng,
   )
 
