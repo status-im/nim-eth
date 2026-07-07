@@ -359,8 +359,8 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
     # requested, so in this case lets just pass only our own. TODO: OK?
     d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
   else:
-    # TODO: Still deduplicate also?
     if fn.distances.all(proc (x: uint16): bool = return x <= 256):
+      # neighboursAtDistances deduplicates, not erroring on this
       d.sendNodes(fromId, fromAddr, reqId,
         d.routingTable.neighboursAtDistances(fn.distances, seenOnly = true, k = findNodeResultLimit))
     else:
