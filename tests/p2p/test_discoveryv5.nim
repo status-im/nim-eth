@@ -1104,3 +1104,31 @@ suite "Discovery v5.1 Tests":
 
     await node1.closeWait()
     await node2.closeWait()
+
+  asyncTest "Ping back on inbound handshake":
+    let
+      # pingBackMax = 0 so the ping-back fires immediately, keeping the test fast
+      config = DiscoveryConfig.init(
+        DefaultTableIpLimit, DefaultBucketIpLimit, DefaultBitsPerHop,
+        pingBackMax = 0)
+      node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301),
+        config = config)
+      node2 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302),
+        config = config)
+
+    # node1 pings node2: node2 completes an inbound handshake, adds node1 to
+    # its routing table, and schedules a ping-back to node1.
+    check (await node1.ping(node2.localNode)).isOk()
+
+    # yield to the event loop to let the ping-back complete.
+    await sleepAsync(100.milliseconds)
+
+    # node1 should now be marked as seen in node2's routing table because the
+    # ping-back gave node2 a successful pong from node1.
+    let n = node2.getNode(node1.localNode.id)
+    check:
+      n.isSome()
+      n.get().seen
+
+    await node1.closeWait()
+    await node2.closeWait()
