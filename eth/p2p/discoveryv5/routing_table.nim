@@ -536,16 +536,13 @@ func neighboursAtDistance*(r: RoutingTable, distance: uint16,
 func neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours at given logarithmic distances.
-  # TODO: This will currently return nodes with neighbouring distances on the
-  # first one prioritize. It might end up not including all the node distances
-  # requested. Need to rework the logic here and not use the neighbours call.
-  if distances.len > 0:
-    result = r.neighbours(r.idAtDistance(r.localNode.id, distances[0]), k,
-      seenOnly)
-    # This is a bit silly, first getting closest nodes then to only keep the ones
-    # that are exactly the requested distances.
-    keepIf(result, proc(n: Node): bool =
-      distances.contains(r.logDistance(n.id, r.localNode.id)))
+  var res: seq[Node]
+  for d in distances.deduplicate():
+    for n in r.neighboursAtDistance(d, k, seenOnly):
+      res.add(n)
+      if res.len >= k:
+        return res
+  res
 
 func len*(r: RoutingTable): int =
   for b in r.buckets: result += b.len
