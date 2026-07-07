@@ -303,8 +303,9 @@ proc send*(d: Protocol, a: Address, data: seq[byte]) =
   asyncSpawn sendTo(d, a, data)
 
 proc send(d: Protocol, n: Node, data: seq[byte]) =
-  doAssert(n.address.isSome())
-  d.send(n.address.get(), data)
+  let address = preferredAddress(n, d.localNode)
+  doAssert(address.isSome())
+  d.send(address.get(), data)
 
 proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
     nodes: openArray[Node]) =
@@ -515,9 +516,10 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
       var pr: PendingRequest
       if d.pendingRequests.take(packet.whoareyou.requestNonce, pr):
         let toNode = pr.node
+        let addressOpt = preferredAddress(toNode, d.localNode)
         # This is a node we previously contacted and thus must have an address.
-        doAssert(toNode.address.isSome())
-        let address = toNode.address.get()
+        doAssert(addressOpt.isSome())
+        let address = addressOpt.get()
         let data = encodeHandshakePacket(d.rng[], d.codec, toNode.id,
           address, pr.message, packet.whoareyou, toNode.pubkey)
 
@@ -559,7 +561,7 @@ proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
         # The ENR could contain bogus IPs and although they would get removed
         # on the next revalidation, one could spam these as the handshake
         # message occurs on (first) incoming messages.
-        if node.address.isSome() and a == node.address.get():
+        if node.hasAddress(a):
           if d.addNode(node):
             trace "Added new node to routing table after handshake", node
 
@@ -635,9 +637,14 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
 
 proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
     RequestId =
-  doAssert(toNode.address.isSome())
+  let addressOpt = preferredAddress(toNode, d.localNode)
+  doAssert(addressOpt.isSome())
+  # if addressOpt.isNone():
+  #   warn "No preferred address found for node, cannot send message",
+  #     nodeId = toNode.id
+
   let
-    address = toNode.address.get()
+    address = addressOpt.get()
     reqId = RequestId.init(d.rng[])
     message = encodeMessage(m, reqId)
     key = HandshakeKey(nodeId: toNode.id, address: address)
@@ -715,7 +722,7 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
   let nodes = await d.waitNodes(toNode, reqId)
 
   if nodes.isOk:
-    let res = verifyNodesRecords(nodes.get(), toNode, findNodeResultLimit, distances)
+    let res = verifyNodesRecords(nodes.get(), toNode, d.localNode, findNodeResultLimit, distances)
     d.routingTable.setJustSeen(toNode)
     return ok(res.filterIt(not d.isBanned(it.id)))
   else:
@@ -1299,6 +1306,92 @@ proc newProtocol*(
     config,
     rng,
   )
+
+
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
+    enrIp6: Opt[IpAddress],
+    enrTcp6Port, enrUdp6Port: Opt[Port],
+    localEnrFields: openArray[FieldPair] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = Opt.none(enr.Record),
+    bindPort: Port,
+    bindIp: Opt[IpAddress],
+    enrAutoUpdate = false,
+    banNodes = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng()): Protocol =
+  let record =
+    if previousRecord.isSome():
+      var res = previousRecord.get()
+      # TODO: this is faulty in case the intent is to remove a field with
+      # opt.none
+      res.updateDS(privKey, enrIp, enrTcpPort, enrUdpPort, enrIp6, enrTcp6Port,
+        enrUdp6Port,
+        localEnrFields).expect("Record within size limits and correct key")
+      res
+    else:
+      enr.Record.initDS(1, privKey, enrIp, enrTcpPort, enrUdpPort, enrIp6, enrTcp6Port, enrUdp6Port,
+        localEnrFields).expect("Record within size limits")
+
+  info "Discovery ENR initialized", enrAutoUpdate, seqNum = record.seqNum,
+    ip = enrIp, ip6 = enrIp6, tcpPort = enrTcpPort, udpPort = enrUdpPort,
+    localEnrFields, uri = toURI(record)
+
+  if enrIp.isNone():
+    if enrAutoUpdate:
+      notice "No external IP provided for the ENR, this node will not be " &
+             "discoverable until the ENR is updated with the discovered " &
+             "external IP address"
+    else:
+      warn "No external IP provided for the ENR, this node will not be " &
+           "discoverable"
+
+  let node = Node.fromRecord(record)
+
+  doAssert not(isNil(rng)), "RNG initialization failed"
+
+  Protocol(
+    privateKey: privKey,
+    localNode: node,
+    bindAddress: OptAddress(ip: bindIp, port: bindPort),
+    codec: Codec(localNode: node, privKey: privKey,
+      sessions: Sessions.init(config.sessionsSize)),
+    bootstrapRecords: @bootstrapRecords,
+    ipVote: IpVote.init(),
+    enrAutoUpdate: enrAutoUpdate,
+    routingTable: RoutingTable.init(
+      node, config.bitsPerHop, config.tableIpLimits, rng),
+    banNodes: banNodes,
+    handshakeTimeout: config.handshakeTimeout,
+    responseTimeout: config.responseTimeout,
+    rng: rng)
+
+proc newProtocol*(
+    privKey: PrivateKey,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
+    enrIp6: Opt[IpAddress],
+    enrTcp6Port, enrUdp6Port: Opt[Port],
+    localEnrFields: openArray[(string, seq[byte])] = [],
+    bootstrapRecords: openArray[Record] = [],
+    previousRecord = Opt.none(enr.Record),
+    bindPort: Port,
+    bindIp: Opt[IpAddress],
+    enrAutoUpdate = false,
+    banNodes = false,
+    config = defaultDiscoveryConfig,
+    rng = newRng(),
+): Protocol =
+  let customEnrFields = mapIt(localEnrFields, toFieldPair(it[0], it[1]))
+  newProtocol(
+    privKey, enrIp, enrTcpPort, enrUdpPort, enrIp6, enrTcp6Port, enrUdp6Port,
+    customEnrFields, bootstrapRecords,
+    previousRecord, bindPort, bindIp, enrAutoUpdate, banNodes, config, rng,
+  )
+
 
 proc `$`*(a: OptAddress): string =
   if a.ip.isNone():
