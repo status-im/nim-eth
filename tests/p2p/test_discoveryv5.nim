@@ -1132,3 +1132,52 @@ suite "Discovery v5.1 Tests":
 
     await node1.closeWait()
     await node2.closeWait()
+
+  test "verifyNodesRecords rejects ENRs with udp = 0":
+    let
+      port = Port(9000)
+      srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
+        Opt.some(parseIpAddress("127.0.0.1")),
+        Opt.some(port), Opt.some(port))[]
+      srcNode = Node.fromRecord(srcRecord)
+      pk = PrivateKey.random(rng[])
+      badRecord = enr.Record.init(1, pk,
+        Opt.some(parseIpAddress("127.0.0.1")),
+        Opt.some(Port(0)), Opt.some(Port(0)))[]
+      accepted = verifyNodesRecords([badRecord], srcNode, 16)
+    check accepted.len == 0
+
+  asyncTest "addNode rejects ENRs with udp = 0":
+    let
+      node = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20401))
+      badRecord = enr.Record.init(1, PrivateKey.random(rng[]),
+        Opt.some(parseIpAddress("127.0.0.1")),
+        Opt.some(Port(0)), Opt.some(Port(0)))[]
+    check not node.addNode(badRecord)
+    await node.closeWait()
+
+  asyncTest "FindNode does not return peers with udp = 0":
+    let
+      mainNode = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20404))
+      testNode = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20405))
+
+      badRecord = enr.Record.init(1, PrivateKey.random(rng[]),
+        Opt.some(parseIpAddress("127.0.0.1")),
+        Opt.some(Port(0)), Opt.some(Port(0)))[]
+      badNode = Node.fromRecord(badRecord)
+
+    discard mainNode.addSeenNode(badNode)
+
+    check (await testNode.ping(mainNode.localNode)).isOk()
+    check (await mainNode.ping(testNode.localNode)).isOk()
+
+    let dist = uint16(logDistance(mainNode.localNode.id, badNode.id))
+    let discovered = await testNode.findNode(mainNode.localNode, @[dist])
+    check discovered.isOk()
+    check badNode notin discovered.get()
+
+    await mainNode.closeWait()
+    await testNode.closeWait()

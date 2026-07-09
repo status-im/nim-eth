@@ -41,7 +41,10 @@ func toNodeId*(pk: PublicKey): NodeId =
 func fromRecord*(T: type Node, r: Record): T =
   ## Create a new `Node` from a `Record`.
   let tr = TypedRecord.fromRecord(r)
-  if tr.ip.isSome() and tr.udp.isSome():
+  if tr.ip.isSome() and tr.udp.isSome() and tr.udp.get() != 0:
+    # Port 0 is reserved (RFC 6335) and not routable as a destination.
+    # Reject it here so peers with udp = 0 cannot enter the routing table
+    # nor be returned in NODES responses.
     let a = Address(ip: ipv4(tr.ip.get()), port: Port(tr.udp.get()))
 
     Node(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
