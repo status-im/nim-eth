@@ -11,15 +11,15 @@ test:
     # parsing will still be fuzzed.
     let decoded = try: rlp.decode(payload, enr.Record)
                   except RlpError as e:
-                        debug "decode failed", err = e.msg
+                        echo "decode failed: " & e.msg
                         break testBlock
                   except ValueError as e:
-                        debug "decode failed", err = e.msg
+                        echo "decode failed: " & e.msg
                         break testBlock
 
     let encoded = try: rlp.encode(decoded)
                   except RlpError as e:
-                    debug "decode failed", err = e.msg
+                    echo "decode failed: " & e.msg
                     doAssert(false, "decoding worked but encoding failed")
                     break testBlock
     if encoded != payload.toOpenArray(0, encoded.len - 1):

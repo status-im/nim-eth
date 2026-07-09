@@ -34,4 +34,4 @@ test:
 
   let decoded = decodePacket(codecB, nodeA.address.get(), @iv & maskedHeader)
   if decoded.isErr():
-    debug "Error occurred", error = decoded.error
+    echo "Error occurred: " & $decoded.error
