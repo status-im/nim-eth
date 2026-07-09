@@ -1,5 +1,5 @@
 import
-  testutils/fuzzing, chronicles,
+  testutils/fuzzing,
   ../../../eth/rlp
 
 type
@@ -14,7 +14,7 @@ template testDecode(payload: openArray, T: type) =
   try:
     discard rlp.decode(payload, T)
   except RlpError as e:
-    debug "Decode failed", err = e.msg
+    echo "Decode failed: " & e.msg
 
 test:
   testDecode(payload, string)

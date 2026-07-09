@@ -1,5 +1,5 @@
 import
-  testutils/fuzzing, chronicles,
+  testutils/fuzzing,
   ../../../eth/rlp
 
 test:
@@ -7,4 +7,4 @@ test:
     var rlp = rlpFromBytes(payload)
     discard rlp.inspect()
   except RlpError as e:
-    debug "Inspect failed", err = e.msg
+    echo "Inspect failed: " & e.msg
