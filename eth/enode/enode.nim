@@ -1,5 +1,5 @@
 # nim-eth enode
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -79,7 +79,7 @@ proc fromString*(T: type ENode, e: string): ENodeResult[ENode] =
     if len(uri.port) == 0:
       return err(IncorrectPort)
     tport = parseInt(uri.port)
-    if tport <= 0 or tport > 65535:
+    if tport < 0 or tport > 65535:
       return err(IncorrectPort)
   except ValueError:
     return err(IncorrectPort)
@@ -94,6 +94,10 @@ proc fromString*(T: type ENode, e: string): ENodeResult[ENode] =
     except ValueError:
       return err(IncorrectDiscPort)
   else:
+    if tport == 0:
+      # TCP port 0 signals a discovery-only node, which requires an explicit
+      # discport, without one there is no usable port at all
+      return err(IncorrectPort)
     uport = tport
 
   var ip: IpAddress
@@ -125,9 +129,8 @@ proc `$`*(n: ENode): string =
   result.add($n.pubkey)
   result.add("@")
   result.add(ipaddr)
-  if uint16(n.address.tcpPort) != 0:
-    result.add(":")
-    result.add($int(n.address.tcpPort))
+  result.add(":")
+  result.add($int(n.address.tcpPort))
   if uint16(n.address.udpPort) != uint16(n.address.tcpPort):
     result.add("?")
     result.add("discport=")
