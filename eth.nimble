@@ -65,17 +65,7 @@ task test_common, "Run common tests":
   run "tests/common/all_tests", "common"
 
 task test, "Run all tests":
-  run "tests/test_bloom", ""
-  run "tests/test_enr", ""
-  run "tests/test_enode", ""
-
-  test_keyfile_task()
-  test_rlp_task()
-  test_discv5_task()
-  test_trie_task()
-  test_db_task()
-  test_utp_task()
-  test_common_task()
+  run "tests/all_tests", ""
 
 task test_discv5_full, "Run discovery v5 and its dependencies tests":
   run "tests/test_enr", ""
