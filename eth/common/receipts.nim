@@ -9,18 +9,23 @@
 
 import 
   ./[addresses, base, hashes, transactions],
-  ../bloom
+  ../bloom,
+  ssz_serialization  
 
 export addresses, base, hash, transactions
+
+const
+  MAX_TOPICS_PER_LOG* = 4
+  MAX_LOG_DATA_SIZE*  = 1 shl 24
 
 type
   Topic* = Bytes32
   # topic can be Hash32 or zero padded bytes array
 
   Log* = object
-    address*:       Address
-    topics*:        seq[Topic]
-    data*:          seq[byte]
+    address*: Address
+    topics*: List[Topic, MAX_TOPICS_PER_LOG]
+    data*: ByteList[MAX_LOG_DATA_SIZE]
 
   # easily convertible between
   # ReceiptType and TxType
