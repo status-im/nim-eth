@@ -273,12 +273,22 @@ func getRecord*(d: Protocol): Record =
   d.localNode.record
 
 func updateRecord*(
-    d: Protocol, enrFields: openArray[(string, seq[byte])]): DiscResult[void] =
-  ## Update the ENR of the local node with provided `enrFields` k:v pairs.
-  let fields = mapIt(enrFields, toFieldPair(it[0], it[1]))
+    d: Protocol, fields: openArray[FieldPair]): DiscResult[void] =
+  ## Update the ENR of the local node with provided `fields` k:v pairs.
+  ##
+  ## Build the `fields` with `enr.enrFields` (or `toFieldPair`) so each field's
+  ## RLP encoding is chosen based on its value type (e.g. list vs byte string).
   d.localNode.record.update(d.privateKey, extraFields = fields)
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
+
+func updateRecord*(
+    d: Protocol, fields: openArray[(string, seq[byte])]): DiscResult[void] =
+  ## Update the ENR of the local node with provided k:v pairs.
+  ##
+  ## Convenience overload where every value is a `seq[byte]`, stored as an RLP
+  ## byte string. For other encodings use the `openArray[FieldPair]` overload.
+  d.updateRecord(mapIt(fields, toFieldPair(it[0], it[1])))
 
 func getEnr*(d: Protocol, id: NodeId, address: Address): Opt[enr.Record] =
   d.codec.sessions.getEnr(id, address)
