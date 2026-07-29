@@ -120,6 +120,10 @@ func init*(h: var KeccakXkcpCtx) {.inline.} =
   h.state.reset()
   h.absorbOffset = 0
 
+template clear*(h: var KeccakXkcpCtx) =
+  ## Reset to the initial state, discarding any buffered input.
+  init(h)
+
 func update*(h: var KeccakXkcpCtx, data: openArray[byte]) =
   if data.len == 0:
     return
@@ -164,7 +168,7 @@ func finish*(h: var KeccakXkcpCtx, output: var openArray[byte]) =
   keccakF(h.state)
   copyMem(addr output[0], addr h.state[0], 32)
 
-func keccak256XkcpNim*(input: openArray[byte], output: var array[32, byte]) =
+func keccak256Xkcp*(input: openArray[byte], output: var array[32, byte]) =
   ## One-shot Keccak-256 (the original 0x01 padding, not SHA-3's 0x06).
   var state: array[25, uint64]
   let stateBytes = cast[ptr UncheckedArray[byte]](addr state[0])
