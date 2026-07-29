@@ -15,7 +15,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include "./keccak.h"
+#include "./keccak_boringssl.h"
 
 #define RATE_BYTES (200 - (512 / 8))
 
