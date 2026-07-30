@@ -30,16 +30,16 @@ const
   RateBytes* = 200 - (512 div 8)
     ## Keccak-256 block size
 
-const kRC: array[24, uint64] = [
-  0x0000000000000001'u64, 0x0000000000008082'u64, 0x800000000000808a'u64,
-  0x8000000080008000'u64, 0x000000000000808b'u64, 0x0000000080000001'u64,
-  0x8000000080008081'u64, 0x8000000000008009'u64, 0x000000000000008a'u64,
-  0x0000000000000088'u64, 0x0000000080008009'u64, 0x000000008000000a'u64,
-  0x000000008000808b'u64, 0x800000000000008b'u64, 0x8000000000008089'u64,
-  0x8000000000008003'u64, 0x8000000000008002'u64, 0x8000000000000080'u64,
-  0x000000000000800a'u64, 0x800000008000000a'u64, 0x8000000080008081'u64,
-  0x8000000000008080'u64, 0x0000000080000001'u64, 0x8000000080008008'u64,
-]
+  kRC: array[24, uint64] = [
+    0x0000000000000001'u64, 0x0000000000008082'u64, 0x800000000000808a'u64,
+    0x8000000080008000'u64, 0x000000000000808b'u64, 0x0000000080000001'u64,
+    0x8000000080008081'u64, 0x8000000000008009'u64, 0x000000000000008a'u64,
+    0x0000000000000088'u64, 0x0000000080008009'u64, 0x000000008000000a'u64,
+    0x000000008000808b'u64, 0x800000000000008b'u64, 0x8000000000008089'u64,
+    0x8000000000008003'u64, 0x8000000000008002'u64, 0x8000000000000080'u64,
+    0x000000000000800a'u64, 0x800000008000000a'u64, 0x8000000080008081'u64,
+    0x8000000000008080'u64, 0x0000000080000001'u64, 0x8000000080008008'u64,
+  ]
 
 template rotl64(v, s: untyped): uint64 =
   ## `s` is a literal at every call site. Lane 0 has an offset of 0, where a
@@ -111,8 +111,6 @@ func keccakF(state: var array[25, uint64]) =
 
 type
   KeccakXkcpCtx* = object
-    ## Incremental sponge. Layout and absorb logic mirror `keccak_boringssl.c`'s
-    ## `keccak_st`, so streaming behaviour is identical.
     state*: array[25, uint64]
     absorbOffset*: int
 
@@ -121,7 +119,6 @@ func init*(h: var KeccakXkcpCtx) {.inline.} =
   h.absorbOffset = 0
 
 template clear*(h: var KeccakXkcpCtx) =
-  ## Reset to the initial state, discarding any buffered input.
   init(h)
 
 func update*(h: var KeccakXkcpCtx, data: openArray[byte]) =
@@ -133,7 +130,6 @@ func update*(h: var KeccakXkcpCtx, data: openArray[byte]) =
     pos = 0
     remaining = data.len
 
-  # Top up a partially filled block first.
   if h.absorbOffset != 0:
     let firstBlockLen = RateBytes - h.absorbOffset
     for i in 0 ..< min(firstBlockLen, remaining):
@@ -169,7 +165,6 @@ func finish*(h: var KeccakXkcpCtx, output: var openArray[byte]) =
   copyMem(addr output[0], addr h.state[0], 32)
 
 func keccak256Xkcp*(input: openArray[byte], output: var array[32, byte]) =
-  ## One-shot Keccak-256 (the original 0x01 padding, not SHA-3's 0x06).
   var state: array[25, uint64]
   let stateBytes = cast[ptr UncheckedArray[byte]](addr state[0])
   var
@@ -191,5 +186,3 @@ func keccak256Xkcp*(input: openArray[byte], output: var array[32, byte]) =
   stateBytes[RateBytes - 1] = stateBytes[RateBytes - 1] xor 0x80'u8
   keccakF(state)
   copyMem(addr output[0], addr state[0], 32)
-
-{.pop.}

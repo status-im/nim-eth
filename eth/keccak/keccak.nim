@@ -104,5 +104,3 @@ func digestImpl(data: openArray[byte]): MDigest[256] {.noinit, inline.} =
 
 func digest*(_: type Keccak256, data: openArray[byte]): MDigest[256] {.noinit, inline.} =
   digestImpl(data)
-
-{.pop.}

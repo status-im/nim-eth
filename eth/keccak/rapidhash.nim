@@ -80,4 +80,3 @@ func rapidhashMicro*(data: openArray[char]): uint64 {.inline.} =
 func rapidhashNano*(data: openArray[char]): uint64 {.inline.} =
   rapidhashNano(data.toOpenArrayByte(0, data.high))
 
-{.pop.}

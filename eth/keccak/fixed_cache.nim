@@ -158,5 +158,3 @@ proc get*[K, V](c: var FixedCache[K, V], key: K, val: var V): bool =
 
 proc put*[K, V](c: var FixedCache[K, V], key: K, val: V) =
   c.putBySlot(c.locate(key), key, val)
-
-{.pop.}
