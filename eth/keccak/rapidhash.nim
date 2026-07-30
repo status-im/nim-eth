@@ -1,12 +1,9 @@
-# Nimbus
+# eth
 # Copyright (c) 2026 Status Research & Development GmbH
-# Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
-#    http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
-#    http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except
-# according to those terms.
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 ## Bindings for rapidhash V3 (`rapidhash.h`, MIT, Nicolas De Carli,
 ## https://github.com/Nicoshev/rapidhash).
@@ -20,10 +17,6 @@
 ##
 ## These are *not* cryptographic hashes. They are for hash tables and caches
 ## where the input is not adversarially chosen against the seed.
-##
-## The header compiles as both C and C++ and every function is `static inline`,
-## so there is nothing to link - the definitions land in whichever translation
-## unit includes it.
 
 {.push raises: [], gcsafe.}
 

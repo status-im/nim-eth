@@ -1,15 +1,16 @@
-# Nimbus
+# eth
 # Copyright (c) 2026 Status Research & Development GmbH
-# Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
-#    http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
-#    http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except
-# according to those terms.
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 ## Keccak-256, with the permutation structured in the style of XKCP's
-## `KeccakP-1600-opt64.c`.
+## `KeccakP-1600-opt64.c`:
+## https://github.com/XKCP/XKCP/blob/master/lib/low/KeccakP-1600/plain-64bits/KeccakP-1600-opt64.c
+##
+## XKCP is the eXtended Keccak Code Package, maintained by the Keccak team:
+## https://github.com/XKCP/XKCP
 ##
 ## Lanes are indexed `x + 5*y`. A round reads one 25-lane state and writes the
 ## other, so nothing is written back mid-round and the 24 rotations are
@@ -25,6 +26,13 @@
 ## does no byte swapping despite the name.
 
 {.push raises: [], gcsafe, checks: off.}
+
+static:
+  doAssert cpuEndian == littleEndian,
+    "keccak_xkcp absorbs input and squeezes the digest in native lane order, " &
+    "so a big-endian build would silently compute the wrong hash. Byte-swap " &
+    "the lane loads in `update`/`keccak256Xkcp` and the output copy in " &
+    "`finish` before enabling this on such a target."
 
 const
   RateBytes* = 200 - (512 div 8)
@@ -111,8 +119,11 @@ func keccakF(state: var array[25, uint64]) =
 
 type
   KeccakXkcpCtx* = object
-    state*: array[25, uint64]
-    absorbOffset*: int
+    ## Opaque, like the `keccak_st` it replaces: the sponge state and absorb
+    ## position are implementation detail, reachable only through the procs
+    ## below.
+    state: array[25, uint64]
+    absorbOffset: int
 
 func init*(h: var KeccakXkcpCtx) {.inline.} =
   h.state.reset()

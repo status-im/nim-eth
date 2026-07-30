@@ -1,12 +1,9 @@
-# nim-eth
+# eth
 # Copyright (c) 2026 Status Research & Development GmbH
-# Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
-#    http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
-#    http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except
-# according to those terms.
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 {.used.}
 
@@ -41,15 +38,6 @@ import
 const
   keccakFuzzSeed {.intdefine.} = 0x5EED
   keccakFuzzRounds {.intdefine.} = 50_000
-
-  CacheLenBound = 87
-    ## Mirrors `MaxCachedInputLen`, which is only exported when the cache is
-    ## compiled in - the test names the boundary in both configurations.
-
-when ethkeccak.keccakCacheEnabled:
-  static:
-    doAssert CacheLenBound == ethkeccak.MaxCachedInputLen,
-      "cache bound drifted; update CacheLenBound"
 
 func hashXkcp(data: openArray[byte]): array[32, byte] =
   keccak256Xkcp(data, result)
@@ -155,16 +143,16 @@ suite "Keccak256":
       # itself and the 136-byte rate boundaries.
       let n =
         case rng.rand(0 .. 9)
-        of 0 .. 2: rng.rand(0 .. CacheLenBound)
+        of 0 .. 2: rng.rand(0 .. MaxCachedInputLen)
         of 3: rng.rand(0 .. 20)
-        of 4: rng.rand(CacheLenBound - 3 .. CacheLenBound + 3)
-        of 5: rng.rand(CacheLenBound + 1 .. 200)
+        of 4: rng.rand(MaxCachedInputLen - 3 .. MaxCachedInputLen + 3)
+        of 5: rng.rand(MaxCachedInputLen + 1 .. 200)
         of 6: rng.rand(133 .. 139)
         of 7: rng.rand(269 .. 275)
-        of 8: rng.rand(CacheLenBound + 1 .. 1200)
+        of 8: rng.rand(MaxCachedInputLen + 1 .. 1200)
         else: rng.rand(0 .. 400)
 
-      if n <= CacheLenBound: inc belowBound else: inc aboveBound
+      if n <= MaxCachedInputLen: inc belowBound else: inc aboveBound
 
       var data = newSeq[byte](n)
       for i in 0 ..< n:

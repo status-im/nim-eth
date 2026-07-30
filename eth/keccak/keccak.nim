@@ -1,12 +1,9 @@
-# Nimbus
+# eth
 # Copyright (c) 2026 Status Research & Development GmbH
-# Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
-#    http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
-#    http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except
-# according to those terms.
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 {.push raises: [], gcsafe.}
 
@@ -18,6 +15,16 @@ export MDigest
 
 const
   keccakCacheEnabled* {.booldefine.} = false
+    ## Memoize `keccak256` of short inputs.
+
+  keccakCacheCapacity* {.intdefine.} = 1 shl 14 # 2 MiB
+    ## Number of cache buckets when the cache is enabled. Must be a power of two and
+    ## at least `fixed_cache.MinEntries`, both checked below.
+
+  MaxCachedInputLen* = 87
+    ## Longest input the cache will hold. Each cache bucket is 128 bytes containing
+    ## the 32-byte digest, the one-byte length and the eight-byte tag word are fixed
+    ## overhead, leaving 87 bytes for the key.
 
   emptyKeccak256Digest = MDigest[256](data: [
     0xc5'u8, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c,
@@ -39,9 +46,11 @@ when keccakCacheEnabled:
     ./fixed_cache,
     ./rapidhash
 
-  const
-    MaxCachedInputLen* = 87
-    DefaultKeccakCacheCapacity* = 1 shl 14
+  static:
+    doAssert (keccakCacheCapacity and (keccakCacheCapacity - 1)) == 0,
+      "keccakCacheCapacity must be a power of two"
+    doAssert keccakCacheCapacity >= MinEntries,
+      "keccakCacheCapacity must be at least fixed_cache.MinEntries"
 
   type
     KeccakCacheKey = object
@@ -49,11 +58,7 @@ when keccakCacheEnabled:
       data: array[MaxCachedInputLen, byte]
 
   # A lookup is done against the caller's bytes directly - hashing and comparing
-  # a borrowed view rather than building a KeccakCacheKey first. Only an insert
-  # needs the owned key. `hash(KeccakCacheKey)` is defined in terms of the
-  # openArray one so the two can never disagree: if they did, every lookup would
-  # probe a different bucket than the matching insert wrote, and the cache would
-  # silently never hit while still returning correct digests.
+  # a borrowed view rather than building a KeccakCacheKey first.
   func hash(data: openArray[byte]): Hash =
     cast[Hash](rapidhashMicro(data))
 
@@ -72,35 +77,37 @@ when keccakCacheEnabled:
 
   var keccakCache: FixedCache[KeccakCacheKey, MDigest[256]]
 
-  keccakCache.init(DefaultKeccakCacheCapacity)
+  keccakCache.init(keccakCacheCapacity)
 
 func digestImpl(data: openArray[byte]): MDigest[256] {.noinit, inline.} =
-  ## Non-generic on purpose. `digest` takes a typedesc, which makes it generic,
-  ## and a generic body resolves late-bound symbols in the *caller's* scope -
-  ## where this module's private `==` and `hash` overloads are not visible.
+  # Non-generic on purpose. `digest` takes a typedesc, which makes it generic,
+  # and a generic body resolves late-bound symbols in the caller's scope
+  # where this module's private `==` and `hash` overloads are not visible.
   if data.len == 0:
     return emptyKeccak256Digest
 
+  var digest {.noinit.}: MDigest[256]
+
   when not keccakCacheEnabled:
-    keccak256Xkcp(data, result.data)
+    keccak256Xkcp(data, digest.data)
+    return digest
   else:
     if data.len > MaxCachedInputLen:
-      keccak256Xkcp(data, result.data)
-      return
+      keccak256Xkcp(data, digest.data)
+      return digest
 
-    # Memoisation is semantically pure - the same input always yields the same
-    # digest - so consulting it from a `func` is sound despite the mutation.
     {.cast(noSideEffect), cast(gcsafe).}:
       let slot = keccakCache.locate(data)
-      if keccakCache.getBySlot(slot, data, result):
-        return result
+      if keccakCache.getBySlot(slot, data, digest):
+        return digest
 
-      keccak256Xkcp(data, result.data)
+      keccak256Xkcp(data, digest.data)
 
       var key: KeccakCacheKey
       key.len = uint8(data.len)
       copyMem(addr key.data[0], unsafeAddr data[0], data.len)
-      keccakCache.putBySlot(slot, key, result)
+      keccakCache.putBySlot(slot, key, digest)
+      return digest
 
-func digest*(_: type Keccak256, data: openArray[byte]): MDigest[256] {.noinit, inline.} =
+func digest*(_: type Keccak256, data: openArray[byte]): MDigest[256] {.inline.} =
   digestImpl(data)
