@@ -23,23 +23,23 @@
 import std/[os, strutils]
 
 const
-  rapidhashHeader = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0] &
+  RAPIDHASH_HEADER = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0] &
     "/rapidhash.h"
 
 func rapidhashRaw*(key: pointer, len: csize_t): uint64 {.
-  importc: "rapidhash", header: rapidhashHeader.}
+  importc: "rapidhash", header: RAPIDHASH_HEADER.}
 func rapidhashRaw*(key: pointer, len: csize_t, seed: uint64): uint64 {.
-  importc: "rapidhash_withSeed", header: rapidhashHeader.}
+  importc: "rapidhash_withSeed", header: RAPIDHASH_HEADER.}
 
 func rapidhashMicroRaw*(key: pointer, len: csize_t): uint64 {.
-  importc: "rapidhashMicro", header: rapidhashHeader.}
+  importc: "rapidhashMicro", header: RAPIDHASH_HEADER.}
 func rapidhashMicroRaw*(key: pointer, len: csize_t, seed: uint64): uint64 {.
-  importc: "rapidhashMicro_withSeed", header: rapidhashHeader.}
+  importc: "rapidhashMicro_withSeed", header: RAPIDHASH_HEADER.}
 
 func rapidhashNanoRaw*(key: pointer, len: csize_t): uint64 {.
-  importc: "rapidhashNano", header: rapidhashHeader.}
+  importc: "rapidhashNano", header: RAPIDHASH_HEADER.}
 func rapidhashNanoRaw*(key: pointer, len: csize_t, seed: uint64): uint64 {.
-  importc: "rapidhashNano_withSeed", header: rapidhashHeader.}
+  importc: "rapidhashNano_withSeed", header: RAPIDHASH_HEADER.}
 
 # An empty openArray has no valid element to take the address of, so the
 # wrappers below pass a nil pointer with length zero rather than indexing.

@@ -35,10 +35,10 @@ static:
     "`finish` before enabling this on such a target."
 
 const
-  RateBytes* = 200 - (512 div 8)
+  RATE_BYTES = 200 - (512 div 8)
     ## Keccak-256 block size
 
-  kRC: array[24, uint64] = [
+  ROUND_CONSTANTS: array[24, uint64] = [
     0x0000000000000001'u64, 0x0000000000008082'u64, 0x800000000000808a'u64,
     0x8000000080008000'u64, 0x000000000000808b'u64, 0x0000000080000001'u64,
     0x8000000080008081'u64, 0x8000000000008009'u64, 0x000000000000008a'u64,
@@ -111,17 +111,14 @@ func keccakF(state: var array[25, uint64]) =
 
   var r = 0
   while r < 24:
-    keccakRound(a, e, c, d, kRC[r])
-    keccakRound(e, a, c, d, kRC[r + 1])
+    keccakRound(a, e, c, d, ROUND_CONSTANTS[r])
+    keccakRound(e, a, c, d, ROUND_CONSTANTS[r + 1])
     r += 2
 
   state = a
 
 type
   KeccakXkcpCtx* = object
-    ## Opaque, like the `keccak_st` it replaces: the sponge state and absorb
-    ## position are implementation detail, reachable only through the procs
-    ## below.
     state: array[25, uint64]
     absorbOffset: int
 
@@ -142,7 +139,7 @@ func update*(h: var KeccakXkcpCtx, data: openArray[byte]) =
     remaining = data.len
 
   if h.absorbOffset != 0:
-    let firstBlockLen = RateBytes - h.absorbOffset
+    let firstBlockLen = RATE_BYTES - h.absorbOffset
     for i in 0 ..< min(firstBlockLen, remaining):
       stateBytes[h.absorbOffset + i] = stateBytes[h.absorbOffset + i] xor data[i]
     if firstBlockLen > remaining:
@@ -152,14 +149,14 @@ func update*(h: var KeccakXkcpCtx, data: openArray[byte]) =
     pos += firstBlockLen
     remaining -= firstBlockLen
 
-  while remaining >= RateBytes:
-    for i in 0 ..< RateBytes div 8:
+  while remaining >= RATE_BYTES:
+    for i in 0 ..< RATE_BYTES div 8:
       var v: uint64
       copyMem(addr v, unsafeAddr data[pos + 8 * i], 8)
       h.state[i] = h.state[i] xor v
     keccakF(h.state)
-    pos += RateBytes
-    remaining -= RateBytes
+    pos += RATE_BYTES
+    remaining -= RATE_BYTES
 
   for i in 0 ..< remaining:
     stateBytes[i] = stateBytes[i] xor data[pos + i]
@@ -169,9 +166,11 @@ func update*(h: var KeccakXkcpCtx, data: openArray[char]) {.inline.} =
   h.update(data.toOpenArrayByte(0, data.high))
 
 func finish*(h: var KeccakXkcpCtx, output: var openArray[byte]) =
+  doAssert output.len >= 32, "output must have room for the 32-byte digest"
+
   let stateBytes = cast[ptr UncheckedArray[byte]](addr h.state[0])
   stateBytes[h.absorbOffset] = stateBytes[h.absorbOffset] xor 0x01'u8
-  stateBytes[RateBytes - 1] = stateBytes[RateBytes - 1] xor 0x80'u8
+  stateBytes[RATE_BYTES - 1] = stateBytes[RATE_BYTES - 1] xor 0x80'u8
   keccakF(h.state)
   copyMem(addr output[0], addr h.state[0], 32)
 
@@ -182,18 +181,18 @@ func keccak256Xkcp*(input: openArray[byte], output: var array[32, byte]) =
     pos = 0
     remaining = input.len
 
-  while remaining >= RateBytes:
-    for i in 0 ..< RateBytes div 8:
+  while remaining >= RATE_BYTES:
+    for i in 0 ..< RATE_BYTES div 8:
       var v: uint64
       copyMem(addr v, unsafeAddr input[pos + 8 * i], 8)
       state[i] = state[i] xor v
     keccakF(state)
-    pos += RateBytes
-    remaining -= RateBytes
+    pos += RATE_BYTES
+    remaining -= RATE_BYTES
 
   for i in 0 ..< remaining:
     stateBytes[i] = stateBytes[i] xor input[pos + i]
   stateBytes[remaining] = stateBytes[remaining] xor 0x01'u8
-  stateBytes[RateBytes - 1] = stateBytes[RateBytes - 1] xor 0x80'u8
+  stateBytes[RATE_BYTES - 1] = stateBytes[RATE_BYTES - 1] xor 0x80'u8
   keccakF(state)
   copyMem(addr output[0], addr state[0], 32)

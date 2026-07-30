@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import std/tables, nimcrypto/[keccak, hash], ../rlp, "."/[trie_defs, nibbles, db]
+import std/tables, ../rlp, "."/[trie_defs, nibbles, db]
 
 type
   TrieNodeKey = object

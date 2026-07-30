@@ -31,9 +31,14 @@ import
   stew/byteutils,
   nimcrypto/keccak as ncrypto,
   ../../eth/common/hashes,
-  ../../eth/keccak/keccak as ethkeccak,
   ../../eth/keccak/keccak_xkcp,
   ../../eth/keccak/keccak_boringssl as bssl
+
+# `{.all.}` for MAX_CACHED_INPUT_LEN, which the fuzz length distribution below
+# straddles deliberately. It is private to the module, and `{.all.}` neither
+# accepts an `as` alias nor combines with the list above, hence the separate
+# statement and the `keccak.` qualification at the one ambiguous use.
+import ../../eth/keccak/keccak {.all.}
 
 const
   keccakFuzzSeed {.intdefine.} = 0x5EED
@@ -57,7 +62,7 @@ func hashNimcrypto(data: openArray[byte]): array[32, byte] =
 proc hashStream(data: openArray[byte], chunks: openArray[int]): array[32, byte] =
   ## Feed `data` through the incremental context in the given chunk sizes.
   var
-    ctx: ethkeccak.Keccak256
+    ctx: keccak.Keccak256
     pos = 0
   ctx.init()
   for c in chunks:
@@ -136,23 +141,23 @@ suite "Keccak256":
     var
       rng = initRand(keccakFuzzSeed)
       mismatches = 0
-      belowBound = 0 # <= MaxCachedInputLen: the cache can serve these
-      aboveBound = 0 # >  MaxCachedInputLen: always hashed directly
+      belowBound = 0 # <= MAX_CACHED_INPUT_LEN: the cache can serve these
+      aboveBound = 0 # >  MAX_CACHED_INPUT_LEN: always hashed directly
     for round in 0 ..< keccakFuzzRounds:
       # Deliberately split across the cache cut-off, weighting the cut-off
       # itself and the 136-byte rate boundaries.
       let n =
         case rng.rand(0 .. 9)
-        of 0 .. 2: rng.rand(0 .. MaxCachedInputLen)
+        of 0 .. 2: rng.rand(0 .. MAX_CACHED_INPUT_LEN)
         of 3: rng.rand(0 .. 20)
-        of 4: rng.rand(MaxCachedInputLen - 3 .. MaxCachedInputLen + 3)
-        of 5: rng.rand(MaxCachedInputLen + 1 .. 200)
+        of 4: rng.rand(MAX_CACHED_INPUT_LEN - 3 .. MAX_CACHED_INPUT_LEN + 3)
+        of 5: rng.rand(MAX_CACHED_INPUT_LEN + 1 .. 200)
         of 6: rng.rand(133 .. 139)
         of 7: rng.rand(269 .. 275)
-        of 8: rng.rand(MaxCachedInputLen + 1 .. 1200)
+        of 8: rng.rand(MAX_CACHED_INPUT_LEN + 1 .. 1200)
         else: rng.rand(0 .. 400)
 
-      if n <= MaxCachedInputLen: inc belowBound else: inc aboveBound
+      if n <= MAX_CACHED_INPUT_LEN: inc belowBound else: inc aboveBound
 
       var data = newSeq[byte](n)
       for i in 0 ..< n:

@@ -25,6 +25,10 @@ import
   unittest2,
   ../../eth/keccak/fixed_cache
 
+const TestEntries = 1 shl 10
+  ## Default capacity for these tests: big enough to spread keys, small enough
+  ## that oversubscribed key spaces still collide constantly.
+
 type
   Key = object
     len: uint8
@@ -68,7 +72,7 @@ func valueFor(k: Key): Val =
 suite "FixedCache single-threaded":
   test "empty cache misses":
     var c: FixedCache[Key, Val]
-    c.init(MinEntries)
+    c.init(TestEntries)
     defer: c.dispose()
     var got: Val
     for n in 0 ..< 500:
@@ -126,7 +130,7 @@ suite "FixedCache single-threaded":
   test "collision evicts, and the evicted key then misses":
     # Far more keys than buckets, so collisions are certain.
     var c: FixedCache[Key, Val]
-    c.init(MinEntries)
+    c.init(TestEntries)
     defer: c.dispose()
     var resident = -1
     for n in 0 ..< 200:
@@ -146,7 +150,7 @@ suite "FixedCache single-threaded":
 
   test "heavy churn never returns another key's value":
     var c: FixedCache[Key, Val]
-    c.init(MinEntries)
+    c.init(TestEntries)
     defer: c.dispose()
     var
       rng = initRand(0x1234)
@@ -170,18 +174,17 @@ suite "FixedCache single-threaded":
     expect Defect:
       c.init(1000)
 
-  test "capacity below MinEntries is rejected":
-    # A capacity that small leaves a version counter one or two bits wide, which
-    # can alias across two writes and let a reader accept a torn entry. The
-    # multi-threaded test below reproduced exactly that at 4 entries.
-    for tooSmall in [2, 4, 16, 256, MinEntries div 2]:
+  test "invalid capacities are rejected":
+    # Fewer than MIN_ENTRIES (2) entries would let a stored tag collide with the
+    # lock bit; non-powers of two would break the masking.
+    for bad in [-8, 0, 1, 1000]:
       var c: FixedCache[Key, Val]
       expect Defect:
-        c.init(tooSmall)
+        c.init(bad)
 
-  test "MinEntries itself is accepted":
+  test "the minimum capacity is accepted":
     var c: FixedCache[Key, Val]
-    c.init(MinEntries)
+    c.init(MIN_ENTRIES)
     defer: c.dispose()
     let k = keyFor(1)
     c.put(k, valueFor(k))
@@ -196,10 +199,8 @@ when compileOption("threads"):
     Writers = 2
     OpsPerThread = 200_000
     HotKeys = 8
-      ## Contention comes from a small *key* space, not a small cache. Shrinking
-      ## the cache would also narrow the version counter, which `init` now
-      ## rejects - and which is what an earlier version of this test tripped
-      ## over.
+      ## A small key space, so readers and writers collide on the same handful
+      ## of buckets almost every operation.
 
   type
     Shared = object
@@ -234,14 +235,46 @@ when compileOption("threads"):
       let k = keyFor(rng.rand(0 ..< HotKeys))
       s.cache[].put(k, valueFor(k))
 
+  proc wideWriterLoop(s: ptr Shared) {.thread.} =
+    ## Writes over a key space several times larger than the cache, so writers
+    ## constantly evict each other's entries as well as their own.
+    var rng = initRand(getThreadId() * 104729)
+    for _ in 0 ..< OpsPerThread:
+      let k = keyFor(rng.rand(0 ..< 4 * TestEntries))
+      s.cache[].put(k, valueFor(k))
+
+  proc viewReaderLoop(s: ptr Shared) {.thread.} =
+    ## Reads through the borrowed-view path - `locate` on raw bytes, then
+    ## `getBySlot` with the same view - as the keccak cache does, rather than
+    ## through the owned-key `get`.
+    var
+      rng = initRand(getThreadId() * 31 + 1)
+      localHits = 0
+      localMisses = 0
+      localWrong = 0
+    for _ in 0 ..< OpsPerThread:
+      let k = keyFor(rng.rand(0 ..< HotKeys))
+      var got: Val
+      if s.cache[].getBySlot(
+          s.cache[].locate(k.data.toOpenArray(0, int(k.len) - 1)),
+          k.data.toOpenArray(0, int(k.len) - 1), got):
+        inc localHits
+        if got != valueFor(k):
+          inc localWrong
+      else:
+        inc localMisses
+    discard s.hits.fetchAdd(localHits, moRelaxed)
+    discard s.misses.fetchAdd(localMisses, moRelaxed)
+    discard s.wrong.fetchAdd(localWrong, moRelaxed)
+
   suite "FixedCache multi-threaded":
     test &"{Readers} readers + {Writers} writers on a hot bucket set":
-      # A key space of HotKeys spread over MinEntries buckets means readers race
-      # writers on the same handful of buckets almost every operation - the case
-      # a seqlock has to get right, and the one single-threaded tests cannot
-      # reach.
+      # A key space of HotKeys spread over TestEntries buckets means readers
+      # race writers on the same handful of buckets almost every operation -
+      # the case the locked read path has to get right, and the one
+      # single-threaded tests cannot reach.
       var cache: FixedCache[Key, Val]
-      cache.init(MinEntries)
+      cache.init(TestEntries)
       defer: cache.dispose()
 
       var s: Shared
@@ -294,6 +327,91 @@ when compileOption("threads"):
       checkpoint(&"hits={s.hits.load(moRelaxed)} wrong={s.wrong.load(moRelaxed)}")
       check s.wrong.load(moRelaxed) == 0
       check s.hits.load(moRelaxed) > 0
+
+    test "borrowed-view readers race writers":
+      # The keccak cache's actual read path: hash and compare the caller's raw
+      # bytes against the bucket without materialising a key. The view lookup
+      # must obey the same locking guarantees as the owned-key one.
+      var cache: FixedCache[Key, Val]
+      cache.init(TestEntries)
+      defer: cache.dispose()
+
+      var s: Shared
+      s.cache = addr cache
+
+      var
+        readers: array[Readers, Thread[ptr Shared]]
+        writers: array[Writers, Thread[ptr Shared]]
+      for i in 0 ..< Writers:
+        createThread(writers[i], writerLoop, addr s)
+      for i in 0 ..< Readers:
+        createThread(readers[i], viewReaderLoop, addr s)
+      joinThreads(writers)
+      joinThreads(readers)
+
+      checkpoint(&"hits={s.hits.load(moRelaxed)} misses={s.misses.load(moRelaxed)} " &
+        &"wrong={s.wrong.load(moRelaxed)}")
+      check s.wrong.load(moRelaxed) == 0
+      check s.hits.load(moRelaxed) > 0
+
+    test "racing writers leave only self-consistent entries behind":
+      # Writers alone, over 4x more keys than buckets, so the contention is
+      # writer-vs-writer: overlapping lock attempts and constant eviction.
+      # Afterwards every resident entry must still be a matched key/value pair -
+      # a lost lock race may drop an insert, but never corrupt one.
+      var cache: FixedCache[Key, Val]
+      cache.init(TestEntries)
+      defer: cache.dispose()
+
+      var s: Shared
+      s.cache = addr cache
+
+      var writers: array[4, Thread[ptr Shared]]
+      for i in 0 ..< writers.len:
+        createThread(writers[i], wideWriterLoop, addr s)
+      joinThreads(writers)
+
+      var resident = 0
+      for n in 0 ..< 4 * TestEntries:
+        let k = keyFor(n)
+        var got: Val
+        if cache.get(k, got):
+          inc resident
+          check got == valueFor(k)
+      checkpoint(&"resident={resident} of {cache.capacity} buckets")
+      # With 4x oversubscription and 800k inserts virtually every bucket ends
+      # up occupied.
+      check resident > TestEntries div 2
+
+    test "4-entry cache under full contention":
+      # The configuration that exposed the earlier lock-free read path: at 4
+      # entries its version counter was a single bit, and torn reads scored
+      # wrong=22..73 per run. With reads taking the bucket lock there is no
+      # window at any capacity, so the smallest interesting cache under maximal
+      # contention must be exactly clean.
+      var cache: FixedCache[Key, Val]
+      cache.init(4)
+      defer: cache.dispose()
+
+      var s: Shared
+      s.cache = addr cache
+
+      var
+        readers: array[Readers, Thread[ptr Shared]]
+        writers: array[Writers, Thread[ptr Shared]]
+      for i in 0 ..< Writers:
+        createThread(writers[i], writerLoop, addr s)
+      for i in 0 ..< Readers:
+        createThread(readers[i], readerLoop, addr s)
+      joinThreads(writers)
+      joinThreads(readers)
+
+      let
+        hits = s.hits.load(moRelaxed)
+        wrong = s.wrong.load(moRelaxed)
+      checkpoint(&"hits={hits} wrong={wrong}")
+      check wrong == 0
+      check hits > 0
 else:
   suite "FixedCache multi-threaded":
     test "skipped - compiled without --threads:on":

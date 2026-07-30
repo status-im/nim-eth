@@ -10,7 +10,6 @@
 import
   std/[tables, options, sequtils],
   results,
-  nimcrypto/[keccak, hash],
   ".."/rlp,
   "."/[trie_defs, nibbles, db]
 

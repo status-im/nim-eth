@@ -15,18 +15,14 @@ export MDigest
 
 const
   keccakCacheEnabled* {.booldefine.} = false
-    ## Memoize `keccak256` of short inputs.
+    ## Enable memoize `keccak256` of short inputs.
 
   keccakCacheCapacity* {.intdefine.} = 1 shl 14 # 2 MiB
-    ## Number of cache buckets when the cache is enabled. Must be a power of two and
-    ## at least `fixed_cache.MinEntries`, both checked below.
+    ## Number of cache buckets. Must be a power of two.
 
-  MaxCachedInputLen* = 87
-    ## Longest input the cache will hold. Each cache bucket is 128 bytes containing
-    ## the 32-byte digest, the one-byte length and the eight-byte tag word are fixed
-    ## overhead, leaving 87 bytes for the key.
+  MAX_CACHED_INPUT_LEN = 87
 
-  emptyKeccak256Digest = MDigest[256](data: [
+  EMPTY_KECCAK256_DIGEST = MDigest[256](data: [
     0xc5'u8, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c,
     0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0,
     0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b,
@@ -49,13 +45,13 @@ when keccakCacheEnabled:
   static:
     doAssert (keccakCacheCapacity and (keccakCacheCapacity - 1)) == 0,
       "keccakCacheCapacity must be a power of two"
-    doAssert keccakCacheCapacity >= MinEntries,
-      "keccakCacheCapacity must be at least fixed_cache.MinEntries"
+    doAssert keccakCacheCapacity >= MIN_ENTRIES,
+      "keccakCacheCapacity must be at least fixed_cache.MIN_ENTRIES"
 
   type
     KeccakCacheKey = object
       len: uint8
-      data: array[MaxCachedInputLen, byte]
+      data: array[MAX_CACHED_INPUT_LEN, byte]
 
   # A lookup is done against the caller's bytes directly - hashing and comparing
   # a borrowed view rather than building a KeccakCacheKey first.
@@ -84,7 +80,7 @@ func digestImpl(data: openArray[byte]): MDigest[256] {.noinit, inline.} =
   # and a generic body resolves late-bound symbols in the caller's scope
   # where this module's private `==` and `hash` overloads are not visible.
   if data.len == 0:
-    return emptyKeccak256Digest
+    return EMPTY_KECCAK256_DIGEST
 
   var digest {.noinit.}: MDigest[256]
 
@@ -92,7 +88,7 @@ func digestImpl(data: openArray[byte]): MDigest[256] {.noinit, inline.} =
     keccak256Xkcp(data, digest.data)
     return digest
   else:
-    if data.len > MaxCachedInputLen:
+    if data.len > MAX_CACHED_INPUT_LEN:
       keccak256Xkcp(data, digest.data)
       return digest
 
