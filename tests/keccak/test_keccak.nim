@@ -205,3 +205,36 @@ suite "Keccak256":
       for i in 0 ..< 32:
         data[i] = byte(rng.rand(0 .. 255))
       check hashEthHashes(data) == hashNimcrypto(data)
+
+# Nested `when`s: `keccakCacheStatsEnabled` is only declared when the cache
+# itself is compiled in, and `when a and b` still semchecks `b` when `a` is
+# false.
+when keccakCacheEnabled:
+  when keccakCacheStatsEnabled:
+    suite "Keccak256 cache stats":
+      test "per-preimage lengths, hits and misses are recorded":
+        resetKeccakCacheStats()
+
+        # A preimage no earlier test has hashed: miss once, hit twice.
+        var small: array[32, byte]
+        for i in 0 ..< small.len:
+          small[i] = byte(i xor 0xA5)
+        for _ in 0 ..< 3:
+          discard hashEthHashes(small)
+
+        # Above the cache bound: recorded, but can only miss.
+        let big = newSeq[byte](200)
+        discard hashEthHashes(big)
+
+        var found32, found200 = false
+        for s in keccakCacheKeyStats():
+          if s.len == 32 and s.misses == 1 and s.hits == 2:
+            found32 = true
+          if s.len == 200 and s.misses == 1 and s.hits == 0:
+            found200 = true
+        check found32
+        check found200
+        check keccakCacheUntrackedLookups() == 0
+
+        let report = keccakCacheStatsReport()
+        check "200*" in report # the uncacheable length is marked
