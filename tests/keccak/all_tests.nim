@@ -7,4 +7,5 @@
 
 import
   ./test_fixed_cache,
+  ./test_fixed_cache_fuzz,
   ./test_keccak
