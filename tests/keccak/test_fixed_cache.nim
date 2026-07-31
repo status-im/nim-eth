@@ -124,7 +124,8 @@ suite "FixedCache single-threaded":
       check c.getBySlot(c.locate(view), view, got)
       check got == valueFor(k)
       # and the two hash paths must agree on the bucket
-      check c.locate(k) == c.locate(view)
+      check c.locate(k).idx == c.locate(view).idx
+      check c.locate(k).tag == c.locate(view).tag
 
   test "collision evicts, and the evicted key then misses":
     # Far more keys than buckets, so collisions are certain.
@@ -174,8 +175,8 @@ suite "FixedCache single-threaded":
       c.init(1000)
 
   test "invalid capacities are rejected":
-    # Non-powers of two would break the index masking; a single entry is
-    # rejected as degenerate.
+    # Fewer than MIN_ENTRIES (2) entries would let a stored tag collide with the
+    # lock bit; non-powers of two would break the masking.
     for bad in [-8, 0, 1, 1000]:
       var c: FixedCache[Key, Val]
       expect Defect:
