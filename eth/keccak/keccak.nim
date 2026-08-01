@@ -17,7 +17,7 @@ const
   keccakCacheEnabled* {.booldefine.} = false
     ## Enable memoize `keccak256` of short inputs.
 
-  keccakCacheCapacity* {.intdefine.} = 1 shl 14 # 2 MiB
+  keccakCacheCapacity* {.intdefine.} = 1 shl 16 # 8 MiB
     ## Number of cache buckets. Must be a power of two.
 
   MAX_CACHED_INPUT_LEN = 87
@@ -39,6 +39,7 @@ template finish*(h: var Keccak256): MDigest[256] =
 when keccakCacheEnabled:
   import
     std/hashes,
+    nimcrypto/sysrand,
     ./fixed_cache,
     ./rapidhash
 
@@ -53,10 +54,16 @@ when keccakCacheEnabled:
       len: uint8
       data: array[MAX_CACHED_INPUT_LEN, byte]
 
+  let keccakCacheSeed: uint64 = block:
+    var s: array[1, uint64]
+    doAssert randomBytes(s) == s.len
+    s[0]
+
   # A lookup is done against the caller's bytes directly - hashing and comparing
   # a borrowed view rather than building a KeccakCacheKey first.
   func hash(data: openArray[byte]): Hash =
-    cast[Hash](rapidhashMicro(data))
+    {.cast(noSideEffect).}:
+      cast[Hash](rapidhashMicro(data, keccakCacheSeed))
 
   func hash(k: KeccakCacheKey): Hash =
     hash(k.data.toOpenArray(0, int(k.len) - 1))
