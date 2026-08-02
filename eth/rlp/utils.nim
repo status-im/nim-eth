@@ -1,15 +1,22 @@
 # eth
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import stew/[bitops2], ./priv/defs
+import std/bitops, ./priv/defs
 
-func bytesNeeded*(num: SomeUnsignedInt): int =
+func bytesNeeded*(num: SomeUnsignedInt): int {.inline.} =
   # Number of non-zero bytes in the big endian encoding
-  sizeof(num) - (num.leadingZeros() shr 3)
+  #
+  # `countLeadingZeroBits` is undefined for zero, hence the branch - going
+  # through a leading-zero count that encodes zero as a sentinel instead costs
+  # several times as much because it cannot fold into a single instruction
+  if num == typeof(num)(0):
+    0
+  else:
+    sizeof(num) - (countLeadingZeroBits(num) shr 3)
 
 func writeBigEndian*(
     outStream: var auto, number: SomeUnsignedInt, lastByteIdx: int, numberOfBytes: int

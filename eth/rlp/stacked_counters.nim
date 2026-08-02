@@ -15,6 +15,34 @@ proc push*[T](self: var StaticStackedCounters, item: T, count: int) =
 proc push*[T](self: var DynamicStackedCounters, item: T, count: int) =
   self.stack.add((item, count))
 
+func isEmpty*(self: StaticStackedCounters): bool {.inline.} =
+  self.top == 0
+
+func isEmpty*(self: DynamicStackedCounters): bool {.inline.} =
+  self.stack.len == 0
+
+func decrementTop*(self: var StaticStackedCounters): bool {.inline.} =
+  ## Decrement the innermost counter, returning true when it is left non-zero.
+  ## Returns false without touching anything when there is no counter or when
+  ## the counter is about to reach zero, leaving those cases - which have to
+  ## close the item and update the enclosing counters - to `pop`.
+  if self.top > 0:
+    let count = addr self.stack[self.top - 1].count
+    if count[] > 1:
+      count[] -= 1
+      return true
+  false
+
+func decrementTop*(self: var DynamicStackedCounters): bool {.inline.} =
+  ## See `decrementTop` for `StaticStackedCounters`.
+  let top = self.stack.len
+  if top > 0:
+    let count = addr self.stack[top - 1].count
+    if count[] > 1:
+      count[] -= 1
+      return true
+  false
+
 proc peek*(self: var StaticStackedCounters, T: type): Opt[T] =
   if self.top > 0:
     return Opt.some(self.stack[self.top - 1].item)

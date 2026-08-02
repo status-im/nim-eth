@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -76,6 +76,30 @@ proc processListCounter(self: var RlpLengthTracker, item: Opt[PendingListItem]):
     return false
 
 proc decrementCounters(self: var RlpLengthTracker, isSelfEncoding: bool) =
+  # This runs after every encoded item. `wrapEncoding` is the only thing that
+  # puts a wrapped encoding in flight, so most encodings never have one and can
+  # take the loop below, which does the same work as the general case without
+  # the wrap bookkeeping. `isSelfEncoding` only ever feeds `processWrapCounter`,
+  # so it does not matter while there is no wrapped encoding to close.
+  if self.wrappedEncodings.isEmpty():
+    # Items left in the innermost list - nothing to close, just count down
+    if self.pendingLists.decrementTop():
+      return
+
+    # The innermost list ran out of items; closing it may in turn use up the
+    # last item of the list enclosing it, and so on outwards
+    while true:
+      let item = self.pendingLists.pop(PendingListItem)
+      if item.isNone():
+        return
+
+      let
+        i = item.unsafeGet()
+        listLen = self.totalLength - i.startLen
+
+      self.lengths[i.idx] = listLen
+      self.totalLength += prefixLength(listLen)
+
   var
     wrapStatus = true
     listStatus = true
@@ -124,7 +148,10 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     # open a list = push a list on the stack with count value as the list size
     self.pendingLists.push((self.lengths.len, self.totalLength), listSize)
 
-    self.lengths.setLen(self.lengths.len + 1)
+    # `add` rather than `setLen` - the slot is filled in when the list is
+    # closed, and growing a seq one item at a time is markedly cheaper through
+    # `add`, which grows geometrically
+    self.lengths.add(0)
 
 # next item encoded will not decrement list or wrap counters
 
@@ -132,7 +159,7 @@ proc wrapEncoding*(self: var RlpLengthTracker, numOfEncodings: int) =
   self.wrappedEncodings.push(
     (self.wrapLengths.len, self.lengths.len, self.totalLength), numOfEncodings
   )
-  self.wrapLengths.setLen(self.wrapLengths.len + 1)
+  self.wrapLengths.add(0)
 
 func writeBlob*(self: var RlpLengthTracker, data: openArray[byte]) =
   let isSelfEncoding = data.len == 1 and byte(data[0]) < BLOB_START_MARKER
@@ -152,7 +179,8 @@ func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
   elif i == typeof(i)(0):
     self.totalLength += 1
   else:
-    self.totalLength += prefixLength(i.bytesNeeded) + i.bytesNeeded
+    let lenBytes = i.bytesNeeded
+    self.totalLength += prefixLength(lenBytes) + lenBytes
 
   self.decrementCounters(isSelfEncoding)
 
@@ -171,8 +199,8 @@ proc appendDetached*(self: var RlpLengthTracker, data: byte) =
   # self.decrementCounters(false)
 
 func initLengthTracker*(self: var RlpLengthTracker) =
-  # we preset the lengths since we want to skip using add method for
-  # these lists
+  # reserve room for the list lengths up front so that the first few lists do
+  # not each have to grow the seq
   when self is DynamicRlpLengthTracker:
     self.pendingLists.init(STACK_LENGTH, PendingListItem)
   self.lengths = newSeqOfCap[int](LIST_LENGTH)
