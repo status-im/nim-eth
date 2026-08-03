@@ -58,6 +58,9 @@ task test_trie, "Run trie tests":
 task test_db, "Run db tests":
   run "tests/db/all_tests", "db"
 
+task test_keccak, "Run keccak tests":
+  run "tests/keccak/all_tests", "keccak"
+
 task test_utp, "Run utp tests":
   run "tests/utp/all_utp_tests", "utp"
 
@@ -74,6 +77,7 @@ task test, "Run all tests":
   test_discv5_task()
   test_trie_task()
   test_db_task()
+  test_keccak_task()
   test_utp_task()
   test_common_task()
 

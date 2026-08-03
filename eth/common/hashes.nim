@@ -97,22 +97,10 @@ func keccak256*(input: openArray[byte]): Hash32 {.noinit.} =
     c.update(input)
     c.finish().to(Hash32)
   else:
-    var ctx: keccak.Keccak256
-    ctx.update(input)
-    ctx.finish().to(Hash32)
+    keccak.Keccak256.digest(input).to(Hash32)
 
 func keccak256*(input: openArray[char]): Hash32 {.noinit.} =
   keccak256(input.toOpenArrayByte(0, input.high))
-
-template keccak256*[N: static[int]](input: array[N, byte]): Hash32 =
-  when N == 20:
-    keccak256_20(input).to(Hash32)
-  elif N == 32:
-    keccak256_32(input).to(Hash32)
-  else:
-    var ctx: keccak.Keccak256
-    ctx.update(input)
-    ctx.finish().to(Hash32)
 
 template withKeccak256*(body: untyped): Hash32 =
   var h {.inject.}: keccak.Keccak256
