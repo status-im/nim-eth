@@ -22,10 +22,6 @@ func isEmpty*(self: DynamicStackedCounters): bool {.inline.} =
   self.stack.len == 0
 
 func decrementTop*(self: var StaticStackedCounters): bool {.inline.} =
-  ## Decrement the innermost counter, returning true when it is left non-zero.
-  ## Returns false without touching anything when there is no counter or when
-  ## the counter is about to reach zero, leaving those cases - which have to
-  ## close the item and update the enclosing counters - to `pop`.
   if self.top > 0:
     let count = addr self.stack[self.top - 1].count
     if count[] > 1:
@@ -34,7 +30,6 @@ func decrementTop*(self: var StaticStackedCounters): bool {.inline.} =
   false
 
 func decrementTop*(self: var DynamicStackedCounters): bool {.inline.} =
-  ## See `decrementTop` for `StaticStackedCounters`.
   let top = self.stack.len
   if top > 0:
     let count = addr self.stack[top - 1].count

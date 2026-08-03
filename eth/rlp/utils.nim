@@ -9,10 +9,6 @@ import std/bitops, ./priv/defs
 
 func bytesNeeded*(num: SomeUnsignedInt): int {.inline.} =
   # Number of non-zero bytes in the big endian encoding
-  #
-  # `countLeadingZeroBits` is undefined for zero, hence the branch - going
-  # through a leading-zero count that encodes zero as a sentinel instead costs
-  # several times as much because it cannot fold into a single instruction
   if num == typeof(num)(0):
     0
   else:

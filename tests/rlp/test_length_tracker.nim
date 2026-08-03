@@ -12,12 +12,6 @@ import
   ../../eth/[rlp, common],
   unittest2
 
-# `encode`, `getEncodedLength` and `computeRlpHash` all measure the encoding
-# with `RlpLengthTracker` before writing it. `RlpDefaultWriter` instead writes
-# the payload first and shifts it to make room for the prefix, so it never
-# consults the tracker - which makes it an independent oracle for everything
-# the tracker produces.
-
 proc encodeDirect[T](v: T): seq[byte] =
   var writer = initRlpWriter()
   writer.append(v)
@@ -61,8 +55,6 @@ suite "RLP length tracker":
     checkAgainstDirect(@[@[@[newSeq[byte]()]]])
 
   test "deep nesting closes the enclosing lists in order":
-    # a list whose last element is itself a list cascades the closing outwards,
-    # which is the path the tracker takes when a counter reaches zero
     checkAgainstDirect(@[@[@[@[@[@[@[1'u64]]]]]]])
     checkAgainstDirect(@[@[@[1'u64, 2], @[3'u64]], @[@[4'u64]]])
     checkAgainstDirect(@[@[@[newSeq[uint64]()]], @[newSeq[seq[uint64]]()]])
@@ -87,7 +79,6 @@ suite "RLP length tracker":
         for b in 0 ..< rng.rand(4):
           var inner: seq[uint64]
           for c in 0 ..< rng.rand(5):
-            # cover self encoding, single byte and multi byte integers
             inner.add(
               case rng.rand(2)
               of 0: uint64(rng.rand(127))
