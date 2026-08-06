@@ -21,7 +21,8 @@ import
   std/[hashes, macros, typetraits],
   stint,
   results,
-  stew/[assign2, byteutils, endians2, staticfor]
+  stew/[assign2, byteutils, endians2],
+  ../keccak/rapidhash
 
 export stint, hashes, results
 
@@ -85,17 +86,12 @@ func `==`*(a, b: FixedBytes): bool {.inline.} =
   equalMem(addr a.data[0], addr b.data[0], a.N)
 
 func hash*[N: static int](v: FixedBytes[N]): Hash {.inline.} =
-  copyMem(addr result, addr v.data[0], min(N, sizeof(Hash)))
-
-  when N > sizeof(Hash):
-    var tmp: Hash
-    staticFor i, 1 ..< N div sizeof(Hash):
-      copyMem(addr tmp, addr v.data[i * sizeof(Hash)], sizeof(Hash))
-      result = result !& tmp
-    const last = N mod sizeof(Hash)
-    when last > 0:
-      copyMem(addr tmp, addr v.data[N - last], last)
-      result !& tmp
+  when N <= 48:
+    cast[Hash](rapidhashNano(v.data))
+  elif N <= 512:
+    cast[Hash](rapidhashMicro(v.data))
+  else:
+    cast[Hash](rapidhash(v.data))
 
 func toHex*(v: FixedBytes): string =
   ## Convert to lowercase hex without 0x prefix
