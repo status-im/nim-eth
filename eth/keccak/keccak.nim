@@ -1,48 +1,116 @@
-{.push raises: [].}
+# eth
+# Copyright (c) 2026 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  std/[os, strutils]
+{.push raises: [], gcsafe.}
+
+import ./keccak_xkcp
+export keccak_xkcp.init, keccak_xkcp.update, keccak_xkcp.clear
 
 from nimcrypto/hash import MDigest
 export MDigest
 
 const
-  srcPath = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
+  keccakCacheEnabled* {.booldefine.} = false
+    ## Enable memoize `keccak256` of short inputs.
 
-{.pragma: kheader, header: srcPath & "/keccak.h".}
-{.passc: "-I" & srcPath.}
-{.compile: srcPath & "/keccak.c".}
+  keccakCacheCapacity* {.intdefine.} = 1 shl 16 # 8 MiB
+    ## Number of cache buckets. Must be a power of two.
 
-type
-  Keccak256* {.importc: "keccak_st", kheader.} = object
+  MAX_CACHED_INPUT_LEN = 87
 
-func init(h: var Keccak256) {.cdecl, importc: "keccak_init", kheader.}
-func finish(h: var Keccak256, val: var openArray[byte]) {.cdecl, importc: "keccak_finish", kheader.}
-func update*(h: var Keccak256, data: openArray[byte]) {.cdecl, importc: "keccak_update", kheader.}
-func update*(h: var Keccak256, data: openArray[char]) {.cdecl, importc: "keccak_update_char", kheader.}
-func keccak256_20*(data: ptr byte, output: ptr byte) {.cdecl, importc: "keccak256_20", kheader.}
-func keccak256_32*(data: ptr byte, output: ptr byte) {.cdecl, importc: "keccak256_32", kheader.}
+  EMPTY_KECCAK256_DIGEST = MDigest[256](data: [
+    0xc5'u8, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c,
+    0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0,
+    0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b,
+    0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85, 0xa4, 0x70])
 
-template clear*(h: var Keccak256) =
-  init(h)
+type Keccak256* = KeccakXkcpCtx
 
-{.push inline, noinit, gcsafe, stackTrace:off.}
+template finish*(h: var Keccak256): MDigest[256] =
+  block:
+    var digest {.noinit.}: MDigest[256]
+    keccak_xkcp.finish(h, digest.data)
+    digest
 
-func init*(_: type Keccak256): Keccak256 =
-  result.init()
+when keccakCacheEnabled:
+  import
+    std/hashes,
+    nimcrypto/sysrand,
+    ./fixed_cache,
+    ./rapidhash
 
-func digest*(_: type Keccak256, data: openArray[byte]): MDigest[256] =
-  var ctx = Keccak256.init()
-  ctx.update(data)
-  ctx.finish(result.data)
+  static:
+    doAssert (keccakCacheCapacity and (keccakCacheCapacity - 1)) == 0,
+      "keccakCacheCapacity must be a power of two"
+    doAssert keccakCacheCapacity >= MIN_ENTRIES,
+      "keccakCacheCapacity must be at least fixed_cache.MIN_ENTRIES"
 
-func finish*(h: var Keccak256): MDigest[256] =
-  h.finish(result.data)
+  type
+    KeccakCacheKey = object
+      len: uint8
+      data: array[MAX_CACHED_INPUT_LEN, byte]
 
-func keccak256_20*(data: openArray[byte]): MDigest[256] =
-  keccak256_20(data[0].addr, result.data[0].addr)
+  let keccakCacheSeed: uint64 = block:
+    var s: array[1, uint64]
+    doAssert randomBytes(s) == s.len
+    s[0]
 
-func keccak256_32*(data: openArray[byte]): MDigest[256] =
-  keccak256_32(data[0].addr, result.data[0].addr)
+  # A lookup is done against the caller's bytes directly - hashing and comparing
+  # a borrowed view rather than building a KeccakCacheKey first.
+  func hash(data: openArray[byte]): Hash =
+    {.cast(noSideEffect).}:
+      cast[Hash](rapidhashMicro(data, keccakCacheSeed))
 
-{.pop.}
+  func hash(k: KeccakCacheKey): Hash =
+    hash(k.data.toOpenArray(0, int(k.len) - 1))
+
+  func `==`(k: KeccakCacheKey, data: openArray[byte]): bool =
+    int(k.len) == data.len and
+      equalMem(unsafeAddr k.data[0], unsafeAddr data[0], data.len)
+
+  func `==`(a, b: KeccakCacheKey): bool =
+    a == b.data.toOpenArray(0, int(b.len) - 1)
+
+  static:
+    doAssert sizeof(KeccakCacheKey) + sizeof(MDigest[256]) + sizeof(uint) <= 128
+
+  var keccakCache: FixedCache[KeccakCacheKey, MDigest[256]]
+
+  keccakCache.init(keccakCacheCapacity)
+
+func digestImpl(data: openArray[byte]): MDigest[256] {.noinit, inline.} =
+  # Non-generic on purpose. `digest` takes a typedesc, which makes it generic,
+  # and a generic body resolves late-bound symbols in the caller's scope
+  # where this module's private `==` and `hash` overloads are not visible.
+  if data.len == 0:
+    return EMPTY_KECCAK256_DIGEST
+
+  var digest {.noinit.}: MDigest[256]
+
+  when not keccakCacheEnabled:
+    keccak256Xkcp(data, digest.data)
+    return digest
+  else:
+    if data.len > MAX_CACHED_INPUT_LEN:
+      keccak256Xkcp(data, digest.data)
+      return digest
+
+    {.cast(noSideEffect), cast(gcsafe).}:
+      let slot = keccakCache.locate(data)
+      if keccakCache.getBySlot(slot, data, digest):
+        return digest
+
+      keccak256Xkcp(data, digest.data)
+
+      var key: KeccakCacheKey
+      key.len = uint8(data.len)
+      copyMem(addr key.data[0], unsafeAddr data[0], data.len)
+      keccakCache.putBySlot(slot, key, digest)
+      return digest
+
+func digest*(_: type Keccak256, data: openArray[byte]): MDigest[256] {.inline.} =
+  digestImpl(data)

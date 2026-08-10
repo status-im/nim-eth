@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -76,6 +76,22 @@ proc processListCounter(self: var RlpLengthTracker, item: Opt[PendingListItem]):
     return false
 
 proc decrementCounters(self: var RlpLengthTracker, isSelfEncoding: bool) =
+  if self.wrappedEncodings.isEmpty():
+    if self.pendingLists.decrementTop():
+      return
+
+    while true:
+      let item = self.pendingLists.pop(PendingListItem)
+      if item.isNone():
+        return
+
+      let
+        i = item.unsafeGet()
+        listLen = self.totalLength - i.startLen
+
+      self.lengths[i.idx] = listLen
+      self.totalLength += prefixLength(listLen)
+
   var
     wrapStatus = true
     listStatus = true
@@ -124,7 +140,7 @@ proc startList*(self: var RlpLengthTracker, listSize: int) =
     # open a list = push a list on the stack with count value as the list size
     self.pendingLists.push((self.lengths.len, self.totalLength), listSize)
 
-    self.lengths.setLen(self.lengths.len + 1)
+    self.lengths.add(0)
 
 # next item encoded will not decrement list or wrap counters
 
@@ -132,7 +148,7 @@ proc wrapEncoding*(self: var RlpLengthTracker, numOfEncodings: int) =
   self.wrappedEncodings.push(
     (self.wrapLengths.len, self.lengths.len, self.totalLength), numOfEncodings
   )
-  self.wrapLengths.setLen(self.wrapLengths.len + 1)
+  self.wrapLengths.add(0)
 
 func writeBlob*(self: var RlpLengthTracker, data: openArray[byte]) =
   let isSelfEncoding = data.len == 1 and byte(data[0]) < BLOB_START_MARKER
@@ -152,7 +168,8 @@ func writeInt*(self: var RlpLengthTracker, i: SomeUnsignedInt) =
   elif i == typeof(i)(0):
     self.totalLength += 1
   else:
-    self.totalLength += prefixLength(i.bytesNeeded) + i.bytesNeeded
+    let lenBytes = i.bytesNeeded
+    self.totalLength += prefixLength(lenBytes) + lenBytes
 
   self.decrementCounters(isSelfEncoding)
 
@@ -171,8 +188,6 @@ proc appendDetached*(self: var RlpLengthTracker, data: byte) =
   # self.decrementCounters(false)
 
 func initLengthTracker*(self: var RlpLengthTracker) =
-  # we preset the lengths since we want to skip using add method for
-  # these lists
   when self is DynamicRlpLengthTracker:
     self.pendingLists.init(STACK_LENGTH, PendingListItem)
   self.lengths = newSeqOfCap[int](LIST_LENGTH)

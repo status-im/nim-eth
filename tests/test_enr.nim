@@ -115,6 +115,19 @@ suite "ENR encoding tests":
       $enr.value == """(123, id: "v4", ip: 5.6.7.8, secp256k1: 0x02E51EFA66628CE09F689BC2B82F165A75A9DDECBB6A804BE15AC3FDF41F3B34E7, some_list: (Raw RLP list) 0xCE4883000102884869207468657265, udp: 1234)"""
       testRlpEncodingLoop(enr.value)
 
+  test "enrFields encodes values based on their type":
+    let
+      pk = KeyPair.random(rng[]).seckey
+      fields = enrFields({
+        "a_bytes": @[byte 0xAA, 0xBB],
+        "a_list": [1'u16, 2'u16, 3'u16],
+      })
+      record = Record.init(1, pk, extraFields = fields).expect("valid record")
+
+    check:
+      record.rawFieldValue("a_list").get() == hexToSeqByte("c3010203")
+      record.rawFieldValue("a_bytes").get() == hexToSeqByte("82aabb")
+
   test "Base64 encode loop":
     const encodedBase64 = "-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8"
     let res = Record.fromBase64(encodedBase64)

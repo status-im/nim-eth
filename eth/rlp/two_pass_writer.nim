@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -31,8 +31,9 @@ func writeLength(writer: var RlpTwoPassWriter, dataLen: int, baseMarker: byte) =
   if dataLen < THRESHOLD_LEN:
     writer.update(baseMarker + byte(dataLen))
   else:
-    writer.update(baseMarker + (THRESHOLD_LEN - 1) + byte(uint64(dataLen).bytesNeeded))
-    writer.updateBigEndian(uint64(dataLen), uint64(dataLen).bytesNeeded)
+    let lenBytes = uint64(dataLen).bytesNeeded
+    writer.update(baseMarker + (THRESHOLD_LEN - 1) + byte(lenBytes))
+    writer.updateBigEndian(uint64(dataLen), lenBytes)
 
 func writeInt*(writer: var RlpTwoPassWriter, i: SomeUnsignedInt) =
   if i == typeof(i)(0):

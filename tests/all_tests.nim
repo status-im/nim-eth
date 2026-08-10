@@ -13,6 +13,7 @@
 import
   ./common/all_tests,
   ./db/all_tests,
+  ./keccak/all_tests,
   ./keyfile/all_tests,
   ./p2p/all_tests,
   ./rlp/all_tests,

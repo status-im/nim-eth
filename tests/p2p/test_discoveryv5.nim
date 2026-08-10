@@ -380,7 +380,7 @@ suite "Discovery v5.1 Tests":
 
       targetSeqNum.inc()
       # need to add something to get the enr sequence number incremented
-      let update = targetNode.updateRecord({"addsomefield": @[byte 1]})
+      let update = targetNode.updateRecord(enrFields({"addsomefield": @[byte 1]}))
       check update.isOk()
 
       var n = mainNode.getNode(targetId)

@@ -84,12 +84,19 @@ type
 template toField[T](v: T): Field =
   when T is string:
     Field(kind: kString, str: v)
-  elif T is array:
-    Field(kind: kBytes, bytes: @v)
-  elif T is seq[byte]:
-    Field(kind: kBytes, bytes: v)
   elif T is SomeUnsignedInt:
     Field(kind: kNum, num: BiggestUInt(v))
+  elif T is seq[byte]:
+    Field(kind: kBytes, bytes: @v)
+  elif T is array:
+    when type(default(T)[low(T)]) is byte:
+      Field(kind: kBytes, bytes: @v)
+    else:
+      # A non-byte sequence is an RLP list
+      Field(kind: kList, listRaw: rlp.encode(v))
+  elif T is seq:
+    # A non-byte sequence is an RLP list
+    Field(kind: kList, listRaw: rlp.encode(v))
   elif T is object|tuple:
     Field(kind: kList, listRaw: rlp.encode(v))
   else:
@@ -111,6 +118,14 @@ func `==`(a, b: Field): bool =
 
 template toFieldPair*(key: string, value: auto): FieldPair =
   (key, toField(value))
+
+macro enrFields*(pairs: untyped{nkTableConstr}): untyped =
+  ## Build a list of `FieldPair`s from a `{key: value}` table constructor.
+  var res = nnkBracket.newTree()
+  for c in pairs:
+    c.expectKind(nnkExprColonExpr)
+    res.add newCall(bindSym"toFieldPair", c[0], c[1])
+  res
 
 func cmp(a, b: FieldPair): int = cmp(a[0], b[0])
 
@@ -373,6 +388,22 @@ func tryGet*(r: Record, key: string, T: type): Opt[T] =
   ## Return `none` if the key does not exist or if the value is invalid
   ## according to type `T`.
   get(r, key, T).optValue()
+
+func rawFieldValue*(r: Record, key: string): Opt[seq[byte]] =
+  ## Get the value of the field with the given `key` as its raw (as encoded on
+  ## the wire) RLP bytes. Returns `none` if the key does not exist.
+  try:
+    var rlp = rlpFromBytes(r.raw)
+    doAssert rlp.enterList()
+    rlp.skipElem() # signature
+    rlp.skipElem() # seqNum
+    while rlp.hasData:
+      if rlp.read(string) == key:
+        return Opt.some(@(rlp.rawData()))
+      rlp.skipElem() # value of a non matching field
+    Opt.none(seq[byte])
+  except RlpError as e:
+    raiseAssert "Record.raw must be valid RLP: " & e.msg
 
 func fromRecord*(T: type TypedRecord, r: Record): T =
   TypedRecord(

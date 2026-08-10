@@ -5,4 +5,5 @@ import
   ./test_object_serialization,
   ./test_optional_fields,
   ./test_hashes,
+  ./test_length_tracker,
   ./test_rlp_profiler
