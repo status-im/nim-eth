@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2025 Status Research & Development GmbH
+# Copyright (c) 2020-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -6,7 +6,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[strutils, sets, sugar],
@@ -128,17 +128,17 @@ type
         desc: "Number of evenly distributed keys to generate"
         name: "n" .}: uint16
 
-proc parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
+func parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
   let res = enr.Record.fromURI(p)
   if res.isErr:
     raise newException(ValueError, "Invalid ENR:" & $res.error)
 
   res.value
 
-proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
-  return @[]
+func completeCmdArg*(T: type enr.Record, val: string): seq[string] =
+  @[]
 
-proc parseCmdArg*(T: type Node, p: string): T {.raises: [ValueError].} =
+func parseCmdArg*(T: type Node, p: string): T {.raises: [ValueError].} =
   let res = enr.Record.fromURI(p)
   if res.isErr:
     raise newException(ValueError, "Invalid ENR:" & $res.error)
@@ -149,17 +149,17 @@ proc parseCmdArg*(T: type Node, p: string): T {.raises: [ValueError].} =
 
   n
 
-proc completeCmdArg*(T: type Node, val: string): seq[string] =
-  return @[]
+func completeCmdArg*(T: type Node, val: string): seq[string] =
+  @[]
 
-proc parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =
+func parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =
   try:
     result = PrivateKey.fromHex(p).tryGet()
   except CatchableError:
     raise newException(ValueError, "Invalid private key")
 
-proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
-  return @[]
+func completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
+  @[]
 
 proc generateDistributedNetKeys(
     rng: var HmacDrbgContext, n: uint16
@@ -200,7 +200,7 @@ proc discover(
 ) {.async: (raises: [CancelledError]).} =
   info "Starting node discovery - storing nodes at: ", psFile
 
-  var seenNodes = initHashSet[NodeId]()
+  var seenNodes: HashSet[NodeId]
 
   let f =
     try:
@@ -437,7 +437,7 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
 when isMainModule:
   {.pop.}
   let config = DiscoveryConf.load()
-  {.push raises: [].}
+  {.push raises: [], gcsafe.}
 
   setLogLevel(config.logLevel)
 

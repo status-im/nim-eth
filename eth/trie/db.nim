@@ -1,16 +1,15 @@
 # nim-eth
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[tables, hashes, sets],
-  "."/[trie_defs, db_tracing]
+  ./[trie_defs, db_tracing]
 
 type
   MemDBRec = object
@@ -56,16 +55,16 @@ type
 
   TransactionID* = distinct DbTransaction
 
-proc put*(db: TrieDatabaseRef, key, val: openArray[byte]) {.gcsafe.}
-proc get*(db: TrieDatabaseRef, key: openArray[byte]): seq[byte] {.gcsafe.}
-proc del*(db: TrieDatabaseRef, key: openArray[byte]) {.gcsafe.}
-proc beginTransaction*(db: TrieDatabaseRef): DbTransaction {.gcsafe.}
+proc put*(db: TrieDatabaseRef, key, val: openArray[byte])
+proc get*(db: TrieDatabaseRef, key: openArray[byte]): seq[byte]
+proc del*(db: TrieDatabaseRef, key: openArray[byte])
+func beginTransaction*(db: TrieDatabaseRef): DbTransaction
 
-proc get*(db: MemoryLayer, key: openArray[byte]): seq[byte] =
+func get*(db: MemoryLayer, key: openArray[byte]): seq[byte] =
   result = db.records.getOrDefault(@key).value
   traceGet key, result
 
-proc del*(db: MemoryLayer, key: openArray[byte]) =
+func del*(db: MemoryLayer, key: openArray[byte]) =
   traceDel key
 
   # The database should ensure that the empty key is always active:
@@ -80,10 +79,10 @@ proc del*(db: MemoryLayer, key: openArray[byte]) =
         db.records.del(key)
         db.deleted.incl(key)
 
-proc contains*(db: MemoryLayer, key: openArray[byte]): bool =
+func contains*(db: MemoryLayer, key: openArray[byte]): bool =
   db.records.hasKey(@key)
 
-proc put*(db: MemoryLayer, key, val: openArray[byte]) =
+func put*(db: MemoryLayer, key, val: openArray[byte]) =
   tracePut key, val
 
   # TODO: This is quite inefficient and it won't be necessary once
@@ -103,10 +102,10 @@ proc put*(db: MemoryLayer, key, val: openArray[byte]) =
     do:
       db.records[key] = MemDBRec(refCount: 1, value: @val)
 
-proc newMemoryLayer: MemoryLayer =
+func newMemoryLayer: MemoryLayer =
   result.new
-  result.records = initTable[seq[byte], MemDBRec]()
-  result.deleted = initHashSet[seq[byte]]()
+  result.records = Table[seq[byte], MemDBRec]()
+  result.deleted = HashSet[seq[byte]]()
 
 proc commit(memDb: MemoryLayer, db: TrieDatabaseRef, applyDeletes: bool = true) =
   if applyDeletes:
@@ -116,7 +115,7 @@ proc commit(memDb: MemoryLayer, db: TrieDatabaseRef, applyDeletes: bool = true) 
   for k, v in memDb.records:
     db.put(k, v.value)
 
-proc init(db: var MemoryLayer) =
+func init(db: var MemoryLayer) =
   db = newMemoryLayer()
 
 proc newMemoryDB*: TrieDatabaseRef =
@@ -130,7 +129,7 @@ template isMemoryDB(db: TrieDatabaseRef): bool =
     db.mostInnerTransaction != nil and
     db.mostInnerTransaction.parentTransaction == nil
 
-proc totalRecordsInMemoryDB*(db: TrieDatabaseRef): int =
+func totalRecordsInMemoryDB*(db: TrieDatabaseRef): int =
   doAssert isMemoryDB(db)
   return db.mostInnerTransaction.modifications.records.len
 
@@ -139,7 +138,7 @@ iterator pairsInMemoryDB*(db: TrieDatabaseRef): (seq[byte], seq[byte]) =
   for k, v in db.mostInnerTransaction.modifications.records:
     yield (k, v.value)
 
-proc beginTransaction*(db: TrieDatabaseRef): DbTransaction =
+func beginTransaction*(db: TrieDatabaseRef): DbTransaction =
   new result
   result.db = db
   init result.modifications
@@ -147,7 +146,7 @@ proc beginTransaction*(db: TrieDatabaseRef): DbTransaction =
   result.parentTransaction = db.mostInnerTransaction
   db.mostInnerTransaction = result
 
-proc rollback*(t: DbTransaction) =
+func rollback*(t: DbTransaction) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
@@ -164,11 +163,11 @@ proc commit*(t: DbTransaction, applyDeletes: bool = true) =
   t.modifications.commit(t.db, applyDeletes)
   t.state = Committed
 
-proc dispose*(t: DbTransaction) {.inline.} =
+func dispose*(t: DbTransaction) {.inline.} =
   if t.state == Pending:
     t.rollback()
 
-proc safeDispose*(t: DbTransaction) {.inline.} =
+func safeDispose*(t: DbTransaction) {.inline.} =
   if (not isNil(t)) and (t.state == Pending):
     t.rollback()
 
@@ -188,7 +187,7 @@ proc containsImpl[T](db: RootRef, key: openArray[byte]): bool =
   mixin contains
   return contains(T(db), key)
 
-proc trieDB*[T: RootRef](x: T): TrieDatabaseRef =
+func trieDB*[T: RootRef](x: T): TrieDatabaseRef =
   mixin del, get, put
 
   new result
@@ -248,10 +247,10 @@ proc contains*(db: TrieDatabaseRef, key: openArray[byte]): bool =
 # this is useful when we need to jump back to specific point
 # in history where the database still in 'original' state
 # and retrieve data from that point
-proc getTransactionID*(db: TrieDatabaseRef): TransactionID =
+func getTransactionID*(db: TrieDatabaseRef): TransactionID =
   TransactionID(db.mostInnerTransaction)
 
-proc setTransactionID*(db: TrieDatabaseRef, id: TransactionID) =
+func setTransactionID*(db: TrieDatabaseRef, id: TransactionID) =
   db.mostInnerTransaction = DbTransaction(id)
 
 template shortTimeReadOnly*(db: TrieDatabaseRef, id: TransactionID, body: untyped) =

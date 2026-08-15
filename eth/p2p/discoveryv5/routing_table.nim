@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[algorithm, times, sequtils, bitops, sets, tables],
@@ -201,7 +201,7 @@ func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   r.ipLimits.dec(ip)
 
 func getNode*(r: RoutingTable, id: NodeId): Opt[Node]
-proc replaceNode*(r: var RoutingTable, n: Node) {.gcsafe.}
+proc replaceNode*(r: var RoutingTable, n: Node)
 
 proc banNode*(r: var RoutingTable, nodeId: NodeId, period: chronos.Duration) =
   ## Ban a node from the routing table for the given period. The node is removed
@@ -334,7 +334,7 @@ func init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop
     ipLimits: IpLimits(limit: ipLimits.tableIpLimit),
     distanceCalculator: distanceCalculator,
     rng: rng,
-    bannedNodes: initTable[NodeId, chronos.Moment]())
+    bannedNodes: Table[NodeId, chronos.Moment]())
 
 func splitBucket(r: var RoutingTable, index: int) =
   let bucket = r.buckets[index]
@@ -499,7 +499,7 @@ func bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
 func nodesByDistanceTo(r: RoutingTable, k: KBucket, id: NodeId): seq[Node] =
   sortedByIt(k.nodes, r.distance(it.id, id))
 
-proc neighbours*(
+func neighbours*(
     r: RoutingTable,
     id: NodeId,
     k: int = BUCKET_SIZE,

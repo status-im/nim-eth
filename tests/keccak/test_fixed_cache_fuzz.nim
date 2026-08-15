@@ -82,7 +82,7 @@ func wideKey(n: int): Key =
   ## always inside the compared prefix.
   keyFor(n, 8 + (n mod 80))
 
-proc randomVal(rng: var Rand): Val =
+func randomVal(rng: var Rand): Val =
   var v: Val
   for i in 0 ..< v.len:
     v[i] = byte(rng.rand(0 .. 255))
@@ -99,7 +99,7 @@ proc modelFuzz(capacity, rounds: int, seed: int64,
   ## Returns (hits, wrongs); every hit was checked against the model.
   var
     cache: FixedCache[Key, Val]
-    model = initTable[Key, Val]()
+    model: Table[Key, Val]
     rng = initRand(seed)
     hits = 0
     wrongs = 0
@@ -167,7 +167,7 @@ suite "FixedCache fuzz, single-threaded":
     # only in tag bits.
     var
       cache: FixedCache[uint64, uint64]
-      model = initTable[uint64, uint64]()
+      model: Table[uint64, uint64]
       rng = initRand(fcFuzzSeed + 3)
       hits = 0
     cache.init(ProdEntries)
@@ -260,7 +260,7 @@ when compileOption("threads"):
     ## Every thread both reads and writes, so the same bucket sees read/read,
     ## read/write and write/write races rather than fixed roles.
     var
-      rng = initRand(getThreadId() * 2654435761)
+      rng = initRand(int64(getThreadId()) * 2654435761)
       localHits = 0
       localMisses = 0
       localWrong = 0
@@ -343,7 +343,7 @@ when compileOption("threads"):
 
   proc narrowLoop(s: ptr SharedN) {.thread.} =
     var
-      rng = initRand(getThreadId() * 48271)
+      rng = initRand(int64(getThreadId()) * 48271)
       localHits = 0
       localWrong = 0
     for _ in 0 ..< fcFuzzThreadOps:

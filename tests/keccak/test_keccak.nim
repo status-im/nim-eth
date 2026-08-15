@@ -59,7 +59,7 @@ func hashNimcrypto(data: openArray[byte]): array[32, byte] =
   c.update(data)
   c.finish().data
 
-proc hashStream(data: openArray[byte], chunks: openArray[int]): array[32, byte] =
+func hashStream(data: openArray[byte], chunks: openArray[int]): array[32, byte] =
   ## Feed `data` through the incremental context in the given chunk sizes.
   var
     ctx: keccak.Keccak256
@@ -74,7 +74,7 @@ proc hashStream(data: openArray[byte], chunks: openArray[int]): array[32, byte] 
     ctx.update(data.toOpenArray(pos, data.high))
   ctx.finish().data
 
-proc randomChunks(rng: var Rand, total: int): seq[int] =
+func randomChunks(rng: var Rand, total: int): seq[int] =
   ## A random partition of `total`, with zero-length updates mixed in - those
   ## must be no-ops.
   var remaining = total

@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -45,7 +45,7 @@ var
   upnp {.threadvar.}: Miniupnp
   npmp {.threadvar.}: NatPmp
   strategy = NatNone
-  portMapping = initTable[PortSpec, PortSpec]()
+  portMapping: Table[PortSpec, PortSpec]
 
 logScope:
   topics = "eth net nat"
@@ -512,10 +512,10 @@ func `==`*(a, b: NatConfig): bool =
   of true: a.extIp == b.extIp
   of false: a.nat == b.nat
 
-proc toPort*(p: PortSpec): Port =
+func toPort*(p: PortSpec): Port =
   p.port
 
-proc toPort*(p: Opt[PortSpec]): Opt[Port] =
+func toPort*(p: Opt[PortSpec]): Opt[Port] =
   if p.isSome:
     Opt.some(p.get().port)
   else:

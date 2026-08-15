@@ -10,12 +10,12 @@ type
     key*: seq[byte]
     value*: seq[byte]
 
-proc randGen*[T](minVal, maxVal: T): RandGen[T] =
+func randGen*[T](minVal, maxVal: T): RandGen[T] =
   doAssert(minVal <= maxVal)
   result.minVal = minVal
   result.maxVal = maxVal
 
-proc randGen*[T](minMax: T): RandGen[T] =
+func randGen*[T](minMax: T): RandGen[T] =
   randGen(minMax, minMax)
 
 proc getVal*[T](x: RandGen[T]): T =
@@ -31,7 +31,7 @@ proc randBytes*(len: int): seq[byte] =
   result = newSeq[byte](len)
   discard randomBytes(result[0].addr, len)
 
-proc toBytesRange*(str: string): seq[byte] =
+func toBytesRange*(str: string): seq[byte] =
   var s: seq[byte]
   if str[0] == '0' and str[1] == 'x':
     s = fromHex(str.substr(2))
@@ -55,7 +55,7 @@ proc randList*(T: typedesc, strGen, listGen: RandGen, unique: bool = true): seq[
   let listLen = listGen.getVal()
   result = newSeqOfCap[T](listLen)
   if unique:
-    var set = initHashSet[T]()
+    var set: HashSet[T]
     for len in 0..<listLen:
       while true:
         let x = randPrimitives[T](strGen.getVal())
