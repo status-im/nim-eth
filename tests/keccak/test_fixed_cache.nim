@@ -229,7 +229,7 @@ when compileOption("threads"):
     discard s.wrong.fetchAdd(localWrong, moRelaxed)
 
   proc writerLoop(s: ptr Shared) {.thread.} =
-    var rng = initRand(getThreadId() * 7919)
+    var rng = initRand(int64(getThreadId()) * 7919)
     for _ in 0 ..< OpsPerThread:
       let k = keyFor(rng.rand(0 ..< HotKeys))
       s.cache[].put(k, valueFor(k))
@@ -237,7 +237,7 @@ when compileOption("threads"):
   proc wideWriterLoop(s: ptr Shared) {.thread.} =
     ## Writes over a key space several times larger than the cache, so writers
     ## constantly evict each other's entries as well as their own.
-    var rng = initRand(getThreadId() * 104729)
+    var rng = initRand(int64(getThreadId()) * 104729)
     for _ in 0 ..< OpsPerThread:
       let k = keyFor(rng.rand(0 ..< 4 * TestEntries))
       s.cache[].put(k, valueFor(k))
@@ -247,7 +247,7 @@ when compileOption("threads"):
     ## `getBySlot` with the same view - as the keccak cache does, rather than
     ## through the owned-key `get`.
     var
-      rng = initRand(getThreadId() * 31 + 1)
+      rng = initRand(int64(getThreadId()) * 31 + 1)
       localHits = 0
       localMisses = 0
       localWrong = 0

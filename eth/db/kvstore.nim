@@ -1,5 +1,5 @@
 # beacon_chain
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 ## Simple Key-Value store database interface that allows creating multiple
 ## tables within each store
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 {.pragma: callback, gcsafe, raises: [].}
 
 import
@@ -154,32 +154,32 @@ proc find*(
 
   ok(total)
 
-proc del*(db: MemStoreRef, key: openArray[byte]): KvResult[bool] =
+func del*(db: MemStoreRef, key: openArray[byte]): KvResult[bool] =
   if @key in db.records:
     db.records.del(@key)
     ok(true)
   else:
     ok(false)
 
-proc clear*(db: MemStoreRef): KvResult[bool] =
+func clear*(db: MemStoreRef): KvResult[bool] =
   if db.records.len > 0:
     db.records.clear()
     ok(true)
   else:
     ok(false)
 
-proc contains*(db: MemStoreRef, key: openArray[byte]): KvResult[bool] =
+func contains*(db: MemStoreRef, key: openArray[byte]): KvResult[bool] =
   ok(db.records.contains(@key))
 
-proc put*(db: MemStoreRef, key, val: openArray[byte]): KvResult[void] =
+func put*(db: MemStoreRef, key, val: openArray[byte]): KvResult[void] =
   db.records[@key] = @val
   ok()
 
-proc close*(db: MemStoreRef): KvResult[void] =
+func close*(db: MemStoreRef): KvResult[void] =
   db.records.clear()
   ok()
 
-proc init*(T: type MemStoreRef): T =
+func init*(T: type MemStoreRef): T =
   T(
-    records: initTable[seq[byte], seq[byte]]()
+    records: Table[seq[byte], seq[byte]]()
   )
