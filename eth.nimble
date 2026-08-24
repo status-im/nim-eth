@@ -1,27 +1,27 @@
 mode = ScriptMode.Verbose
 
-version       = "0.9.0"
+version       = "0.9.1"
 author        = "Status Research & Development GmbH"
 description   = "Ethereum Common library"
 license       = "MIT"
 skipDirs      = @["tests"]
 
 requires "nim >= 2.0.10",
-         "nimcrypto",
-         "stint >= 0.8.0",
-         "secp256k1",
-         "chronos",
-         "chronicles",
-         "stew",
+         "chronicles >= 0.12.4",
+         "chronos >= 4.0.0",
+         "confutils >= 0.1.1",
+         "metrics >= 0.2.0",
+         "minilru >= 0.1.1",
          "nat_traversal",
-         "metrics",
+         "nimcrypto >= 0.7.0",
+         "results >= 0.5.0",
+         "secp256k1 >= 0.6.0",
+         "snappy",
          "sqlite3_abi",
-         "confutils",
-         "testutils",
-         "unittest2",
-         "results",
-         "minilru",
-         "snappy"
+         "stew >= 0.5.0",
+         "stint >= 0.8.0",
+         "testutils >= 0.8.3",
+         "unittest2 >= 0.2.0"
 
 let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
 let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
