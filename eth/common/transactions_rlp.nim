@@ -213,6 +213,37 @@ proc rlpEncodeEip7702(w: var RlpWriter, tx: Transaction) =
   w.append(tx.accessList)
   w.append(tx.authorizationList)
 
+proc appendSignature(w: var RlpWriter, sig: Signature) =
+  w.startList(4)
+  w.append(sig.scheme)
+  w.append(sig.signer)
+  w.append(sig.msg)
+  if sig.msg.len == 0:
+    const emptySeq = newSeq[byte](0)
+    w.append(emptySeq)
+  else:
+    w.append(sig.signature)
+
+proc appendSignatures(w: var RlpWriter, sigs: openArray[Signature]) =
+  w.startList(sigs.len)
+  for sig in sigs:
+    w.appendSignature(sig)
+
+proc rlpEncodeEip8141(w: var RlpWriter, tx: Transaction) =
+  w.appendDetached(uint8(TxEip8141))
+  w.startList(7)
+  w.append(tx.chainId)
+  w.append(tx.nonce)
+  w.append(tx.sender)
+  w.append(tx.frames)
+  w.appendSignatures(tx.signatures)
+  block:
+    w.startList(3)
+    w.append(tx.maxPriorityFeePerGas)
+    w.append(tx.maxFeePerGas)
+    w.append(tx.maxFeePerBlobGas)
+  w.append(tx.versionedHashes)
+
 proc encodeUnsignedTransaction*(w: var RlpWriter, tx: Transaction, eip155: bool) =
   ## Encode transaction data in preparation for signing or signature checking.
   ## For signature checking, set `eip155 = tx.isEip155`
@@ -230,7 +261,7 @@ proc encodeUnsignedTransaction*(w: var RlpWriter, tx: Transaction, eip155: bool)
   of TxType5:
     doAssert(false, "encodeUnsignedTransaction: Unsupported tx type 5")
   of TxEip8141:
-    doAssert(false, "encodeUnsignedTransaction: Unsupported tx type 6")
+    w.rlpEncodeEip8141(tx)
 
 proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
   ## Encode transaction data in preparation for signing or signature checking.
