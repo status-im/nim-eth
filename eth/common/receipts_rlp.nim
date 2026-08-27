@@ -129,10 +129,10 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpErr
   if not checkedEnumAssign(rec.receiptType, txType):
     raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $txType)
 
-  if txType == ReceiptType5:
+  if rec.receiptType == ReceiptType5:
     raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $txType)
 
-  if txType == Eip8141Receipt:
+  if rec.receiptType == Eip8141Receipt:
     rlp.read(rec.cumulativeGasUsed)
     rlp.read(rec.payer)
     rlp.read(rec.frames)
