@@ -15,8 +15,16 @@ export addresses_rlp, base_rlp, hashes_rlp, receipts, rlp
 
 # RLP encoding for Receipt (eth/68)
 proc append*(w: var RlpWriter, rec: Receipt) =
-  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt}:
+  doAssert(rec.receiptType != ReceiptType5, "append: Unsupported receipt type 5")
+  if rec.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip8141Receipt}:
     w.appendDetached(rec.receiptType.uint8)
+
+  if rec.receiptType == Eip8141Receipt:
+    w.startList(3)
+    w.append(rec.cumulativeGasUsed)
+    w.append(rec.payer)
+    w.append(rec.frames)
+    return
 
   w.startList(4)
   if rec.isHash:
@@ -29,6 +37,14 @@ proc append*(w: var RlpWriter, rec: Receipt) =
 
 # RLP encoding for StoredReceipt (eth/69)
 proc append*(w: var RlpWriter, rec: StoredReceipt) =
+  if rec.receiptType == Eip8141Receipt:
+    w.startList(4)
+    w.append(rec.receiptType.uint)
+    w.append(rec.cumulativeGasUsed)
+    w.append(rec.payer)
+    w.append(rec.frames)
+    return
+
   w.startList(4)
   w.append(rec.receiptType.uint)
   if rec.isHash:
@@ -71,12 +87,21 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].}
   var txVal: ReceiptType
   if checkedEnumAssign(txVal, recType):
     case txVal
-    of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt:
+    of Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip8141Receipt:
       receipt.receiptType = txVal
+    of ReceiptType5:
+      raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $recType)
     of LegacyReceipt:
       raise newException(MalformedRlpError, "Invalid ReceiptType: " & $recType)
   else:
     raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $recType)
+
+  if txVal == Eip8141Receipt:
+    rlp.tryEnterList()
+    rlp.read(receipt.cumulativeGasUsed)
+    rlp.read(receipt.payer)
+    rlp.read(receipt.frames)
+    return
 
   rlp.tryEnterList()
   if rlp.isBlob and rlp.blobLen in {0, 1}:
@@ -103,6 +128,15 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpErr
   let txType = rlp.read(uint8)
   if not checkedEnumAssign(rec.receiptType, txType):
     raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $txType)
+
+  if txType == ReceiptType5:
+    raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $txType)
+
+  if txType == Eip8141Receipt:
+    rlp.read(rec.cumulativeGasUsed)
+    rlp.read(rec.payer)
+    rlp.read(rec.frames)
+    return rec
 
   if rlp.isBlob and rlp.blobLen in {0, 1}:
     rec.isHash = false

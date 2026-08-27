@@ -34,6 +34,26 @@ type
     TxEip1559   # 2
     TxEip4844   # 3
     TxEip7702   # 4
+    TxType5     # 5
+    TxEip8141   # 6
+
+  Limits* = object
+    execution*: GasInt
+    state*: GasInt
+
+  Frame* = object
+    mode*  : uint8
+    flags* : uint8
+    target*: Opt[Address]
+    limits*: Limits
+    value* : UInt256
+    data*  : seq[byte]
+
+  Signature* = object
+    scheme*   : uint8
+    signer*   : Opt[Address]
+    msg*      : seq[byte]
+    signature*: seq[byte]
 
   Transaction* = object
     txType*        : TxType               # EIP-2718
@@ -52,6 +72,9 @@ type
     authorizationList*: seq[Authorization]# EIP-7702
     V*             : uint64
     R*, S*         : UInt256
+    sender*        : Address              # EIP-8141
+    frames*        : seq[Frame]           # EIP-8141
+    signatures*    : seq[Signature]       # EIP-8141
 
 func destination*(tx: Transaction): Address =
   # use getRecipient if you also want to get

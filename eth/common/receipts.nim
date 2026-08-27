@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import 
+import
   ./[addresses, base, hashes, transactions],
   ../bloom
 
@@ -30,6 +30,16 @@ type
     # Eip1559Receipt = TxEip1559
     # Eip4844Receipt = TxEip4844
     # Eip7702Receipt = TxEip7702
+    # Eip8141Receipt = TxEip8141
+
+  GasUsedReceipt* = object
+    execution*: GasInt
+    state*    : GasInt
+
+  FrameReceipt* = object
+    status* : bool
+    gasUsed*: GasInt
+    logs*   : seq[Log]
 
   Receipt* = object
     receiptType*      : ReceiptType
@@ -39,6 +49,8 @@ type
     cumulativeGasUsed*: GasInt
     logsBloom*        : Bloom
     logs*             : seq[Log]
+    payer*            : Address
+    frames*           : seq[FrameReceipt]
 
   StoredReceipt* = object
     receiptType*      : ReceiptType
@@ -47,6 +59,8 @@ type
     hash*             : Hash32
     cumulativeGasUsed*: GasInt
     logs*             : seq[Log]
+    payer*            : Address
+    frames*           : seq[FrameReceipt]
 
 const
   LegacyReceipt*  = TxLegacy
@@ -54,6 +68,8 @@ const
   Eip1559Receipt* = TxEip1559
   Eip4844Receipt* = TxEip4844
   Eip7702Receipt* = TxEip7702
+  ReceiptType5*   = TxType5
+  Eip8141Receipt* = TxEip8141
 
 func hasStatus*(rec: Receipt): bool {.inline.} =
   rec.isHash == false
@@ -81,7 +97,9 @@ func to*(rec: Receipt, _: type StoredReceipt): StoredReceipt =
     status            : rec.status,
     hash              : rec.hash,
     cumulativeGasUsed : rec.cumulativeGasUsed,
-    logs              : rec.logs
+    logs              : rec.logs,
+    payer             : rec.payer,
+    frames            : rec.frames,
   )
 
 func to*(rec: StoredReceipt, _: type Receipt): Receipt =
@@ -92,7 +110,9 @@ func to*(rec: StoredReceipt, _: type Receipt): Receipt =
     hash              : rec.hash,
     cumulativeGasUsed : rec.cumulativeGasUsed,
     logsBloom         : logsBloom(rec.logs).value.to(Bloom),
-    logs              : rec.logs
+    logs              : rec.logs,
+    payer             : rec.payer,
+    frames            : rec.frames,
   )
 
 func to*(list: openArray[Receipt], _: type seq[StoredReceipt]): seq[StoredReceipt] =

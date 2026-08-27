@@ -7,8 +7,8 @@
 
 {.push raises: [].}
 
-import 
-  "."/[addresses_rlp, base_rlp, hashes_rlp, transactions], 
+import
+  "."/[addresses_rlp, base_rlp, hashes_rlp, transactions],
   ../rlp,
   ../rlp/[length_writer, two_pass_writer, hash_writer]
 
@@ -99,6 +99,20 @@ proc appendTxEip7702(w: var RlpWriter, tx: Transaction) =
   w.append(tx.R)
   w.append(tx.S)
 
+proc appendTxEip8141(w: var RlpWriter, tx: Transaction) =
+  w.startList(7)
+  w.append(tx.chainId)
+  w.append(tx.nonce)
+  w.append(tx.sender)
+  w.append(tx.frames)
+  w.append(tx.signatures)
+  block:
+    w.startList(3)
+    w.append(tx.maxPriorityFeePerGas)
+    w.append(tx.maxFeePerGas)
+    w.append(tx.maxFeePerBlobGas)
+  w.append(tx.versionedHashes)
+
 proc appendTxPayload(w: var RlpWriter, tx: Transaction) =
   case tx.txType
   of TxLegacy:
@@ -111,6 +125,10 @@ proc appendTxPayload(w: var RlpWriter, tx: Transaction) =
     w.appendTxEip4844(tx)
   of TxEip7702:
     w.appendTxEip7702(tx)
+  of TxType5:
+    doAssert(false, "appendTxPayload: Unsupported tx type 5")
+  of TxEip8141:
+    w.appendTxEip8141(tx)
 
 proc append*(w: var RlpWriter, tx: Transaction) =
   if tx.txType != TxLegacy:
@@ -209,6 +227,10 @@ proc encodeUnsignedTransaction*(w: var RlpWriter, tx: Transaction, eip155: bool)
     w.rlpEncodeEip4844(tx)
   of TxEip7702:
     w.rlpEncodeEip7702(tx)
+  of TxType5:
+    doAssert(false, "encodeUnsignedTransaction: Unsupported tx type 5")
+  of TxEip8141:
+    doAssert(false, "encodeUnsignedTransaction: Unsupported tx type 6")
 
 proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
   ## Encode transaction data in preparation for signing or signature checking.
@@ -352,6 +374,21 @@ proc readTxEip7702(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   rlp.read(tx.R)
   rlp.read(tx.S)
 
+proc readTxEip8141(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
+  tx.txType = TxEip8141
+  rlp.tryEnterList()
+  tx.chainId = rlp.read(ChainId)
+  rlp.read(tx.nonce)
+  rlp.read(tx.sender)
+  rlp.read(tx.frames)
+  rlp.read(tx.signatures)
+  block:
+    rlp.tryEnterList()
+    rlp.read(tx.maxPriorityFeePerGas)
+    rlp.read(tx.maxFeePerGas)
+    rlp.read(tx.maxFeePerBlobGas)
+  rlp.read(tx.versionedHashes)
+
 proc readTxType(rlp: var Rlp): TxType {.raises: [RlpError].} =
   if rlp.isList:
     raise newException(
@@ -403,6 +440,11 @@ proc readTxPayload(
     rlp.readTxEip4844(tx)
   of TxEip7702:
     rlp.readTxEip7702(tx)
+  of TxType5:
+    raise newException(RlpTypeMismatch,
+      "readTxPayload: Unsupported tx type 5")
+  of TxEip8141:
+    rlp.readTxEip8141(tx)
 
 proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   let txType = rlp.readTxType()
