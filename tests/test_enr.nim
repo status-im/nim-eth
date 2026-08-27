@@ -451,3 +451,26 @@ suite "ENR update tests":
         typedEnr.quic.get() == 9001
 
         r.seqNum == 5
+
+suite "ENR decode validation tests":
+  # EIP-778: "The key/value pairs must be sorted by key and must be unique."
+  # `initRecord` is deprecated because it neither sorts nor deduplicates its
+  # pairs, which is exactly what is needed here: a correctly signed record
+  # whose wire encoding breaks the ordering rules.
+  {.push warning[Deprecated]: off.}
+
+  test "Decode: unsorted key/value pairs":
+    let
+      pk = PrivateKey.random(rng[])
+      r = initRecord(1, pk, {"zzz": 1'u, "aaa": 2'u}).expect("valid record")
+
+    check Record.fromBytes(r.raw).isErr()
+
+  test "Decode: duplicate keys":
+    let
+      pk = PrivateKey.random(rng[])
+      r = initRecord(1, pk, {"aaa": 1'u, "aaa": 2'u}).expect("valid record")
+
+    check Record.fromBytes(r.raw).isErr()
+
+  {.pop.}

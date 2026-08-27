@@ -492,9 +492,23 @@ func fromBytesAux(T: type Record, s: openArray[byte]): EnrResult[T] =
     pairs = newSeqOfCap[FieldPair](numPairs)
     id: string = ""
     pkRaw = Opt.none(seq[byte])
+    prevKey = ""
 
   for i in 0 ..< numPairs:
     let k = rlpResult rlp.read(string)
+    # The key:value pairs must be sorted by key and must be unique. `pairs` is
+    # documented to hold them that way and `insert` relies on it, so a record
+    # that breaks the ordering cannot be stored as it arrived. Reading on would
+    # also leave the record disagreeing with itself: the identity scheme and
+    # the public key below are taken from the last occurrence of a repeated
+    # key, while every `getField` lookup returns the first.
+    if i > 0:
+      if k == prevKey:
+        return err("Duplicate key in the ENR")
+      if k < prevKey:
+        return err("Key:value pairs in the ENR are not sorted")
+    prevKey = k
+
     case k
     of "id":
       id = rlpResult rlp.read(string)
