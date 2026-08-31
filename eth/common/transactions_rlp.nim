@@ -99,6 +99,18 @@ proc appendTxEip7702(w: var RlpWriter, tx: Transaction) =
   w.append(tx.R)
   w.append(tx.S)
 
+proc append*(w: var RlpWriter, x: TransactionFrame) =
+  w.startList(6)
+  w.append(x.mode)
+  w.append(x.flags)
+  w.append(x.target)
+  block:
+    w.startList(2)
+    w.append(x.gasLimit)
+    w.append(x.stateGasLimit)
+  w.append(x.value)
+  w.append(x.data)
+
 proc appendTxEip8141(w: var RlpWriter, tx: Transaction) =
   w.startList(7)
   w.append(tx.chainId)
@@ -410,7 +422,10 @@ proc read*(rlp: var Rlp, T: type TransactionFrame): T {.raises: [RlpError].} =
   rlp.read(result.mode)
   rlp.read(result.flags)
   rlp.read(result.target)
-  rlp.read(result.limits)
+  block:
+    rlp.tryEnterList()
+    rlp.read(result.gasLimit)
+    rlp.read(result.stateGasLimit)
   rlp.read(result.value)
   rlp.read(result.data)
 

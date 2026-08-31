@@ -37,15 +37,12 @@ type
     TxType5     # 5
     TxEip8141   # 6
 
-  TransactionLimits* = object
-    execution*: GasInt
-    state*: GasInt
-
   TransactionFrame* = object
     mode*  : uint8
     flags* : uint8
     target*: Opt[Address]
-    limits*: TransactionLimits
+    gasLimit*: GasInt
+    stateGasLimit*: GasInt
     value* : UInt256
     data*  : seq[byte]
 
