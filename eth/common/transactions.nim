@@ -51,7 +51,7 @@ type
 
   TransactionSignature* = object
     scheme*   : uint8
-    signer*   : Opt[Address]
+    signer*   : seq[byte] # EIP-8141: zero or 20 bytes
     msg*      : seq[byte]
     signature*: seq[byte]
 

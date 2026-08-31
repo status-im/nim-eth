@@ -405,6 +405,15 @@ proc readTxEip7702(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   rlp.read(tx.R)
   rlp.read(tx.S)
 
+proc read*(rlp: var Rlp, T: type TransactionFrame): T {.raises: [RlpError].} =
+  rlp.tryEnterList()
+  rlp.read(result.mode)
+  rlp.read(result.flags)
+  rlp.read(result.target)
+  rlp.read(result.limits)
+  rlp.read(result.value)
+  rlp.read(result.data)
+
 proc readTxEip8141(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip8141
   rlp.tryEnterList()
