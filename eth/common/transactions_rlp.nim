@@ -225,7 +225,7 @@ proc rlpEncodeEip7702(w: var RlpWriter, tx: Transaction) =
   w.append(tx.accessList)
   w.append(tx.authorizationList)
 
-proc appendSignature(w: var RlpWriter, sig: TransactionSignature) =
+proc appendSignature(w: var RlpWriter, sig: FrameSignature) =
   w.startList(4)
   w.append(sig.scheme)
   w.append(sig.signer)
@@ -236,7 +236,7 @@ proc appendSignature(w: var RlpWriter, sig: TransactionSignature) =
   else:
     w.append(sig.signature)
 
-proc appendSignatures(w: var RlpWriter, sigs: openArray[TransactionSignature]) =
+proc appendSignatures(w: var RlpWriter, sigs: openArray[FrameSignature]) =
   w.startList(sigs.len)
   for sig in sigs:
     w.appendSignature(sig)

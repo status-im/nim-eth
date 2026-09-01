@@ -46,7 +46,7 @@ type
     value* : UInt256
     data*  : seq[byte]
 
-  TransactionSignature* = object
+  FrameSignature* = object
     scheme*   : uint8
     signer*   : seq[byte] # EIP-8141: zero or 20 bytes
     msg*      : seq[byte]
@@ -71,7 +71,7 @@ type
     R*, S*         : UInt256
     sender*        : Address                  # EIP-8141
     frames*        : seq[TransactionFrame]    # EIP-8141
-    signatures*    : seq[TransactionSignature]# EIP-8141
+    signatures*    : seq[FrameSignature]# EIP-8141
 
 func destination*(tx: Transaction): Address =
   # use getRecipient if you also want to get
