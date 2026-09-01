@@ -13,6 +13,15 @@ from stew/objects import checkedEnumAssign
 
 export addresses_rlp, base_rlp, hashes_rlp, receipts, rlp
 
+proc append*(w: var RlpWriter, rec: FrameReceipt) =
+  w.startList(3)
+  w.append(rec.status)
+  block:
+    w.startList(2)
+    w.append(rec.gasUsed)
+    w.append(rec.stateGasUsed)
+  w.append(rec.logs)
+
 # RLP encoding for Receipt (eth/68)
 proc append*(w: var RlpWriter, rec: Receipt) =
   doAssert(rec.receiptType != ReceiptType5, "append: Unsupported receipt type 5")
@@ -23,7 +32,7 @@ proc append*(w: var RlpWriter, rec: Receipt) =
     w.startList(3)
     w.append(rec.cumulativeGasUsed)
     w.append(rec.payer)
-    w.append(rec.frames)
+    w.append(rec.frameReceipts)
     return
 
   w.startList(4)
@@ -42,7 +51,7 @@ proc append*(w: var RlpWriter, rec: StoredReceipt) =
     w.append(rec.receiptType.uint)
     w.append(rec.cumulativeGasUsed)
     w.append(rec.payer)
-    w.append(rec.frames)
+    w.append(rec.frameReceipts)
     return
 
   w.startList(4)
@@ -53,6 +62,15 @@ proc append*(w: var RlpWriter, rec: StoredReceipt) =
     w.append(rec.status.uint8)
   w.append(rec.cumulativeGasUsed)
   w.append(rec.logs)
+
+proc read*(rlp: var Rlp, T: type FrameReceipt): FrameReceipt {.raises: [RlpError].} =
+  rlp.tryEnterList()
+  rlp.read(result.status)
+  block:
+    rlp.tryEnterList()
+    rlp.read(result.gasUsed)
+    rlp.read(result.stateGasUsed)
+  rlp.read(result.logs)
 
 # Decode legacy receipt (eth/68)
 proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].} =
@@ -100,7 +118,7 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].}
     rlp.tryEnterList()
     rlp.read(receipt.cumulativeGasUsed)
     rlp.read(receipt.payer)
-    rlp.read(receipt.frames)
+    rlp.read(receipt.frameReceipts)
     return
 
   rlp.tryEnterList()
@@ -135,7 +153,7 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpErr
   if rec.receiptType == Eip8141Receipt:
     rlp.read(rec.cumulativeGasUsed)
     rlp.read(rec.payer)
-    rlp.read(rec.frames)
+    rlp.read(rec.frameReceipts)
     return rec
 
   if rlp.isBlob and rlp.blobLen in {0, 1}:

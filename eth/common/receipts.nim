@@ -32,14 +32,11 @@ type
     # Eip7702Receipt = TxEip7702
     # Eip8141Receipt = TxEip8141
 
-  GasUsedReceipt* = object
-    execution*: GasInt
-    state*    : GasInt
-
   FrameReceipt* = object
-    status* : bool
-    gasUsed*: GasInt
-    logs*   : seq[Log]
+    status*      : bool
+    gasUsed*     : GasInt
+    stateGasUsed*: GasInt
+    logs*        : seq[Log]
 
   Receipt* = object
     receiptType*      : ReceiptType
@@ -50,7 +47,7 @@ type
     logsBloom*        : Bloom
     logs*             : seq[Log]
     payer*            : Address
-    frames*           : seq[FrameReceipt]
+    frameReceipts*    : seq[FrameReceipt]
 
   StoredReceipt* = object
     receiptType*      : ReceiptType
@@ -60,7 +57,7 @@ type
     cumulativeGasUsed*: GasInt
     logs*             : seq[Log]
     payer*            : Address
-    frames*           : seq[FrameReceipt]
+    frameReceipts*    : seq[FrameReceipt]
 
 const
   LegacyReceipt*  = TxLegacy
@@ -99,7 +96,7 @@ func to*(rec: Receipt, _: type StoredReceipt): StoredReceipt =
     cumulativeGasUsed : rec.cumulativeGasUsed,
     logs              : rec.logs,
     payer             : rec.payer,
-    frames            : rec.frames,
+    frameReceipts     : rec.frameReceipts,
   )
 
 func to*(rec: StoredReceipt, _: type Receipt): Receipt =
@@ -112,7 +109,7 @@ func to*(rec: StoredReceipt, _: type Receipt): Receipt =
     logsBloom         : logsBloom(rec.logs).value.to(Bloom),
     logs              : rec.logs,
     payer             : rec.payer,
-    frames            : rec.frames,
+    frameReceipts     : rec.frameReceipts,
   )
 
 func to*(list: openArray[Receipt], _: type seq[StoredReceipt]): seq[StoredReceipt] =
