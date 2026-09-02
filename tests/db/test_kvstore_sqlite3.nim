@@ -27,6 +27,33 @@ procSuite "SqStoreRef":
       kv.del([byte 0, 1, 2]).isOk
     defer: kv[].close()
 
+  test "Find only returns keys matching prefix":
+    let db = SqStoreRef.init("", "test", inMemory = true)[]
+    defer: db.close()
+    let kv = db.openKvStore().expect("working db")
+    defer: kv[].close()
+
+    check:
+      kv.put([byte 0, 1], []).isOk
+      kv.put([byte 0, 2], []).isOk
+      kv.put([byte 1, 1], []).isOk
+
+    var found: seq[seq[byte]]
+    check kv.find([byte 0], proc(key, value: openArray[byte]) =
+      found.add(@key)
+    ).expect("find") == 2
+    check:
+      found.len == 2
+      @[byte 0, 1] in found
+      @[byte 0, 2] in found
+
+    check kv.put([byte 0, 255, 1], []).isOk
+    found.setLen(0)
+    check kv.find([byte 0, 255], proc(key, value: openArray[byte]) =
+      found.add(@key)
+    ).expect("find") == 1
+    check found == @[@[byte 0, 255, 1]]
+
   test "Prepare and execute statements":
     let db = SqStoreRef.init("", "test", inMemory = true)[]
     defer: db.close()
