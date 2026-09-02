@@ -1,5 +1,5 @@
 # nim-eth enode
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -18,12 +18,7 @@ export
   enr.Record, enr.fromURI, enode
 
 func fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
-  let
-    # TODO: there must always be a public key, else no signature verification
-    # could have been done and no Record would exist here.
-    # TypedRecord should be reworked not to have public key as an option.
-    pk = r.get(PublicKey).get()
-    tr = TypedRecord.fromRecord(r)#.expect("id in valid record")
+  let tr = TypedRecord.fromRecord(r)
 
   if tr.ip.isNone():
     return err(IncorrectIP)
@@ -33,11 +28,10 @@ func fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
     return err(IncorrectPort)
 
   ok(ENode(
-    pubkey: pk,
+    pubkey: r.publicKey,
     address: enode.Address(
       ip: utils.ipv4(tr.ip.get()),
       udpPort: Port(tr.udp.get()),
       tcpPort: Port(tr.tcp.get())
     )
   ))
-
