@@ -1,5 +1,5 @@
 # nim-eth - enr
-# Copyright (c) 2020-2025 Status Research & Development GmbH
+# Copyright (c) 2020-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,9 +11,9 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strutils, sequtils, macros, algorithm, net],
+  std/[strutils, macros, algorithm, net],
   nimcrypto/utils,
-  stew/base64,
+  stew/[base64, assign2],
   results,
   chronicles,
   ../keccak/keccak,
@@ -24,10 +24,11 @@ import
 export results, rlp, keys
 
 const
-  maxEnrSize = 300  ## Maximum size of an encoded node record, in bytes.
+  maxEnrSize = 300 ## Maximum size of an encoded node record, in bytes.
   minRlpListLen = 4 ## Minimum node record RLP list has: signature, seqId,
   ## "id" key and value.
-  PreDefinedKeys = ["id", "secp256k1", "ip", "ip6", "tcp", "tcp6", "udp", "udp6"]
+  PreDefinedKeys =
+    ["id", "secp256k1", "ip", "ip6", "tcp", "tcp6", "udp", "udp6", "quic", "quic6"]
   ## Predefined keys in the ENR spec, these have specific constraints on the
   ## type of the associated value.
 
@@ -47,7 +48,7 @@ type
     of kBytes:
       bytes: seq[byte]
     of kList:
-      listRaw: seq[byte] ## Differently from the other kinds, this is is stored
+      listRaw: seq[byte] ## Differently from the other kinds, this is stored
       ## as raw (encoded) RLP data, and thus treated as such further on.
 
   FieldPair* = (string, Field)
@@ -64,7 +65,7 @@ type
   EnrUri* = distinct string
 
   # TODO: I think it makes more sense to have the directly usable types for the
-  # fields here because in its current for you might as well just access the
+  # fields here because in its current form you might as well just access the
   # pairs in a Record directly. This would break the current API unless the type
   # gets renamed.
   TypedRecord* = object
@@ -142,7 +143,7 @@ func find(pairs: openArray[FieldPair], key: string): Opt[int] =
   ## Search for key in key:value pairs.
   ##
   ## Returns some(index of key) if key is found. Else returns none.
-  for i, (k, v) in pairs:
+  for i, (k, _) in pairs:
     if k == key:
       return Opt.some(i)
   Opt.none(int)
@@ -299,9 +300,10 @@ func get*(r: Record, key: string, T: type): EnrResult[T] =
       ? requireKind(f, kNum)
       ok(T(f.num))
     elif T is seq[byte]:
-      if requireKind(f, kBytes).isOk:
+      case f.kind
+      of kBytes:
         ok(f.bytes)
-      elif requireKind(f, kList).isOk:
+      of kList:
         ok(f.listRaw)
       else:
         err("Invalid rlp type for seq[byte]")
@@ -322,7 +324,7 @@ func get*(r: Record, key: string, T: type): EnrResult[T] =
           err("Invalid byte blob length")
         else:
           var res: T
-          copyMem(addr res[0], addr f.bytes[0], res.len)
+          assign(res, f.bytes)
           ok(res)
       else:
         {.fatal: "Unsupported output type in enr.get".}
@@ -439,7 +441,7 @@ func verifySignatureV4(
   if verify(signature, SkMessage(hash.data), publicKey):
     ok()
   else:
-    err("Signature verfication failed")
+    err("Signature verification failed")
 
 template rlpResult(body: untyped): auto =
   try:
@@ -493,8 +495,14 @@ func fromBytesAux(T: type Record, s: openArray[byte]): EnrResult[T] =
     id: string = ""
     pkRaw = Opt.none(seq[byte])
 
+  var prevKey = ""
   for i in 0 ..< numPairs:
     let k = rlpResult rlp.read(string)
+    # The k:v pairs must be sorted by key and each key may occur only once.
+    if i > 0 and k <= prevKey:
+      return err("Key:value pairs are not sorted or contain duplicate keys")
+    prevKey = k
+
     case k
     of "id":
       id = rlpResult rlp.read(string)

@@ -342,19 +342,21 @@ proc get*(db: SqKeyspaceRef,
 func nextPrefix(prefix: openArray[byte], next: var seq[byte]): bool =
   # Return a seq that is greater than all strings starting with `prefix` when
   # doing a lexicographical compare - we're looking for the string that
-  # increments the last byte by 1, removing any bytes from the back that
-  # cannot be incremented (0xff)
+  # increments the last non-255 byte by 1, removing any trailing 255 bytes
+  #
+  # Examples:
+  #   [0] -> [1] (increment last byte)
+  #   [0, 255] -> [1] (strip 255, increment remaining)
+  #   [255] -> false (all 255s, can't increment)
+  #   [255, 255] -> false (all 255s, can't increment)
 
-  for i in 0..<prefix.len():
-    if prefix[^(i+1)] == high(byte):
-      if i == 0:
-        return false
-      else:
-        next = prefix[0..<i]
-        next[^1] += 1'u8
-        return true
+  for i in countdown(prefix.len - 1, 0):
+    if prefix[i] != high(byte):
+      next = @(prefix[0..i])
+      next[^1] += 1
+      return true
 
-  false # Empty
+  false # All bytes are 255 or empty prefix
 
 proc find*(
     db: SqKeyspaceRef,

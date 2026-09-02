@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
@@ -18,6 +18,29 @@ func testRlpEncodingLoop(r: enr.Record): bool =
   let encoded = rlp.encode(r)
   let decoded = rlp.decode(encoded, enr.Record)
   decoded == r
+
+func enc[T](v: T): seq[byte] = rlp.encode(v)
+
+proc signedRecord(
+    seqNum: uint64, pk: PrivateKey,
+    pairs: openArray[(string, seq[byte])]): seq[byte] =
+  ## Build a raw, signed ENR from an explicit ordered list of
+  ## (key, encoded-value) pairs
+  template appendPairs(w: var RlpWriter) =
+    w.append(seqNum)
+    for (k, v) in pairs:
+      w.append(k)
+      w.appendRawBytes(v)
+
+  let content = block:
+    var w = initRlpList(pairs.len * 2 + 1)
+    w.appendPairs()
+    w.finish()
+
+  var w = initRlpList(pairs.len * 2 + 2)
+  w.append(signNR(pk, content).toRaw())
+  w.appendPairs()
+  w.finish()
 
 suite "ENR test vector tests":
   # Tests using the test vector from:
@@ -159,6 +182,39 @@ suite "ENR encoding tests":
 
   test "Invalid URI: no payload":
     check Record.fromURI("enr:").isErr()
+
+  test "Sorted keys accepted":
+    let
+      pk = PrivateKey.random(rng[])
+      raw = signedRecord(1, pk, [
+        ("id", enc("v4")),
+        ("secp256k1", enc(@(pk.toPublicKey().toRawCompressed()))),
+        ("udp", enc(30303'u16)),
+      ])
+    check Record.fromBytes(raw).isOk()
+
+  test "Unsorted keys rejected":
+    let
+      pk = PrivateKey.random(rng[])
+      raw = signedRecord(1, pk, [
+        ("udp", enc(30303'u16)),
+        ("secp256k1", enc(@(pk.toPublicKey().toRawCompressed()))),
+        ("ip", enc(@[byte 1, 2, 3, 4])),
+        ("id", enc("v4")),
+      ])
+    check Record.fromBytes(raw).isErr()
+
+  test "Duplicate keys rejected":
+    let
+      pk = PrivateKey.random(rng[])
+      raw = signedRecord(1, pk, [
+        ("id", enc("v4")),
+        ("ip", enc(@[byte 1, 2, 3, 4])),
+        ("ip", enc(@[byte 9, 9, 9, 9])),
+        ("secp256k1", enc(@(pk.toPublicKey().toRawCompressed()))),
+        ("udp", enc(30303'u16)),
+      ])
+    check Record.fromBytes(raw).isErr()
 
 suite "ENR init tests":
   test "Record.init minimum fields":
