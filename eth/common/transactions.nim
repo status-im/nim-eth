@@ -69,9 +69,9 @@ type
     authorizationList*: seq[Authorization]# EIP-7702
     V*             : uint64
     R*, S*         : UInt256
-    sender*        : Address                  # EIP-8141
-    frames*        : seq[TransactionFrame]    # EIP-8141
-    signatures*    : seq[FrameSignature]# EIP-8141
+    sender*        : Address              # EIP-8141
+    frames*        : seq[TransactionFrame]# EIP-8141
+    signatures*    : seq[FrameSignature]  # EIP-8141
 
 func destination*(tx: Transaction): Address =
   # use getRecipient if you also want to get
