@@ -82,4 +82,6 @@ func isEip155*(tx: Transaction): bool =
   tx.V >= EIP155_CHAIN_ID_OFFSET
 
 func contractCreation*(tx: Transaction): bool =
+  if tx.txType == TxEip8141:
+    return false
   tx.to.isNone
