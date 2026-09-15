@@ -19,13 +19,12 @@
 ## Columns, in order:
 ##
 ##   nimcrypto  the pure-Nim implementation in nimcrypto
-##   boringssl  the BoringSSL C kept in `keccak_boringssl`
 ##   xkcp       the current implementation in `keccak_xkcp`
 ##   selected   whatever `eth/common/hashes.keccak256` resolves to, including
 ##              the memoisation layer when it is compiled in
 ##
 ## Each iteration mutates the input, so the memoisation cache never hits and all
-## four columns measure the same work. The cache's best case is reported
+## three columns measure the same work. The cache's best case is reported
 ## separately at the end - it is a property of the workload, not the hash.
 
 {.push raises: [].}
@@ -35,8 +34,7 @@ import
   nimcrypto/keccak as ncrypto,
   ../../eth/common/hashes,
   ../../eth/keccak/keccak as ethkeccak,
-  ../../eth/keccak/keccak_xkcp,
-  ../../eth/keccak/keccak_boringssl as bssl
+  ../../eth/keccak/keccak_xkcp
 
 const Sizes = [32, 64, 136, 200, 532, 1024, 8192, 65536]
   ## 32/64: trie keys and mapping-slot preimages, the dominant EVM shapes.
@@ -47,9 +45,6 @@ func hashNimcrypto(data: openArray[byte]): array[32, byte] =
   c.init()
   c.update(data)
   c.finish().data
-
-func hashBoringSsl(data: openArray[byte]): array[32, byte] =
-  bssl.Keccak256.digest(data).data
 
 func hashXkcp(data: openArray[byte]): array[32, byte] =
   keccak256Xkcp(data, result)
@@ -75,7 +70,6 @@ proc main() =
       data[i] = byte((i * 31 + 7) and 0xff)
     for n in [0, 1, 32, 136, 137, 200]:
       let want = hashNimcrypto(data.toOpenArray(0, n - 1))
-      doAssert hashBoringSsl(data.toOpenArray(0, n - 1)) == want
       doAssert hashXkcp(data.toOpenArray(0, n - 1)) == want
       doAssert hashSelected(data.toOpenArray(0, n - 1)) == want
 
@@ -84,11 +78,11 @@ proc main() =
     (when ethkeccak.keccakCacheEnabled: "ENABLED" else: "DISABLED"),
     "  (affects the 'selected' column only)"
   echo ""
-  echo &"""{"input":>8} {"nimcrypto":>11} {"boringssl":>11} {"xkcp":>11} {"selected":>11}  """ &
-    &"""{"xkcp vs":>9} {"xkcp vs":>9}"""
-  echo &"""{"bytes":>8} {"ns":>11} {"ns":>11} {"ns":>11} {"ns":>11}  """ &
-    &"""{"nimcrypto":>9} {"boringssl":>9}"""
-  echo "-".repeat(88)
+  echo &"""{"input":>8} {"nimcrypto":>11} {"xkcp":>11} {"selected":>11}  """ &
+    &"""{"xkcp vs":>9}"""
+  echo &"""{"bytes":>8} {"ns":>11} {"ns":>11} {"ns":>11}  """ &
+    &"""{"nimcrypto":>9}"""
+  echo "-".repeat(55)
 
   for size in Sizes:
     var data = newSeq[byte](size)
@@ -115,20 +109,18 @@ proc main() =
     # warm up each path before timing it
     for _ in 0 .. 1:
       discard run(hashNimcrypto)
-      discard run(hashBoringSsl)
       discard run(hashXkcp)
       discard run(hashSelected)
 
     let
       nimc = run(hashNimcrypto)
-      boring = run(hashBoringSsl)
       xkcp = run(hashXkcp)
       selected = run(hashSelected)
 
-    echo &"{size:>8} {nimc:>11.1f} {boring:>11.1f} {xkcp:>11.1f} " &
-      &"{selected:>11.1f}  {nimc / xkcp:>8.2f}x {boring / xkcp:>8.2f}x"
+    echo &"{size:>8} {nimc:>11.1f} {xkcp:>11.1f} " &
+      &"{selected:>11.1f}  {nimc / xkcp:>8.2f}x"
 
-  echo "-".repeat(88)
+  echo "-".repeat(55)
   echo ""
   echo "Repeated preimage - the memoisation best case, 100% hit rate."
   echo "Not a workload: real hit rates depend on how often preimages recur."

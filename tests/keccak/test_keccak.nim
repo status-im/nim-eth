@@ -13,9 +13,8 @@
 ##
 ## * the Keccak Team's published known-answer vectors, which check the
 ##   implementation against the specification;
-## * differential fuzzing against two unrelated implementations - the BoringSSL
-##   C kept in `keccak_boringssl`, and nimcrypto - which covers inputs no fixed
-##   vector set reaches.
+## * differential fuzzing against nimcrypto, an unrelated implementation, which
+##   covers inputs no fixed vector set reaches.
 ##
 ## Both run over the one-shot, the incremental context and
 ## `eth/common/hashes.keccak256`, so a bug confined to one entry point cannot
@@ -31,8 +30,7 @@ import
   stew/byteutils,
   nimcrypto/keccak as ncrypto,
   ../../eth/common/hashes,
-  ../../eth/keccak/keccak_xkcp,
-  ../../eth/keccak/keccak_boringssl as bssl
+  ../../eth/keccak/keccak_xkcp
 
 # `{.all.}` for MAX_CACHED_INPUT_LEN, which the fuzz length distribution below
 # straddles deliberately. It is private to the module, and `{.all.}` neither
@@ -49,9 +47,6 @@ func hashXkcp(data: openArray[byte]): array[32, byte] =
 
 func hashEthHashes(data: openArray[byte]): array[32, byte] =
   keccak256(data).data
-
-func hashBoringSsl(data: openArray[byte]): array[32, byte] =
-  bssl.Keccak256.digest(data).data
 
 func hashNimcrypto(data: openArray[byte]): array[32, byte] =
   var c: ncrypto.keccak256
@@ -107,7 +102,7 @@ suite "Keccak256":
       check hashXkcp(msg).toHex == expected
       check hashEthHashes(msg).toHex == expected
       check hashStream(msg, [1, 7, 64, 136]).toHex == expected
-      check hashBoringSsl(msg).toHex == expected
+      check hashNimcrypto(msg).toHex == expected
       inc count
     # guard against a parse bug silently reducing this to nothing
     check count == 256
@@ -123,7 +118,6 @@ suite "Keccak256":
       data[i] = byte((i * 31 + 7) and 0xff)
     for n in 0 .. 600:
       let got = hashXkcp(data.toOpenArray(0, n - 1))
-      check got == hashBoringSsl(data.toOpenArray(0, n - 1))
       check got == hashNimcrypto(data.toOpenArray(0, n - 1))
       check got == hashEthHashes(data.toOpenArray(0, n - 1))
 
@@ -167,18 +161,15 @@ suite "Keccak256":
         oneShot = hashXkcp(data)
         stream = hashStream(data, randomChunks(rng, n))
         eth = hashEthHashes(data)
-        boring = hashBoringSsl(data)
         nimc = hashNimcrypto(data)
 
-      if oneShot != boring or oneShot != nimc or oneShot != eth or
-          oneShot != stream:
+      if oneShot != nimc or oneShot != eth or oneShot != stream:
         inc mismatches
         if mismatches <= 3:
           checkpoint(&"round {round}, len {n}: input {data.toHex}")
           checkpoint(&"  one-shot  {oneShot.toHex}")
           checkpoint(&"  stream    {stream.toHex}")
           checkpoint(&"  eth       {eth.toHex}")
-          checkpoint(&"  boringssl {boring.toHex}")
           checkpoint(&"  nimcrypto {nimc.toHex}")
     check mismatches == 0
     # both sides of the cache boundary must actually have been exercised
@@ -194,7 +185,7 @@ suite "Keccak256":
       for i in 0 ..< n:
         data[i] = byte(rng.rand(0 .. 255))
       let first = hashEthHashes(data)
-      check first == hashBoringSsl(data)
+      check first == hashNimcrypto(data)
       for _ in 0 ..< 10:
         check hashEthHashes(data) == first
 
