@@ -7,8 +7,18 @@
 
 {.push raises: [], gcsafe.}
 
-import ./keccak_xkcp
-export keccak_xkcp.init, keccak_xkcp.update, keccak_xkcp.clear
+const keccakExternalBackend* {.booldefine.} = false
+  ## Take the keccak implementation from an externally supplied backend instead
+  ## of the one shipped here: a module named `keccak_external` on the search
+  ## path, exporting the same API as `keccak_xkcp`: `KeccakCtx` with
+  ## `init`/`update`/`clear`/`finish`, and the one-shot `keccak256`.
+
+when keccakExternalBackend:
+  import keccak_external as keccakBackend
+else:
+  import ./keccak_xkcp as keccakBackend
+
+export keccakBackend.init, keccakBackend.update, keccakBackend.clear
 
 from nimcrypto/hash import MDigest
 export MDigest
@@ -28,12 +38,12 @@ const
     0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b,
     0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85, 0xa4, 0x70])
 
-type Keccak256* = KeccakXkcpCtx
+type Keccak256* = keccakBackend.KeccakCtx
 
 template finish*(h: var Keccak256): MDigest[256] =
   block:
     var digest {.noinit.}: MDigest[256]
-    keccak_xkcp.finish(h, digest.data)
+    keccakBackend.finish(h, digest.data)
     digest
 
 when keccakCacheEnabled:
@@ -92,11 +102,11 @@ func digestImpl(data: openArray[byte]): MDigest[256] {.noinit, inline.} =
   var digest {.noinit.}: MDigest[256]
 
   when not keccakCacheEnabled:
-    keccak256Xkcp(data, digest.data)
+    keccakBackend.keccak256(data, digest.data)
     return digest
   else:
     if data.len > MAX_CACHED_INPUT_LEN:
-      keccak256Xkcp(data, digest.data)
+      keccakBackend.keccak256(data, digest.data)
       return digest
 
     {.cast(noSideEffect), cast(gcsafe).}:
@@ -104,7 +114,7 @@ func digestImpl(data: openArray[byte]): MDigest[256] {.noinit, inline.} =
       if keccakCache.getBySlot(slot, data, digest):
         return digest
 
-      keccak256Xkcp(data, digest.data)
+      keccakBackend.keccak256(data, digest.data)
 
       var key: KeccakCacheKey
       key.len = uint8(data.len)
