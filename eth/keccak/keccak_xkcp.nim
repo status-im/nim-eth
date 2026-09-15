@@ -122,6 +122,9 @@ type
     state: array[25, uint64]
     absorbOffset: int
 
+  KeccakCtx* = KeccakXkcpCtx
+    ## The name `keccak.nim` imports a backend under
+
 func init*(h: var KeccakXkcpCtx) {.inline.} =
   h.state.reset()
   h.absorbOffset = 0
@@ -196,3 +199,6 @@ func keccak256Xkcp*(input: openArray[byte], output: var array[32, byte]) =
   stateBytes[RATE_BYTES - 1] = stateBytes[RATE_BYTES - 1] xor 0x80'u8
   keccakF(state)
   copyMem(addr output[0], addr state[0], 32)
+
+template keccak256*(input: openArray[byte], output: var array[32, byte]) =
+  keccak256Xkcp(input, output)
