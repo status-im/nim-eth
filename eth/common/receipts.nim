@@ -33,7 +33,7 @@ type
     # Eip8141Receipt = TxEip8141
 
   FrameReceipt* = object
-    status*      : bool
+    status*      : uint8
     gasUsed*     : GasInt
     stateGasUsed*: GasInt
     logs*        : seq[Log]
