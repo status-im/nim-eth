@@ -18,7 +18,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, net],
   results,
   chronos,
   ./node
@@ -46,32 +46,49 @@ proc insert*(ipvote: var IpVote, key: NodeId, address: Address) =
   ## can only hold 1 vote.
   ipvote.votes[key] = (address, now(chronos.Moment) + IpVoteTimeout)
 
-proc majority*(ipvote: var IpVote): Opt[Address] =
-  ## Get the majority of votes on an address. Pruning of votes older than
-  ## `IpVoteTime` will be done before the majority count.
+func largest[T](count: CountTable[T], threshold: uint): Opt[T] =
+  ## The entry with the most votes, but only when it reaches `threshold`.
   ## Note: When there is a draw the selected "majority" will depend on whichever
-  ## address comes first in the CountTable. This seems acceptable as there is no
+  ## entry comes first in the CountTable. This seems acceptable as there is no
   ## other criteria to make a selection.
+  if count.len <= 0:
+    return Opt.none(T)
+
+  let (value, amount) = count.largest()
+
+  if uint(amount) >= threshold:
+    Opt.some(value)
+  else:
+    Opt.none(T)
+
+proc majority*(ipvote: var IpVote): tuple[ip: Opt[IpAddress], port: Opt[Port]] =
+  ## Get the majority of votes on the external address. Pruning of votes older
+  ## than `IpVoteTime` will be done before the majority count.
+  ##
+  ## When there is no majority on the full IP:port address, the majority on
+  ## just the IP address is returned, without a port. A node behind a symmetric
+  ## NAT (or for example behind the Docker userland proxy) gets a different
+  ## external port assigned per destination, so the ports reported back will
+  ## (nearly) all differ while there still is agreement on the IP address.
   let now = now(chronos.Moment)
 
   var
     pruneList: seq[NodeId]
-    ipCount: CountTable[Address]
+    ipCount: CountTable[IpAddress]
+    addressCount: CountTable[Address]
   for k, v in ipvote.votes:
     if now > v.expiry:
       pruneList.add(k)
     else:
-      ipCount.inc(v.address)
+      ipCount.inc(v.address.ip)
+      addressCount.inc(v.address)
 
   for id in pruneList:
     ipvote.votes.del(id)
 
-  if ipCount.len <= 0:
-    return Opt.none(Address)
+  # A majority on the full address wins from one on just the IP address, as the
+  # agreement of the voters is on both values.
+  let address = addressCount.largest(ipvote.threshold).valueOr:
+    return (ipCount.largest(ipvote.threshold), Opt.none(Port))
 
-  let (address, count) = ipCount.largest()
-
-  if uint(count) >= ipvote.threshold:
-    Opt.some(address)
-  else:
-    Opt.none(Address)
+  (Opt.some(address.ip), Opt.some(address.port))

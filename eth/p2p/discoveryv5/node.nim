@@ -64,17 +64,7 @@ func update*(n: Node, pk: PrivateKey, ip: Opt[IpAddress],
     extraFields: openArray[FieldPair] = []): Result[void, cstring] =
   ? n.record.update(pk, ip, tcpPort, udpPort, quicPort, extraFields)
 
-  if ip.isSome():
-    if udpPort.isSome():
-      let a = Address(ip: ip.get(), port: udpPort.get())
-      n.address = Opt.some(a)
-    elif n.address.isSome():
-      let a = Address(ip: ip.get(), port: n.address.get().port)
-      n.address = Opt.some(a)
-    else:
-      n.address = Opt.none(Address)
-  else:
-    n.address = Opt.none(Address)
+  n.address = Node.fromRecord(n.record).address
 
   ok()
 
