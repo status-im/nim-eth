@@ -1,5 +1,5 @@
 # nim-eth - Node Discovery Protocol v5
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -13,6 +13,7 @@ import
   std/net,
   stew/arrayops,
   results,
+  chronos/transports/ipnet,
   ../../rlp,
   "."/messages
 
@@ -42,11 +43,17 @@ func read*(rlp: var Rlp, T: type IpAddress): T
   if ipBytes.len == 4:
     var ip: array[4, byte]
     discard copyFrom(ip, ipBytes)
-    IpAddress(family: IPv4, address_v4: ip)
+    IpAddress(family: IpAddressFamily.IPv4, address_v4: ip)
   elif ipBytes.len == 16:
     var ip: array[16, byte]
     discard copyFrom(ip, ipBytes)
-    IpAddress(family: IPv6, address_v6: ip)
+    let ipAddress = IpAddress(family: IpAddressFamily.IPv6, address_v6: ip)
+    # Some implementations send IPv4 addresses as IPv4-mapped IPv6 addresses.
+    let address = initTAddress(ipAddress, Port(0))
+    if address.isV4Mapped():
+      address.toIPv4().toIpAddress()
+    else:
+      ipAddress
   else:
     raise newException(RlpTypeMismatch,
       "Amount of bytes for IP address is different from 4 or 16")

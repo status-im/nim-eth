@@ -1,5 +1,5 @@
 # nim-eth
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -55,6 +55,41 @@ suite "Discovery v5.1 Protocol Message Encodings":
       message.reqId == reqId
       message.kind == pong
       message.pong.enrSeq == enrSeq
+      message.pong.ip == ip
+      message.pong.port == port
+
+  test "Pong Response with IPv4-mapped IPv6 address":
+    let
+      enrSeq = 1'u64
+      mappedIp = parseIpAddress("::ffff:8.8.8.8")
+      ip = parseIpAddress("8.8.8.8")
+      port = 5000'u16
+      p = PongMessage(enrSeq: enrSeq, ip: mappedIp, port: port)
+      reqId = RequestId(id: @[1.byte])
+
+    let decoded = decodeMessage(encodeMessage(p, reqId))
+    check decoded.isOk()
+
+    let message = decoded.get()
+    check:
+      message.kind == pong
+      message.pong.ip == ip
+      message.pong.port == port
+
+  test "Pong Response with IPv6 address":
+    let
+      enrSeq = 1'u64
+      ip = parseIpAddress("2001:4860:4860::8888")
+      port = 5000'u16
+      p = PongMessage(enrSeq: enrSeq, ip: ip, port: port)
+      reqId = RequestId(id: @[1.byte])
+
+    let decoded = decodeMessage(encodeMessage(p, reqId))
+    check decoded.isOk()
+
+    let message = decoded.get()
+    check:
+      message.kind == pong
       message.pong.ip == ip
       message.pong.port == port
 
