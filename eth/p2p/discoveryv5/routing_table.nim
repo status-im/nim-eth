@@ -98,6 +98,7 @@ type
     Existing
     IpLimitReached
     ReplacementAdded
+    ReplacementUpdated
     ReplacementExisting
     NoAddress
     Banned
@@ -199,6 +200,19 @@ func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
     return
   b.ipLimits.dec(ip)
   r.ipLimits.dec(ip)
+
+func ipLimitUpdate(r: var RoutingTable, b: KBucket, old, new: Node): bool =
+  ## Move the ip limits of the routing table and the bucket from the record of
+  ## `old` to that of `new`. When an ip limit is reached for `new`, the limits
+  ## of `old` are kept and false is returned.
+  if old.address.get().ip == new.address.get().ip:
+    return true
+
+  if not ipLimitInc(r, b, new):
+    return false
+  ipLimitDec(r, b, old)
+
+  return true
 
 func getNode*(r: RoutingTable, id: NodeId): Opt[Node]
 proc replaceNode*(r: var RoutingTable, n: Node)
@@ -352,28 +366,42 @@ func addReplacement(r: var RoutingTable, k: KBucket, n: Node): NodeStatus =
   ##
   ## If the replacement cache is full, the oldest (first entry) node will be
   ## removed. If the node is already in the replacement cache, it will be moved
-  ## to the tail.
+  ## to the tail. Its record only gets replaced when the sequence number is higher.
   ## When the IP of the node has reached the IP limits for the bucket or the
   ## total routing table, the node will not be added to the replacement cache.
+  ## An entry that is already in the replacement cache gets removed in that case.
   let nodeIdx = k.replacementCache.find(n)
   if nodeIdx != -1:
-    if k.replacementCache[nodeIdx].record.seqNum <= n.record.seqNum:
-      # In case the record sequence number is higher or the same, the new node
-      # gets moved to the tail.
-      if k.replacementCache[nodeIdx].address.get().ip != n.address.get().ip:
-        if not ipLimitInc(r, k, n):
-          return IpLimitReached
-        ipLimitDec(r, k, k.replacementCache[nodeIdx])
-      k.replacementCache.delete(nodeIdx)
-      k.replacementCache.add(n)
-    return ReplacementExisting
-  elif not ipLimitInc(r, k, n):
-    return IpLimitReached
-  else:
-    doAssert(k.replacementCache.len <= REPLACEMENT_CACHE_SIZE)
+    let existing = k.replacementCache[nodeIdx]
+    if existing.record.seqNum > n.record.seqNum:
+      return ReplacementExisting
 
+    if existing.record.seqNum == n.record.seqNum:
+      # Same record, the node only gets moved to the tail.
+      k.replacementCache.delete(nodeIdx)
+      k.replacementCache.add(existing)
+
+      return ReplacementExisting
+
+    # In case of a newer record, it gets replaced and moved to the tail.
+    if not ipLimitUpdate(r, k, existing, n):
+      # Cannot add the new version of record because of IP limits,
+      # thus remove the old stale record.
+      ipLimitDec(r, k, existing)
+      k.replacementCache.delete(nodeIdx)
+      return IpLimitReached
+
+    k.replacementCache.delete(nodeIdx)
+    k.replacementCache.add(n)
+
+    return ReplacementUpdated
+  else:
+    if not ipLimitInc(r, k, n):
+      return IpLimitReached
+
+    doAssert(k.replacementCache.len <= REPLACEMENT_CACHE_SIZE)
     if k.replacementCache.len == REPLACEMENT_CACHE_SIZE:
-      # Remove ip from limits for the to be deleted node.
+      # Remove the oldest entry and its IPs from the limits.
       ipLimitDec(r, k, k.replacementCache[0])
       k.replacementCache.delete(0)
 
@@ -392,7 +420,8 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   ## newer record.
   ## When the IP of the node has reached the IP limits for the bucket or the
   ## total routing table, the node will not be added to the bucket, nor its
-  ## replacement cache.
+  ## replacement cache. A node that is already in the routing table gets
+  ## replaced in that case.
 
   # Don't allow nodes without an address field in the ENR to be added.
   # This could also be reworked by having another Node type that always has an
@@ -414,10 +443,11 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   if nodeIdx != -1:
     if bucket.nodes[nodeIdx].record.seqNum < n.record.seqNum:
       # In case of a newer record, it gets replaced.
-      if bucket.nodes[nodeIdx].address.get().ip != n.address.get().ip:
-        if not ipLimitInc(r, bucket, n):
-          return IpLimitReached
-        ipLimitDec(r, bucket, bucket.nodes[nodeIdx])
+      if not ipLimitUpdate(r, bucket, bucket.nodes[nodeIdx], n):
+        # Cannot add the new version of record because of IP limits,
+        # thus remove the old stale record.
+        r.replaceNode(bucket.nodes[nodeIdx])
+        return IpLimitReached
       # Copy over the seen status, we trust here that after the ENR update the
       # node will still be reachable, but it might not be the case.
       n.seen = bucket.nodes[nodeIdx].seen

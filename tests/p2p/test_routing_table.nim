@@ -229,6 +229,67 @@ suite "Routing Table Tests":
       # This node should be removed
       check (table.getNode(bucketNodes[bucketNodes.high].id)).isNone()
 
+  test "Replacement cache entry only gets replaced by a newer record":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+
+    # create a full bucket so that further nodes end up in the replacement cache
+    for n in node.nodesAtDistance(rng[], 256, BUCKET_SIZE):
+      check table.addNode(n) == Added
+
+    let (replacementNode, privKey) = node.nodeAndPrivKeyAtDistance(rng[], 256)
+
+    proc recordAtSeqNum(seqNum: uint64, ip: string): Node =
+      let port = Port(20302)
+      Node.fromRecord(enr.Record.init(seqNum, privKey,
+        Opt.some(parseIpAddress(ip)), Opt.some(port), Opt.some(port),
+        Opt.none(Port)).expect("Properly initialized private key"))
+
+    let
+      seqNum = replacementNode.record.seqNum
+      sameSeqNumNode = recordAtSeqNum(seqNum, "127.0.0.2")
+      newerNode = recordAtSeqNum(seqNum + 1, "127.0.0.3")
+
+    check:
+      table.addNode(replacementNode) == ReplacementAdded
+      # A record with the same sequence number does not replace the entry, it
+      # only gets moved to the tail, same as for the nodes in a bucket.
+      table.addNode(sameSeqNumNode) == ReplacementExisting
+      table.getNode(replacementNode.id).isNone() # still a replacement
+      table.addNode(newerNode) == ReplacementUpdated
+      # The older record must not replace the newer one.
+      table.addNode(replacementNode) == ReplacementExisting
+
+  test "Node gets removed when its updated record reaches the ip limits":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+
+    const
+      pubIp1 = parseIpAddress("1.2.3.4")
+      pubIp2 = parseIpAddress("5.6.7.8")
+      port = Port(20302)
+
+    # Fill up the bucket ip limit for both ips, with the node to update being
+    # one of the nodes on `pubIp1`.
+    let (nodeToUpdate, privKey) = node.nodeAndPrivKeyAtDistance(rng[], 256, pubIp1)
+    check table.addNode(nodeToUpdate) == Added
+    for i in 0..<DefaultTableIpLimits.bucketIpLimit - 1:
+      check table.addNode(node.nodeAtDistance(rng[], 256, pubIp1)) == Added
+    for i in 0..<DefaultTableIpLimits.bucketIpLimit:
+      check table.addNode(node.nodeAtDistance(rng[], 256, pubIp2)) == Added
+
+    # The updated record moves the node to an ip of which the limit is reached.
+    let updatedNode = Node.fromRecord(enr.Record.init(2, privKey,
+      Opt.some(pubIp2), Opt.some(port), Opt.some(port), Opt.none(Port)).expect(
+      "Properly initialized private key"))
+
+    check:
+      table.addNode(updatedNode) == IpLimitReached
+      # The outdated record must not be kept around in the routing table.
+      table.getNode(nodeToUpdate.id).isNone()
+      # And its ip limits must have been released.
+      table.addNode(node.nodeAtDistance(rng[], 256, pubIp1)) == Added
+
   test "Just seen":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
@@ -512,10 +573,14 @@ suite "Routing Table Tests":
     let (sameIpNode1, pk) = node.nodeAndPrivKeyAtDistance(rng[], 256)
     check table.addNode(sameIpNode1) == ReplacementAdded
 
-    # For replacements we don't need to get seqNum increased as the node will
-    # still get pushed in front of the queue.
-    let updatedNode1 = generateNode(pk, ip = parseIpAddress("192.168.1.1"))
-    check table.addNode(updatedNode1) == ReplacementExisting
+    # Need to do an update to get seqNum increased, as the record of a node in
+    # the replacement cache only gets replaced by one with a higher seqNum.
+    let updatedNode1 = generateNode(pk)
+    let updated = updatedNode1.update(pk,
+      Opt.some(parseIpAddress("192.168.1.1")),
+      Opt.some(Port(9000)), Opt.some(Port(9000)))
+    check updated.isOk()
+    check table.addNode(updatedNode1) == ReplacementUpdated
 
     let sameIpNodes = node.nodesAtDistance(rng[], 256,
       int(DefaultTableIpLimits.bucketIpLimit))
