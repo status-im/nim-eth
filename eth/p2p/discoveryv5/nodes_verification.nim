@@ -72,7 +72,6 @@ proc verifyNodesRecords(
       continue
     # Check if returned node has one of the requested distances.
     if distances.isSome():
-      # TODO: This is incorrect for custom distances
       if (not distances.get().contains(logDistance(n.id, src.id))):
         debug "Incorrect distance", record = n.record.toURI
         continue
