@@ -21,18 +21,6 @@ declareGauge routing_table_nodes,
   "Discovery routing table nodes", labels = ["state"]
 
 type
-  DistanceProc* =
-    proc(a, b: NodeId): NodeId {.raises: [], gcsafe, noSideEffect.}
-  LogDistanceProc* =
-    proc(a, b: NodeId): uint16 {.raises: [], gcsafe, noSideEffect.}
-  IdAtDistanceProc* =
-    proc (id: NodeId, dist: uint16): NodeId {.raises: [], gcsafe, noSideEffect.}
-
-  DistanceCalculator* = object
-    calculateDistance*: DistanceProc
-    calculateLogDistance*: LogDistanceProc
-    calculateIdAtDistance*: IdAtDistanceProc
-
   RoutingTable* = object
     localNode*: Node
     buckets*: seq[KBucket]
@@ -46,7 +34,6 @@ type
     ## will result in an improvement of log base(2^b) n hops per lookup.
     ipLimits: IpLimits ## IP limits for total routing table: all buckets and
     ## replacement caches.
-    distanceCalculator: DistanceCalculator
     rng: ref HmacDrbgContext
     bannedNodes: Table[NodeId, chronos.Moment] ## Nodes can be banned from the
     ## routing table for a period until the timeout is reached. Banned nodes
@@ -145,17 +132,6 @@ const
   DefaultTableIpLimit* = 10'u
   DefaultTableIpLimits* = TableIpLimits(tableIpLimit: DefaultTableIpLimit,
     bucketIpLimit: DefaultBucketIpLimit)
-  XorDistanceCalculator* = DistanceCalculator(calculateDistance: distance,
-    calculateLogDistance: logDistance, calculateIdAtDistance: idAtDistance)
-
-func distance*(r: RoutingTable, a, b: NodeId): UInt256 =
-  r.distanceCalculator.calculateDistance(a, b)
-
-func logDistance*(r: RoutingTable, a, b: NodeId): uint16 =
-  r.distanceCalculator.calculateLogDistance(a, b)
-
-func idAtDistance*(r: RoutingTable, id: NodeId, dist: uint16): NodeId =
-  r.distanceCalculator.calculateIdAtDistance(id, dist)
 
 func new(T: type KBucket, istart, iend: NodeId, bucketIpLimit: uint): T =
   KBucket(
@@ -337,8 +313,7 @@ proc computeSharedPrefixBits(nodes: openArray[NodeId]): int =
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
 func init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop,
-    ipLimits = DefaultTableIpLimits, rng: ref HmacDrbgContext,
-    distanceCalculator = XorDistanceCalculator): T =
+    ipLimits = DefaultTableIpLimits, rng: ref HmacDrbgContext): T =
   ## Initialize the routing table for provided `Node` and bitsPerHop value.
   ## `bitsPerHop` is default set to 5 as recommended by original Kademlia paper.
   RoutingTable(
@@ -346,7 +321,6 @@ func init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop
     buckets: @[KBucket.new(0.u256, high(UInt256), ipLimits.bucketIpLimit)],
     bitsPerHop: bitsPerHop,
     ipLimits: IpLimits(limit: ipLimits.tableIpLimit),
-    distanceCalculator: distanceCalculator,
     rng: rng,
     bannedNodes: Table[NodeId, chronos.Moment]())
 
@@ -524,10 +498,10 @@ func contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
   # Check if the routing table contains node `n`.
 
 func bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
-  sortedByIt(r.buckets,  r.distance(it.midpoint, id))
+  sortedByIt(r.buckets, distance(it.midpoint, id))
 
 func nodesByDistanceTo(r: RoutingTable, k: KBucket, id: NodeId): seq[Node] =
-  sortedByIt(k.nodes, r.distance(it.id, id))
+  sortedByIt(k.nodes, distance(it.id, id))
 
 func neighbours*(
     r: RoutingTable,
@@ -551,17 +525,17 @@ func neighbours*(
 
   # TODO: is this sort still needed? Can we get nodes closer from the "next"
   # bucket?
-  result = sortedByIt(result, r.distance(it.id, id))
+  result = sortedByIt(result, distance(it.id, id))
   if result.len > k:
     result.setLen(k)
 
 func neighboursAtDistance*(r: RoutingTable, distance: uint16,
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours at given logarithmic distance.
-  result = r.neighbours(r.idAtDistance(r.localNode.id, distance), k, seenOnly)
+  result = r.neighbours(idAtDistance(r.localNode.id, distance), k, seenOnly)
   # This is a bit silly, first getting closest nodes then to only keep the ones
   # that are exactly the requested distance.
-  keepIf(result, proc(n: Node): bool = r.logDistance(n.id, r.localNode.id) == distance)
+  keepIf(result, proc(n: Node): bool = logDistance(n.id, r.localNode.id) == distance)
 
 func neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
