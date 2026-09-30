@@ -453,6 +453,54 @@ suite "Routing Table Tests":
         table.getNode(anotherSameIpNode1.id).isNone()
         table.getNode(anotherSameIpNode2.id).isNone()
 
+  test "Ip limits are accounted per address family":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+
+    let
+      pubIp4 = Opt.some(parseIpAddress("1.2.3.4"))
+      pubIp6 = Opt.some(parseIpAddress("2606:4700:4700::1111"))
+      otherIp4 = Opt.some(parseIpAddress("5.6.7.8"))
+      otherIp6 = Opt.some(parseIpAddress("2606:4700:4700::2222"))
+
+    # Fill up the bucket limit with dual stack nodes sharing both addresses.
+    var added: seq[Node]
+    for i in 0..<DefaultTableIpLimits.bucketIpLimit:
+      let n = node.nodeAtDistanceDualStack(rng[], 256, pubIp4, pubIp6)
+      check table.addNode(n) == Added
+      added.add(n)
+
+    # A node cannot bypass the limit of one family by only providing the
+    # address of that family.
+    check:
+      table.addNode(
+        node.nodeAtDistanceDualStack(rng[], 256, pubIp4, otherIp6)) == IpLimitReached
+      table.addNode(
+        node.nodeAtDistanceDualStack(rng[], 256, otherIp4, pubIp6)) == IpLimitReached
+      table.addNode(
+        node.nodeAtDistanceDualStack(rng[], 256, otherIp4, otherIp6)) == Added
+
+    for n in added:
+      table.removeNode(n)
+
+    # On removal the limits of both families must be released again.
+    for i in 0..<DefaultTableIpLimits.bucketIpLimit:
+      check:
+        table.addNode(node.nodeAtDistanceDualStack(rng[], 256, ip4 = pubIp4)) == Added
+        table.addNode(node.nodeAtDistanceDualStack(rng[], 256, ip6 = pubIp6)) == Added
+
+  test "Nodes with only an IPv6 address can be added and removed":
+    let node = generateNodeDualStack(PrivateKey.random(rng[]),
+      ip4 = Opt.some(parseIpAddress("8.8.8.8")))
+    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+
+    let n = node.nodeAtDistanceDualStack(rng[], 256,
+      ip6 = Opt.some(parseIpAddress("2606:4700:4700::1111")))
+
+    check table.addNode(n) == Added
+    table.removeNode(n)
+    check table.getNode(n.id).isNone()
+
   test "Ip limits on replacement cache: deletion":
     let node = generateNode(PrivateKey.random(rng[]))
     var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
