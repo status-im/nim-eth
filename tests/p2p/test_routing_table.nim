@@ -14,20 +14,6 @@ import
   ../../eth/p2p/discoveryv5/[routing_table, node],
   ./discv5_test_helper
 
-func customDistance*(a, b: NodeId): UInt256 =
-  if a >= b:
-    a - b
-  else:
-    b - a
-
-func customLogDistance*(a, b: NodeId): uint16 =
-  let distance = customDistance(a, b)
-  let modulo = distance mod (u256(uint8.high))
-  cast[uint16](modulo)
-
-func customIdAdDist*(id: NodeId, dist: uint16): NodeId =
-  id + u256(dist)
-
 suite "Routing Table Tests":
   let rng = newRng()
 
@@ -37,11 +23,6 @@ suite "Routing Table Tests":
   # thus independent of routing_table.
   let ipLimits = TableIpLimits(tableIpLimit: 200,
     bucketIpLimit: BUCKET_SIZE + REPLACEMENT_CACHE_SIZE + 1)
-
-  let customDistanceCalculator = DistanceCalculator(
-    calculateDistance: customDistance,
-    calculateLogDistance: customLogDistance,
-    calculateIdAtDistance: customIdAdDist)
 
   test "Add local node":
     let node = generateNode(PrivateKey.random(rng[]))
@@ -228,6 +209,67 @@ suite "Routing Table Tests":
     block:
       # This node should be removed
       check (table.getNode(bucketNodes[bucketNodes.high].id)).isNone()
+
+  test "Replacement cache entry only gets replaced by a newer record":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+
+    # create a full bucket so that further nodes end up in the replacement cache
+    for n in node.nodesAtDistance(rng[], 256, BUCKET_SIZE):
+      check table.addNode(n) == Added
+
+    let (replacementNode, privKey) = node.nodeAndPrivKeyAtDistance(rng[], 256)
+
+    proc recordAtSeqNum(seqNum: uint64, ip: string): Node =
+      let port = Port(20302)
+      Node.fromRecord(enr.Record.init(seqNum, privKey,
+        Opt.some(parseIpAddress(ip)), Opt.some(port), Opt.some(port),
+        Opt.none(Port)).expect("Properly initialized private key"))
+
+    let
+      seqNum = replacementNode.record.seqNum
+      sameSeqNumNode = recordAtSeqNum(seqNum, "127.0.0.2")
+      newerNode = recordAtSeqNum(seqNum + 1, "127.0.0.3")
+
+    check:
+      table.addNode(replacementNode) == ReplacementAdded
+      # A record with the same sequence number does not replace the entry, it
+      # only gets moved to the tail, same as for the nodes in a bucket.
+      table.addNode(sameSeqNumNode) == ReplacementExisting
+      table.getNode(replacementNode.id).isNone() # still a replacement
+      table.addNode(newerNode) == ReplacementUpdated
+      # The older record must not replace the newer one.
+      table.addNode(replacementNode) == ReplacementExisting
+
+  test "Node gets removed when its updated record reaches the ip limits":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+
+    const
+      pubIp1 = parseIpAddress("1.2.3.4")
+      pubIp2 = parseIpAddress("5.6.7.8")
+      port = Port(20302)
+
+    # Fill up the bucket ip limit for both ips, with the node to update being
+    # one of the nodes on `pubIp1`.
+    let (nodeToUpdate, privKey) = node.nodeAndPrivKeyAtDistance(rng[], 256, pubIp1)
+    check table.addNode(nodeToUpdate) == Added
+    for i in 0..<DefaultTableIpLimits.bucketIpLimit - 1:
+      check table.addNode(node.nodeAtDistance(rng[], 256, pubIp1)) == Added
+    for i in 0..<DefaultTableIpLimits.bucketIpLimit:
+      check table.addNode(node.nodeAtDistance(rng[], 256, pubIp2)) == Added
+
+    # The updated record moves the node to an ip of which the limit is reached.
+    let updatedNode = Node.fromRecord(enr.Record.init(2, privKey,
+      Opt.some(pubIp2), Opt.some(port), Opt.some(port), Opt.none(Port)).expect(
+      "Properly initialized private key"))
+
+    check:
+      table.addNode(updatedNode) == IpLimitReached
+      # The outdated record must not be kept around in the routing table.
+      table.getNode(nodeToUpdate.id).isNone()
+      # And its ip limits must have been released.
+      table.addNode(node.nodeAtDistance(rng[], 256, pubIp1)) == Added
 
   test "Just seen":
     let node = generateNode(PrivateKey.random(rng[]))
@@ -512,10 +554,14 @@ suite "Routing Table Tests":
     let (sameIpNode1, pk) = node.nodeAndPrivKeyAtDistance(rng[], 256)
     check table.addNode(sameIpNode1) == ReplacementAdded
 
-    # For replacements we don't need to get seqNum increased as the node will
-    # still get pushed in front of the queue.
-    let updatedNode1 = generateNode(pk, ip = parseIpAddress("192.168.1.1"))
-    check table.addNode(updatedNode1) == ReplacementExisting
+    # Need to do an update to get seqNum increased, as the record of a node in
+    # the replacement cache only gets replaced by one with a higher seqNum.
+    let updatedNode1 = generateNode(pk)
+    let updated = updatedNode1.update(pk,
+      Opt.some(parseIpAddress("192.168.1.1")),
+      Opt.some(Port(9000)), Opt.some(Port(9000)))
+    check updated.isOk()
+    check table.addNode(updatedNode1) == ReplacementUpdated
 
     let sameIpNodes = node.nodesAtDistance(rng[], 256,
       int(DefaultTableIpLimits.bucketIpLimit))
@@ -547,47 +593,6 @@ suite "Routing Table Tests":
       check table.addNode(n) == Added
 
     check table.len == int(DefaultTableIpLimits.bucketIpLimit) + 1
-
-  test "Custom distance calculator: distance":
-    let numNodes = 10
-    let local = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(local, 1, ipLimits, rng = rng,
-      distanceCalculator = customDistanceCalculator)
-
-    let nodes = generateNRandomNodes(rng[], numNodes)
-
-    for n in nodes:
-      check table.addNode(n) == Added
-
-    let neighbours = table.neighbours(local.id)
-    check len(neighbours) == numNodes
-
-    # check that neighbours are sorted by provided custom distance function
-    for i in 0..numNodes-2:
-      let prevDist = customDistance(local.id, neighbours[i].id)
-      let nextDist = customDistance(local.id, neighbours[i + 1].id)
-      check prevDist <= nextDist
-
-  test "Custom distance calculator: at log distance":
-    let numNodes = 10
-    let local = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(local, 1, ipLimits, rng = rng,
-      distanceCalculator = customDistanceCalculator)
-
-    let nodes = generateNRandomNodes(rng[], numNodes)
-
-    for n in nodes:
-      check table.addNode(n) == Added
-
-    let neighbours = table.neighbours(local.id)
-    check len(neighbours) == numNodes
-
-    for n in neighbours:
-      let cLogDist = customLogDistance(local.id, n.id)
-      let neighboursAtLogDist = table.neighboursAtDistance(cLogDist)
-      # there may be more than one node at provided distance
-      check len(neighboursAtLogDist) >= 1
-      check neighboursAtLogDist.contains(n)
 
   test "Banned nodes: banned node cannot be added":
     let
@@ -716,8 +721,7 @@ suite "Routing Table Tests":
   test "neighbours filter predicate":
     let numNodes = 10
     let local = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(local, 1, ipLimits, rng = rng,
-      distanceCalculator = customDistanceCalculator)
+    var table = RoutingTable.init(local, 1, ipLimits, rng = rng)
 
     let nodes = generateNRandomNodes(rng[], numNodes)
 

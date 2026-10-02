@@ -1037,25 +1037,30 @@ proc refreshLoop(d: Protocol) {.async: (raises: []).} =
   except CancelledError:
     trace "refreshLoop canceled"
 
-proc updateExternalIp*(d: Protocol, extIp: IpAddress, udpPort: Port): bool =
-  var success = false
-  let
-    previous = d.localNode.address
-    res = d.localNode.update(d.privateKey,
-      ip = Opt.some(extIp), udpPort = Opt.some(udpPort))
+proc updateExternalIp*(d: Protocol, extIp: IpAddress, udpPort: Opt[Port]): bool =
+  ## Update the ENR with the discovered external IP address, and with the UDP port
+  ## when one was discovered. Does nothing when `enrAutoUpdate` is not enabled.
+  let current = d.localNode.address
 
-  if res.isErr:
+  if not d.enrAutoUpdate:
+    warn "Not updating ENR with newly discovered external address, ENR auto " &
+      "update is off", current, newExtIp = extIp, newUdpPort = udpPort
+    return false
+
+  d.localNode.update(d.privateKey, ip = Opt.some(extIp), udpPort = udpPort).isOkOr:
     warn "Failed updating ENR with newly discovered external address",
-      previous, newExtIp = extIp, newUdpPort = udpPort, error = res.error
-  else:
-    success = true
-    info "Updated ENR with newly discovered external address",
-      previous, newExtIp = extIp, newUdpPort = udpPort, uri = toURI(d.localNode.record)
-  return success
+      current, newExtIp = extIp, newUdpPort = udpPort, error
+    return false
+
+  info "Updated ENR with newly discovered external address",
+    previous = current, newExtIp = extIp, newUdpPort = udpPort,
+    uri = toURI(d.localNode.record)
+  true
 
 proc ipMajorityLoop(d: Protocol) {.async: (raises: []).} =
-  ## When `enrAutoUpdate` is enabled, the IP:port combination returned
-  ## by the majority will be used to update the local ENR.
+  ## When `enrAutoUpdate` is enabled, the external IP address and UDP port
+  ## returned by the majority will be used to update the local ENR.
+  ##
   ## This should be safe as long as the routing table is not overwhelmed by
   ## malicious nodes trying to provide invalid addresses.
   ## Why is that?
@@ -1074,21 +1079,24 @@ proc ipMajorityLoop(d: Protocol) {.async: (raises: []).} =
   ## - There are IP limits on the buckets and the whole routing table.
   try:
     while true:
-      let majority = d.ipVote.majority()
-      if majority.isSome():
-        if d.localNode.address != majority:
-          let address = majority.get()
-          let previous = d.localNode.address
-          if d.enrAutoUpdate:
-            let success = d.updateExternalIp(address.ip, address.port)
-            if success:
-              discovery_enr_auto_update.inc()
-          else:
-            warn "Discovered new external address but ENR auto update is off",
-              majority, previous
+      let (majorityIp, majorityPort) = d.ipVote.majority()
+      if majorityIp.isSome():
+        let
+          extIp = majorityIp.get()
+          current = d.localNode.address
+
+        if majorityPort.isSome():
+          # Majority on both the IP address and the UDP port.
+          if current == Opt.some(Address(ip: extIp, port: majorityPort.get())):
+            debug "Discovered external address matches current address", current
+          elif d.updateExternalIp(extIp, majorityPort):
+            discovery_enr_auto_update.inc()
         else:
-          debug "Discovered external address matches current address", majority,
-            current = d.localNode.address
+          # Majority on the IP address only, the advertised UDP port is kept.
+          if current.isSome() and current.get().ip == extIp:
+            debug "Discovered external IP matches current IP", current
+          elif d.updateExternalIp(extIp, majorityPort):
+            discovery_enr_auto_update.inc()
 
       await sleepAsync(ipMajorityInterval)
   except CancelledError:
