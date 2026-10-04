@@ -10,11 +10,7 @@ test:
     # However, as the signature checking is done at the end, a big part of the
     # parsing will still be fuzzed.
     let decoded = try: rlp.decode(payload, enr.Record)
-                  except RlpError as e:
-                        echo "decode failed: " & e.msg
-                        break testBlock
-                  except ValueError as e:
-                        echo "decode failed: " & e.msg
+                  except RlpError, ValueError:
                         break testBlock
 
     let encoded = try: rlp.encode(decoded)

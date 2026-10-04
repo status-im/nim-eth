@@ -6,5 +6,5 @@ test:
   try:
     var rlp = rlpFromBytes(payload)
     discard rlp.inspect()
-  except RlpError as e:
-    echo "Inspect failed: " & e.msg
+  except RlpError:
+    discard
