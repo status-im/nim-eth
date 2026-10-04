@@ -87,14 +87,18 @@ proc fuzz(target: string) =
       if fuzzer == "honggfuzz":
         continue
 
+    if fuzzer == "libFuzzer":
+      # detect_stack_use_after_return does not work with refc
+      # https://github.com/nim-lang/Nim/issues/26334
+      putEnv("ASAN_OPTIONS", "detect_stack_use_after_return=0")
+    else:
+      delEnv("ASAN_OPTIONS")
+
     exec "ntu fuzz --fuzzer=" & fuzzer & fuzzTime &
       "--corpus=tests/fuzzing/" & target.parentDir & "/corpus " &
       "tests/fuzzing/" & target
 
 task fuzz, "Run fuzzing tests":
-  # detect_stack_use_after_return does not work with refc
-  # https://github.com/nim-lang/Nim/issues/26334
-  putEnv("ASAN_OPTIONS", "detect_stack_use_after_return=0")
   fuzz "discoveryv5/fuzz_decode_message"
   fuzz "discoveryv5/fuzz_decode_packet"
   run "", "tests/fuzzing/enr/generate"
