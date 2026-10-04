@@ -67,16 +67,6 @@ look in the local routing table and if it finds the node it will try to contact
 the node directly to check if the ENR is up to date. If any of this fail a
 `lookup` will be done.
 
-## Test suite
-To run the test suite specifically for discovery v5 related (discovery v5 + its
-nim-eth dependencies) tests, one can run following command:
-```sh
-# Install required modules
-nimble install
-# Run only discovery v5 related test suite
-nimble test_discv5_full
-```
-
 ## dcli
 This is a small command line application that allows you to run a discovery
 node. It also has the options to do a `ping` or `findNode` request to a specific

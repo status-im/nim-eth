@@ -148,5 +148,5 @@ If `color` is `none`, but `width` is some, it will raise assertion error.
 ### Contributing / Testing
 
 To test the correctness of any modifications to the library, please execute
-`nimble test_rlp` at the root of the repo.
+`nimble test` at the root of the repo.
 
