@@ -10,8 +10,71 @@ jobs:
   build:
     uses: status-im/nimbus-common-workflow/.github/workflows/common.yml@main
     with:
-      nim-versions: '["version-2-0", "version-2-2", "version-2-4", "devel"]'
       test-command: |
+        nimble test_asan
         nimble test
         nimble build_dcli
-        nimble build_fuzzers
+
+  fuzz:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - os: linux
+          - os: macos
+        include:
+          - target:
+              os: linux
+            builder: ubuntu-latest
+          - target:
+              os: macos
+            builder: macos-latest
+
+    name: '${{ matrix.target.os }} Fuzz'
+    runs-on: ${{ matrix.builder }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Nim
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: 'stable'
+
+      - name: Install fuzzing engines (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+
+          # libFuzzer
+          sudo apt-get install -y clang
+
+          # honggfuzz
+          nimble install -y testutils
+          "$(nimble path testutils | head -1)/scripts/install_honggfuzz.sh"
+          echo "/opt/honggfuzz/usr/local/bin" >> "$GITHUB_PATH"
+
+          # afl
+          sudo apt-get install -y afl++
+          sudo afl-system-config
+
+      - name: Install fuzzing engines (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+
+          # libFuzzer
+          brew install llvm
+          echo "/opt/homebrew/opt/llvm/bin" >> "$GITHUB_PATH"
+
+          # honggfuzz
+          nimble install -y testutils
+          "$(nimble path testutils | head -1)/scripts/install_honggfuzz.sh"
+          echo "/opt/honggfuzz/usr/local/bin" >> "$GITHUB_PATH"
+
+          # afl
+          brew install afl++
+          sudo afl-system-config
+
+      - name: Run fuzzing tests
+        run: nimble fuzz

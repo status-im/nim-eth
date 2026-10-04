@@ -29,14 +29,6 @@ nimble install
 # Run full test suite
 nimble test
 ```
-
-You can also run specific parts of the test suite, e.g.:
-```
-# Test p2p functionality
-nimble test_p2p
-# Test rlp functionality
-nimble test_rlp
-```
 ## Fuzzing
 Next to the test suite, there are also several fuzzing test cases available.
 How these can be run is explained in the [fuzzing readme](https://github.com/status-im/nim-eth/blob/master/tests/fuzzing/readme.md).

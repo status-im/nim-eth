@@ -20,84 +20,81 @@ requires "nim >= 2.0.10",
          "sqlite3_abi",
          "stew >= 0.5.0",
          "stint >= 0.8.0",
-         "testutils >= 0.8.3",
+         "testutils >= 0.8.5",
          "unittest2 >= 0.2.0"
+
+from std/os import parentDir, quoteShell
 
 let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
 let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
 let flags = getEnv("NIMFLAGS", "") # Extra flags for the compiler
 let verbose = getEnv("V", "") notin ["", "0"]
+let platform = getEnv("PLATFORM", "")
+let testArguments = [
+  "-d:release",
+]
 
 let cfg =
   " --styleCheck:usages --styleCheck:error" &
   (if verbose: "" else: " --verbosity:0") &
-  " --skipUserCfg --nimcache:build/nimcache -f" &
-  " -d:chronicles_log_level=TRACE" &
-  " --threads:on -d:release"
+  " --skipParentCfg --skipUserCfg --outdir:build -f " &
+  quoteShell("--nimcache:build/nimcache/$projectName")
 
-proc build(args, path, outdir: string) =
-  exec nimc & " " & lang & " " & cfg & " " & flags & " " & args &
-    " --outdir:build/" & outdir & " " & path
+proc build(args, path: string) =
+  exec nimc & " " & lang & " " & cfg & " " & flags & " " & args & " " & path
 
-proc run(path, outdir: string) =
-  build "--mm:refc -r", path, outdir
-  build "--mm:orc -r", path, outdir
-
-task test_keyfile, "Run keyfile tests":
-  run "tests/keyfile/all_tests", "keyfile"
-
-task test_discv5, "Run discovery v5 tests":
-  run "tests/p2p/all_tests", "p2p"
-
-task test_rlp, "Run rlp tests":
-  run "tests/rlp/all_tests", "rlp"
-
-task test_trie, "Run trie tests":
-  run "tests/trie/all_tests", "trie"
-
-task test_db, "Run db tests":
-  run "tests/db/all_tests", "db"
-
-task test_keccak, "Run keccak tests":
-  run "tests/keccak/all_tests", "keccak"
-
-task test_utp, "Run utp tests":
-  run "tests/utp/all_utp_tests", "utp"
-
-task test_common, "Run common tests":
-  run "tests/common/all_tests", "common"
+proc run(args, path: string) =
+  build args & " -r", path
 
 task test, "Run all tests":
-  run "tests/test_bloom", ""
-  run "tests/test_enr", ""
-  run "tests/test_enode", ""
+  for args in testArguments:
+    run args & " --mm:refc", "tests/all_tests"
+    run args & " --mm:orc", "tests/all_tests"
 
-  test_keyfile_task()
-  test_rlp_task()
-  test_discv5_task()
-  test_trie_task()
-  test_db_task()
-  test_keccak_task()
-  test_utp_task()
-  test_common_task()
+task test_asan, "Run all tests with ASAN":
+  if platform != "x86":
+    try:
+      exec "echo '#if __clang_major__ < 20\n#error\n#endif' | clang -E - >/dev/null"
+    except OSError:
+      return
 
-task test_discv5_full, "Run discovery v5 and its dependencies tests":
-  run "tests/test_enr", ""
-  test_rlp_task()
-  test_discv5_task()
+    # https://clang.llvm.org/docs/AddressSanitizer.html
+    putEnv("ASAN_OPTIONS", "detect_leaks=0:detect_stack_use_after_return=1")
+    # https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
+    putEnv("UBSAN_OPTIONS", "print_stacktrace=1")
+    let asanArgs =
+      " --mm:orc -d:useMalloc --cc:clang --debugger:native" &
+      " --passC:-fsanitize=address,undefined" &
+      " --passL:-fsanitize=address,undefined" &
+      " --passC:-fno-sanitize-recover=undefined" &
+      " --passC:-fno-sanitize-merge" &
+      " --passC:-fno-omit-frame-pointer"
+    for args in testArguments:
+      run args & asanArgs, "tests/all_tests"
 
 task build_dcli, "Build dcli":
-  build "", "tools/dcli", ""
+  build "-d:release -d:chronicles_log_level=TRACE", "tools/dcli"
 
-import os, strutils
+let
+  fuzzSeconds = getEnv("FUZZ_SECONDS", "100")
+  fuzzTime =
+    if fuzzSeconds == "": ""
+    else: " --duration=" & fuzzSeconds & " "
 
-task build_fuzzers, "Build fuzzer test cases":
-  # This file is there to be able to quickly build the fuzzer test cases in
-  # order to avoid bit rot (e.g. for CI). Not for actual fuzzing.
-  # TODO: Building fuzzer test case one by one will make it take a bit longer,
-  # but we cannot import them in one Nim file due to the usage of
-  # `exportc: "AFLmain"` in the fuzzing test template for Windows:
-  # https://github.com/status-im/nim-testutils/blob/master/testutils/fuzzing.nim#L100
-  for file in walkDirRec("tests/fuzzing/"):
-    if file.endsWith("nim"):
-      build "", file, "fuzzing"
+proc fuzz(target: string) =
+  for fuzzer in ["libFuzzer", "honggfuzz", "afl"]:
+    when defined(macosx):
+      if fuzzer == "honggfuzz":
+        continue
+
+    exec "ntu fuzz --fuzzer=" & fuzzer & fuzzTime &
+      "--corpus=tests/fuzzing/" & target.parentDir & "/corpus " &
+      "tests/fuzzing/" & target
+
+task fuzz, "Run fuzzing tests":
+  fuzz "discoveryv5/fuzz_decode_message"
+  fuzz "discoveryv5/fuzz_decode_packet"
+  run "", "tests/fuzzing/enr/generate"
+  fuzz "enr/fuzz_enr"
+  fuzz "rlp/rlp_decode"
+  fuzz "rlp/rlp_inspect"
