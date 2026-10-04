@@ -567,6 +567,10 @@ func inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) 
     output.add "}"
 
 func inspect*(self: Rlp, indent = 0, hexOutput = true): string =
-  var rlpCopy = self
-  result = newStringOfCap(self.bytes.len)
-  inspectAux(rlpCopy, indent, hexOutput, result)
+  # Build into a local: `result` leaks if `inspectAux` raises
+  # https://github.com/nim-lang/Nim/issues/25919
+  var
+    rlpCopy = self
+    res = newStringOfCap(self.bytes.len)
+  inspectAux(rlpCopy, indent, hexOutput, res)
+  res
