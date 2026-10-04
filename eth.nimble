@@ -78,7 +78,7 @@ task build_dcli, "Build dcli":
 let
   fuzzSeconds = getEnv("FUZZ_SECONDS", "100")
   fuzzTime =
-    if fuzzSeconds == "": ""
+    if fuzzSeconds == "": " "
     else: " --duration=" & fuzzSeconds & " "
 
 proc fuzz(target: string) =
