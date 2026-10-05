@@ -55,6 +55,20 @@ func generateNode*(privKey: PrivateKey, port: int = 20302,
     Opt.some(port), Opt.some(port), Opt.some(port), localEnrFields).expect("Properly initialized private key")
   result = Node.fromRecord(enr)
 
+func generateNodeDualStack*(privKey: PrivateKey, port: int = 20302,
+    ip4 = Opt.none(IpAddress), ip6 = Opt.none(IpAddress)): Node =
+  let port = Opt.some(Port(port))
+  let enr = enr.Record.initDS(1, privKey, ip4, port, port, Opt.none(Port),
+    ip6, port, port, Opt.none(Port)).expect("Properly initialized private key")
+  Node.fromRecord(enr)
+
+proc nodeAtDistanceDualStack*(n: Node, rng: var HmacDrbgContext, d: uint32,
+    ip4 = Opt.none(IpAddress), ip6 = Opt.none(IpAddress)): Node =
+  while true:
+    let node = generateNodeDualStack(PrivateKey.random(rng), ip4 = ip4, ip6 = ip6)
+    if logDistance(n.id, node.id) == d:
+      return node
+
 proc generateNRandomNodes*(rng: var HmacDrbgContext, n: int): seq[Node] =
   var res = newSeq[Node]()
   for i in 1..n:

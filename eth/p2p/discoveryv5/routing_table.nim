@@ -146,49 +146,84 @@ func midpoint(k: KBucket): NodeId =
 
 func len(k: KBucket): int = k.nodes.len
 
-func ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
-  ## Check if the ip limits of the routing table and the bucket are reached for
-  ## the specified `Node` its ip.
-  ## When one of the ip limits is reached return false, else increment them and
-  ## return true.
-  let ip = n.address.get().ip # Node from table should always have an address
+func ip(a: Opt[Address]): Opt[IpAddress] =
+  if a.isSome():
+    Opt.some(a.get().ip)
+  else:
+    Opt.none(IpAddress)
 
+func inc(ipLimits: var IpLimits, ip: Opt[IpAddress]): bool =
+  ## Increment the ip limits for the given ip, when there is one and when it is
+  ## a public address. Return false when the limit is reached.
+  if ip.isNone():
+    return true
   # Apply IP limits only to public addresses. The limits defend against Sybil
   # attacks from a single public IP, which is not meaningful on a private
   # network. go-ethereum applies the same exemption.
-  if not ip.isPublic():
+  if not ip.get().isPublic():
     return true
+
+  ipLimits.inc(ip.get())
+
+func dec(ipLimits: var IpLimits, ip: Opt[IpAddress]) =
+  if ip.isNone() or not ip.get().isPublic():
+    return
+
+  ipLimits.dec(ip.get())
+
+func inc(ipLimits: var IpLimits, n: Node): bool =
+  ## Increment the ip limits for all addresses of the node. When the limit is
+  ## reached for one of them, nothing is incremented and false is returned.
+  if not ipLimits.inc(n.address.ip):
+    return false
+  if not ipLimits.inc(n.address6.ip):
+    ipLimits.dec(n.address.ip)
+    return false
+
+  true
+
+func dec(ipLimits: var IpLimits, n: Node) =
+  ipLimits.dec(n.address.ip)
+  ipLimits.dec(n.address6.ip)
+
+func ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
+  ## Check if the ip limits of the routing table and the bucket are reached for
+  ## the addresses of the specified `Node`.
+  ## When one of the ip limits is reached return false, else increment them and
+  ## return true.
   # Check ip limit for bucket
-  if not b.ipLimits.inc(ip):
+  if not b.ipLimits.inc(n):
     return false
   # Check ip limit for routing table
-  if not r.ipLimits.inc(ip):
-    b.ipLimits.dec(ip)
+  if not r.ipLimits.inc(n):
+    b.ipLimits.dec(n)
     return false
 
   return true
 
 func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   ## Decrement the ip limits of the routing table and the bucket for the
-  ## specified `Node` its ip.
-  let ip = n.address.get().ip # Node from table should always have an address
-  if not ip.isPublic():
-    return
-  b.ipLimits.dec(ip)
-  r.ipLimits.dec(ip)
+  ## addresses of the specified `Node`.
+  b.ipLimits.dec(n)
+  r.ipLimits.dec(n)
 
 func ipLimitUpdate(r: var RoutingTable, b: KBucket, old, new: Node): bool =
   ## Move the ip limits of the routing table and the bucket from the record of
-  ## `old` to that of `new`. When an ip limit is reached for `new`, the limits
-  ## of `old` are kept and false is returned.
-  if old.address.get().ip == new.address.get().ip:
+  ## `old` to that of `new`, for a node of which the record got replaced.
+  ## When an ip limit is reached for `new`, the limits of `old` are restored and
+  ## false is returned.
+  if old.address.ip == new.address.ip and old.address6.ip == new.address6.ip:
     return true
 
-  if not ipLimitInc(r, b, new):
-    return false
-  ipLimitDec(r, b, old)
-
-  return true
+  # Release `old` before counting `new`, else an address that did not change
+  # would need a second slot and could hit its limit.
+  r.ipLimitDec(b, old)
+  if r.ipLimitInc(b, new):
+    true
+  else:
+    doAssert(r.ipLimitInc(b, old),
+      "IpLimit increment should work as the limits were just released")
+    false
 
 func getNode*(r: RoutingTable, id: NodeId): Opt[Node]
 proc replaceNode*(r: var RoutingTable, n: Node)
@@ -262,16 +297,14 @@ func split(k: KBucket): tuple[lower, upper: KBucket] =
     # increment again for each added node. It should however never fail as the
     # previous bucket had the same limits. IP limits only track public addresses
     # so non-public addresses are not counted.
-    if node.address.get().ip.isPublic():
-      doAssert(bucket.ipLimits.inc(node.address.get().ip),
-        "IpLimit increment should work as all buckets have the same limits")
+    doAssert(bucket.ipLimits.inc(node),
+      "IpLimit increment should work as all buckets have the same limits")
 
   for node in k.replacementCache:
     let bucket = if node.id <= splitid: result.lower else: result.upper
     bucket.replacementCache.add(node)
-    if node.address.get().ip.isPublic():
-      doAssert(bucket.ipLimits.inc(node.address.get().ip),
-        "IpLimit increment should work as all buckets have the same limits")
+    doAssert(bucket.ipLimits.inc(node),
+      "IpLimit increment should work as all buckets have the same limits")
 
 func inRange(k: KBucket, n: Node): bool =
   k.istart <= n.id and n.id <= k.iend
@@ -400,7 +433,7 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   # Don't allow nodes without an address field in the ENR to be added.
   # This could also be reworked by having another Node type that always has an
   # address.
-  if n.address.isNone():
+  if n.address.isNone() and n.address6.isNone():
     return NoAddress
 
   if n == r.localNode:
