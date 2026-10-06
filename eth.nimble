@@ -1,12 +1,12 @@
 mode = ScriptMode.Verbose
 
-version       = "0.9.1"
+version       = "0.10.0"
 author        = "Status Research & Development GmbH"
 description   = "Ethereum Common library"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 2.0.10",
+requires "nim >= 2.2.14",
          "chronicles >= 0.12.4",
          "chronos >= 4.0.0",
          "confutils >= 0.1.1",
