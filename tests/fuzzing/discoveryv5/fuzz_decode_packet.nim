@@ -32,6 +32,4 @@ test:
     iv = rng[].generate(array[ivSize, byte])
     maskedHeader = encryptHeader(nodeB.id, iv, payload)
 
-  let decoded = decodePacket(codecB, nodeA.address.get(), @iv & maskedHeader)
-  if decoded.isErr():
-    echo "Error occurred: " & $decoded.error
+  discard decodePacket(codecB, nodeA.address.get(), @iv & maskedHeader)

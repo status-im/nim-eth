@@ -206,7 +206,7 @@ func verify*(sig: SignatureNR, msg: openArray[byte], key: PublicKey): bool =
   let hash = keccak256(msg)
   verify(sig, SkMessage(hash.data), key)
 
-proc ecdhSharedSecretHash(output: ptr byte, x32, y32: ptr byte, data: pointer): cint
+proc ecdhSharedSecretHash(output: ptr byte, x32, y32: SkConstPtrByte, data: pointer): cint
                     {.cdecl, raises: [].} =
   ## Hash function used by `ecdhSharedSecret` below
   # `x32` and `y32` are result of scalar multiplication of publicKey * privateKey.
@@ -215,7 +215,7 @@ proc ecdhSharedSecretHash(output: ptr byte, x32, y32: ptr byte, data: pointer): 
 
   # output length is derived from x32 length and taken from ecdh
   # generic parameter `KeyLength`
-  copyMem(output, x32, KeyLength)
+  copyMem(output, cast[pointer](x32), KeyLength)
   return 1
 
 func ecdhSharedSecret*(seckey: PrivateKey, pubkey: PublicKey): SharedSecret =
@@ -226,7 +226,7 @@ func ecdhSharedSecret*(seckey: PrivateKey, pubkey: PublicKey): SharedSecret =
   doAssert res.isOk, $res.error
   SharedSecret(data: res.get)
 
-proc ecdhSharedSecretFullHash(output: ptr byte, x32, y32: ptr byte, data: pointer): cint
+proc ecdhSharedSecretFullHash(output: ptr byte, x32, y32: SkConstPtrByte, data: pointer): cint
                     {.cdecl, raises: [].} =
   ## Hash function used by `ecdhSharedSecretFull` below
   # `x32` and `y32` are result of scalar multiplication of publicKey * privateKey.
@@ -236,8 +236,8 @@ proc ecdhSharedSecretFullHash(output: ptr byte, x32, y32: ptr byte, data: pointe
   # generic parameter `FullKeyLength`
 
   # output[0] = 0x02 | (y32[31] & 1)
-  output[] = 0x02 or (y32.offset(31)[] and 0x01)
-  copyMem(output.offset(1), x32, KeyLength)
+  output[] = 0x02 or (cast[ptr UncheckedArray[byte]](y32)[31] and 0x01)
+  copyMem(output.offset(1), cast[pointer](x32), KeyLength)
   return 1
 
 func ecdhSharedSecretFull*(seckey: PrivateKey, pubkey: PublicKey): SharedSecretFull =

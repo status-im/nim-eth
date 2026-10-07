@@ -7,7 +7,7 @@
 {.used.}
 
 import
-  sequtils,
+  std/[options, sequtils],
   chronos,
   testutils/unittests,
   ./test_utils,
@@ -593,7 +593,10 @@ procSuite "uTP over UDP protocol":
     for i in 0..<amountOfNodes:
       let
         address = initTAddress("127.0.0.1", 9080 + i)
-        utpNode = UtpProtocol.new(handleIncomingConnection, address)
+        utpNode = UtpProtocol.new(
+          handleIncomingConnection, address,
+          socketConfig = SocketConfig.init(
+            incomingSocketReceiveTimeout = none[Duration]()))
 
       utpNodeList.add(utpNode)
 

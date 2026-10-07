@@ -13,8 +13,8 @@ type
 template testDecode(payload: openArray, T: type) =
   try:
     discard rlp.decode(payload, T)
-  except RlpError as e:
-    echo "Decode failed: " & e.msg
+  except RlpError:
+    discard
 
 test:
   testDecode(payload, string)
