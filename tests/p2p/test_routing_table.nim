@@ -10,6 +10,7 @@
 import
   std/os,
   unittest2,
+  ../../eth/net/utils,
   ../../eth/enr/enr,
   ../../eth/p2p/discoveryv5/[routing_table, node],
   ./discv5_test_helper
@@ -593,6 +594,40 @@ suite "Routing Table Tests":
       check table.addNode(n) == Added
 
     check table.len == int(DefaultTableIpLimits.bucketIpLimit) + 1
+
+  test "Ip limits are counted per subnet":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
+
+    const
+      ip1 = parseIpAddress("1.2.3.4")
+      ip2 = parseIpAddress("1.2.3.5")
+      ip3 = parseIpAddress("1.2.3.6")
+      otherSubnet = parseIpAddress("1.2.4.4")
+
+    check:
+      DefaultTableIpLimits.bucketIpLimit == 2 # the test depends on it
+      table.addNode(node.nodeAtDistance(rng[], 256, ip1)) == Added
+      table.addNode(node.nodeAtDistance(rng[], 256, ip2)) == Added
+      table.addNode(node.nodeAtDistance(rng[], 256, ip3)) == IpLimitReached
+      table.addNode(node.nodeAtDistance(rng[], 256, otherSubnet)) == Added
+
+  test "Ip limits count the subnet of an address":
+    var limits = IpLimits(limit: 2)
+
+    check:
+      limits.inc(parseIpAddress("1.2.3.4"))
+      limits.inc(parseIpAddress("1.2.3.5"))
+      not limits.inc(parseIpAddress("1.2.3.6")) # same /24
+      limits.inc(parseIpAddress("1.2.4.6")) # different /24
+
+      limits.inc(parseIpAddress("2001:db9::1"))
+      limits.inc(parseIpAddress("2001:db9::2"))
+      not limits.inc(parseIpAddress("2001:db9::3")) # same /64
+      limits.inc(parseIpAddress("2001:db9:0:1::3")) # different /64
+
+    limits.dec(parseIpAddress("1.2.3.4"))
+    check limits.inc(parseIpAddress("1.2.3.6"))
 
   test "Banned nodes: banned node cannot be added":
     let
