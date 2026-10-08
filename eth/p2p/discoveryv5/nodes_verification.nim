@@ -26,7 +26,9 @@ func validIp(sender, address: IpAddress): bool =
     let s = initTAddress(sender, Port(0))
     if a.isLoopback() and s.isLoopback():
       true
-    elif a.isSiteLocal() and s.isSiteLocal():
+    elif (a.isSiteLocal() or a.isUniqueLocal()) and
+        (s.isSiteLocal() or s.isUniqueLocal()):
+          # TODO: replace with isPrivate once nim-chronos tag > v4.1.1
       true
     else:
       false

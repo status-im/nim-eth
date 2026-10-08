@@ -22,4 +22,5 @@ import
   ./test_bloom,
   ./test_enr,
   ./test_enode,
-  ./test_nat
+  ./test_nat,
+  ./test_net_utils

@@ -11,7 +11,7 @@ import
   std/[tables, hashes, net],
   results, chronos, chronicles
 
-export net.IpAddress
+export net.IpAddress, net.parseIpAddress
 
 type
   IpLimits* = object
@@ -38,20 +38,27 @@ func dec*(ipLimits: var IpLimits, ip: IpAddress) =
   elif val > 1:
     ipLimits.ips[ip] = val - 1
 
+func isLocallyAssigned*(address: TransportAddress): bool =
+  ## Returns true for addresses that are assigned within a local network
+  ## instead of globally: loopback, private and link local addresses.
+  # TODO: replace with isPrivate once nim-chronos tag > v4.1.1
+  address.isLoopback() or address.isSiteLocal() or address.isUniqueLocal() or
+    address.isLinkLocal()
+
+func isLocallyAssigned*(address: IpAddress): bool =
+  let a = initTAddress(address, Port(0))
+  a.isLocallyAssigned()
+
 func isGlobalUnicast*(address: TransportAddress): bool =
-  if address.isGlobal() and address.isUnicast():
-    true
-  else:
-    false
+  # nim-chronos its `isGlobal` follows the IANA special-purpose registry,
+  # which no longer lists the IPv6 site local range `fec0::/10`: deprecated
+  # by RFC 3879 but never reassigned, so it is not reachable either. It's
+  # the only address range that is removed here with isSiteLocal.
+  address.isGlobal() and address.isUnicast() and not address.isSiteLocal()
 
 func isGlobalUnicast*(address: IpAddress): bool =
   let a = initTAddress(address, Port(0))
   a.isGlobalUnicast()
-
-func isPublic*(address: IpAddress): bool =
-  ## Returns true for globally routable (public) addresses
-  let a = initTAddress(address, Port(0))
-  not (a.isLoopback() or a.isSiteLocal() or a.isLinkLocal())
 
 proc getRouteIpv4*(): Result[IpAddress, cstring] =
   # Avoiding Exception with initTAddress and can't make it work with static.

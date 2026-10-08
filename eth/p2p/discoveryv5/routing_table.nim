@@ -153,10 +153,10 @@ func ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
   ## return true.
   let ip = n.address.get().ip # Node from table should always have an address
 
-  # Apply IP limits only to public addresses. The limits defend against Sybil
-  # attacks from a single public IP, which is not meaningful on a private
-  # network. go-ethereum applies the same exemption.
-  if not ip.isPublic():
+  # Apply IP limits only to globally assigned addresses. The limits defend
+  # against Sybil attacks from a single public IP, which is not meaningful on a
+  # private network. go-ethereum applies the same exemption.
+  if ip.isLocallyAssigned():
     return true
   # Check ip limit for bucket
   if not b.ipLimits.inc(ip):
@@ -172,7 +172,7 @@ func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
   ## Decrement the ip limits of the routing table and the bucket for the
   ## specified `Node` its ip.
   let ip = n.address.get().ip # Node from table should always have an address
-  if not ip.isPublic():
+  if ip.isLocallyAssigned():
     return
   b.ipLimits.dec(ip)
   r.ipLimits.dec(ip)
@@ -260,16 +260,16 @@ func split(k: KBucket): tuple[lower, upper: KBucket] =
     bucket.nodes.add(node)
     # Ip limits got reset because of the KBucket.new, so there is the need to
     # increment again for each added node. It should however never fail as the
-    # previous bucket had the same limits. IP limits only track public addresses
-    # so non-public addresses are not counted.
-    if node.address.get().ip.isPublic():
+    # previous bucket had the same limits. IP limits only track globally
+    # assigned addresses, so locally assigned ones are not counted.
+    if not node.address.get().ip.isLocallyAssigned():
       doAssert(bucket.ipLimits.inc(node.address.get().ip),
         "IpLimit increment should work as all buckets have the same limits")
 
   for node in k.replacementCache:
     let bucket = if node.id <= splitid: result.lower else: result.upper
     bucket.replacementCache.add(node)
-    if node.address.get().ip.isPublic():
+    if not node.address.get().ip.isLocallyAssigned():
       doAssert(bucket.ipLimits.inc(node.address.get().ip),
         "IpLimit increment should work as all buckets have the same limits")
 
