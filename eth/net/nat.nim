@@ -396,7 +396,7 @@ proc setupNat*(natStrategy: NatStrategy, ports: seq[PortSpec],
                   description = clientId)).valueOr:
     warn "UPnP/NAT-PMP available but port forwarding failed"
     return (ip: Opt.none(IpAddress), ports: ports.mapIt(Opt.some(it)))
-  
+
   (ip: Opt.some(extIp), ports: extPorts.mapIt(Opt.some(it)))
 
 proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
@@ -457,6 +457,12 @@ proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress, ports: seq[PortSpec]
   ## external IP can be figured out by other means at a later stage.
 
   if natConfig.hasExtIp:
+    if natConfig.extIp.family == IpAddressFamily.IPv6:
+      # Specifically ignored and not rejected, so that such a node still starts up.
+      warn "Ignoring the IPv6 address of --nat:extip, it only applies to IPv4",
+        extIp = natConfig.extIp
+      return (Opt.none(IpAddress), ports.mapIt(Opt.some(it)))
+
     # any required port redirection must be done by hand
     return (Opt.some(natConfig.extIp), ports.mapIt(Opt.some(it)))
 

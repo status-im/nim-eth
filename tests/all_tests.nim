@@ -21,4 +21,5 @@ import
   ./utp/all_utp_tests,
   ./test_bloom,
   ./test_enr,
-  ./test_enode
+  ./test_enode,
+  ./test_nat
