@@ -22,7 +22,7 @@ declareGauge routing_table_nodes,
 
 type
   RoutingTable* = object
-    localNode*: Node
+    localId*: NodeId ## The id of our own node.
     buckets*: seq[KBucket]
     bitsPerHop: int ## This value indicates how many bits (at minimum) you get
     ## closer to finding your target per query. Practically, it tells you also
@@ -43,7 +43,7 @@ type
   KBucket = ref object
     istart, iend: NodeId ## Range of NodeIds this KBucket covers. This is not a
     ## simple logarithmic distance as buckets can be split over a prefix that
-    ## does not cover the `localNode` id.
+    ## does not cover the `localId`.
     nodes*: seq[Node] ## Node entries of the KBucket. Sorted according to last
     ## time seen. First entry (head) is considered the most recently seen node
     ## and the last entry (tail) is considered the least recently seen node.
@@ -273,8 +273,8 @@ func split(k: KBucket): tuple[lower, upper: KBucket] =
       doAssert(bucket.ipLimits.inc(node.address.get().ip),
         "IpLimit increment should work as all buckets have the same limits")
 
-func inRange(k: KBucket, n: Node): bool =
-  k.istart <= n.id and n.id <= k.iend
+func inRange(k: KBucket, id: NodeId): bool =
+  k.istart <= id and id <= k.iend
 
 func contains(k: KBucket, n: Node): bool = n in k.nodes
 
@@ -312,12 +312,13 @@ proc computeSharedPrefixBits(nodes: openArray[NodeId]): int =
   # Reaching this would mean that all node ids are equal.
   doAssert(false, "Unable to calculate number of shared prefix bits")
 
-func init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop,
+func init*(T: type RoutingTable, localId: NodeId, bitsPerHop = DefaultBitsPerHop,
     ipLimits = DefaultTableIpLimits, rng: ref HmacDrbgContext): T =
-  ## Initialize the routing table for provided `Node` and bitsPerHop value.
+  ## Initialize the routing table for provided local node id and bitsPerHop
+  ## value.
   ## `bitsPerHop` is default set to 5 as recommended by original Kademlia paper.
   RoutingTable(
-    localNode: localNode,
+    localId: localId,
     buckets: @[KBucket.new(0.u256, high(UInt256), ipLimits.bucketIpLimit)],
     bitsPerHop: bitsPerHop,
     ipLimits: IpLimits(limit: ipLimits.tableIpLimit),
@@ -403,7 +404,7 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
   if n.address.isNone():
     return NoAddress
 
-  if n == r.localNode:
+  if n.id == r.localId:
     return LocalNode
 
   if r.isBanned(n.id):
@@ -457,7 +458,7 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
     let depth = computeSharedPrefixBits(@[bucket.istart, bucket.iend])
     # Split if the bucket has the local node in its range or if the depth is not
     # congruent to 0 mod `bitsPerHop`
-    if bucket.inRange(r.localNode) or
+    if bucket.inRange(r.localId) or
         (depth mod r.bitsPerHop != 0 and depth != ID_SIZE):
       r.splitBucket(r.buckets.find(bucket))
       return r.addNode(n) # retry adding
@@ -532,10 +533,10 @@ func neighbours*(
 func neighboursAtDistance*(r: RoutingTable, distance: uint16,
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
   ## Return up to k neighbours at given logarithmic distance.
-  result = r.neighbours(idAtDistance(r.localNode.id, distance), k, seenOnly)
+  result = r.neighbours(idAtDistance(r.localId, distance), k, seenOnly)
   # This is a bit silly, first getting closest nodes then to only keep the ones
   # that are exactly the requested distance.
-  keepIf(result, proc(n: Node): bool = logDistance(n.id, r.localNode.id) == distance)
+  keepIf(result, proc(n: Node): bool = logDistance(n.id, r.localId) == distance)
 
 func neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
     k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
@@ -623,3 +624,10 @@ proc randomNodes*(r: RoutingTable, maxAmount: int,
         seen.incl(node)
         if pred.isNil() or node.pred:
           result.add(node)
+
+# Deprecated API, kept for backwards compatibility only. Not used internally anymore.
+
+func init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop,
+    ipLimits = DefaultTableIpLimits, rng: ref HmacDrbgContext): T
+    {.deprecated: "Use RoutingTable.init with the local node id".} =
+  RoutingTable.init(localNode.id, bitsPerHop, ipLimits, rng)

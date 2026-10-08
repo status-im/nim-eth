@@ -26,14 +26,14 @@ suite "Routing Table Tests":
 
   test "Add local node":
     let node = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
 
     check table.addNode(node) == LocalNode
 
   test "Bucket splitting in range branch b=1":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
 
     for j in 0..5'u32:
       for i in 0..<BUCKET_SIZE:
@@ -43,7 +43,7 @@ suite "Routing Table Tests":
   test "Bucket splitting off range branch b=1":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
 
     # Add 16 nodes, distance 256
     for i in 0..<BUCKET_SIZE:
@@ -61,7 +61,7 @@ suite "Routing Table Tests":
   test "Bucket splitting off range branch b=2":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 2, allow not in range branch to split once (2 buckets).
-    var table = RoutingTable.init(node, 2, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 2, ipLimits, rng = rng)
 
     # Add 16 nodes, distance 256 from `node`, but all with 2 bits shared prefix
     # among themselves.
@@ -89,7 +89,7 @@ suite "Routing Table Tests":
   test "Replacement cache":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
 
     # create a full bucket
     let bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
@@ -121,7 +121,7 @@ suite "Routing Table Tests":
   test "Empty bucket":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
 
     check table.nodeToRevalidate().isNil()
 
@@ -143,7 +143,7 @@ suite "Routing Table Tests":
   test "Empty replacement cache":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
 
     # create a full bucket TODO: no need to store bucketNodes
     let bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
@@ -157,7 +157,7 @@ suite "Routing Table Tests":
   test "Double add":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
 
     let doubleNode = node.nodeAtDistance(rng[], 256)
     # Try to add the node twice
@@ -185,7 +185,7 @@ suite "Routing Table Tests":
   test "Double replacement add":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
 
     # create a full bucket
     let bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
@@ -212,7 +212,7 @@ suite "Routing Table Tests":
 
   test "Replacement cache entry only gets replaced by a newer record":
     let node = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
 
     # create a full bucket so that further nodes end up in the replacement cache
     for n in node.nodesAtDistance(rng[], 256, BUCKET_SIZE):
@@ -243,7 +243,7 @@ suite "Routing Table Tests":
 
   test "Node gets removed when its updated record reaches the ip limits":
     let node = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
     const
       pubIp1 = parseIpAddress("1.2.3.4")
@@ -274,7 +274,7 @@ suite "Routing Table Tests":
   test "Just seen":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
 
     # create a full bucket
     let bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
@@ -292,7 +292,7 @@ suite "Routing Table Tests":
   test "Just seen replacement":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    var table = RoutingTable.init(node, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
 
     # create a full bucket
     let bucketNodes = node.nodesAtDistance(rng[], 256, BUCKET_SIZE)
@@ -323,7 +323,7 @@ suite "Routing Table Tests":
   test "Ip limits on bucket":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
     # Use public IPs: LAN/loopback/link-local addresses are not added to IP limits
     const
@@ -375,7 +375,7 @@ suite "Routing Table Tests":
   test "Ip limits on routing table":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
-    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
     # Use public IPs: LAN/loopback/link-local addresses are not added to IP limits
     const
@@ -416,7 +416,7 @@ suite "Routing Table Tests":
 
   test "Ip limits on replacement cache":
     let node = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
     const
       pubIp1 = parseIpAddress("1.2.3.4")
@@ -455,7 +455,7 @@ suite "Routing Table Tests":
 
   test "Ip limits on replacement cache: deletion":
     let node = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
     const
       pubIp1 = parseIpAddress("1.2.3.4")
@@ -496,7 +496,7 @@ suite "Routing Table Tests":
 
   test "Ip limits on replacement cache: double add":
     let node = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
     const
       pubIp1 = parseIpAddress("1.2.3.4")
@@ -520,7 +520,7 @@ suite "Routing Table Tests":
 
   test "Ip limits on bucket: double add with new ip":
     let node = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
     let pk = PrivateKey.random(rng[])
     let sameIpNode1 = generateNode(pk)
@@ -543,7 +543,7 @@ suite "Routing Table Tests":
 
   test "Ip limits on replacement cache: double add with new ip":
     let node = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
     # Fill bucket
     let diffIpNodes = node.nodesAtDistanceUniqueIp(rng[], 256, BUCKET_SIZE,
@@ -571,7 +571,7 @@ suite "Routing Table Tests":
   test "Ip limits on bucket: even more adds with new ip":
     # This tests against an issue where the ip of the nodes would not get updated
     let node = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(node, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
     let pk = PrivateKey.random(rng[])
     let sameIpNode1 = generateNode(pk)
@@ -600,7 +600,7 @@ suite "Routing Table Tests":
       node1 = generateNode(PrivateKey.random(rng[]))
       node2 = generateNode(PrivateKey.random(rng[]))
 
-    var table = RoutingTable.init(localNode, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(localNode.id, 1, DefaultTableIpLimits, rng = rng)
 
     # Can add a node that is not banned
     check:
@@ -640,7 +640,7 @@ suite "Routing Table Tests":
       node1 = generateNode(PrivateKey.random(rng[]))
       node2 = generateNode(PrivateKey.random(rng[]))
 
-    var table = RoutingTable.init(localNode, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(localNode.id, 1, DefaultTableIpLimits, rng = rng)
 
     check table.addNode(node1) == Added
     table.banNode(node1.id, 1.nanoseconds)
@@ -668,7 +668,7 @@ suite "Routing Table Tests":
       node1 = generateNode(PrivateKey.random(rng[]))
       node2 = generateNode(PrivateKey.random(rng[]))
 
-    var table = RoutingTable.init(localNode, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(localNode.id, 1, DefaultTableIpLimits, rng = rng)
 
     check:
       table.addNode(node1) == Added
@@ -698,7 +698,7 @@ suite "Routing Table Tests":
       node1 = generateNode(PrivateKey.random(rng[]))
       node2 = generateNode(PrivateKey.random(rng[]))
 
-    var table = RoutingTable.init(localNode, 1, DefaultTableIpLimits, rng = rng)
+    var table = RoutingTable.init(localNode.id, 1, DefaultTableIpLimits, rng = rng)
 
     table.banNode(node1.id, 1.nanoseconds)
     sleep(1) # node1's ban is expired
@@ -721,7 +721,7 @@ suite "Routing Table Tests":
   test "neighbours filter predicate":
     let numNodes = 10
     let local = generateNode(PrivateKey.random(rng[]))
-    var table = RoutingTable.init(local, 1, ipLimits, rng = rng)
+    var table = RoutingTable.init(local.id, 1, ipLimits, rng = rng)
 
     let nodes = generateNRandomNodes(rng[], numNodes)
 

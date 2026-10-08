@@ -1204,7 +1204,7 @@ proc newProtocol*(
     bootstrapRecords: @bootstrapRecords,
     ipVote: IpVote.init(),
     enrAutoUpdate: enrAutoUpdate,
-    routingTable: RoutingTable.init(node, config.bitsPerHop, config.tableIpLimits, rng),
+    routingTable: RoutingTable.init(node.id, config.bitsPerHop, config.tableIpLimits, rng),
     banNodes: config.banNodes,
     handshakeTimeout: config.handshakeTimeout,
     responseTimeout: config.responseTimeout,
