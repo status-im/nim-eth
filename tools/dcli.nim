@@ -105,7 +105,7 @@ type
       pingTarget* {.
         argument
         desc: "ENR URI of the node to a send ping message"
-        name: "node" .}: Node
+        name: "node" .}: DiscoveryNode
     of findNode:
       distance* {.
         defaultValue: 255
@@ -116,12 +116,12 @@ type
       findNodeTarget* {.
         argument
         desc: "ENR URI of the node to send a findNode message"
-        name: "node" .}: Node
+        name: "node" .}: DiscoveryNode
     of talkReq:
       talkReqTarget* {.
         argument
         desc: "ENR URI of the node to send a talkReq message"
-        name: "node" .}: Node
+        name: "node" .}: DiscoveryNode
     of generateKeys:
       numKeys* {.
         argument
@@ -138,18 +138,18 @@ func parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
 func completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   @[]
 
-func parseCmdArg*(T: type Node, p: string): T {.raises: [ValueError].} =
+func parseCmdArg*(T: type DiscoveryNode, p: string): T {.raises: [ValueError].} =
   let res = enr.Record.fromURI(p)
   if res.isErr:
     raise newException(ValueError, "Invalid ENR:" & $res.error)
 
-  let n = Node.fromRecord(res.value)
+  let n = DiscoveryNode.fromRecord(res.value)
   if n.address.isNone():
     raise newException(ValueError, "ENR without address")
 
   n
 
-func completeCmdArg*(T: type Node, val: string): seq[string] =
+func completeCmdArg*(T: type DiscoveryNode, val: string): seq[string] =
   @[]
 
 func parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =
@@ -345,7 +345,7 @@ proc discover(
 
       seenNodes.incl(n.id)
 
-    info "Node random lookup finished",
+    info "DiscoveryNode random lookup finished",
       query_time_ms = duration.millis, discovered_nodes = discovered.len, new_nodes = newNodes, total_nodes = len(seenNodes)
 
     await sleepAsync(100.milliseconds) # 100 ms of idle time
@@ -430,7 +430,7 @@ proc run(config: DiscoveryConf) {.raises: [CatchableError].} =
 
       echo "Key ", i + 1, ":"
       echo "Private Key: ", $key
-      echo "Node ID: ", nodeIdHex
+      echo "DiscoveryNode ID: ", nodeIdHex
       echo "First 2 Bytes: 0x", nodeIdHex[0..3]
       echo ""
 

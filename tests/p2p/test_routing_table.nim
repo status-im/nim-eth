@@ -221,9 +221,9 @@ suite "Routing Table Tests":
 
     let (replacementNode, privKey) = node.nodeAndPrivKeyAtDistance(rng[], 256)
 
-    proc recordAtSeqNum(seqNum: uint64, ip: string): Node =
+    proc recordAtSeqNum(seqNum: uint64, ip: string): DiscoveryNode =
       let port = Port(20302)
-      Node.fromRecord(enr.Record.init(seqNum, privKey,
+      DiscoveryNode.fromRecord(enr.Record.init(seqNum, privKey,
         Opt.some(parseIpAddress(ip)), Opt.some(port), Opt.some(port),
         Opt.none(Port)).expect("Properly initialized private key"))
 
@@ -242,7 +242,7 @@ suite "Routing Table Tests":
       # The older record must not replace the newer one.
       table.addNode(replacementNode) == ReplacementExisting
 
-  test "Node gets removed when its updated record reaches the ip limits":
+  test "DiscoveryNode gets removed when its updated record reaches the ip limits":
     let node = generateNode(PrivateKey.random(rng[]))
     var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
@@ -261,7 +261,7 @@ suite "Routing Table Tests":
       check table.addNode(node.nodeAtDistance(rng[], 256, pubIp2)) == Added
 
     # The updated record moves the node to an ip of which the limit is reached.
-    let updatedNode = Node.fromRecord(enr.Record.init(2, privKey,
+    let updatedNode = DiscoveryNode.fromRecord(enr.Record.init(2, privKey,
       Opt.some(pubIp2), Opt.some(port), Opt.some(port), Opt.none(Port)).expect(
       "Properly initialized private key"))
 

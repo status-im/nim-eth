@@ -23,9 +23,9 @@ type
     ip*: IpAddress
     port*: Port
 
-  Node* = ref object
-    ## A peer in the DHT. Treated as immutable after construction:
-    ## a peer with an updated record is a new `Node` that replaces the old one.
+  DiscoveryNode* = ref object
+    ## A peer in the DHT. Treated as immutable after construction: a peer with
+    ## an updated record is a new `DiscoveryNode` that replaces the old one.
     ## Only `seen` is meant to be set.
     id: NodeId
     pubkey: PublicKey
@@ -34,7 +34,7 @@ type
     seen*: bool ## Indicates if there was at least one successful
     ## request-response with this node.
 
-  LocalNode* = ref object
+  LocalDiscoveryNode* = ref object
     ## Local discovery identity and the record advertised. The record and thus
     ## the addresses can change over time.
     id*: NodeId
@@ -42,16 +42,16 @@ type
     address*: Opt[Address]
     record*: Record
 
-func id*(n: Node): lent NodeId =
+func id*(n: DiscoveryNode): lent NodeId =
   n.id
 
-func pubkey*(n: Node): lent PublicKey =
+func pubkey*(n: DiscoveryNode): lent PublicKey =
   n.pubkey
 
-func address*(n: Node): lent Opt[Address] =
+func address*(n: DiscoveryNode): lent Opt[Address] =
   n.address
 
-func record*(n: Node): lent Record =
+func record*(n: DiscoveryNode): lent Record =
   n.record
 
 func toNodeId*(pk: PublicKey): NodeId =
@@ -72,37 +72,38 @@ func address(r: Record): Opt[Address] =
   else:
     Opt.none(Address)
 
-func fromRecord*(T: type Node, r: Record): T =
-  ## Create a new `Node` from a `Record`.
-  Node(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
+func fromRecord*(T: type DiscoveryNode, r: Record): T =
+  ## Create a new `DiscoveryNode` from a `Record`.
+  DiscoveryNode(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
     address: r.address())
 
-func fromRecord*(T: type LocalNode, r: Record): T =
-  ## Create a new `LocalNode` from a `Record`.
-  LocalNode(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
+func fromRecord*(T: type LocalDiscoveryNode, r: Record): T =
+  ## Create a new `LocalDiscoveryNode` from a `Record`.
+  LocalDiscoveryNode(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
     address: r.address())
 
-func toNode*(ln: LocalNode): Node =
-  ## A snapshot of the `LocalNode` for the places where it appears as a peer,
-  ## such as the NODES response to a request at distance 0.
-  Node(id: ln.id, pubkey: ln.pubkey, record: ln.record, address: ln.address)
+func toNode*(ln: LocalDiscoveryNode): DiscoveryNode =
+  ## A snapshot of the `LocalDiscoveryNode` for the places where it appears as
+  ## a peer, such as the NODES response to a request at distance 0.
+  DiscoveryNode(id: ln.id, pubkey: ln.pubkey, record: ln.record,
+    address: ln.address)
 
-func update*(ln: LocalNode, pk: PrivateKey,
+func update*(ln: LocalDiscoveryNode, pk: PrivateKey,
     ip: Opt[IpAddress] = Opt.none(IpAddress),
     tcpPort: Opt[Port] = Opt.none(Port),
     udpPort: Opt[Port] = Opt.none(Port),
     quicPort: Opt[Port] = Opt.none(Port),
     extraFields: openArray[FieldPair] = []): Result[void, cstring] =
-  ## Update the record and the address of the `LocalNode`.
+  ## Update the record and the address of the `LocalDiscoveryNode`.
   ? ln.record.update(pk, ip, tcpPort, udpPort, quicPort, extraFields)
 
   ln.address = ln.record.address()
 
   ok()
 
-func hash*(n: Node): hashes.Hash = hash(n.pubkey.toRaw)
+func hash*(n: DiscoveryNode): hashes.Hash = hash(n.pubkey.toRaw)
 
-func `==`*(a, b: Node): bool =
+func `==`*(a, b: DiscoveryNode): bool =
   (a.isNil and b.isNil) or
     (not a.isNil and not b.isNil and a.pubkey == b.pubkey)
 
@@ -136,7 +137,7 @@ func `$`*(a: Address): string =
   result.add($a.ip)
   result.add(":" & $a.port)
 
-func shortLog*(n: Node): string =
+func shortLog*(n: DiscoveryNode): string =
   if n.isNil:
     "uninitialized"
   elif n.address.isNone():
@@ -144,7 +145,7 @@ func shortLog*(n: Node): string =
   else:
     shortLog(n.id) & ":" & $n.address.get()
 
-func shortLog*(ln: LocalNode): string =
+func shortLog*(ln: LocalDiscoveryNode): string =
   if ln.isNil:
     "uninitialized"
   elif ln.address.isNone():
@@ -152,7 +153,7 @@ func shortLog*(ln: LocalNode): string =
   else:
     shortLog(ln.id) & ":" & $ln.address.get()
 
-func shortLog*(nodes: seq[Node]): string =
+func shortLog*(nodes: seq[DiscoveryNode]): string =
   result = "["
 
   var first = true
@@ -167,19 +168,24 @@ func shortLog*(nodes: seq[Node]): string =
 
 chronicles.formatIt(NodeId): shortLog(it)
 chronicles.formatIt(Address): $it
-chronicles.formatIt(Node): shortLog(it)
-chronicles.formatIt(seq[Node]): shortLog(it)
-chronicles.formatIt(LocalNode): shortLog(it)
+chronicles.formatIt(DiscoveryNode): shortLog(it)
+chronicles.formatIt(seq[DiscoveryNode]): shortLog(it)
+chronicles.formatIt(LocalDiscoveryNode): shortLog(it)
 
 # Deprecated API, kept for backwards compatibility only.
 
-func newNode*(r: Record): Result[Node, cstring]
-    {.deprecated: "Use Node.fromRecord instead".} =
-  ## Create a new `Node` from a `Record`.
-  ok(Node.fromRecord(r))
+type Node* {.deprecated: "Use DiscoveryNode".} = DiscoveryNode
+  ## The peer type was called `Node`, which is ambiguous in a codebase that
+  ## has a node type per protocol and per client.
 
-converter toNodeCompat*(ln: LocalNode): Node
-    {.deprecated: "A LocalNode is not a peer, use LocalNode.toNode() for an " &
-      "explicit snapshot".} =
-  ## Keeps passing a `LocalNode` where a `Node` is expected still possible.
+func newNode*(r: Record): Result[DiscoveryNode, cstring]
+    {.deprecated: "Use DiscoveryNode.fromRecord instead".} =
+  ## Create a new `DiscoveryNode` from a `Record`.
+  ok(DiscoveryNode.fromRecord(r))
+
+converter toNodeCompat*(ln: LocalDiscoveryNode): DiscoveryNode
+    {.deprecated: "A LocalDiscoveryNode is not a peer, use " &
+      "LocalDiscoveryNode.toNode() for an explicit snapshot".} =
+  ## Keeps passing a `LocalDiscoveryNode` where a `DiscoveryNode` is expected
+  ## still possible.
   ln.toNode()

@@ -39,7 +39,7 @@ suite "Discovery v5.1 Tests":
 
     await node.closeWait()
 
-  asyncTest "Node deletion":
+  asyncTest "DiscoveryNode deletion":
     let
       bootnode = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20301))
@@ -443,7 +443,7 @@ suite "Discovery v5.1 Tests":
       ("test", @[byte 1,2,3,4]))
     check discoveredFiltered.len == 1 and discoveredFiltered.contains(targetNode)
     let discoveredEmpty = lookupNode.randomNodes(10,
-      proc(n: Node) : bool = false)
+      proc(n: DiscoveryNode) : bool = false)
     check discoveredEmpty.len == 0
 
     await lookupNode.closeWait()
@@ -550,7 +550,7 @@ suite "Discovery v5.1 Tests":
       srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
         Opt.some(parseIpAddress("11.12.13.14")),
         Opt.some(port), Opt.some(port))[]
-      srcNode = Node.fromRecord(srcRecord)
+      srcNode = DiscoveryNode.fromRecord(srcRecord)
       pk = PrivateKey.random(rng[])
       targetDistance = @[logDistance(srcNode.id, pk.toPublicKey().toNodeId())]
       limit = 16
@@ -633,7 +633,7 @@ suite "Discovery v5.1 Tests":
       srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
         Opt.some(parseIpAddress("127.0.0.0")),
         Opt.some(port), Opt.some(port))[]
-      srcNode = Node.fromRecord(srcRecord)
+      srcNode = DiscoveryNode.fromRecord(srcRecord)
       pk = PrivateKey.random(rng[])
       targetDistance = @[logDistance(srcNode.id, pk.toPublicKey().toNodeId())]
       limit = 16
@@ -660,7 +660,7 @@ suite "Discovery v5.1 Tests":
       srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
         Opt.some(parseIpAddress("192.168.1.1")),
         Opt.some(port), Opt.some(port))[]
-      srcNode = Node.fromRecord(srcRecord)
+      srcNode = DiscoveryNode.fromRecord(srcRecord)
       pk = PrivateKey.random(rng[])
       targetDistance = @[logDistance(srcNode.id, pk.toPublicKey().toNodeId())]
       limit = 16
@@ -723,7 +723,7 @@ suite "Discovery v5.1 Tests":
         enrRec = enr.Record.init(1, privKey,
           Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
           Opt.some(Port(9000))).expect("Properly initialized private key")
-        sendNode = LocalNode.fromRecord(enrRec)
+        sendNode = LocalDiscoveryNode.fromRecord(enrRec)
       var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 
       let (packet, _) = encodeMessagePacket(rng[], codec,
@@ -752,7 +752,7 @@ suite "Discovery v5.1 Tests":
       enrRec = enr.Record.init(1, privKey,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      sendNode = LocalNode.fromRecord(enrRec)
+      sendNode = LocalDiscoveryNode.fromRecord(enrRec)
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
     for i in 0 ..< 5:
       let a = localAddress(20303 + i)
@@ -784,7 +784,7 @@ suite "Discovery v5.1 Tests":
       enrRec = enr.Record.init(1, privKey,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      sendNode = LocalNode.fromRecord(enrRec)
+      sendNode = LocalDiscoveryNode.fromRecord(enrRec)
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 
     var firstRequestNonce: AESGCMNonce
@@ -839,7 +839,7 @@ suite "Discovery v5.1 Tests":
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
         fromId: NodeId, fromUdpAddress: Address,
-        node: Opt[Node]):
+        node: Opt[DiscoveryNode]):
         seq[byte] {.gcsafe, raises: [].} =
       request
 
@@ -867,7 +867,7 @@ suite "Discovery v5.1 Tests":
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
         fromId: NodeId, fromUdpAddress: Address,
-        node: Opt[Node]):
+        node: Opt[DiscoveryNode]):
         seq[byte] {.gcsafe, raises: [].} =
       request
 
@@ -892,7 +892,7 @@ suite "Discovery v5.1 Tests":
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
         fromId: NodeId, fromUdpAddress: Address,
-        node: Opt[Node]):
+        node: Opt[DiscoveryNode]):
         seq[byte] {.gcsafe, raises: [].} =
       request
 
@@ -932,7 +932,7 @@ suite "Discovery v5.1 Tests":
     proc handler(
         protocol: TalkProtocol, request: seq[byte],
         fromId: NodeId, fromUdpAddress: Address,
-        node: Opt[Node]):
+        node: Opt[DiscoveryNode]):
         seq[byte] {.gcsafe, raises: [].} =
       # Return the request + same protocol id + 2 bytes, to make it 1 byte
       # bigger than the request
@@ -1142,7 +1142,7 @@ suite "Discovery v5.1 Tests":
       srcRecord = enr.Record.init(1, PrivateKey.random(rng[]),
         Opt.some(parseIpAddress("127.0.0.1")),
         Opt.some(port), Opt.some(port))[]
-      srcNode = Node.fromRecord(srcRecord)
+      srcNode = DiscoveryNode.fromRecord(srcRecord)
       pk = PrivateKey.random(rng[])
       badRecord = enr.Record.init(1, pk,
         Opt.some(parseIpAddress("127.0.0.1")),
@@ -1170,7 +1170,7 @@ suite "Discovery v5.1 Tests":
       badRecord = enr.Record.init(1, PrivateKey.random(rng[]),
         Opt.some(parseIpAddress("127.0.0.1")),
         Opt.some(Port(0)), Opt.some(Port(0)))[]
-      badNode = Node.fromRecord(badRecord)
+      badNode = DiscoveryNode.fromRecord(badRecord)
 
     discard mainNode.addSeenNode(badNode)
 

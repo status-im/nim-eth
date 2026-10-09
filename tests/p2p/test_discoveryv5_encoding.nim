@@ -324,12 +324,12 @@ suite "Discovery v5.1 Packet Encodings Test Vectors":
       enrRecA = enr.Record.init(1, privKeyA,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      nodeA = LocalNode.fromRecord(enrRecA)
+      nodeA = LocalDiscoveryNode.fromRecord(enrRecA)
 
       enrRecB = enr.Record.init(1, privKeyB,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      nodeB = LocalNode.fromRecord(enrRecB)
+      nodeB = LocalDiscoveryNode.fromRecord(enrRecB)
 
     var
       codecA {.used.} = Codec(localNode: nodeA, privKey: privKeyA,
@@ -545,12 +545,12 @@ suite "Discovery v5.1 Additional Encode/Decode":
       enrRecA = enr.Record.init(1, privKeyA,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      nodeA = LocalNode.fromRecord(enrRecA)
+      nodeA = LocalDiscoveryNode.fromRecord(enrRecA)
 
       enrRecB = enr.Record.init(1, privKeyB,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      nodeB = LocalNode.fromRecord(enrRecB)
+      nodeB = LocalDiscoveryNode.fromRecord(enrRecB)
 
     var
       codecA = Codec(localNode: nodeA, privKey: privKeyA, sessions: Sessions.init(5))
