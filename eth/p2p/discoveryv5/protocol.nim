@@ -834,7 +834,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[DiscoveryNode]]
 
     let query =
       try:
-        await one(pendingQueries)
+        await race(pendingQueries)
       except ValueError:
         raiseAssert("pendingQueries should not have been empty")
 
@@ -896,7 +896,7 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[DiscoveryN
 
     let query =
       try:
-        await one(pendingQueries)
+        await race(pendingQueries)
       except ValueError:
         raiseAssert("pendingQueries should not have been empty")
 
