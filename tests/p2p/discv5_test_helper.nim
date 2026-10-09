@@ -8,6 +8,7 @@
 import
   std/net,
   chronos,
+  ../../eth/net/utils,
   ../../eth/enr/enr,
   ../../eth/p2p/discoveryv5/[node, routing_table],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol
@@ -84,9 +85,11 @@ proc nodesAtDistance*(
 proc nodesAtDistanceUniqueIp*(
     n: Node, rng: var HmacDrbgContext, d: uint32, amount: int,
     ip: IpAddress = parseIpAddress("127.0.0.1")): seq[Node] =
+  ## Nodes of which the addresses are each in a different subnet, as that is
+  ## what the ip limits are counted on.
   var ta = initTAddress(ip, Port(0))
   for i in 0..<amount:
-    ta.inc()
+    ta.inc(1 shl (32 - IpLimitSubnetV4))
     result.add(nodeAtDistance(n, rng, d, ta.address()))
 
 proc addSeenNode*(d: discv5_protocol.Protocol, n: Node): bool =
