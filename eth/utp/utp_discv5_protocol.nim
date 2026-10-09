@@ -31,7 +31,7 @@ type
 proc init*(T: type NodeAddress, nodeId: NodeId, address: Address): NodeAddress =
   NodeAddress(nodeId: nodeId, address: address)
 
-proc init*(T: type NodeAddress, node: Node): Opt[NodeAddress] =
+proc init*(T: type NodeAddress, node: DiscoveryNode): Opt[NodeAddress] =
   node.address.map((address: Address) =>
     NodeAddress(nodeId: node.id, address: address))
 
@@ -82,7 +82,7 @@ proc initSendCallback(
 
 proc messageHandler(
     protocol: TalkProtocol, request: seq[byte],
-    srcId: NodeId, srcUdpAddress: Address, node: Opt[Node]): seq[byte] =
+    srcId: NodeId, srcUdpAddress: Address, node: Opt[DiscoveryNode]): seq[byte] =
   let
     p = UtpDiscv5Protocol(protocol)
     nodeAddress = NodeAddress.init(srcId, srcUdpAddress)

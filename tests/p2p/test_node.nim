@@ -19,7 +19,7 @@ const
   udpPort = Port(9000)
   newUdpPort = Port(9001)
 
-suite "Discovery v5.1 Node":
+suite "Discovery v5.1 DiscoveryNode":
   let rng = newRng()
 
   test "Update with IP and UDP port":
@@ -27,7 +27,7 @@ suite "Discovery v5.1 Node":
       privKey = PrivateKey.random(rng[])
       record = enr.Record.init(1, privKey, Opt.none(IpAddress),
         Opt.some(tcpPort), Opt.some(udpPort)).expect("Valid record")
-      node = Node.fromRecord(record)
+      node = LocalDiscoveryNode.fromRecord(record)
       extIp = parseIpAddress("1.2.3.4")
 
     check:
@@ -41,7 +41,7 @@ suite "Discovery v5.1 Node":
       privKey = PrivateKey.random(rng[])
       record = enr.Record.init(1, privKey, Opt.none(IpAddress),
         Opt.some(tcpPort), Opt.some(udpPort)).expect("Valid record")
-      node = Node.fromRecord(record)
+      node = LocalDiscoveryNode.fromRecord(record)
       extIp = parseIpAddress("1.2.3.4")
 
     check:
@@ -56,7 +56,7 @@ suite "Discovery v5.1 Node":
       privKey = PrivateKey.random(rng[])
       record = enr.Record.init(1, privKey, Opt.none(IpAddress),
         Opt.some(tcpPort), Opt.none(Port)).expect("Valid record")
-      node = Node.fromRecord(record)
+      node = LocalDiscoveryNode.fromRecord(record)
       extIp = parseIpAddress("1.2.3.4")
 
     check:
@@ -69,7 +69,7 @@ suite "Discovery v5.1 Node":
       ip = parseIpAddress("1.2.3.4")
       record = enr.Record.init(1, privKey, Opt.some(ip),
         Opt.some(tcpPort), Opt.some(udpPort)).expect("Valid record")
-      node = Node.fromRecord(record)
+      node = LocalDiscoveryNode.fromRecord(record)
 
     check:
       node.address == Opt.some(Address(ip: ip, port: udpPort))

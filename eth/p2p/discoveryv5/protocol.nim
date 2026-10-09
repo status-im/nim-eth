@@ -147,7 +147,7 @@ type
 
   Protocol* = ref object
     transp: DatagramTransport
-    localNode*: Node
+    localNode*: LocalDiscoveryNode
     privateKey: PrivateKey
     bindAddress: OptAddress ## UDP binding address
     pendingRequests: Table[AESGCMNonce, PendingRequest]
@@ -171,13 +171,13 @@ type
     requestQueues: Table[HandshakeKey, seq[seq[byte]]]
 
   PendingRequest = object
-    node: Node
+    node: DiscoveryNode
     message: seq[byte]
 
   TalkProtocolHandler* = proc(
     p: TalkProtocol, request: seq[byte],
     fromId: NodeId, fromUdpAddress: Address,
-    node: Opt[Node]): seq[byte]
+    node: Opt[DiscoveryNode]): seq[byte]
     {.gcsafe, raises: [].}
 
   TalkProtocol* = ref object of RootObj
@@ -203,10 +203,10 @@ const
 chronicles.formatIt(Opt[Port]): $it
 chronicles.formatIt(Opt[IpAddress]): $it
 
-proc addNode*(d: Protocol, node: Node): bool =
-  ## Add `Node` to discovery routing table.
+proc addNode*(d: Protocol, node: DiscoveryNode): bool =
+  ## Add `DiscoveryNode` to discovery routing table.
   ##
-  ## Returns true only when `Node` was added as a new entry to a bucket in the
+  ## Returns true only when `DiscoveryNode` was added as a new entry to a bucket in the
   ## routing table.
   let r = d.routingTable.addNode(node)
   if r == Added:
@@ -217,14 +217,14 @@ proc addNode*(d: Protocol, node: Node): bool =
   return false
 
 proc addNode*(d: Protocol, r: Record): bool =
-  ## Add `Node` from a `Record` to discovery routing table.
+  ## Add `DiscoveryNode` from a `Record` to discovery routing table.
   ##
-  ## Returns false only if no valid `Node` can be created from the `Record` or
-  ## on the conditions of `addNode` from a `Node`.
-  d.addNode(Node.fromRecord(r))
+  ## Returns false only if no valid `DiscoveryNode` can be created from the `Record` or
+  ## on the conditions of `addNode` from a `DiscoveryNode`.
+  d.addNode(DiscoveryNode.fromRecord(r))
 
 proc addNode*(d: Protocol, uri: string): bool =
-  ## Add `Node` from a ENR URI to discovery routing table.
+  ## Add `DiscoveryNode` from a ENR URI to discovery routing table.
   ##
   ## Returns false if no valid ENR URI, or on the conditions of `addNode` from
   ## an `Record`.
@@ -233,33 +233,34 @@ proc addNode*(d: Protocol, uri: string): bool =
 
   d.addNode(r)
 
-func getNode*(d: Protocol, id: NodeId): Opt[Node] =
+func getNode*(d: Protocol, id: NodeId): Opt[DiscoveryNode] =
   ## Get the node with id from the routing table.
   d.routingTable.getNode(id)
 
-proc randomNodes*(d: Protocol, maxAmount: int): seq[Node] =
+proc randomNodes*(d: Protocol, maxAmount: int): seq[DiscoveryNode] =
   ## Get a `maxAmount` of random nodes from the local routing table.
   d.routingTable.randomNodes(maxAmount)
 
 proc randomNodes*(d: Protocol, maxAmount: int,
-    pred: proc(x: Node): bool {.raises: [], gcsafe, noSideEffect.}): seq[Node] =
+    pred: proc(x: DiscoveryNode): bool {.raises: [], gcsafe, noSideEffect.}
+    ): seq[DiscoveryNode] =
   ## Get a `maxAmount` of random nodes from the local routing table with the
   ## `pred` predicate function applied as filter on the nodes selected.
   d.routingTable.randomNodes(maxAmount, pred)
 
 proc randomNodes*(d: Protocol, maxAmount: int,
-  enrField: (string, seq[byte])): seq[Node] =
+  enrField: (string, seq[byte])): seq[DiscoveryNode] =
   ## Get a `maxAmount` of random nodes from the local routing table. The
   ## the nodes selected are filtered by provided `enrField`.
-  d.randomNodes(maxAmount, proc(x: Node): bool = x.record.contains(enrField))
+  d.randomNodes(maxAmount, proc(x: DiscoveryNode): bool = x.record.contains(enrField))
 
 func neighbours*(d: Protocol, id: NodeId, k: int = BUCKET_SIZE,
-    seenOnly = false): seq[Node] =
+    seenOnly = false): seq[DiscoveryNode] =
   ## Return up to k neighbours (closest node ids) of the given node id.
   d.routingTable.neighbours(id, k, seenOnly)
 
 func neighboursAtDistances*(d: Protocol, distances: seq[uint16],
-    k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
+    k: int = BUCKET_SIZE, seenOnly = false): seq[DiscoveryNode] =
   ## Return up to k neighbours (closest node ids) at given distances.
   d.routingTable.neighboursAtDistances(distances, k, seenOnly)
 
@@ -278,7 +279,7 @@ func updateRecord*(
   ##
   ## Build the `fields` with `enr.enrFields` (or `toFieldPair`) so each field's
   ## RLP encoding is chosen based on its value type (e.g. list vs byte string).
-  d.localNode.record.update(d.privateKey, extraFields = fields)
+  d.localNode.update(d.privateKey, extraFields = fields)
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
@@ -317,12 +318,12 @@ proc sendTo(d: Protocol, a: Address, data: seq[byte]): Future[void] {.async: (ra
 proc send*(d: Protocol, a: Address, data: seq[byte]) =
   asyncSpawn sendTo(d, a, data)
 
-proc send(d: Protocol, n: Node, data: seq[byte]) =
+proc send(d: Protocol, n: DiscoveryNode, data: seq[byte]) =
   doAssert(n.address.isSome())
   d.send(n.address.get(), data)
 
 proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address, reqId: RequestId,
-    nodes: openArray[Node]) =
+    nodes: openArray[DiscoveryNode]) =
   proc sendNodes(d: Protocol, toId: NodeId, toAddr: Address,
       message: NodesMessage, reqId: RequestId) {.nimcall.} =
     let (data, _) = encodeMessagePacket(d.rng[], d.codec, toId, toAddr,
@@ -372,7 +373,7 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
     # A request for our own record.
     # It would be a weird request if there are more distances next to 0
     # requested, so in this case lets just pass only our own. TODO: OK?
-    d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
+    d.sendNodes(fromId, fromAddr, reqId, [d.localNode.toNode()])
   else:
     if fn.distances.all(proc (x: uint16): bool = return x <= 256):
       # neighboursAtDistances deduplicates, not erroring on this
@@ -384,7 +385,7 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
       d.sendNodes(fromId, fromAddr, reqId, [])
 
 proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
-    talkreq: TalkReqMessage, reqId: RequestId, node: Opt[Node]) =
+    talkreq: TalkReqMessage, reqId: RequestId, node: Opt[DiscoveryNode]) =
   let talkProtocol = d.talkProtocols.getOrDefault(talkreq.protocol)
 
   let talkresp =
@@ -404,7 +405,7 @@ proc handleTalkReq(d: Protocol, fromId: NodeId, fromAddr: Address,
 
 proc handleMessage(
     d: Protocol, srcId: NodeId, fromAddr: Address,
-    message: Message, node: Opt[Node] = Opt.none(Node)) =
+    message: Message, node: Opt[DiscoveryNode] = Opt.none(DiscoveryNode)) =
   case message.kind
   of ping:
     discovery_message_requests_incoming.inc()
@@ -438,7 +439,7 @@ func registerTalkProtocol*(d: Protocol, protocolId: seq[byte],
     ok()
 
 proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
-    requestNonce: AESGCMNonce, node: Opt[Node]) =
+    requestNonce: AESGCMNonce, node: Opt[DiscoveryNode]) =
   let key = HandshakeKey(nodeId: toId, address: a)
   if d.codec.hasHandshake(key):
     # A challenge is already outstanding for this peer. We only allow
@@ -456,7 +457,7 @@ proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
         node.get().record.seqNum
       else:
         0
-    pubkey = node.map(proc(node: Node): PublicKey = node.pubkey)
+    pubkey = node.map(proc(node: DiscoveryNode): PublicKey = node.pubkey)
 
   let data = encodeWhoareyouPacket(d.rng[], d.codec, toId, a, requestNonce,
     recordSeq, pubkey)
@@ -468,7 +469,7 @@ proc sendWhoareyou(d: Protocol, toId: NodeId, a: Address,
   trace "Send whoareyou", dstId = toId, address = a
   d.send(a, data)
 
-proc replaceNode(d: Protocol, n: Node) =
+proc replaceNode(d: Protocol, n: DiscoveryNode) =
   if n.record notin d.bootstrapRecords:
     d.routingTable.replaceNode(n)
   else:
@@ -477,7 +478,7 @@ proc replaceNode(d: Protocol, n: Node) =
     # peers in the routing table.
     debug "Message request to bootstrap node failed", enr = toURI(n.record)
 
-proc banNode*(d: Protocol, n: Node, banPeriod: chronos.Duration) =
+proc banNode*(d: Protocol, n: DiscoveryNode, banPeriod: chronos.Duration) =
   if n.record notin d.bootstrapRecords:
     if d.banNodes:
       d.routingTable.banNode(n.id, banPeriod) # banNode also replaces the node
@@ -495,14 +496,14 @@ proc isBanned*(d: Protocol, nodeId: NodeId): bool =
 # TODO: This could be improved to do the clean-up immediately in case a non
 # whoareyou response does arrive, but we would need to store the AuthTag
 # somewhere
-proc registerRequest(d: Protocol, n: Node, message: seq[byte],
+proc registerRequest(d: Protocol, n: DiscoveryNode, message: seq[byte],
     nonce: AESGCMNonce) =
   let request = PendingRequest(node: n, message: message)
   if not d.pendingRequests.hasKeyOrPut(nonce, request):
     sleepAsync(d.responseTimeout).addCallback() do(data: pointer):
       d.pendingRequests.del(nonce)
 
-proc pingBack(d: Protocol, node: Node) {.async: (raises: [CancelledError]).}
+proc pingBack(d: Protocol, node: DiscoveryNode) {.async: (raises: [CancelledError]).}
 
 proc receive*(d: Protocol, a: Address, packet: openArray[byte]) =
   discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
@@ -610,7 +611,7 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
 
   proto.receive(Address(ip: raddr.toIpAddress(), port: raddr.port), buf)
 
-proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
+proc waitMessage(d: Protocol, fromNode: DiscoveryNode, reqId: RequestId):
     Future[Opt[Message]] {.async: (raw: true, raises: [CancelledError]).} =
   let retFuture = Future[Opt[Message]].Raising([CancelledError]).init("discv5.waitMessage")
   let key = (fromNode.id, reqId)
@@ -621,7 +622,7 @@ proc waitMessage(d: Protocol, fromNode: Node, reqId: RequestId):
   d.awaitedMessages[key] = retFuture
   retFuture
 
-proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
+proc waitNodes(d: Protocol, fromNode: DiscoveryNode, reqId: RequestId):
     Future[DiscResult[seq[Record]]] {.async: (raises: [CancelledError]).} =
   ## Wait for one or more nodes replies.
   ##
@@ -651,7 +652,7 @@ proc waitNodes(d: Protocol, fromNode: Node, reqId: RequestId):
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Nodes message not received in time")
 
-proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
+proc sendMessage*[T: SomeMessage](d: Protocol, toNode: DiscoveryNode, m: T):
     RequestId =
   doAssert(toNode.address.isSome())
   let
@@ -693,7 +694,7 @@ proc sendMessage*[T: SomeMessage](d: Protocol, toNode: Node, m: T):
 
   reqId
 
-proc ping*(d: Protocol, toNode: Node):
+proc ping*(d: Protocol, toNode: DiscoveryNode):
     Future[DiscResult[PongMessage]] {.async: (raises: [CancelledError]).} =
   ## Send a discovery ping message.
   ##
@@ -719,19 +720,19 @@ proc ping*(d: Protocol, toNode: Node):
     discovery_message_requests_outgoing.inc(labelValues = ["no_response"])
     return err("Pong message not received in time")
 
-proc pingBack(d: Protocol, node: Node) {.async: (raises: [CancelledError]).} =
+proc pingBack(d: Protocol, node: DiscoveryNode) {.async: (raises: [CancelledError]).} =
   ## Ping back a node after an inbound session setup, with a random delay.
   await sleepAsync(milliseconds(d.rng[].rand(d.pingBackMax)))
   let res = await d.ping(node)
   if res.isErr():
     trace "Ping back failed", node, err = res.error
 
-proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
-    Future[DiscResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
+proc findNode*(d: Protocol, toNode: DiscoveryNode, distances: seq[uint16]):
+    Future[DiscResult[seq[DiscoveryNode]]] {.async: (raises: [CancelledError]).} =
   ## Send a discovery findNode message.
   ##
   ## Returns the received nodes or an error.
-  ## Received ENRs are already validated and converted to `Node`.
+  ## Received ENRs are already validated and converted to `DiscoveryNode`.
 
   if d.isBanned(toNode.id):
     return err("toNode is banned")
@@ -746,7 +747,7 @@ proc findNode*(d: Protocol, toNode: Node, distances: seq[uint16]):
   else:
     return err(nodes.error)
 
-proc talkReq*(d: Protocol, toNode: Node, protocol, request: seq[byte]):
+proc talkReq*(d: Protocol, toNode: DiscoveryNode, protocol, request: seq[byte]):
     Future[DiscResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
   ## Send a discovery talkreq message.
   ##
@@ -784,8 +785,8 @@ func lookupDistances*(target, dest: NodeId): seq[uint16] =
       result.add(td - uint16(i))
     inc i
 
-proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
-    Future[seq[Node]] {.async: (raises: [CancelledError]).} =
+proc lookupWorker(d: Protocol, destNode: DiscoveryNode, target: NodeId):
+    Future[seq[DiscoveryNode]] {.async: (raises: [CancelledError]).} =
   let dists = lookupDistances(target, destNode.id)
 
   # Instead of doing max `lookupRequestLimit` findNode requests, make use
@@ -798,7 +799,8 @@ proc lookupWorker(d: Protocol, destNode: Node, target: NodeId):
     for n in result:
       discard d.addNode(n)
 
-proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async: (raises: [CancelledError]).} =
+proc lookup*(d: Protocol, target: NodeId): Future[seq[DiscoveryNode]]
+    {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -812,7 +814,8 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async: (raises: [
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
+  var pendingQueries =
+    newSeqOfCap[Future[seq[DiscoveryNode]].Raising([CancelledError])](alpha)
 
   while true:
     var i = 0
@@ -849,7 +852,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async: (raises: [
       if not seen.containsOrIncl(n.id):
         # If it wasn't seen before, insert node while remaining sorted
         closestNodes.insert(n, closestNodes.lowerBound(n,
-          proc(x: Node, n: Node): int =
+          proc(x: DiscoveryNode, n: DiscoveryNode): int =
             cmp(distance(x.id, target), distance(n.id, target))
         ))
 
@@ -859,7 +862,7 @@ proc lookup*(d: Protocol, target: NodeId): Future[seq[Node]] {.async: (raises: [
   d.lastLookup = now(chronos.Moment)
   return closestNodes
 
-proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
+proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[DiscoveryNode]]
     {.async: (raises: [CancelledError]).} =
   ## Query k nodes for the given target, returns all nodes found, including the
   ## nodes queried.
@@ -875,7 +878,8 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
   for node in queryBuffer:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
+  var pendingQueries =
+    newSeqOfCap[Future[seq[DiscoveryNode]].Raising([CancelledError])](alpha)
 
   while true:
     var i = 0
@@ -913,37 +917,39 @@ proc query*(d: Protocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
   d.lastLookup = now(chronos.Moment)
   return queryBuffer
 
-proc queryRandom*(d: Protocol): Future[seq[Node]] {.async: (raw: true, raises: [CancelledError]).} =
+proc queryRandom*(d: Protocol): Future[seq[DiscoveryNode]]
+    {.async: (raw: true, raises: [CancelledError]).} =
   ## Perform a query for a random target, return all nodes discovered.
   d.query(NodeId.random(d.rng[]))
 
 proc queryRandom*(d: Protocol, enrField: (string, seq[byte])):
-    Future[seq[Node]] {.async: (raises: [CancelledError]).} =
+    Future[seq[DiscoveryNode]] {.async: (raises: [CancelledError]).} =
   ## Perform a query for a random target, return all nodes discovered which
   ## contain enrField.
   let nodes = await d.queryRandom()
-  var filtered: seq[Node]
+  var filtered: seq[DiscoveryNode]
   for n in nodes:
     if n.record.contains(enrField):
       filtered.add(n)
 
   return filtered
 
-proc resolve*(d: Protocol, id: NodeId): Future[Opt[Node]] {.async: (raises: [CancelledError]).} =
-  ## Resolve a `Node` based on provided `NodeId`.
+proc resolve*(d: Protocol, id: NodeId): Future[Opt[DiscoveryNode]]
+    {.async: (raises: [CancelledError]).} =
+  ## Resolve a `DiscoveryNode` based on provided `NodeId`.
   ##
   ## This will first look in the own routing table. If the node is known, it
   ## will try to contact if for newer information. If node is not known or it
   ## does not reply, a lookup is done to see if it can find a (newer) record of
   ## the node on the network.
   if id == d.localNode.id:
-    return Opt.some(d.localNode)
+    return Opt.some(d.localNode.toNode())
 
   # No point in trying to resolve a banned node because it won't exist in the
   # routing table and it will be filtered out of any respones in the lookup call
   if d.isBanned(id):
     debug "Not resolving banned node", nodeId = id
-    return Opt.none(Node)
+    return Opt.none(DiscoveryNode)
 
   let node = d.getNode(id)
   if node.isSome():
@@ -989,7 +995,8 @@ proc populateTable*(d: Protocol) {.async: (raises: [CancelledError]).} =
   debug "Total nodes in routing table after populate",
     total = d.routingTable.len()
 
-proc revalidateNode*(d: Protocol, n: Node) {.async: (raises: [CancelledError]).} =
+proc revalidateNode*(d: Protocol, n: DiscoveryNode)
+    {.async: (raises: [CancelledError]).} =
   let pong = await d.ping(n)
 
   if pong.isOk():
@@ -1190,7 +1197,7 @@ proc newProtocol*(
     else:
       warn "No external IP provided for the ENR, this node will not be " & "discoverable"
 
-  let node = Node.fromRecord(record)
+  let node = LocalDiscoveryNode.fromRecord(record)
 
   doAssert not (isNil(rng)), "RNG initialization failed"
 

@@ -44,12 +44,12 @@ type
     istart, iend: NodeId ## Range of NodeIds this KBucket covers. This is not a
     ## simple logarithmic distance as buckets can be split over a prefix that
     ## does not cover the `localId`.
-    nodes*: seq[Node] ## Node entries of the KBucket. Sorted according to last
+    nodes*: seq[DiscoveryNode] ## Node entries of the KBucket. Sorted according to last
     ## time seen. First entry (head) is considered the most recently seen node
     ## and the last entry (tail) is considered the least recently seen node.
     ## Here "seen" means a successful request-response. This can also not have
     ## occurred yet.
-    replacementCache: seq[Node] ## Nodes that could not be added to the `nodes`
+    replacementCache: seq[DiscoveryNode] ## Nodes that could not be added to the `nodes`
     ## seq as it is full and without stale nodes. This is practically a small
     ## LRU cache.
     ipLimits: IpLimits ## IP limits for bucket: node entries and replacement
@@ -146,9 +146,9 @@ func midpoint(k: KBucket): NodeId =
 
 func len(k: KBucket): int = k.nodes.len
 
-func ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
+func ipLimitInc(r: var RoutingTable, b: KBucket, n: DiscoveryNode): bool =
   ## Check if the ip limits of the routing table and the bucket are reached for
-  ## the specified `Node` its ip.
+  ## the specified `DiscoveryNode` its ip.
   ## When one of the ip limits is reached return false, else increment them and
   ## return true.
   let ip = n.address.get().ip # Node from table should always have an address
@@ -168,16 +168,16 @@ func ipLimitInc(r: var RoutingTable, b: KBucket, n: Node): bool =
 
   return true
 
-func ipLimitDec(r: var RoutingTable, b: KBucket, n: Node) =
+func ipLimitDec(r: var RoutingTable, b: KBucket, n: DiscoveryNode) =
   ## Decrement the ip limits of the routing table and the bucket for the
-  ## specified `Node` its ip.
+  ## specified `DiscoveryNode` its ip.
   let ip = n.address.get().ip # Node from table should always have an address
   if ip.isLocallyAssigned():
     return
   b.ipLimits.dec(ip)
   r.ipLimits.dec(ip)
 
-func ipLimitUpdate(r: var RoutingTable, b: KBucket, old, new: Node): bool =
+func ipLimitUpdate(r: var RoutingTable, b: KBucket, old, new: DiscoveryNode): bool =
   ## Move the ip limits of the routing table and the bucket from the record of
   ## `old` to that of `new`. When an ip limit is reached for `new`, the limits
   ## of `old` are kept and false is returned.
@@ -190,8 +190,8 @@ func ipLimitUpdate(r: var RoutingTable, b: KBucket, old, new: Node): bool =
 
   return true
 
-func getNode*(r: RoutingTable, id: NodeId): Opt[Node]
-proc replaceNode*(r: var RoutingTable, n: Node)
+func getNode*(r: RoutingTable, id: NodeId): Opt[DiscoveryNode]
+proc replaceNode*(r: var RoutingTable, n: DiscoveryNode)
 
 proc banNode*(r: var RoutingTable, nodeId: NodeId, period: chronos.Duration) =
   ## Ban a node from the routing table for the given period. The node is removed
@@ -235,11 +235,11 @@ proc cleanupExpiredBans*(r: var RoutingTable) =
   for id in expiredIds:
     r.bannedNodes.del(id)
 
-proc add(k: KBucket, n: Node) =
+proc add(k: KBucket, n: DiscoveryNode) =
   k.nodes.add(n)
   routing_table_nodes.inc()
 
-proc remove(k: KBucket, n: Node): bool =
+proc remove(k: KBucket, n: DiscoveryNode): bool =
   let i = k.nodes.find(n)
   if i != -1:
     routing_table_nodes.dec()
@@ -276,7 +276,7 @@ func split(k: KBucket): tuple[lower, upper: KBucket] =
 func inRange(k: KBucket, id: NodeId): bool =
   k.istart <= id and id <= k.iend
 
-func contains(k: KBucket, n: Node): bool = n in k.nodes
+func contains(k: KBucket, n: DiscoveryNode): bool = n in k.nodes
 
 func binaryGetBucketForNode*(buckets: openArray[KBucket],
                             id: NodeId): KBucket =
@@ -336,7 +336,7 @@ func bucketForNode(r: RoutingTable, id: NodeId): KBucket =
   doAssert(not result.isNil(),
     "Routing table should always cover the full id space")
 
-func addReplacement(r: var RoutingTable, k: KBucket, n: Node): NodeStatus =
+func addReplacement(r: var RoutingTable, k: KBucket, n: DiscoveryNode): NodeStatus =
   ## Add the node to the tail of the replacement cache of the KBucket.
   ##
   ## If the replacement cache is full, the oldest (first entry) node will be
@@ -383,7 +383,7 @@ func addReplacement(r: var RoutingTable, k: KBucket, n: Node): NodeStatus =
     k.replacementCache.add(n)
     return ReplacementAdded
 
-proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
+proc addNode*(r: var RoutingTable, n: DiscoveryNode): NodeStatus =
   ## Try to add the node to the routing table.
   ##
   ## First, an attempt will be done to add the node to the bucket in its range.
@@ -466,13 +466,13 @@ proc addNode*(r: var RoutingTable, n: Node): NodeStatus =
       # When bucket doesn't get split the node is added to the replacement cache
       return r.addReplacement(bucket, n)
 
-proc removeNode*(r: var RoutingTable, n: Node) =
+proc removeNode*(r: var RoutingTable, n: DiscoveryNode) =
   ## Remove the node `n` from the routing table.
   let b = r.bucketForNode(n.id)
   if b.remove(n):
     ipLimitDec(r, b, n)
 
-proc replaceNode*(r: var RoutingTable, n: Node) =
+proc replaceNode*(r: var RoutingTable, n: DiscoveryNode) =
   ## Replace node `n` with last entry in the replacement cache. If there are
   ## no entries in the replacement cache, node `n` will simply be removed.
   # TODO: Kademlia paper recommends here to not remove nodes if there are no
@@ -487,21 +487,21 @@ proc replaceNode*(r: var RoutingTable, n: Node) =
       b.add(b.replacementCache[high(b.replacementCache)])
       b.replacementCache.delete(high(b.replacementCache))
 
-func getNode*(r: RoutingTable, id: NodeId): Opt[Node] =
-  ## Get the `Node` with `id` as `NodeId` from the routing table.
+func getNode*(r: RoutingTable, id: NodeId): Opt[DiscoveryNode] =
+  ## Get the `DiscoveryNode` with `id` as `NodeId` from the routing table.
   ## If no node with provided node id can be found,`none` is returned .
   let b = r.bucketForNode(id)
   for n in b.nodes:
     if n.id == id:
       return Opt.some(n)
 
-func contains*(r: RoutingTable, n: Node): bool = n in r.bucketForNode(n.id)
+func contains*(r: RoutingTable, n: DiscoveryNode): bool = n in r.bucketForNode(n.id)
   # Check if the routing table contains node `n`.
 
 func bucketsByDistanceTo(r: RoutingTable, id: NodeId): seq[KBucket] =
   sortedByIt(r.buckets, distance(it.midpoint, id))
 
-func nodesByDistanceTo(r: RoutingTable, k: KBucket, id: NodeId): seq[Node] =
+func nodesByDistanceTo(r: RoutingTable, k: KBucket, id: NodeId): seq[DiscoveryNode] =
   sortedByIt(k.nodes, distance(it.id, id))
 
 func neighbours*(
@@ -510,11 +510,11 @@ func neighbours*(
     k: int = BUCKET_SIZE,
     seenOnly = false,
     filterPred: proc(nodeId: NodeId): bool {.closure.} = nil,
-): seq[Node] {.effectsOf: filterPred.} =
+): seq[DiscoveryNode] {.effectsOf: filterPred.} =
   ## Return up to k neighbours of the given node id.
   ## When seenOnly is set to true, only nodes that have been contacted
   ## previously successfully will be selected.
-  result = newSeqOfCap[Node](k * 2)
+  result = newSeqOfCap[DiscoveryNode](k * 2)
   block addNodes:
     for bucket in r.bucketsByDistanceTo(id):
       for n in r.nodesByDistanceTo(bucket, id):
@@ -531,17 +531,18 @@ func neighbours*(
     result.setLen(k)
 
 func neighboursAtDistance*(r: RoutingTable, distance: uint16,
-    k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
+    k: int = BUCKET_SIZE, seenOnly = false): seq[DiscoveryNode] =
   ## Return up to k neighbours at given logarithmic distance.
   result = r.neighbours(idAtDistance(r.localId, distance), k, seenOnly)
   # This is a bit silly, first getting closest nodes then to only keep the ones
   # that are exactly the requested distance.
-  keepIf(result, proc(n: Node): bool = logDistance(n.id, r.localId) == distance)
+  keepIf(result, proc(n: DiscoveryNode): bool =
+    logDistance(n.id, r.localId) == distance)
 
 func neighboursAtDistances*(r: RoutingTable, distances: seq[uint16],
-    k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
+    k: int = BUCKET_SIZE, seenOnly = false): seq[DiscoveryNode] =
   ## Return up to k neighbours at given logarithmic distances.
-  var res: seq[Node]
+  var res: seq[DiscoveryNode]
   for d in distances.deduplicate():
     for n in r.neighboursAtDistance(d, k, seenOnly):
       res.add(n)
@@ -566,7 +567,7 @@ func moveRight[T](arr: var openArray[T], a, b: int) =
       arr[i + 1] = move arr[i]
     arr[a] = move t
 
-proc setJustSeen*(r: RoutingTable, n: Node) =
+proc setJustSeen*(r: RoutingTable, n: DiscoveryNode) =
   ## Move `n` to the head (most recently seen) of its bucket.
   ## If `n` is not in the routing table, do nothing.
   let b = r.bucketForNode(n.id)
@@ -579,7 +580,7 @@ proc setJustSeen*(r: RoutingTable, n: Node) =
       b.nodes[0].seen = true
       routing_table_nodes.inc(labelValues = ["seen"])
 
-func nodeToRevalidate*(r: RoutingTable): Node =
+func nodeToRevalidate*(r: RoutingTable): DiscoveryNode =
   ## Return a node to revalidate. The least recently seen node from a random
   ## bucket is selected.
   var buckets = r.buckets
@@ -591,8 +592,8 @@ func nodeToRevalidate*(r: RoutingTable): Node =
       return b.nodes[^1]
 
 proc randomNodes*(r: RoutingTable, maxAmount: int,
-    pred: proc(x: Node): bool {.raises: [], gcsafe, noSideEffect.} = nil):
-    seq[Node] =
+    pred: proc(x: DiscoveryNode): bool {.raises: [], gcsafe, noSideEffect.} = nil):
+    seq[DiscoveryNode] =
   ## Get a `maxAmount` of random nodes from the routing table with the `pred`
   ## predicate function applied as filter on the nodes selected.
   var maxAmount = maxAmount
@@ -602,8 +603,8 @@ proc randomNodes*(r: RoutingTable, maxAmount: int,
       requested = maxAmount, present = sz
     maxAmount = sz
 
-  result = newSeqOfCap[Node](maxAmount)
-  var seen = HashSet[Node]()
+  result = newSeqOfCap[DiscoveryNode](maxAmount)
+  var seen = HashSet[DiscoveryNode]()
 
   # This is a rather inefficient way of randomizing nodes from all buckets, but even if we
   # iterate over all nodes in the routing table, the time it takes would still be
@@ -627,7 +628,8 @@ proc randomNodes*(r: RoutingTable, maxAmount: int,
 
 # Deprecated API, kept for backwards compatibility only. Not used internally anymore.
 
-func init*(T: type RoutingTable, localNode: Node, bitsPerHop = DefaultBitsPerHop,
+func init*(T: type RoutingTable, localNode: DiscoveryNode,
+    bitsPerHop = DefaultBitsPerHop,
     ipLimits = DefaultTableIpLimits, rng: ref HmacDrbgContext): T
     {.deprecated: "Use RoutingTable.init with the local node id".} =
   RoutingTable.init(localNode.id, bitsPerHop, ipLimits, rng)
