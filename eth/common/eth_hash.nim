@@ -30,8 +30,8 @@ template keccakHash*(v: Address): Hash32 {.deprecated: "keccak256".} =
 
 from nimcrypto/hash import MDigest
 
-# TODO https://github.com/nim-lang/Nim/issues/24241
-when (NimMajor, NimMinor) >= (2, 12) or defined(ethDigestConverterWarning):
+# https://github.com/nim-lang/Nim/issues/24241
+when (NimMajor, NimMinor) >= (2, 2) or defined(ethDigestConverterWarning):
   {.pragma: convdeprecated, deprecated.}
 else:
   {.pragma: convdeprecated.}

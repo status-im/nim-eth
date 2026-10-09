@@ -248,14 +248,14 @@ proc allocPortMappingsArgPtr(
   args.portsLen = ports.len
   if ports.len > 0:
     args.portsPtr = cast[ptr PortSpec](allocShared(sizeof(PortSpec) * ports.len))
-    copyMem(args.portsPtr, unsafeAddr ports[0], sizeof(PortSpec) * ports.len)
+    copyMem(args.portsPtr, addr ports[0], sizeof(PortSpec) * ports.len)
   else:
     args.portsPtr = nil
 
   args.descLen = description.len
   if description.len > 0:
     args.descPtr = cast[ptr char](allocShared(description.len))
-    copyMem(args.descPtr, unsafeAddr description[0], description.len)
+    copyMem(args.descPtr, addr description[0], description.len)
   else:
     args.descPtr = nil
 
