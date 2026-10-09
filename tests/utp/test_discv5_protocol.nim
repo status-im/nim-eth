@@ -51,9 +51,9 @@ procSuite "uTP over discovery v5 protocol":
 
     # nodes must have session between each other
     check:
-      (await node1.ping(node2.localNode)).isOk()
+      (await node1.ping(node2.localNode.toNode())).isOk()
 
-    let clientSocketResult = await utp1.connectTo(NodeAddress.init(node2.localNode).unsafeGet())
+    let clientSocketResult = await utp1.connectTo(NodeAddress.init(node2.localNode.toNode()).unsafeGet())
     let clientSocket = clientSocketResult.get()
     let serverSocket = await queue.get()
 
@@ -88,9 +88,9 @@ procSuite "uTP over discovery v5 protocol":
 
     # nodes must have session between each other
     check:
-      (await node1.ping(node2.localNode)).isOk()
+      (await node1.ping(node2.localNode.toNode())).isOk()
 
-    let clientSocketResult = await utp1.connectTo(NodeAddress.init(node2.localNode).unsafeGet())
+    let clientSocketResult = await utp1.connectTo(NodeAddress.init(node2.localNode.toNode()).unsafeGet())
     let clientSocket = clientSocketResult.get()
     let serverSocket = await queue.get()
 
@@ -118,10 +118,10 @@ procSuite "uTP over discovery v5 protocol":
 
     # nodes must have session between each other
     check:
-      (await node1.ping(node2.localNode)).isOk()
+      (await node1.ping(node2.localNode.toNode())).isOk()
 
     let numOfBytes = 20_000
-    let clientSocketResult = await utp1.connectTo(NodeAddress.init(node2.localNode).unsafeGet())
+    let clientSocketResult = await utp1.connectTo(NodeAddress.init(node2.localNode.toNode()).unsafeGet())
     let clientSocket = clientSocketResult.get()
 
     let serverSocket = await queue.get()
@@ -168,10 +168,10 @@ procSuite "uTP over discovery v5 protocol":
 
     # nodes must have session between each other
     check:
-      (await node1.ping(node2.localNode)).isOk()
+      (await node1.ping(node2.localNode.toNode())).isOk()
 
-    let clientSocketResult1 = await utp1.connectTo(NodeAddress.init(node2.localNode).unsafeGet(), allowedId)
-    let clientSocketResult2 = await utp1.connectTo(NodeAddress.init(node2.localNode).unsafeGet(), allowedId + 1)
+    let clientSocketResult1 = await utp1.connectTo(NodeAddress.init(node2.localNode.toNode()).unsafeGet(), allowedId)
+    let clientSocketResult2 = await utp1.connectTo(NodeAddress.init(node2.localNode.toNode()).unsafeGet(), allowedId + 1)
 
     check:
       clientSocketResult1.isOk()
@@ -207,9 +207,9 @@ procSuite "uTP over discovery v5 protocol":
 
     # nodes must have session between each other
     check:
-      (await node1.ping(node2.localNode)).isOk()
+      (await node1.ping(node2.localNode.toNode())).isOk()
 
-    let clientSocketResult = await utp1.connectTo(NodeAddress.init(node2.localNode).unsafeGet())
+    let clientSocketResult = await utp1.connectTo(NodeAddress.init(node2.localNode.toNode()).unsafeGet())
     let clientSocket = clientSocketResult.get()
     let serverSocket = await queue.get()
 
@@ -288,7 +288,7 @@ procSuite "uTP over discovery v5 protocol":
 
       # nodes must have discv5 session between each other
       check:
-        (await sendingNode.ping(node.localNode)).isOk()
+        (await sendingNode.ping(node.localNode.toNode())).isOk()
 
     proc connectSendAndCheck(
         utpProto: UtpDiscv5Protocol,

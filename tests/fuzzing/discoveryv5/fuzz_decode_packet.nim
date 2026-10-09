@@ -19,7 +19,7 @@ let
   enrRecB = enr.Record.init(1, privKeyB,
     Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
     Opt.some(Port(9000))).expect("Properly initialized private key")
-  nodeB = Node.fromRecord(enrRecB)
+  nodeB = LocalNode.fromRecord(enrRecB)
 
 var codecB = Codec(localNode: nodeB, privKey: privKeyB,
   sessions: Sessions.init(5))

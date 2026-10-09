@@ -49,21 +49,21 @@ suite "Discovery v5.1 Tests":
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303),
         @[bootnode.localNode.record])
-      pong1 = await discv5_protocol.ping(node1, bootnode.localNode)
-      pong2 = await discv5_protocol.ping(node1, node2.localNode)
+      pong1 = await discv5_protocol.ping(node1, bootnode.localNode.toNode())
+      pong2 = await discv5_protocol.ping(node1, node2.localNode.toNode())
 
     check pong1.isOk() and pong2.isOk()
 
     await bootnode.closeWait()
     await node2.closeWait()
 
-    await node1.revalidateNode(bootnode.localNode)
-    await node1.revalidateNode(node2.localNode)
+    await node1.revalidateNode(bootnode.localNode.toNode())
+    await node1.revalidateNode(node2.localNode.toNode())
 
     let n = node1.getNode(bootnode.localNode.id)
     check:
       n.isSome()
-      n.get() == bootnode.localNode
+      n.get() == bootnode.localNode.toNode()
       node1.getNode(node2.localNode.id).isNone()
 
     await node1.closeWait()
@@ -193,24 +193,24 @@ suite "Discovery v5.1 Tests":
       testNode = initDiscoveryNode(rng, testNodeKey, localAddress(20302))
       # logarithmic distance between mainNode and testNode is 256
 
-    let nodes = nodesAtDistance(mainNode.localNode, rng[], dist, 10)
+    let nodes = nodesAtDistance(mainNode.localNode.toNode(), rng[], dist, 10)
     for n in nodes:
       discard mainNode.addSeenNode(n) # for testing only!
 
     # ping in one direction to add, ping in the other to update seen.
-    check (await testNode.ping(mainNode.localNode)).isOk()
-    check (await mainNode.ping(testNode.localNode)).isOk()
+    check (await testNode.ping(mainNode.localNode.toNode())).isOk()
+    check (await mainNode.ping(testNode.localNode.toNode())).isOk()
 
     # Get ENR of the node itself
     var discovered =
-      await findNode(testNode, mainNode.localNode, @[0'u16])
+      await findNode(testNode, mainNode.localNode.toNode(), @[0'u16])
     check:
       discovered.isOk
       discovered[].len == 1
-      discovered[][0] == mainNode.localNode
+      discovered[][0] == mainNode.localNode.toNode()
     # Get ENRs of nodes added at provided logarithmic distance
     discovered =
-      await findNode(testNode, mainNode.localNode, @[dist])
+      await findNode(testNode, mainNode.localNode.toNode(), @[dist])
     check discovered.isOk
     check discovered[].len == 10
     for n in nodes:
@@ -218,32 +218,32 @@ suite "Discovery v5.1 Tests":
 
     # Too high logarithmic distance, should return no nodes.
     discovered =
-      await findNode(testNode, mainNode.localNode, @[high(uint16)])
+      await findNode(testNode, mainNode.localNode.toNode(), @[high(uint16)])
     check:
       discovered.isOk
       discovered[].len == 0
 
     # Logarithmic distance of 256 should only return the testNode
     discovered =
-      await findNode(testNode, mainNode.localNode, @[256'u16])
+      await findNode(testNode, mainNode.localNode.toNode(), @[256'u16])
     check:
       discovered.isOk
       discovered[].len == 1
-      discovered[][0] == testNode.localNode
+      discovered[][0] == testNode.localNode.toNode()
 
     # Empty bucket
     discovered =
-      await findNode(testNode, mainNode.localNode, @[254'u16])
+      await findNode(testNode, mainNode.localNode.toNode(), @[254'u16])
     check discovered.isOk
     check discovered[].len == 0
 
-    let moreNodes = nodesAtDistance(mainNode.localNode, rng[], dist, 10)
+    let moreNodes = nodesAtDistance(mainNode.localNode.toNode(), rng[], dist, 10)
     for n in moreNodes:
       discard mainNode.addSeenNode(n) # for testing only!
 
     # Full bucket
     discovered =
-      await findNode(testNode, mainNode.localNode, @[dist])
+      await findNode(testNode, mainNode.localNode.toNode(), @[dist])
     check discovered.isOk
     check discovered[].len == findNodeResultLimit
 
@@ -259,14 +259,15 @@ suite "Discovery v5.1 Tests":
       testNode = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
 
     # 10 nodes at each distance = 20 total, which exceeds findNodeResultLimit.
-    for n in nodesAtDistance(mainNode.localNode, rng[], dist1, 10) &
-             nodesAtDistance(mainNode.localNode, rng[], dist2, 10):
+    for n in nodesAtDistance(mainNode.localNode.toNode(), rng[], dist1, 10) &
+             nodesAtDistance(mainNode.localNode.toNode(), rng[], dist2, 10):
       discard mainNode.addSeenNode(n)
 
-    check (await testNode.ping(mainNode.localNode)).isOk()
-    check (await mainNode.ping(testNode.localNode)).isOk()
+    check (await testNode.ping(mainNode.localNode.toNode())).isOk()
+    check (await mainNode.ping(testNode.localNode.toNode())).isOk()
 
-    let discovered = await findNode(testNode, mainNode.localNode, @[dist1, dist2])
+    let discovered = await findNode(
+      testNode, mainNode.localNode.toNode(), @[dist1, dist2])
     check:
       discovered.isOk()
       discovered[].len == findNodeResultLimit
@@ -294,7 +295,7 @@ suite "Discovery v5.1 Tests":
       testNode = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20302),
         @[mainNode.localNode.record])
-      discovered = await findNode(testNode, mainNode.localNode,
+      discovered = await findNode(testNode, mainNode.localNode.toNode(),
         @[closestDistance])
 
     check discovered.isOk
@@ -321,11 +322,11 @@ suite "Discovery v5.1 Tests":
     for n in nodes:
       for t in nodes:
         if n != t:
-          let pong = await n.ping(t.localNode)
+          let pong = await n.ping(t.localNode.toNode())
           check pong.isOk()
           if pong.isErr():
             echo pong.error
-          # check (await n.ping(t.localNode)).isOk()
+          # check (await n.ping(t.localNode.toNode())).isOk()
 
     for i in 1 ..< nodeCount:
       nodes[i].start()
@@ -333,8 +334,8 @@ suite "Discovery v5.1 Tests":
     for i in 0..<nodeCount-1:
       let target = nodes[i]
       let discovered = await nodes[nodeCount-1].lookup(target.localNode.id)
-      debug "Lookup result", target = target.localNode, discovered
-      check discovered[0] == target.localNode
+      debug "Lookup result", target = target.localNode.toNode(), discovered
+      check discovered[0] == target.localNode.toNode()
 
     for node in nodes:
       await node.closeWait()
@@ -355,7 +356,7 @@ suite "Discovery v5.1 Tests":
     # Populate routing table with target through a ping. Next, close target and
     # see if resolve works (only local getNode).
     block:
-      let pong = await targetNode.ping(mainNode.localNode)
+      let pong = await targetNode.ping(mainNode.localNode.toNode())
       check pong.isOk()
       await targetNode.closeWait()
       let n = await mainNode.resolve(targetId)
@@ -372,7 +373,7 @@ suite "Discovery v5.1 Tests":
       # Request the target ENR and manually add it to the routing table.
       # Ping for handshake based ENR passing will not work as our previous
       # session will still be in the LRU cache.
-      let nodes = await mainNode.findNode(targetNode.localNode, @[0'u16])
+      let nodes = await mainNode.findNode(targetNode.localNode.toNode(), @[0'u16])
       check:
         nodes.isOk()
         nodes[].len == 1
@@ -406,10 +407,10 @@ suite "Discovery v5.1 Tests":
       check update.isOk()
 
       # ping node so that its ENR gets added
-      check (await targetNode.ping(lookupNode.localNode)).isOk()
+      check (await targetNode.ping(lookupNode.localNode.toNode())).isOk()
       # ping node so that it becomes "seen" and thus will be forwarded on a
       # findNode request
-      check (await lookupNode.ping(targetNode.localNode)).isOk()
+      check (await lookupNode.ping(targetNode.localNode.toNode())).isOk()
       await targetNode.closeWait()
 
       check mainNode.addNode(lookupNode.localNode.record)
@@ -487,7 +488,7 @@ suite "Discovery v5.1 Tests":
     check:
       # Get node with current ENR in routing table.
       # Handshake will get done here.
-      (await testNode.ping(mainNode.localNode)).isOk()
+      (await testNode.ping(mainNode.localNode.toNode())).isOk()
       testNode.updateRecord({"test" : @[byte 1]}).isOk()
       testNode.localNode.record.seqNum == 2
 
@@ -532,7 +533,7 @@ suite "Discovery v5.1 Tests":
       n.get.record.seqNum == 1
 
     # This should do a handshake and update the ENR through that.
-    check (await testNode.ping(mainNode.localNode)).isOk()
+    check (await testNode.ping(mainNode.localNode.toNode())).isOk()
 
     # Get the node from routing table, and check if record got updated.
     n = mainNode.getNode(testNodeId)
@@ -722,7 +723,7 @@ suite "Discovery v5.1 Tests":
         enrRec = enr.Record.init(1, privKey,
           Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
           Opt.some(Port(9000))).expect("Properly initialized private key")
-        sendNode = Node.fromRecord(enrRec)
+        sendNode = LocalNode.fromRecord(enrRec)
       var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 
       let (packet, _) = encodeMessagePacket(rng[], codec,
@@ -751,7 +752,7 @@ suite "Discovery v5.1 Tests":
       enrRec = enr.Record.init(1, privKey,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      sendNode = Node.fromRecord(enrRec)
+      sendNode = LocalNode.fromRecord(enrRec)
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
     for i in 0 ..< 5:
       let a = localAddress(20303 + i)
@@ -783,7 +784,7 @@ suite "Discovery v5.1 Tests":
       enrRec = enr.Record.init(1, privKey,
         Opt.some(parseIpAddress("127.0.0.1")), Opt.some(Port(9000)),
         Opt.some(Port(9000))).expect("Properly initialized private key")
-      sendNode = Node.fromRecord(enrRec)
+      sendNode = LocalNode.fromRecord(enrRec)
     var codec = Codec(localNode: sendNode, privKey: privKey, sessions: Sessions.init(5))
 
     var firstRequestNonce: AESGCMNonce
@@ -817,7 +818,7 @@ suite "Discovery v5.1 Tests":
         rng, PrivateKey.random(rng[]), localAddress(20302))
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
-      talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
+      talkresp = await discv5_protocol.talkReq(node1, node2.localNode.toNode(),
         @[byte 0x01], @[])
 
     check:
@@ -845,7 +846,7 @@ suite "Discovery v5.1 Tests":
     let echoProtocol = TalkProtocol(protocolHandler: handler)
 
     check node2.registerTalkProtocol(talkProtocol, echoProtocol).isOk()
-    let talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
+    let talkresp = await discv5_protocol.talkReq(node1, node2.localNode.toNode(),
       talkProtocol, "hello".toBytes())
 
     check:
@@ -901,17 +902,17 @@ suite "Discovery v5.1 Tests":
     # Do a ping first so a session is created, that makes the next message to
     # be an ordinary message and more easy to reverse calculate packet sizes for
     # than for a handshake message.
-    check (await node1.ping(node2.localNode)).isOk()
+    check (await node1.ping(node2.localNode.toNode())).isOk()
 
     block: # 1172 = 1280 - 103 - 4 - 1 = max - talkreq - "echo" - rlp blob
-      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
+      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode.toNode(),
         talkProtocol, repeat(byte 6, 1172))
 
       check:
         talkresp.isOk()
 
     block: # > 1280 -> should fail
-      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
+      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode.toNode(),
         talkProtocol, repeat(byte 6, 1173))
 
       check:
@@ -943,17 +944,17 @@ suite "Discovery v5.1 Tests":
     # Do a ping first so a session is created, that makes the next message to
     # be an ordinary message and more easy to reverse calculate packet sizes for
     # than for a handshake message.
-    check (await node1.ping(node2.localNode)).isOk()
+    check (await node1.ping(node2.localNode.toNode())).isOk()
 
     block: # 1171 -> response will be 1 byte bigger thus this should pass
-      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
+      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode.toNode(),
         talkProtocol, repeat(byte 6, 1171))
 
       check:
         talkresp.isOk()
 
     block: # 1172 -> response will be 1 byte bigger thus this should fail
-      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode,
+      let talkresp = await discv5_protocol.talkReq(node1, node2.localNode.toNode(),
         talkProtocol, repeat(byte 6, 1172))
 
       check:
@@ -1003,7 +1004,8 @@ suite "Discovery v5.1 Tests":
 
     block:
       # the closest node is returned
-      let discovered = await testNode.findNode(mainNode.localNode, @[closestDistance])
+      let discovered = await testNode.findNode(
+        mainNode.localNode.toNode(), @[closestDistance])
       check discovered.isOk
       check closest in discovered[]
 
@@ -1012,7 +1014,8 @@ suite "Discovery v5.1 Tests":
 
     block:
       # the banned node is not returned
-      let discovered = await testNode.findNode(mainNode.localNode, @[closestDistance])
+      let discovered = await testNode.findNode(
+        mainNode.localNode.toNode(), @[closestDistance])
       check discovered.isOk
       check closest notin discovered[]
 
@@ -1027,16 +1030,16 @@ suite "Discovery v5.1 Tests":
       node2 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20301),
           config = config)
     # ban node2 in node1's routing table
-    node1.banNode(node2.localNode, 1.minutes)
+    node1.banNode(node2.localNode.toNode(), 1.minutes)
 
     block:
-      let pong = await node1.ping(node2.localNode)
+      let pong = await node1.ping(node2.localNode.toNode())
       check:
         pong.isErr()
         pong.error() == "toNode is banned"
 
     block:
-      let nodes = await node1.findNode(node2.localNode, @[0.uint16])
+      let nodes = await node1.findNode(node2.localNode.toNode(), @[0.uint16])
       check:
         nodes.isErr()
         nodes.error() == "toNode is banned"
@@ -1057,16 +1060,16 @@ suite "Discovery v5.1 Tests":
           config = config)
 
     # ban node1 in node2's routing table
-    node2.banNode(node1.localNode, 1.minutes)
+    node2.banNode(node1.localNode.toNode(), 1.minutes)
 
     block:
-      let pong = await node1.ping(node2.localNode)
+      let pong = await node1.ping(node2.localNode.toNode())
       check:
         pong.isErr()
         pong.error() == "Pong message not received in time"
 
     block:
-      let nodes = await node1.findNode(node2.localNode, @[0.uint16])
+      let nodes = await node1.findNode(node2.localNode.toNode(), @[0.uint16])
       check:
         nodes.isErr()
         nodes.error() == "Nodes message not received in time"
@@ -1090,11 +1093,11 @@ suite "Discovery v5.1 Tests":
         config = config)
 
     # All pings are fired before yielding to the event loop.
-    let handshakeFuture = node1.ping(node2.localNode)
+    let handshakeFuture = node1.ping(node2.localNode.toNode())
     var queuedFutures: seq[Future[DiscResult[PongMessage]]]
     for _ in 0..<maxQueuedRequestsPerPeer:
-      queuedFutures.add(node1.ping(node2.localNode))
-    let overflowFuture = node1.ping(node2.localNode)
+      queuedFutures.add(node1.ping(node2.localNode.toNode()))
+    let overflowFuture = node1.ping(node2.localNode.toNode())
 
     check (await handshakeFuture).isOk()
     for f in queuedFutures:
@@ -1118,7 +1121,7 @@ suite "Discovery v5.1 Tests":
 
     # node1 pings node2: node2 completes an inbound handshake, adds node1 to
     # its routing table, and schedules a ping-back to node1.
-    check (await node1.ping(node2.localNode)).isOk()
+    check (await node1.ping(node2.localNode.toNode())).isOk()
 
     # yield to the event loop to let the ping-back complete.
     await sleepAsync(100.milliseconds)
@@ -1171,11 +1174,11 @@ suite "Discovery v5.1 Tests":
 
     discard mainNode.addSeenNode(badNode)
 
-    check (await testNode.ping(mainNode.localNode)).isOk()
-    check (await mainNode.ping(testNode.localNode)).isOk()
+    check (await testNode.ping(mainNode.localNode.toNode())).isOk()
+    check (await mainNode.ping(testNode.localNode.toNode())).isOk()
 
     let dist = uint16(logDistance(mainNode.localNode.id, badNode.id))
-    let discovered = await testNode.findNode(mainNode.localNode, @[dist])
+    let discovered = await testNode.findNode(mainNode.localNode.toNode(), @[dist])
     check discovered.isOk()
     check badNode notin discovered.get()
 

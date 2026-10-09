@@ -117,7 +117,7 @@ type
     address*: Address
 
   Codec* = object
-    localNode*: Node
+    localNode*: LocalNode
     privKey*: PrivateKey
     handshakes*: Table[HandshakeKey, Challenge]
     sessions*: Sessions

@@ -56,6 +56,14 @@ func generateNode*(privKey: PrivateKey, port: int = 20302,
     Opt.some(port), Opt.some(port), Opt.some(port), localEnrFields).expect("Properly initialized private key")
   result = Node.fromRecord(enr)
 
+func updatedNode*(n: Node, privKey: PrivateKey, ip: IpAddress, port: Port): Node =
+  ## The same peer with a new record: a higher sequence number and the given
+  ## endpoint.
+  var record = n.record
+  record.update(privKey, Opt.some(ip), Opt.some(port), Opt.some(port))
+    .expect("Valid record update")
+  Node.fromRecord(record)
+
 proc generateNRandomNodes*(rng: var HmacDrbgContext, n: int): seq[Node] =
   var res = newSeq[Node]()
   for i in 1..n:

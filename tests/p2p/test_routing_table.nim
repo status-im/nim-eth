@@ -527,12 +527,8 @@ suite "Routing Table Tests":
     let sameIpNode1 = generateNode(pk)
     check table.addNode(sameIpNode1) == Added
 
-    let updatedNode1 = generateNode(pk)
-    # Need to do an update to get seqNum increased
-    let updated = updatedNode1.update(pk,
-      Opt.some(parseIpAddress("192.168.0.1")),
-      Opt.some(Port(9000)), Opt.some(Port(9000)))
-    check updated.isOk()
+    let updatedNode1 = sameIpNode1.updatedNode(
+      pk, parseIpAddress("192.168.0.1"), Port(9000))
     check table.addNode(updatedNode1) == Existing
 
     let sameIpNodes = node.nodesAtDistance(rng[], 256,
@@ -555,13 +551,9 @@ suite "Routing Table Tests":
     let (sameIpNode1, pk) = node.nodeAndPrivKeyAtDistance(rng[], 256)
     check table.addNode(sameIpNode1) == ReplacementAdded
 
-    # Need to do an update to get seqNum increased, as the record of a node in
-    # the replacement cache only gets replaced by one with a higher seqNum.
-    let updatedNode1 = generateNode(pk)
-    let updated = updatedNode1.update(pk,
-      Opt.some(parseIpAddress("192.168.1.1")),
-      Opt.some(Port(9000)), Opt.some(Port(9000)))
-    check updated.isOk()
+    # A node in the replacement cache only gets replaced by a higher seqNum
+    let updatedNode1 = sameIpNode1.updatedNode(
+      pk, parseIpAddress("192.168.1.1"), Port(9000))
     check table.addNode(updatedNode1) == ReplacementUpdated
 
     let sameIpNodes = node.nodesAtDistance(rng[], 256,
@@ -578,14 +570,10 @@ suite "Routing Table Tests":
     let sameIpNode1 = generateNode(pk)
     check table.addNode(sameIpNode1) == Added
 
-    let updatedNode1 = generateNode(pk)
-
+    var updatedNode1 = sameIpNode1
     for i in 0..<DefaultTableIpLimits.bucketIpLimit + 1:
-      # Need to do an update to get seqNum increased
-      let updated = updatedNode1.update(pk,
-        Opt.some(parseIpAddress("192.168.0.1")),
-        Opt.some(Port(9000+i)), Opt.some(Port(9000+i)))
-      check updated.isOk()
+      updatedNode1 = updatedNode1.updatedNode(
+        pk, parseIpAddress("192.168.0.1"), Port(9000 + i))
       check table.addNode(updatedNode1) == Existing
 
     let sameIpNodes = node.nodesAtDistance(rng[], 256,

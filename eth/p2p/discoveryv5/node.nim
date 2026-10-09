@@ -24,12 +24,35 @@ type
     port*: Port
 
   Node* = ref object
+    ## A peer in the DHT. Treated as immutable after construction:
+    ## a peer with an updated record is a new `Node` that replaces the old one.
+    ## Only `seen` is meant to be set.
+    id: NodeId
+    pubkey: PublicKey
+    address: Opt[Address]
+    record: Record
+    seen*: bool ## Indicates if there was at least one successful
+    ## request-response with this node.
+
+  LocalNode* = ref object
+    ## Local discovery identity and the record advertised. The record and thus
+    ## the addresses can change over time.
     id*: NodeId
     pubkey*: PublicKey
     address*: Opt[Address]
     record*: Record
-    seen*: bool ## Indicates if there was at least one successful
-    ## request-response with this node.
+
+func id*(n: Node): lent NodeId =
+  n.id
+
+func pubkey*(n: Node): lent PublicKey =
+  n.pubkey
+
+func address*(n: Node): lent Opt[Address] =
+  n.address
+
+func record*(n: Node): lent Record =
+  n.record
 
 func toNodeId*(pk: PublicKey): NodeId =
   ## Convert public key to a node identifier.
@@ -38,33 +61,42 @@ func toNodeId*(pk: PublicKey): NodeId =
   # The raw key used is the uncompressed public key.
   readUintBE[256](Keccak256.digest(pk.toRaw()).data)
 
-func fromRecord*(T: type Node, r: Record): T =
-  ## Create a new `Node` from a `Record`.
+func address(r: Record): Opt[Address] =
+  ## Derive the endpoint that is advertised in the record.
   let tr = TypedRecord.fromRecord(r)
   if tr.ip.isSome() and tr.udp.isSome() and tr.udp.get() != 0:
     # Port 0 is reserved (RFC 6335) and not routable as a destination.
     # Reject it here so peers with udp = 0 cannot enter the routing table
     # nor be returned in NODES responses.
-    let a = Address(ip: ipv4(tr.ip.get()), port: Port(tr.udp.get()))
-
-    Node(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
-       address: Opt.some(a))
+    Opt.some(Address(ip: ipv4(tr.ip.get()), port: Port(tr.udp.get())))
   else:
-    Node(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
-       address: Opt.none(Address))
+    Opt.none(Address)
 
-func newNode*(r: Record): Result[Node, cstring] {.deprecated: "Use TypedRecord.fromRecord instead".} =
+func fromRecord*(T: type Node, r: Record): T =
   ## Create a new `Node` from a `Record`.
-  ok(Node.fromRecord(r))
+  Node(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
+    address: r.address())
 
-func update*(n: Node, pk: PrivateKey, ip: Opt[IpAddress],
+func fromRecord*(T: type LocalNode, r: Record): T =
+  ## Create a new `LocalNode` from a `Record`.
+  LocalNode(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
+    address: r.address())
+
+func toNode*(ln: LocalNode): Node =
+  ## A snapshot of the `LocalNode` for the places where it appears as a peer,
+  ## such as the NODES response to a request at distance 0.
+  Node(id: ln.id, pubkey: ln.pubkey, record: ln.record, address: ln.address)
+
+func update*(ln: LocalNode, pk: PrivateKey,
+    ip: Opt[IpAddress] = Opt.none(IpAddress),
     tcpPort: Opt[Port] = Opt.none(Port),
     udpPort: Opt[Port] = Opt.none(Port),
     quicPort: Opt[Port] = Opt.none(Port),
     extraFields: openArray[FieldPair] = []): Result[void, cstring] =
-  ? n.record.update(pk, ip, tcpPort, udpPort, quicPort, extraFields)
+  ## Update the record and the address of the `LocalNode`.
+  ? ln.record.update(pk, ip, tcpPort, udpPort, quicPort, extraFields)
 
-  n.address = Node.fromRecord(n.record).address
+  ln.address = ln.record.address()
 
   ok()
 
@@ -112,6 +144,14 @@ func shortLog*(n: Node): string =
   else:
     shortLog(n.id) & ":" & $n.address.get()
 
+func shortLog*(ln: LocalNode): string =
+  if ln.isNil:
+    "uninitialized"
+  elif ln.address.isNone():
+    shortLog(ln.id) & ":unaddressable"
+  else:
+    shortLog(ln.id) & ":" & $ln.address.get()
+
 func shortLog*(nodes: seq[Node]): string =
   result = "["
 
@@ -129,3 +169,17 @@ chronicles.formatIt(NodeId): shortLog(it)
 chronicles.formatIt(Address): $it
 chronicles.formatIt(Node): shortLog(it)
 chronicles.formatIt(seq[Node]): shortLog(it)
+chronicles.formatIt(LocalNode): shortLog(it)
+
+# Deprecated API, kept for backwards compatibility only.
+
+func newNode*(r: Record): Result[Node, cstring]
+    {.deprecated: "Use Node.fromRecord instead".} =
+  ## Create a new `Node` from a `Record`.
+  ok(Node.fromRecord(r))
+
+converter toNodeCompat*(ln: LocalNode): Node
+    {.deprecated: "A LocalNode is not a peer, use LocalNode.toNode() for an " &
+      "explicit snapshot".} =
+  ## Keeps passing a `LocalNode` where a `Node` is expected still possible.
+  ln.toNode()

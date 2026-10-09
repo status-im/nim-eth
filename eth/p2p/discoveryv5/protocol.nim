@@ -147,7 +147,7 @@ type
 
   Protocol* = ref object
     transp: DatagramTransport
-    localNode*: Node
+    localNode*: LocalNode
     privateKey: PrivateKey
     bindAddress: OptAddress ## UDP binding address
     pendingRequests: Table[AESGCMNonce, PendingRequest]
@@ -278,7 +278,7 @@ func updateRecord*(
   ##
   ## Build the `fields` with `enr.enrFields` (or `toFieldPair`) so each field's
   ## RLP encoding is chosen based on its value type (e.g. list vs byte string).
-  d.localNode.record.update(d.privateKey, extraFields = fields)
+  d.localNode.update(d.privateKey, extraFields = fields)
   # TODO: Would it make sense to actively ping ("broadcast") to all the peers
   # we stored a handshake with in order to get that ENR updated?
 
@@ -372,7 +372,7 @@ proc handleFindNode(d: Protocol, fromId: NodeId, fromAddr: Address,
     # A request for our own record.
     # It would be a weird request if there are more distances next to 0
     # requested, so in this case lets just pass only our own. TODO: OK?
-    d.sendNodes(fromId, fromAddr, reqId, [d.localNode])
+    d.sendNodes(fromId, fromAddr, reqId, [d.localNode.toNode()])
   else:
     if fn.distances.all(proc (x: uint16): bool = return x <= 256):
       # neighboursAtDistances deduplicates, not erroring on this
@@ -937,7 +937,7 @@ proc resolve*(d: Protocol, id: NodeId): Future[Opt[Node]] {.async: (raises: [Can
   ## does not reply, a lookup is done to see if it can find a (newer) record of
   ## the node on the network.
   if id == d.localNode.id:
-    return Opt.some(d.localNode)
+    return Opt.some(d.localNode.toNode())
 
   # No point in trying to resolve a banned node because it won't exist in the
   # routing table and it will be filtered out of any respones in the lookup call
@@ -1190,7 +1190,7 @@ proc newProtocol*(
     else:
       warn "No external IP provided for the ENR, this node will not be " & "discoverable"
 
-  let node = Node.fromRecord(record)
+  let node = LocalNode.fromRecord(record)
 
   doAssert not (isNil(rng)), "RNG initialization failed"
 
