@@ -48,7 +48,7 @@ suite "test api usage":
       not rlp.isList
       not rlp.isEmpty
 
-    expect AssertionDefect:
+    expect MalformedRlpError:
       rlp.skipElem
 
   test "you cannot finish a list without appending enough elements":
@@ -144,7 +144,15 @@ suite "test api usage":
     check intVar == 6000
 
     check(not list.hasData)
-    expect AssertionDefect: list.skipElem
+    expect MalformedRlpError: list.skipElem
+
+  test "list accessors on a non-list raise RlpError":
+    var rlp = rlpFromHex("83616263")
+    expect RlpTypeMismatch:
+      for _ in rlp:
+        discard
+    expect RlpTypeMismatch:
+      discard rlp.listElem(0)
 
   test "encode and decode block body":
     test_blockBodyTranscode()

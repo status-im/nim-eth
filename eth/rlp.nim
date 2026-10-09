@@ -218,14 +218,6 @@ func getByteValue*(self: Rlp): byte =
   doAssert self.isSingleByte()
   self.bytes[self.position]
 
-func readRawByte*(self: var Rlp): byte =
-  ### Read a raw byte that is not RLP encoded
-  ### This is sometimes used to communicate union type information
-  doAssert self.hasData
-  let res = self.bytes[self.position]
-  inc self.position
-  res
-
 func blobLen*(self: Rlp): int =
   if self.isBlob():
     self.item().payload.len()
@@ -298,12 +290,12 @@ func positionAt(rlp: var Rlp, item: RlpItem) =
   rlp.position = item.payload.a
 
 func skipElem*(rlp: var Rlp) =
-  doAssert rlp.hasData()
   rlp.positionAfter(rlp.item())
 
 template iterateIt(self: Rlp, position: int, body: untyped) =
   let item = self.item(position)
-  doAssert item.typ == rlpList
+  if item.typ != rlpList:
+    raiseExpectedList()
   var it {.inject.} = item.payload.a
   let last = item.payload.b
   while it <= last:
@@ -313,7 +305,8 @@ template iterateIt(self: Rlp, position: int, body: untyped) =
 
 iterator items(self: var Rlp, item: RlpItem): var Rlp =
   # Iterate over items while updating "current" element view, mutating self
-  doAssert item.typ == rlpList
+  if item.typ != rlpList:
+    raiseExpectedList()
 
   self.position = item.payload.a
   let last = item.payload.b
@@ -332,7 +325,8 @@ iterator items*(self: var Rlp): var Rlp =
 
 func listElem*(self: Rlp, i: int): Rlp =
   let item = self.item()
-  doAssert item.typ == rlpList
+  if item.typ != rlpList:
+    raiseExpectedList()
 
   var
     i = i
