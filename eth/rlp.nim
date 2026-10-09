@@ -64,7 +64,6 @@ template view(input: openArray[byte], slice: Slice[int]): openArray[byte] =
   toOpenArray(input, slice.a, slice.b)
 
 func toString(self: Rlp, item: RlpItem): string =
-  result = "" # TODO https://github.com/nim-lang/Nim/issues/23645
   if item.typ != rlpBlob:
     raiseExpectedBlob()
 
@@ -259,11 +258,7 @@ func toInt*(self: Rlp, IntType: type): IntType =
   self.toInt(self.item(), IntType)
 
 func toString*(self: Rlp): string =
-  # TODO https://github.com/nim-lang/Nim/issues/23645
-  # the returnd string is cleared properly on exception here - the double
-  # result assignment can be removed once that bug is fixed
-  result = ""
-  result = self.toString(self.item())
+  self.toString(self.item())
 
 func toBytes(self: Rlp, item: RlpItem): seq[byte] =
   if item.typ != rlpBlob:
@@ -399,7 +394,7 @@ func readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
         "Fixed-size array expected, but the source RLP contains a blob of different length",
       )
 
-    copyMem(addr result[0], unsafeAddr rlp.bytes[item.payload.a], result.len)
+    copyMem(addr result[0], addr rlp.bytes[item.payload.a], result.len)
   else:
     if result.len != rlp.listLen:
       raise newException(

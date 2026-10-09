@@ -32,8 +32,7 @@ type
 const EMPTY_UNCLE_HASH* =
   hash32"1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
 
-# TODO https://github.com/nim-lang/Nim/issues/23354 - parameters should be sink
-func init*(T: type Block, header: Header, body: BlockBody): T =
+func init*(T: type Block, header: sink Header, body: sink BlockBody): T =
   T(
     header: header,
     transactions: body.transactions,

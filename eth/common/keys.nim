@@ -70,7 +70,7 @@ proc newRng*(): ref HmacDrbgContext =
   HmacDrbgContext.new()
 
 proc random*(T: type PrivateKey, rng: var HmacDrbgContext): T =
-  let rngPtr = unsafeAddr rng # doesn't escape
+  let rngPtr = addr rng # doesn't escape
   proc callRng(data: var openArray[byte]) =
     generate(rngPtr[], data)
 
@@ -97,7 +97,7 @@ func fromRaw*(T: type PublicKey, data: openArray[byte]): SkResult[T] =
 
   var d: array[SkRawPublicKeySize, byte]
   d[0] = 0x04'u8
-  copyMem(addr d[1], unsafeAddr data[0], 64)
+  copyMem(addr d[1], addr data[0], 64)
 
   SkPublicKey.fromRaw(d).mapConvert(T)
 
@@ -106,7 +106,7 @@ func fromHex*(T: type PublicKey, data: string): SkResult[T] =
 
 func toRaw*(pubkey: PublicKey): array[RawPublicKeySize, byte] =
   let tmp = SkPublicKey(pubkey).toRaw()
-  copyMem(addr result[0], unsafeAddr tmp[1], 64)
+  copyMem(addr result[0], addr tmp[1], 64)
 
 func toRawCompressed*(pubkey: PublicKey): array[33, byte] {.borrow.}
 

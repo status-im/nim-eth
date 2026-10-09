@@ -57,7 +57,7 @@ func hash(k: Key): Hash =
 
 func `==`(k: Key, data: openArray[byte]): bool =
   int(k.len) == data.len and
-    equalMem(unsafeAddr k.data[0], unsafeAddr data[0], data.len)
+    equalMem(addr k.data[0], addr data[0], data.len)
 
 func `==`(a, b: Key): bool =
   a == b.data.toOpenArray(0, int(b.len) - 1)
@@ -225,7 +225,7 @@ when compileOption("threads"):
     ## Fingerprint of the compared prefix - two keys equal under the cache's
     ## `==` always fingerprint alike, and distinct keys differ (whp).
     var h: uint64
-    copyMem(addr h, unsafeAddr k.data[0], 8)
+    copyMem(addr h, addr k.data[0], 8)
     h xor (uint64(k.len) shl 56)
 
   func stampedVal(k: Key, gen: uint32): Val =
@@ -244,7 +244,7 @@ when compileOption("threads"):
   func stampOk(k: Key, v: Val): bool =
     ## A value is acceptable iff it is one whole write for this very key.
     var lanes: array[4, uint64]
-    copyMem(addr lanes[0], unsafeAddr v[0], 32)
+    copyMem(addr lanes[0], addr v[0], 32)
     lanes[0] == lanes[2] and lanes[1] == lanes[3] and
       lanes[0] == fpOf(k) and (lanes[1] shr 32) == LaneMarker
 

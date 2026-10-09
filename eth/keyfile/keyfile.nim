@@ -297,7 +297,7 @@ proc decodeSalt(m: string): string =
 
 proc compareMac(m1: openArray[byte], m2: openArray[byte]): bool =
   if len(m1) == len(m2) and len(m1) > 0:
-    result = equalMem(unsafeAddr m1[0], unsafeAddr m2[0], len(m1))
+    result = equalMem(addr m1[0], addr m2[0], len(m1))
 
 proc createKeyFileJson*(seckey: PrivateKey,
                         password: string,

@@ -383,7 +383,7 @@ proc decodeHeader*(id: NodeId, iv, maskedHeader: openArray[byte]):
     return err("Invalid packet flag")
 
   var nonce: AESGCMNonce
-  copyMem(addr nonce[0], unsafeAddr staticHeader[9], gcmNonceSize)
+  copyMem(addr nonce[0], addr staticHeader[9], gcmNonceSize)
 
   let authdataSize = uint16.fromBytesBE(staticHeader.toOpenArray(21,
     staticHeader.high))
@@ -452,7 +452,7 @@ proc decodeWhoareyouPacket(c: var Codec, nonce: AESGCMNonce,
     return err("Invalid message length for whoareyou packet")
 
   var idNonce: IdNonce
-  copyMem(addr idNonce[0], unsafeAddr authdata[0], idNonceSize)
+  copyMem(addr idNonce[0], addr authdata[0], idNonceSize)
   let whoareyou = WhoareyouData(requestNonce: nonce, idNonce: idNonce,
     recordSeq: uint64.fromBytesBE(
       authdata.toOpenArray(idNonceSize, authdata.high)),
