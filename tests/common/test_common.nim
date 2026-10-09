@@ -158,7 +158,7 @@ suite "EIP-2718 transaction / receipt":
 
   test "Receipts EIP-2718 encoding - invalid - empty receipt payload":
     let receiptBytes: seq[byte] = @[0x02]
-    expect RlpTypeMismatch:
+    expect MalformedRlpError:
       let _ = rlp.decode(receiptBytes, Receipt)
 
   test "Receipt legacy":

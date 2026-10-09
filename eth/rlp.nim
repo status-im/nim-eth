@@ -293,8 +293,18 @@ func enterList*(self: var Rlp): bool =
     return false
 
 func tryEnterList*(self: var Rlp) =
-  if not self.enterList():
+  let item = self.item()
+  if item.typ != rlpList:
     raiseExpectedList()
+
+  self.position = item.payload.a
+
+template consumeList*(self: var Rlp, body: untyped) =
+  let listEnd = self.currentElemEnd()
+  self.tryEnterList()
+  body
+  if self.position != listEnd:
+    raise (ref MalformedRlpError)(msg: "unexpected number of list elements")
 
 func positionAfter(rlp: var Rlp, item: RlpItem) =
   rlp.position = item.payload.b + 1
