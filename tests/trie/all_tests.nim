@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   ./[
     test_hexary_proof, test_hexary_trie, test_json_suite, test_nibbles,

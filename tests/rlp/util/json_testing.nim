@@ -5,13 +5,15 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   std/json,
   unittest2,
   stew/byteutils,
   ../../../eth/rlp
 
-proc append(output: var RlpWriter, js: JsonNode) {.raises: [].} =
+proc append(output: var RlpWriter, js: JsonNode) =
   case js.kind
   of JNull, JFloat, JObject:
     raiseAssert "Unsupported JSON value type " & $js.kind
@@ -29,7 +31,7 @@ proc append(output: var RlpWriter, js: JsonNode) {.raises: [].} =
 proc `==`(lhs: JsonNode, rhs: string): bool =
   lhs.kind == JString and lhs.str == rhs
 
-proc runTests*(filename: string) =
+proc runTests*(filename: string) {.raises: [CatchableError].} =
   let js = json.parseFile(filename)
 
   suite filename:
@@ -66,4 +68,3 @@ proc runTests*(filename: string) =
             actual = rlp.encode(input).toHex
             expected = output.str
           check actual == expected
-

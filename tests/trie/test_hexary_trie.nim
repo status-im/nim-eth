@@ -1,3 +1,4 @@
+{.push raises: [].}
 {.used.}
 
 import
@@ -16,7 +17,7 @@ suite "hexary trie":
       tr {.used.} = initHexaryTrie(db)
 
   test "ref-counted keys crash":
-    proc addKey(intKey: int) =
+    proc addKey(intKey: int) {.raises: [RlpError].} =
       var key = newSeqWith(20, 0.byte)
       key[19] = byte(intKey)
       var data = newSeqWith(29, 1.byte)

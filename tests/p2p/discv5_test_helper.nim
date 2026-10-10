@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   std/net,
   chronos,
@@ -15,7 +17,7 @@ import
 
 export net
 
-func localAddress*(port: int): Address =
+func localAddress*(port: int): Address {.raises: [ValueError].} =
   Address(ip: parseIpAddress("127.0.0.1"), port: Port(port))
 
 proc initDiscoveryNode*(
@@ -26,7 +28,7 @@ proc initDiscoveryNode*(
     localEnrFields: openArray[(string, seq[byte])] = [],
     previousRecord = Opt.none(enr.Record),
     config: DiscoveryConfig = DiscoveryConfig.init(1000, 24, 5)): # default increase bucketIpLimit to allow bucket split
-    discv5_protocol.Protocol =
+    discv5_protocol.Protocol {.raises: [TransportOsError].} =
   let protocol = newProtocol(
     privKey,
     Opt.some(address.ip),
@@ -50,7 +52,7 @@ func nodeIdInNodes*(id: NodeId, nodes: openArray[DiscoveryNode]): bool =
 
 func generateNode*(privKey: PrivateKey, port: int = 20302,
     ip: IpAddress = parseIpAddress("127.0.0.1"),
-    localEnrFields: openArray[FieldPair] = []): DiscoveryNode =
+    localEnrFields: openArray[FieldPair] = []): DiscoveryNode {.raises: [ValueError].} =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, Opt.some(ip),
     Opt.some(port), Opt.some(port), Opt.some(port), localEnrFields).expect("Properly initialized private key")
@@ -65,7 +67,9 @@ func updatedNode*(n: DiscoveryNode, privKey: PrivateKey, ip: IpAddress,
     .expect("Valid record update")
   DiscoveryNode.fromRecord(record)
 
-proc generateNRandomNodes*(rng: var HmacDrbgContext, n: int): seq[DiscoveryNode] =
+proc generateNRandomNodes*(
+    rng: var HmacDrbgContext, n: int
+): seq[DiscoveryNode] {.raises: [ValueError].} =
   var res = newSeq[DiscoveryNode]()
   for i in 1..n:
     let node = generateNode(PrivateKey.random(rng))
@@ -73,7 +77,8 @@ proc generateNRandomNodes*(rng: var HmacDrbgContext, n: int): seq[DiscoveryNode]
   res
 
 proc nodeAndPrivKeyAtDistance*(n: DiscoveryNode, rng: var HmacDrbgContext, d: uint32,
-    ip: IpAddress = parseIpAddress("127.0.0.1")): (DiscoveryNode, PrivateKey) =
+    ip: IpAddress = parseIpAddress("127.0.0.1")
+): (DiscoveryNode, PrivateKey) {.raises: [ValueError].} =
   while true:
     let pk = PrivateKey.random(rng)
     let node = generateNode(pk, ip = ip)
@@ -81,19 +86,19 @@ proc nodeAndPrivKeyAtDistance*(n: DiscoveryNode, rng: var HmacDrbgContext, d: ui
       return (node, pk)
 
 proc nodeAtDistance*(n: DiscoveryNode, rng: var HmacDrbgContext, d: uint32,
-    ip: IpAddress = parseIpAddress("127.0.0.1")): DiscoveryNode =
+    ip: IpAddress = parseIpAddress("127.0.0.1")): DiscoveryNode {.raises: [ValueError].} =
   let (node, _) = n.nodeAndPrivKeyAtDistance(rng, d, ip)
   node
 
 proc nodesAtDistance*(
     n: DiscoveryNode, rng: var HmacDrbgContext, d: uint32, amount: int,
-    ip: IpAddress = parseIpAddress("127.0.0.1")): seq[DiscoveryNode] =
+    ip: IpAddress = parseIpAddress("127.0.0.1")): seq[DiscoveryNode] {.raises: [ValueError].} =
   for i in 0..<amount:
     result.add(nodeAtDistance(n, rng, d, ip))
 
 proc nodesAtDistanceUniqueIp*(
     n: DiscoveryNode, rng: var HmacDrbgContext, d: uint32, amount: int,
-    ip: IpAddress = parseIpAddress("127.0.0.1")): seq[DiscoveryNode] =
+    ip: IpAddress = parseIpAddress("127.0.0.1")): seq[DiscoveryNode] {.raises: [ValueError].} =
   ## Nodes of which the addresses are each in a different subnet, as that is
   ## what the ip limits are counted on.
   var ta = initTAddress(ip, Port(0))
