@@ -215,25 +215,6 @@ func makeEnrAux(
   record.publicKey = pubkey
   ok(record)
 
-macro initRecord*(
-    seqNum: uint64, pk: PrivateKey,
-    pairs: untyped{nkTableConstr}): untyped {.deprecated: "Please use Record.init instead".} =
-  ## Initialize a `Record` with given sequence number, private key and k:v
-  ## pairs.
-  ##
-  ## Can fail in case the record exceeds the `maxEnrSize`.
-  # Note: Deprecated as it is flawed. It allows for any type to be stored in the
-  # predefined keys. It also allows for duplicate keys (which could be fixed)
-  # and no longer sorts the pairs. It can however be moved and used for testing
-  # purposes.
-
-  for c in pairs:
-    c.expectKind(nnkExprColonExpr)
-    c[1] = newCall(bindSym"toField", c[1])
-
-  result = quote do:
-    makeEnrAux(`seqNum`, "v4", `pk`, `pairs`)
-
 func insertAddress(
     fields: var seq[FieldPair],
     ip: Opt[IpAddress],
@@ -421,9 +402,6 @@ func fromRecord*(T: type TypedRecord, r: Record): T =
     quic6: r.tryGet("quic6", int)
   )
 
-func toTypedRecord*(r: Record): EnrResult[TypedRecord] {.deprecated: "Please use TypedRecord.fromRecord instead".} =
-  ok(TypedRecord.fromRecord(r))
-
 func contains*(r: Record, fp: (string, seq[byte])): bool =
   # TODO: use FieldPair for this, but that is a bit cumbersome. Perhaps the
   # `get` call can be improved to make this easier.
@@ -552,13 +530,6 @@ func fromBytes*(T: type Record, s: openArray[byte]): EnrResult[T] =
   ## Creates ENR from rlp-encoded bytes and verifies the signature.
   Record.fromBytesAux(s)
 
-func fromBytes*(r: var Record, s: openArray[byte]): bool {.deprecated: "Use the Result[Record] version instead".} =
-  ## Loads ENR from rlp-encoded bytes and verifies the signature.
-  r = Record.fromBytes(s).valueOr:
-    return false
-  true
-
-
 func fromBase64*(T: type Record, s: string): EnrResult[T] =
   ## Creates ENR from base64-encoded rlp-encoded bytes and verifies the
   ## signature.
@@ -569,13 +540,6 @@ func fromBase64*(T: type Record, s: string): EnrResult[T] =
       return err("Base64 decoding error")
 
   Record.fromBytesAux(rlpRaw)
-
-func fromBase64*(r: var Record, s: string): bool {.deprecated: "Use the Result[Record] version instead".} =
-  ## Loads ENR from base64-encoded rlp-encoded bytes and verifies the
-  ## signature.
-  r = Record.fromBase64(s).valueOr:
-    return false
-  true
 
 func fromURI*(T: type Record, s: string): EnrResult[T] =
   ## Creates ENR from its URI encoding: base64-encoded rlp-encoded bytes,

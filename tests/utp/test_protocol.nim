@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -596,7 +596,7 @@ procSuite "uTP over UDP protocol":
         utpNode = UtpProtocol.new(
           handleIncomingConnection, address,
           socketConfig = SocketConfig.init(
-            incomingSocketReceiveTimeout = none[Duration]()))
+            incomingSocketReceiveTimeout = Opt.none(Duration)))
 
       utpNodeList.add(utpNode)
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -122,7 +122,7 @@ procSuite "uTP router unit":
     let router =
       UtpRouter[int].new(
         registerIncomingSocketCallback(q),
-        SocketConfig.init(incomingSocketReceiveTimeout = some(seconds(2))),
+        SocketConfig.init(incomingSocketReceiveTimeout = Opt.some(seconds(2))),
         rng
       )
     router.sendCb = testSend
@@ -147,7 +147,7 @@ procSuite "uTP router unit":
     let router =
       UtpRouter[int].new(
         registerIncomingSocketCallback(q),
-        SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]()),
+        SocketConfig.init(incomingSocketReceiveTimeout = Opt.none(Duration)),
         rng
       )
     router.sendCb = testSend
@@ -174,7 +174,7 @@ procSuite "uTP router unit":
     let router =
       UtpRouter[int].new(
         registerIncomingSocketCallback(q),
-        SocketConfig.init(incomingSocketReceiveTimeout = some(seconds(3))),
+        SocketConfig.init(incomingSocketReceiveTimeout = Opt.some(seconds(3))),
         rng
       )
     router.sendCb = initTestSnd(pq)

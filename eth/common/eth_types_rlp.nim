@@ -30,8 +30,5 @@ proc read*(rlp: var Rlp, T: type BlockHashOrNumber): T =
   else:
     BlockHashOrNumber(isHash: false, number: rlp.read(BlockNumber))
 
-proc rlpHash*[T](v: T): Hash32 {.deprecated: "computeRlpHash".} =
-  rlp.computeRlpHash(v)
-
 template computeBlockHash*(h: Header): Hash32 =
   rlp.computeRlpHash(h)
