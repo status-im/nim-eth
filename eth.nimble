@@ -8,7 +8,7 @@ skipDirs      = @["tests"]
 
 requires "nim >= 2.2.14",
          "chronicles >= 0.12.4",
-         "chronos >= 4.0.0",
+         "chronos >= 4.0.1",
          "confutils >= 0.1.1",
          "metrics >= 0.2.0",
          "minilru >= 0.1.1",

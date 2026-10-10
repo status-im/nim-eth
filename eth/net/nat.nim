@@ -248,14 +248,14 @@ proc allocPortMappingsArgPtr(
   args.portsLen = ports.len
   if ports.len > 0:
     args.portsPtr = cast[ptr PortSpec](allocShared(sizeof(PortSpec) * ports.len))
-    copyMem(args.portsPtr, unsafeAddr ports[0], sizeof(PortSpec) * ports.len)
+    copyMem(args.portsPtr, addr ports[0], sizeof(PortSpec) * ports.len)
   else:
     args.portsPtr = nil
 
   args.descLen = description.len
   if description.len > 0:
     args.descPtr = cast[ptr char](allocShared(description.len))
-    copyMem(args.descPtr, unsafeAddr description[0], description.len)
+    copyMem(args.descPtr, addr description[0], description.len)
   else:
     args.descPtr = nil
 
@@ -375,12 +375,6 @@ proc redirectPorts*(internalPorts: seq[PortSpec], description: string): Opt[seq[
         portMapping.del(p)
       warn "Failed to create NAT port mapping renewal thread", exc = exc.msg
 
-proc redirectPorts*(tcpPort, udpPort: Port, description: string): Opt[(Port, Port)] {.deprecated: "Please use redirectPorts with a sequence of PortSpec instead".} =
-  let portsOpt = redirectPorts(@[(port: tcpPort, protocol: PortProtocol.TCP), (port: udpPort, protocol: PortProtocol.UDP)], description)
-  if portsOpt.isSome:
-    let ports = portsOpt.get()
-    return Opt.some((ports[0].port, ports[1].port))
-
 proc setupNat*(natStrategy: NatStrategy, ports: seq[PortSpec],
     clientId: string):
     tuple[ip: Opt[IpAddress], ports: seq[Opt[PortSpec]]] =
@@ -396,26 +390,8 @@ proc setupNat*(natStrategy: NatStrategy, ports: seq[PortSpec],
                   description = clientId)).valueOr:
     warn "UPnP/NAT-PMP available but port forwarding failed"
     return (ip: Opt.none(IpAddress), ports: ports.mapIt(Opt.some(it)))
-  
-  (ip: Opt.some(extIp), ports: extPorts.mapIt(Opt.some(it)))
 
-proc setupNat*(natStrategy: NatStrategy, tcpPort, udpPort: Port,
-    clientId: string):
-    tuple[ip: Opt[IpAddress], tcpPort, udpPort: Opt[Port]] {.deprecated: "Please use setupNat with a sequence of PortSpec instead".} =
-  let
-    ports: seq[PortSpec] = @[(tcpPort, PortProtocol.TCP), (udpPort, PortProtocol.UDP)]
-    setupNatRet = setupNat(natStrategy, ports, clientId)
-    tcpPortRet =
-      if setupNatRet.ports[0].isSome:
-        Opt.some(setupNatRet.ports[0].get().port)
-      else:
-        Opt.none(Port)
-    udpPortRet =
-      if setupNatRet.ports[1].isSome:
-        Opt.some(setupNatRet.ports[1].get().port)
-      else:
-        Opt.none(Port)
-  (setupNatRet.ip, tcpPortRet, udpPortRet)
+  (ip: Opt.some(extIp), ports: extPorts.mapIt(Opt.some(it)))
 
 type
   NatConfig* = object
@@ -457,6 +433,12 @@ proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress, ports: seq[PortSpec]
   ## external IP can be figured out by other means at a later stage.
 
   if natConfig.hasExtIp:
+    if natConfig.extIp.family == IpAddressFamily.IPv6:
+      # Specifically ignored and not rejected, so that such a node still starts up.
+      warn "Ignoring the IPv6 address of --nat:extip, it only applies to IPv4",
+        extIp = natConfig.extIp
+      return (Opt.none(IpAddress), ports.mapIt(Opt.some(it)))
+
     # any required port redirection must be done by hand
     return (Opt.some(natConfig.extIp), ports.mapIt(Opt.some(it)))
 
@@ -483,26 +465,6 @@ proc setupAddress*(natConfig: NatConfig, bindIp: IpAddress, ports: seq[PortSpec]
           return (Opt.none(IpAddress), ports.mapIt(Opt.some(it)))
     of NatUpnp, NatPmp:
       return setupNat(natConfig.nat, ports, clientId)
-
-proc setupAddress*(
-    natConfig: NatConfig, bindIp: IpAddress, tcpPort, udpPort: Port, clientId: string
-): tuple[ip: Opt[IpAddress], tcpPort, udpPort: Opt[Port]] {.
-    gcsafe, deprecated: "Please use setupAddress with a sequence of PortSpec instead"
-.} =
-  let
-    ports: seq[PortSpec] = @[(tcpPort, PortProtocol.TCP), (udpPort, PortProtocol.UDP)]
-    setupAddressRet = setupAddress(natConfig, bindIp, ports, clientId)
-    tcpPortRet =
-      if setupAddressRet.ports[0].isSome:
-        Opt.some(setupAddressRet.ports[0].get().port)
-      else:
-        Opt.none(Port)
-    udpPortRet =
-      if setupAddressRet.ports[1].isSome:
-        Opt.some(setupAddressRet.ports[1].get().port)
-      else:
-        Opt.none(Port)
-  (setupAddressRet.ip, tcpPortRet, udpPortRet)
 
 func `==`*(a, b: NatConfig): bool =
   if a.hasExtIp != b.hasExtIp:

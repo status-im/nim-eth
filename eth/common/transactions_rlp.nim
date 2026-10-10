@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -220,9 +220,6 @@ proc encodeForSigning*(tx: Transaction, eip155: bool): seq[byte] =
   writer.encodeUnsignedTransaction(tx, eip155)
   move(writer.finish)
 
-template rlpEncode*(tx: Transaction): seq[byte] {.deprecated.} =
-  encodeForSigning(tx, tx.isEip155())
-
 func rlpHashForSigning*(tx: Transaction, eip155: bool): Hash32 =
   var tracker: DynamicRlpLengthTracker
   tracker.initLengthTracker()
@@ -230,9 +227,6 @@ func rlpHashForSigning*(tx: Transaction, eip155: bool): Hash32 =
   var writer = initHashWriter(tracker)
   writer.encodeUnsignedTransaction(tx, eip155)
   writer.finish
-
-template txHashNoSignature*(tx: Transaction): Hash32 {.deprecated.} =
-  rlpHashForSigning(tx, tx.isEip155())
 
 proc readTxLegacy(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxLegacy

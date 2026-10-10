@@ -29,6 +29,10 @@ type
     rlpBlob
     rlpList
 
+  RlpListMode* {.pure.} = enum
+    RejectAdditionalElements
+    IgnoreAdditionalElements
+
   RlpError* = object of CatchableError
   MalformedRlpError* = object of RlpError
   UnsupportedRlpError* = object of RlpError
@@ -64,7 +68,6 @@ template view(input: openArray[byte], slice: Slice[int]): openArray[byte] =
   toOpenArray(input, slice.a, slice.b)
 
 func toString(self: Rlp, item: RlpItem): string =
-  result = "" # TODO https://github.com/nim-lang/Nim/issues/23645
   if item.typ != rlpBlob:
     raiseExpectedBlob()
 
@@ -219,14 +222,6 @@ func getByteValue*(self: Rlp): byte =
   doAssert self.isSingleByte()
   self.bytes[self.position]
 
-func readRawByte*(self: var Rlp): byte =
-  ### Read a raw byte that is not RLP encoded
-  ### This is sometimes used to communicate union type information
-  doAssert self.hasData
-  let res = self.bytes[self.position]
-  inc self.position
-  res
-
 func blobLen*(self: Rlp): int =
   if self.isBlob():
     self.item().payload.len()
@@ -252,6 +247,9 @@ func toInt(self: Rlp, item: RlpItem, IntType: type): IntType =
   if item.payload.len > maxBytes(IntType):
     raiseIntOutOfBounds()
 
+  if item.payload.len > 0 and self.bytes[item.payload.a] == 0:
+    raiseNonCanonical()
+
   for b in self.bytes.view(item.payload):
     result = (result shl 8) or IntType(b)
 
@@ -259,11 +257,7 @@ func toInt*(self: Rlp, IntType: type): IntType =
   self.toInt(self.item(), IntType)
 
 func toString*(self: Rlp): string =
-  # TODO https://github.com/nim-lang/Nim/issues/23645
-  # the returnd string is cleared properly on exception here - the double
-  # result assignment can be removed once that bug is fixed
-  result = ""
-  result = self.toString(self.item())
+  self.toString(self.item())
 
 func toBytes(self: Rlp, item: RlpItem): seq[byte] =
   if item.typ != rlpBlob:
@@ -293,8 +287,28 @@ func enterList*(self: var Rlp): bool =
     return false
 
 func tryEnterList*(self: var Rlp) =
-  if not self.enterList():
+  let item = self.item()
+  if item.typ != rlpList:
     raiseExpectedList()
+
+  self.position = item.payload.a
+
+template consumeList*(self: var Rlp, mode: static RlpListMode, body: untyped) =
+  let listEnd = self.currentElemEnd()
+  self.tryEnterList()
+  body
+  when mode == RlpListMode.RejectAdditionalElements:
+    if self.position != listEnd:
+      raise (ref MalformedRlpError)(msg: "unexpected number of list elements")
+  else:
+    static: doAssert mode == RlpListMode.IgnoreAdditionalElements
+    while self.position < listEnd:
+      self.position = self.currentElemEnd()
+    if self.position != listEnd:
+      raise (ref MalformedRlpError)(msg: "unexpected number of list elements")
+
+template consumeList*(self: var Rlp, body: untyped) =
+  self.consumeList(RlpListMode.RejectAdditionalElements, body)
 
 func positionAfter(rlp: var Rlp, item: RlpItem) =
   rlp.position = item.payload.b + 1
@@ -303,12 +317,12 @@ func positionAt(rlp: var Rlp, item: RlpItem) =
   rlp.position = item.payload.a
 
 func skipElem*(rlp: var Rlp) =
-  doAssert rlp.hasData()
   rlp.positionAfter(rlp.item())
 
 template iterateIt(self: Rlp, position: int, body: untyped) =
   let item = self.item(position)
-  doAssert item.typ == rlpList
+  if item.typ != rlpList:
+    raiseExpectedList()
   var it {.inject.} = item.payload.a
   let last = item.payload.b
   while it <= last:
@@ -318,7 +332,8 @@ template iterateIt(self: Rlp, position: int, body: untyped) =
 
 iterator items(self: var Rlp, item: RlpItem): var Rlp =
   # Iterate over items while updating "current" element view, mutating self
-  doAssert item.typ == rlpList
+  if item.typ != rlpList:
+    raiseExpectedList()
 
   self.position = item.payload.a
   let last = item.payload.b
@@ -337,7 +352,8 @@ iterator items*(self: var Rlp): var Rlp =
 
 func listElem*(self: Rlp, i: int): Rlp =
   let item = self.item()
-  doAssert item.typ == rlpList
+  if item.typ != rlpList:
+    raiseExpectedList()
 
   var
     i = i
@@ -383,7 +399,13 @@ func readImpl(rlp: var Rlp, T: type[enum]): T =
   res
 
 func readImpl(rlp: var Rlp, T: type bool): T =
-  rlp.readImpl(uint64) != 0
+  case rlp.readImpl(uint64)
+  of 0:
+    false
+  of 1:
+    true
+  else:
+    raise (ref RlpTypeMismatch)(msg: "bool expected, but the source RLP is not 0 or 1")
 
 func readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
   mixin read
@@ -399,7 +421,7 @@ func readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
         "Fixed-size array expected, but the source RLP contains a blob of different length",
       )
 
-    copyMem(addr result[0], unsafeAddr rlp.bytes[item.payload.a], result.len)
+    copyMem(addr result[0], addr rlp.bytes[item.payload.a], result.len)
   else:
     if result.len != rlp.listLen:
       raise newException(

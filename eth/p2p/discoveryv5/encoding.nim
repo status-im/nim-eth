@@ -109,7 +109,7 @@ type
     of HandshakeMessage:
       message*: Message # In a handshake we expect to always be able to decrypt
       # TODO record or node immediately?
-      node*: Opt[Node]
+      node*: Opt[DiscoveryNode]
       srcIdHs*: NodeId
 
   HandshakeKey* = object
@@ -117,7 +117,7 @@ type
     address*: Address
 
   Codec* = object
-    localNode*: Node
+    localNode*: LocalDiscoveryNode
     privKey*: PrivateKey
     handshakes*: Table[HandshakeKey, Challenge]
     sessions*: Sessions
@@ -383,7 +383,7 @@ proc decodeHeader*(id: NodeId, iv, maskedHeader: openArray[byte]):
     return err("Invalid packet flag")
 
   var nonce: AESGCMNonce
-  copyMem(addr nonce[0], unsafeAddr staticHeader[9], gcmNonceSize)
+  copyMem(addr nonce[0], addr staticHeader[9], gcmNonceSize)
 
   let authdataSize = uint16.fromBytesBE(staticHeader.toOpenArray(21,
     staticHeader.high))
@@ -452,7 +452,7 @@ proc decodeWhoareyouPacket(c: var Codec, nonce: AESGCMNonce,
     return err("Invalid message length for whoareyou packet")
 
   var idNonce: IdNonce
-  copyMem(addr idNonce[0], unsafeAddr authdata[0], idNonceSize)
+  copyMem(addr idNonce[0], addr authdata[0], idNonceSize)
   let whoareyou = WhoareyouData(requestNonce: nonce, idNonce: idNonce,
     recordSeq: uint64.fromBytesBE(
       authdata.toOpenArray(idNonceSize, authdata.high)),
@@ -508,12 +508,12 @@ proc decodeHandshakePacket(c: var Codec, fromAddr: Address, nonce: AESGCMNonce,
       return err("Invalid encoded ENR")
 
   var pubkey: PublicKey
-  var newNode: Opt[Node]
+  var newNode: Opt[DiscoveryNode]
   # TODO: Shall we return Node or Record? Record makes more sense, but we do
   # need the pubkey and the nodeid
   if record.isSome():
     # Node returned might not have an address or not a valid address.
-    let node = Node.fromRecord(record.value)
+    let node = DiscoveryNode.fromRecord(record.value)
     if node.id != srcId:
       return err("Invalid node id: does not match node id of ENR")
 

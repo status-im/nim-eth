@@ -48,7 +48,7 @@ suite "test api usage":
       not rlp.isList
       not rlp.isEmpty
 
-    expect AssertionDefect:
+    expect MalformedRlpError:
       rlp.skipElem
 
   test "you cannot finish a list without appending enough elements":
@@ -144,7 +144,15 @@ suite "test api usage":
     check intVar == 6000
 
     check(not list.hasData)
-    expect AssertionDefect: list.skipElem
+    expect MalformedRlpError: list.skipElem
+
+  test "list accessors on a non-list raise RlpError":
+    var rlp = rlpFromHex("83616263")
+    expect RlpTypeMismatch:
+      for _ in rlp:
+        discard
+    expect RlpTypeMismatch:
+      discard rlp.listElem(0)
 
   test "encode and decode block body":
     test_blockBodyTranscode()
@@ -190,6 +198,47 @@ suite "test api usage":
     var rlp = rlpFromHex("b8056d6f6f7365")
     expect MalformedRlpError:
       discard rlp.inspect
+
+  test "malformed lists are not reported as type mismatches":
+    for hex in ["c501", "f80101", ""]:
+      checkpoint hex
+      var r = rlpFromHex(hex)
+      expect MalformedRlpError:
+        r.tryEnterList()
+    var r = rlpFromHex("83616263")
+    expect RlpTypeMismatch:
+      r.tryEnterList()
+
+  test "consumeList requires exactly the list elements":
+    var r = rlpFromHex("c20102")
+    r.consumeList:
+      check:
+        r.read(uint8) == 1
+        r.read(uint8) == 2
+    r = rlpFromHex("c20102")
+    expect MalformedRlpError:
+      r.consumeList:
+        discard r.read(uint8)
+    r = rlpFromHex("c10102")
+    expect MalformedRlpError:
+      r.consumeList:
+        discard r.read(uint8)
+        discard r.read(uint8)
+
+  test "consumeList can ignore additional list elements":
+    var r = rlpFromHex("c301020304")
+    r.consumeList(RlpListMode.IgnoreAdditionalElements):
+      check r.read(uint8) == 1
+    check r.read(uint8) == 4
+    r = rlpFromHex("c10102")
+    expect MalformedRlpError:
+      r.consumeList(RlpListMode.IgnoreAdditionalElements):
+        discard r.read(uint8)
+        discard r.read(uint8)
+    r = rlpFromHex("c2018180")
+    expect MalformedRlpError:
+      r.consumeList(RlpListMode.IgnoreAdditionalElements):
+        discard r.read(uint8)
 
   test "encode byte arrays":
     var b1 = [byte(1), 2, 5, 7, 8]
@@ -295,3 +344,18 @@ suite "test api usage":
 
       check:
         writer.finish() == encode(acc)
+
+  test "integers with leading zeros are not accepted":
+    for hex in ["00", "8200ff", "880000000000000001"]:
+      checkpoint hex
+      expect MalformedRlpError:
+        discard rlp.decode(hexToSeqByte(hex), uint64)
+      expect MalformedRlpError:
+        discard rlp.decode(hexToSeqByte(hex), UInt256)
+
+  test "booleans other than 0 and 1 are not accepted":
+    check:
+      rlp.decode(hexToSeqByte("80"), bool) == false
+      rlp.decode(hexToSeqByte("01"), bool) == true
+    expect RlpTypeMismatch:
+      discard rlp.decode(hexToSeqByte("02"), bool)

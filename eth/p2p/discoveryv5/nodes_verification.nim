@@ -26,21 +26,23 @@ func validIp(sender, address: IpAddress): bool =
     let s = initTAddress(sender, Port(0))
     if a.isLoopback() and s.isLoopback():
       true
-    elif a.isSiteLocal() and s.isSiteLocal():
+    elif (a.isSiteLocal() or a.isUniqueLocal()) and
+        (s.isSiteLocal() or s.isUniqueLocal()):
+          # TODO: replace with isPrivate once nim-chronos tag > v4.1.1
       true
     else:
       false
 
 proc verifyNodesRecords(
-    enrs: openArray[Record], src: Node, nodesLimit: int,
-    distances: Opt[seq[uint16]]): seq[Node] =
+    enrs: openArray[Record], src: DiscoveryNode, nodesLimit: int,
+    distances: Opt[seq[uint16]]): seq[DiscoveryNode] =
   ## Verify and convert ENRs to a sequence of nodes. Only ENRs that pass
   ## verification will be added. ENRs are verified for duplicates, invalid
   ## addresses and invalid distances if those are specified.
   logScope:
     sender = src.record.toURI
 
-  var seen: HashSet[Node]
+  var seen: HashSet[DiscoveryNode]
   var count = 0
   for r in enrs:
     # Check and allow for processing of maximum `findNodeResultLimit` ENRs
@@ -57,7 +59,7 @@ proc verifyNodesRecords(
 
     count.inc()
 
-    let n = Node.fromRecord(r)
+    let n = DiscoveryNode.fromRecord(r)
     # Check for duplicates in the nodes reply. Duplicates are checked based
     # on node id.
     if n in seen:
@@ -83,10 +85,10 @@ proc verifyNodesRecords(
     result.add(n)
 
 proc verifyNodesRecords*(
-    enrs: openArray[Record], src: Node, nodesLimit: int): seq[Node] =
+    enrs: openArray[Record], src: DiscoveryNode, nodesLimit: int): seq[DiscoveryNode] =
   verifyNodesRecords(enrs, src, nodesLimit, Opt.none(seq[uint16]))
 
 proc verifyNodesRecords*(
-    enrs: openArray[Record], src: Node, nodesLimit: int,
-    distances: seq[uint16]): seq[Node] =
+    enrs: openArray[Record], src: DiscoveryNode, nodesLimit: int,
+    distances: seq[uint16]): seq[DiscoveryNode] =
   verifyNodesRecords(enrs, src, nodesLimit, Opt.some(distances))
