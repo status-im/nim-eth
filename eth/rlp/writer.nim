@@ -1,12 +1,12 @@
 # eth
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[options, typetraits],
+  std/typetraits,
   pkg/results,
   stew/[arraybuf, shims/macros],
   ./priv/defs,
@@ -67,7 +67,7 @@ proc appendImpl[T](self: var RlpWriter, list: openArray[T]) =
   for i in 0 ..< list.len:
     self.append list[i]
 
-template innerType[T](x: Option[T] | Opt[T]): typedesc =
+template innerType[T](x: Opt[T]): typedesc =
   T
 
 proc countNestedListsDepth(T: type): int {.compileTime.} =
@@ -78,7 +78,7 @@ proc countNestedListsDepth(T: type): int {.compileTime.} =
   template op(RT, fN, f) {.used.} =
     result += countNestedListsDepth(type f)
 
-  when T is Option or T is Opt:
+  when T is Opt:
     result += countNestedListsDepth(innerType(dummy))
   elif T is UInt256:
     discard
@@ -99,7 +99,7 @@ proc countOptionalFields(T: type): int {.compileTime.} =
 
   # closure signature matches the one in object_serialization.nim
   template op(RT, fN, f) {.used.} =
-    when f is Option or f is Opt:
+    when f is Opt:
       inc result
     else: # this will count only optional fields at the end
       result = 0
@@ -114,7 +114,7 @@ proc validateOptionalFields(obj: object | tuple) =
   var missing: cstring = nil
 
   template op(RT, fN, f) {.used.} =
-    when f is Option or f is Opt:
+    when f is Opt:
       if f.isSome:
         doAssert missing == nil, $missing & " expected"
       elif missing == nil:
@@ -130,7 +130,7 @@ proc countFieldsRuntime(obj: object | tuple): int =
   var numOptionals: int = 0
 
   template op(RT, fN, f) {.used.} =
-    when f is Option or f is Opt:
+    when f is Opt:
       if f.isSome: # if optional and non empty
         inc numOptionals
     else: # if  mandatory field
@@ -161,7 +161,7 @@ proc appendRecordType*(
   template op(RecordType, fieldName, field) {.used.} =
     when hasCustomPragmaFixed(RecordType, fieldName, rlpCustomSerialization):
       append(self, obj, field)
-    elif (field is Option or field is Opt) and cof > 0:
+    elif field is Opt and cof > 0:
       # this works for optional fields at the end of an object/tuple
       # if the optional field is followed by a mandatory field,
       # custom serialization for a field or for the parent object

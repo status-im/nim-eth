@@ -128,7 +128,7 @@ differently depending on the enclosing object type. You can use the
 
 ### Optional fields
 
-Both `Option[T]` of `std/options` and `Opt[T]` of `stew/results` are supported.
+Optional fields use `Opt[T]` of `results`.
 But the decoder and encoder assume optional fields are always added at the end of the RLP object.
 You can never set a field to `None` unless all following fields are also `None`.
 
@@ -137,9 +137,9 @@ You can never set a field to `None` unless all following fields are also `None`.
 
 type
   RlpObject = object
-    size: int
-    color: Option[int]
-    width: Opt[int]
+    size: uint64
+    color: Opt[uint64]
+    width: Opt[uint64]
 ```
 
 If `color` is `none`, `width` should also `none`. If `color` is `some`, `width` can be both.
