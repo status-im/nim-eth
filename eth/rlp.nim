@@ -501,7 +501,7 @@ template readRecordType*(rlp: var Rlp, T: type, wrappedInList: bool): auto =
   if wrappedInList:
     rlp.read(T)
   else:
-    readImpl(rlp, T, wrappedInList = false)  # Custom `read` expects list
+    readImpl(rlp, T, wrappedInList)  # Custom `read` expects list
 
 template decode*(bytes: openArray[byte], T: type): untyped =
   mixin read
