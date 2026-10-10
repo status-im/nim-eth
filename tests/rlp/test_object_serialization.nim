@@ -109,4 +109,21 @@ proc suite() =
         originalBarBytes.len == length
         originalBarHash == hash
 
+    test "readRecordType uses custom read overloads":
+      type Versioned = object
+        version: uint64
+        payload: string
+
+      proc read(rlp: var Rlp, T: type Versioned): T =
+        rlp.tryEnterList()
+        T(version: rlp.read(uint64), payload: "custom " & rlp.read(string))
+
+      var r = rlpFromBytes(encode(Versioned(version: 1, payload: "x")))
+      check r.readRecordType(Versioned, true) ==
+        Versioned(version: 1, payload: "custom x")
+
+      r = rlpFromBytes(encode(1'u64) & encode("x"))
+      check r.readRecordType(Versioned, false) ==
+        Versioned(version: 1, payload: "x")
+
 suite()

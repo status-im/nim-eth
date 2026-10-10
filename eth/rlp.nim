@@ -497,7 +497,11 @@ func `>>`*[T](rlp: var Rlp, location: var T) =
   location = rlp.read(T)
 
 template readRecordType*(rlp: var Rlp, T: type, wrappedInList: bool): auto =
-  readImpl(rlp, T, wrappedInList)
+  mixin read
+  if wrappedInList:
+    rlp.read(T)
+  else:
+    readImpl(rlp, T, wrappedInList = false)  # Custom `read` expects list
 
 template decode*(bytes: openArray[byte], T: type): untyped =
   mixin read
