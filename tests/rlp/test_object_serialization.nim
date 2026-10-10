@@ -10,10 +10,10 @@ import
 
 type
   Transaction = object
-    amount: uint64
-    time: uint64
     sender: string
     receiver: string
+    amount: uint64
+    time {.rlpIgnore.}: uint64
 
   Point = object
     x: uint64
@@ -42,21 +42,6 @@ type
     c: Opt[uint64]
     cache {.rlpIgnore.}: int
 
-  TrailingWithRlpFields = object
-    a: uint64
-    b: Opt[uint64]
-    notEncoded: Opt[uint64]
-    c: Opt[uint64]
-
-rlpFields Foo,
-  x, y, z
-
-rlpFields TrailingWithRlpFields,
-  a, b, c
-
-rlpFields Transaction,
-  sender, receiver, amount
-
 proc append*(rlpWriter: var RlpWriter, holder: CustomSerialized, f: Foo) =
   rlpWriter.startList(3)
   rlpWriter.append(f.x)
@@ -82,13 +67,6 @@ proc suite() =
       expect AssertionDefect:
         discard rlp.encode(TrailingWithIgnored(a: 1, c: Opt.some(3'u64)))
 
-    test "trailing optional fields (with rlpFields)":
-      let obj = TrailingWithRlpFields(
-        a: 1, b: Opt.some(2'u64), c: Opt.some(3'u64))
-      check rlp.decode(rlp.encode(obj), TrailingWithRlpFields) == obj
-      expect AssertionDefect:
-        discard rlp.encode(TrailingWithRlpFields(a: 1, c: Opt.some(3'u64)))
-
     test "encoding and decoding an object":
       var originalBar = Bar(b: "abracadabra",
                             f: Foo(x: 5'u64, y: "hocus pocus", z: @[uint64 100, 200, 300]))
@@ -100,7 +78,7 @@ proc suite() =
       check:
         originalBar == restoredBar
 
-      var t1 = Transaction(time: 100, amount: 1000, sender: "Alice", receiver: "Bob")
+      var t1 = Transaction(sender: "Alice", receiver: "Bob", amount: 1000, time: 100)
       bytes = encode(t1)
       var t2 = bytes.decode(Transaction)
 
