@@ -4,10 +4,11 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
 {.used.}
 
 import
-  std/[algorithm, random, sequtils, options],
+  std/[algorithm, net, random, sequtils, options],
   chronos,
   testutils/unittests,
   ./test_utils,
@@ -20,7 +21,7 @@ import
 procSuite "uTP socket":
   let
     rng = newRng()
-    testAddress = initTAddress("127.0.0.1", 9079)
+    testAddress = initTAddress(IPv4_loopback(), Port(9079))
     testBufferSize = 1024'u32
     defaultRcvOutgoingId = 314'u16
 

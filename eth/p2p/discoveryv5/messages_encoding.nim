@@ -22,12 +22,12 @@ from stew/objects import checkedEnumAssign
 export messages, rlp, results
 
 func read*(rlp: var Rlp, T: type RequestId): T
-    {.raises: [ValueError, RlpError].} =
+    {.raises: [RlpError].} =
   mixin read
   var reqId: RequestId
   reqId.id = rlp.toBytes()
   if reqId.id.len > 8:
-    raise newException(ValueError, "RequestId is > 8 bytes")
+    raise newException(RlpTypeMismatch, "RequestId is > 8 bytes")
   rlp.skipElem()
 
   reqId
@@ -97,7 +97,7 @@ func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
   if rlp.enterList:
     try:
       message.reqId = rlp.read(RequestId)
-    except RlpError, ValueError:
+    except RlpError:
       return err("Invalid request-id")
 
     func decode[T](rlp: var Rlp, v: var T)
@@ -120,7 +120,7 @@ func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
         # But we ignore the message as per specification as "the content and
         # semantics of this message are not final".
         discard
-    except RlpError, ValueError:
+    except RlpError:
       return err("Invalid message encoding")
 
     ok(message)

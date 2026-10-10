@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   chronos, chronicles/chronos_tools
 

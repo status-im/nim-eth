@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   std/[random, sets],
   nimcrypto/[utils, sysrand]

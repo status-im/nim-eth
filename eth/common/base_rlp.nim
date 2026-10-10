@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -59,7 +59,7 @@ proc append*(w: var RlpWriter, value: StUint) =
   else:
     w.append(value.truncate(uint))
 
-proc read*(rlp: var Rlp, T: type StInt): T =
+proc read*(rlp: var Rlp, T: type StInt): T {.raises: [RlpError].} =
   # The Ethereum Yellow Paper defines the RLP serialization only
   # for unsigned integers:
   {.fatal: "RLP serialization of signed integers is not allowed".}

@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   testutils/fuzzing,
   ../../../eth/p2p/discoveryv5/messages_encoding

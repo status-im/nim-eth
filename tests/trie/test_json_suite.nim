@@ -1,9 +1,12 @@
+{.push raises: [].}
 {.used.}
 
 import
   std/[os, json, tables, strutils, algorithm],
   stew/byteutils,
   ../../eth/trie/[db, hexary]
+
+from ../../eth/rlp import RlpError
 
 type
   TestOp = object
@@ -16,7 +19,7 @@ proc `<=`(lhs, rhs: TestOp): bool = lhs.idx <= rhs.idx
 
 proc runSingleTest(testSequence: openArray[TestOp],
                    secureMode: bool,
-                   expectedRootHash: string): bool =
+                   expectedRootHash: string): bool {.raises: [RlpError].} =
   var
     db = newMemoryDB()
     t = initHexaryTrie(db)
@@ -39,7 +42,7 @@ proc runSingleTest(testSequence: openArray[TestOp],
 
   return t.rootHashHex == expectedRootHash
 
-proc runTests*(filename: string) =
+proc runTests*(filename: string) {.raises: [CatchableError].} =
   let js = json.parseFile(filename)
 
   for testname, testdata in js:
@@ -122,4 +125,3 @@ proc runTests*(filename: string) =
 for file in walkDirRec("tests/cases"):
   if file.endsWith("json"):
     runTests(file)
-

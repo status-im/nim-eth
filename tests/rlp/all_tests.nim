@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   ./test_api_usage,
   ./test_json_suite,

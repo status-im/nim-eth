@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   std/[os, strutils, net],
   ../../../eth/enr/enr,
@@ -6,7 +8,7 @@ import
 template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 const inputsDir = sourceDir / "corpus"
 
-proc generate() =
+proc generate() {.raises: [CatchableError].} =
   let
     rng = newRng()
     privKey = PrivateKey.random(rng[])

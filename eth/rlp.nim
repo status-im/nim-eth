@@ -9,6 +9,8 @@
 ## defined in Appendix B of the Ethereum Yellow Paper:
 ## https://ethereum.github.io/yellowpaper/paper.pdf
 
+{.push raises: [].}
+
 import
   std/strutils,
   stew/[byteutils, shims/macros],
@@ -40,19 +42,19 @@ type
 
   RlpItem = tuple[payload: Slice[int], typ: RlpNodeType]
 
-func raiseOutOfBounds() {.noreturn, noinline.} =
+func raiseOutOfBounds() {.noreturn, noinline, raises: [RlpError].} =
   raise (ref MalformedRlpError)(msg: "out-of-bounds payload access")
 
-func raiseExpectedBlob() {.noreturn, noinline.} =
+func raiseExpectedBlob() {.noreturn, noinline, raises: [RlpError].} =
   raise (ref RlpTypeMismatch)(msg: "expected blob")
 
-func raiseExpectedList() {.noreturn, noinline.} =
+func raiseExpectedList() {.noreturn, noinline, raises: [RlpError].} =
   raise (ref RlpTypeMismatch)(msg: "expected list")
 
-func raiseNonCanonical() {.noreturn, noinline.} =
+func raiseNonCanonical() {.noreturn, noinline, raises: [RlpError].} =
   raise (ref MalformedRlpError)(msg: "non-canonical encoding")
 
-func raiseIntOutOfBounds() {.noreturn, noinline.} =
+func raiseIntOutOfBounds() {.noreturn, noinline, raises: [RlpError].} =
   raise (ref UnsupportedRlpError)(msg: "integer out of bounds")
 
 template view(input: openArray[byte], position: int): openArray[byte] =
@@ -67,7 +69,7 @@ template view(input: openArray[byte], slice: Slice[int]): openArray[byte] =
 
   toOpenArray(input, slice.a, slice.b)
 
-func toString(self: Rlp, item: RlpItem): string =
+func toString(self: Rlp, item: RlpItem): string {.raises: [RlpError].} =
   if item.typ != rlpBlob:
     raiseExpectedBlob()
 
@@ -75,7 +77,7 @@ func toString(self: Rlp, item: RlpItem): string =
     result = newString(item.payload.len)
     copyMem(addr result[0], self.bytes.view(item.payload)[0].addr, result.len)
 
-func decodeInteger(input: openArray[byte]): uint64 =
+func decodeInteger(input: openArray[byte]): uint64 {.raises: [RlpError].} =
   # For a positive integer, it is converted to the the shortest byte array whose
   # big-endian interpretation is the integer, and then encoded as a string
   # according to the rules below.
@@ -94,7 +96,7 @@ func decodeInteger(input: openArray[byte]): uint64 =
     v
 
 # https://ethereum.org/en/developers/docs/data-structures-and-encoding/rlp/
-func rlpItem(input: openArray[byte], start = 0): RlpItem =
+func rlpItem(input: openArray[byte], start = 0): RlpItem {.raises: [RlpError].} =
   # Extract coordinates for the RLP item starting at `start`, ensuring that
   # it (but not necessarily its payload) is correctly encoded
   if start >= len(input):
@@ -170,10 +172,10 @@ func rlpItem(input: openArray[byte], start = 0): RlpItem =
 
     (start + 1 + lenOfListLen .. start + lenOfListLen + int(listLen), rlpList)
 
-func item(self: Rlp, position: int): RlpItem =
+func item(self: Rlp, position: int): RlpItem {.raises: [RlpError].} =
   rlpItem(self.bytes, position)
 
-func item(self: Rlp): RlpItem =
+func item(self: Rlp): RlpItem {.raises: [RlpError].} =
   self.item(self.position)
 
 func rlpFromBytes*(data: openArray[byte]): Rlp =
@@ -184,7 +186,7 @@ func rlpFromBytes*(data: sink seq[byte]): Rlp =
 
 const zeroBytesRlp* = Rlp()
 
-func rlpFromHex*(input: string): Rlp =
+func rlpFromHex*(input: string): Rlp {.raises: [ValueError].} =
   Rlp(bytes: hexToSeqByte(input), position: 0)
 
 func hasData(self: Rlp, position: int): bool =
@@ -222,13 +224,13 @@ func getByteValue*(self: Rlp): byte =
   doAssert self.isSingleByte()
   self.bytes[self.position]
 
-func blobLen*(self: Rlp): int =
+func blobLen*(self: Rlp): int {.raises: [RlpError].} =
   if self.isBlob():
     self.item().payload.len()
   else:
     0
 
-func isInt*(self: Rlp): bool =
+func isInt*(self: Rlp): bool {.raises: [RlpError].} =
   if not self.hasData():
     return false
   let item = self.item()
@@ -239,7 +241,7 @@ func isInt*(self: Rlp): bool =
 template maxBytes*(o: type[Ordinal | uint64 | uint]): int =
   sizeof(o)
 
-func toInt(self: Rlp, item: RlpItem, IntType: type): IntType =
+func toInt(self: Rlp, item: RlpItem, IntType: type): IntType {.raises: [RlpError].} =
   mixin maxBytes, to
   if item.typ != rlpBlob:
     raiseExpectedBlob()
@@ -253,26 +255,26 @@ func toInt(self: Rlp, item: RlpItem, IntType: type): IntType =
   for b in self.bytes.view(item.payload):
     result = (result shl 8) or IntType(b)
 
-func toInt*(self: Rlp, IntType: type): IntType =
+func toInt*(self: Rlp, IntType: type): IntType {.raises: [RlpError].} =
   self.toInt(self.item(), IntType)
 
-func toString*(self: Rlp): string =
+func toString*(self: Rlp): string {.raises: [RlpError].} =
   self.toString(self.item())
 
-func toBytes(self: Rlp, item: RlpItem): seq[byte] =
+func toBytes(self: Rlp, item: RlpItem): seq[byte] {.raises: [RlpError].} =
   if item.typ != rlpBlob:
     raiseExpectedBlob()
 
   @(self.bytes.view(item.payload))
 
-func toBytes*(self: Rlp): seq[byte] =
+func toBytes*(self: Rlp): seq[byte] {.raises: [RlpError].} =
   self.toBytes(self.item())
 
-func currentElemEnd(self: Rlp, position: int): int =
+func currentElemEnd(self: Rlp, position: int): int {.raises: [RlpError].} =
   let item = self.item(position).payload
   item.b + 1
 
-func currentElemEnd*(self: Rlp): int =
+func currentElemEnd*(self: Rlp): int {.raises: [RlpError].} =
   self.currentElemEnd(self.position)
 
 func enterList*(self: var Rlp): bool =
@@ -286,7 +288,7 @@ func enterList*(self: var Rlp): bool =
   except RlpError:
     return false
 
-func tryEnterList*(self: var Rlp) =
+func tryEnterList*(self: var Rlp) {.raises: [RlpError].} =
   let item = self.item()
   if item.typ != rlpList:
     raiseExpectedList()
@@ -316,7 +318,7 @@ func positionAfter(rlp: var Rlp, item: RlpItem) =
 func positionAt(rlp: var Rlp, item: RlpItem) =
   rlp.position = item.payload.a
 
-func skipElem*(rlp: var Rlp) =
+func skipElem*(rlp: var Rlp) {.raises: [RlpError].} =
   rlp.positionAfter(rlp.item())
 
 template iterateIt(self: Rlp, position: int, body: untyped) =
@@ -330,7 +332,7 @@ template iterateIt(self: Rlp, position: int, body: untyped) =
     body
     it += subItem.b + 1
 
-iterator items(self: var Rlp, item: RlpItem): var Rlp =
+iterator items(self: var Rlp, item: RlpItem): var Rlp {.raises: [RlpError].} =
   # Iterate over items while updating "current" element view, mutating self
   if item.typ != rlpList:
     raiseExpectedList()
@@ -344,13 +346,13 @@ iterator items(self: var Rlp, item: RlpItem): var Rlp =
     yield self
     self.position = next # self.position might have changed during yield
 
-iterator items*(self: var Rlp): var Rlp =
+iterator items*(self: var Rlp): var Rlp {.raises: [RlpError].} =
   # Iterate over items while updating "current" element view, mutating self
   let item = self.item()
   for item in self.items(item):
     yield item
 
-func listElem*(self: Rlp, i: int): Rlp =
+func listElem*(self: Rlp, i: int): Rlp {.raises: [RlpError].} =
   let item = self.item()
   if item.typ != rlpList:
     raiseExpectedList()
@@ -367,24 +369,24 @@ func listElem*(self: Rlp, i: int): Rlp =
 
   rlpFromBytes self.bytes.view(start .. start + payload.b)
 
-func listLen*(self: Rlp): int =
+func listLen*(self: Rlp): int {.raises: [RlpError].} =
   if not self.isList():
     return 0
 
   self.iterateIt(self.position):
     inc result
 
-func readImpl(rlp: var Rlp, T: type string): string =
+func readImpl(rlp: var Rlp, T: type string): string {.raises: [RlpError].} =
   let item = rlp.item()
   result = rlp.toString(item)
   rlp.positionAfter(item)
 
-func readImpl(rlp: var Rlp, T: type SomeUnsignedInt): T =
+func readImpl(rlp: var Rlp, T: type SomeUnsignedInt): T {.raises: [RlpError].} =
   let item = rlp.item()
   result = rlp.toInt(item, T)
   rlp.positionAfter(item)
 
-func readImpl(rlp: var Rlp, T: type[enum]): T =
+func readImpl(rlp: var Rlp, T: type[enum]): T {.raises: [RlpError].} =
   when ord(low(T)) < 0:
     {.error: "Signed enum encoding is not defined for rlp".}
   let
@@ -400,7 +402,7 @@ func readImpl(rlp: var Rlp, T: type[enum]): T =
 
   res
 
-func readImpl(rlp: var Rlp, T: type bool): T =
+func readImpl(rlp: var Rlp, T: type bool): T {.raises: [RlpError].} =
   case rlp.readImpl(uint64)
   of 0:
     false
@@ -409,7 +411,7 @@ func readImpl(rlp: var Rlp, T: type bool): T =
   else:
     raise (ref RlpTypeMismatch)(msg: "bool expected, but the source RLP is not 0 or 1")
 
-func readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
+func readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T {.raises: [RlpError].} =
   mixin read
 
   let item = rlp.item()
@@ -438,7 +440,7 @@ func readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
 
   rlp.positionAfter(item)
 
-func readImpl[E](rlp: var Rlp, T: type seq[E]): T =
+func readImpl[E](rlp: var Rlp, T: type seq[E]): T {.raises: [RlpError].} =
   mixin read
   let item = rlp.item()
   when E is byte:
@@ -454,12 +456,12 @@ func readImpl[E](rlp: var Rlp, T: type seq[E]): T =
 
   rlp.positionAfter(item)
 
-func readImpl[E](rlp: var Rlp, T: type openArray[E]): seq[E] =
+func readImpl[E](rlp: var Rlp, T: type openArray[E]): seq[E] {.raises: [RlpError].} =
   readImpl(rlp, seq[E])
 
 func readImpl(
     rlp: var Rlp, T: type[object | tuple], wrappedInList = wrapObjsInList
-): T =
+): T {.raises: [RlpError].} =
   mixin enumerateRlpFields, read
 
   let payloadEnd =
@@ -498,7 +500,7 @@ func readImpl(
   if wrappedInList and rlp.position != payloadEnd:
     raise (ref MalformedRlpError)(msg: "unexpected number of list elements")
 
-proc validate(self: Rlp, position: int) =
+proc validate(self: Rlp, position: int) {.raises: [RlpError].} =
   var item = self.item(position)
   while true:
     if item.typ == rlpList:
@@ -510,7 +512,7 @@ proc validate(self: Rlp, position: int) =
 
     item = self.item(item.payload.b + 1)
 
-func validate*(self: Rlp) =
+func validate*(self: Rlp) {.raises: [RlpError].} =
   self.validate(self.position)
 
 # We define a single `read` template with a pretty low specificity
@@ -521,7 +523,7 @@ template read*(rlp: var Rlp, T: type): auto =
   else:
     readImpl(rlp, T)
 
-func `>>`*[T](rlp: var Rlp, location: var T) =
+func `>>`*[T](rlp: var Rlp, location: var T) {.raises: [RlpError].} =
   mixin read
   location = rlp.read(T)
 
@@ -545,7 +547,7 @@ template decode*(bytes: seq[byte], T: type): untyped =
 template rawData*(self: Rlp): openArray[byte] =
   self.bytes.toOpenArray(self.position, self.currentElemEnd - 1)
 
-func append*(writer: var RlpWriter, rlp: Rlp) =
+func append*(writer: var RlpWriter, rlp: Rlp) {.raises: [RlpError].} =
   appendRawBytes(writer, rlp.rawData)
 
 func isPrintable(s: string): bool =
@@ -555,7 +557,7 @@ func isPrintable(s: string): bool =
 
   return true
 
-func renderBlob(self: var Rlp, hexOutput: bool, output: var string) =
+func renderBlob(self: var Rlp, hexOutput: bool, output: var string) {.raises: [RlpError].} =
   let str = self.toString
   if str.isPrintable:
     output.add '"'
@@ -574,7 +576,9 @@ func renderBlob(self: var Rlp, hexOutput: bool, output: var string) =
     else:
       output[^1] = ']'
 
-func inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) =
+func inspectAux(
+    self: var Rlp, depth: int, hexOutput: bool, output: var string
+) {.raises: [RlpError].} =
   if not self.hasData():
     return
 
@@ -597,7 +601,7 @@ func inspectAux(self: var Rlp, depth: int, hexOutput: bool, output: var string) 
     indent()
     output.add "}"
 
-func inspect*(self: Rlp, indent = 0, hexOutput = true): string =
+func inspect*(self: Rlp, indent = 0, hexOutput = true): string {.raises: [RlpError].} =
   var rlpCopy = self
   result = newStringOfCap(self.bytes.len)
   inspectAux(rlpCopy, indent, hexOutput, result)

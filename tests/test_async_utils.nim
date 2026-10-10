@@ -2,6 +2,8 @@
 # We need to be able to test that a program fails in certain way.
 # The testing framework from Chronicles can be extracted in a separate package.
 
+{.push raises: [].}
+
 import
   chronos,
   ../eth/async_utils
@@ -10,7 +12,7 @@ type
   SomeRecoverableError = object of CatchableError
   SomeDefect = object of Defect
 
-proc failingAsyncProc(err: ref Exception = nil) {.async.} =
+proc failingAsyncProc(err: ref Exception = nil) {.async: (raises: [Exception]).} =
   await sleepAsync(0)
   if err != nil:
     raise err

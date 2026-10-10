@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   testutils/fuzzing, stew/byteutils,
   ../../../eth/enr/enr

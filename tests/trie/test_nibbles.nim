@@ -8,6 +8,7 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
+{.push raises: [].}
 {.used.}
 
 import std/[sequtils, strutils], stew/byteutils, unittest2, ../../eth/trie/nibbles

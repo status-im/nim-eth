@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import ../common/hashes, ../rlp, ../rlp/[hash_writer, length_writer, two_pass_writer], stew/arraybuf
 
 export hashes

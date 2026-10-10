@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 const
   db_tracing* {.strdefine.} = "off"
 

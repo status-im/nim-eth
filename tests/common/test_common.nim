@@ -4,6 +4,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
 {.used.}
 
 import
@@ -96,7 +97,7 @@ suite "EIP-2718 transaction / receipt":
     loadFile(i)
 
   test "Header: rlp roundtrip EIP-1559 / EIP-4895 / EIP-4844":
-    proc doTest(h: Header) =
+    proc doTest(h: Header) {.raises: [RlpError].} =
       let xy = rlp.encode(h)
       let hh = rlp.decode(xy, Header)
       check h == hh

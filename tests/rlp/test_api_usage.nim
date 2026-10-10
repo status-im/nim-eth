@@ -5,6 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
 {.used.}
 
 import
@@ -15,9 +16,9 @@ import
 
 proc q(s: string): string = "\"" & s & "\""
 proc i(s: string): string = s.replace(" ").replace("\n")
-proc inspectMatch(r: Rlp, s: string): bool = r.inspect.i == s.i
+proc inspectMatch(r: Rlp, s: string): bool {.raises: [RlpError].} = r.inspect.i == s.i
 
-proc test_blockBodyTranscode() =
+proc test_blockBodyTranscode() {.raises: [RlpError].} =
   ## RLP encode/decode a list of `BlockBody` objects. Note that there is/was a
   ## problem in `eth/common/eth_types_rlp.append()` for `BlockBody` encoding.
   let blkSeq = @[
