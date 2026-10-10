@@ -385,6 +385,8 @@ func readImpl(rlp: var Rlp, T: type SomeUnsignedInt): T =
   rlp.positionAfter(item)
 
 func readImpl(rlp: var Rlp, T: type[enum]): T =
+  when ord(low(T)) < 0:
+    {.error: "Signed enum encoding is not defined for rlp".}
   let
     item = rlp.item()
     value = rlp.toInt(item, uint64)

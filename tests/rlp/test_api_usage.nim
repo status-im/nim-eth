@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -309,6 +309,16 @@ suite "test api usage":
     expect RlpTypeMismatch:
       discard rlp.read(MyEnum)
     rlp.skipElem()
+
+  test "enums with negative values are not supported":
+    type
+      MyEnum = enum
+        neg = -1,
+        zero = 0
+
+    check:
+      not compiles(rlp.encode(neg))
+      not compiles(rlp.decode(@[byte 0x80], MyEnum))
 
   test "encodeInt basics":
     for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:
