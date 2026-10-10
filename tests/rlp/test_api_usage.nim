@@ -303,3 +303,18 @@ suite "test api usage":
 
       check:
         writer.finish() == encode(acc)
+
+  test "integers with leading zeros are not accepted":
+    for hex in ["00", "8200ff", "880000000000000001"]:
+      checkpoint hex
+      expect MalformedRlpError:
+        discard rlp.decode(hexToSeqByte(hex), uint64)
+      expect MalformedRlpError:
+        discard rlp.decode(hexToSeqByte(hex), UInt256)
+
+  test "booleans other than 0 and 1 are not accepted":
+    check:
+      rlp.decode(hexToSeqByte("80"), bool) == false
+      rlp.decode(hexToSeqByte("01"), bool) == true
+    expect RlpTypeMismatch:
+      discard rlp.decode(hexToSeqByte("02"), bool)

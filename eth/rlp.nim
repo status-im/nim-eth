@@ -243,6 +243,9 @@ func toInt(self: Rlp, item: RlpItem, IntType: type): IntType =
   if item.payload.len > maxBytes(IntType):
     raiseIntOutOfBounds()
 
+  if item.payload.len > 0 and self.bytes[item.payload.a] == 0:
+    raiseNonCanonical()
+
   for b in self.bytes.view(item.payload):
     result = (result shl 8) or IntType(b)
 
@@ -372,7 +375,13 @@ func readImpl(rlp: var Rlp, T: type[enum]): T =
   res
 
 func readImpl(rlp: var Rlp, T: type bool): T =
-  rlp.readImpl(uint64) != 0
+  case rlp.readImpl(uint64)
+  of 0:
+    false
+  of 1:
+    true
+  else:
+    raise (ref RlpTypeMismatch)(msg: "bool expected, but the source RLP is not 0 or 1")
 
 func readImpl[R, E](rlp: var Rlp, T: type array[R, E]): T =
   mixin read
