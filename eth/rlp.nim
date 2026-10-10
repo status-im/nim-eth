@@ -312,9 +312,10 @@ template consumeList*(self: var Rlp, mode: static RlpListMode, body: untyped) =
       raise (ref MalformedRlpError)(msg: "unexpected number of list elements")
   else:
     static: doAssert mode == RlpListMode.IgnoreAdditionalElements
-    if self.position > listEnd:
+    while self.position < listEnd:
+      self.position = self.currentElemEnd()
+    if self.position != listEnd:
       raise (ref MalformedRlpError)(msg: "unexpected number of list elements")
-    self.position = listEnd
 
 template consumeList*(self: var Rlp, body: untyped) =
   self.consumeList(RlpListMode.RejectAdditionalElements, body)

@@ -227,6 +227,10 @@ suite "test api usage":
       r.consumeList(RlpListMode.IgnoreAdditionalElements):
         discard r.read(uint8)
         discard r.read(uint8)
+    r = rlpFromHex("c2018180")
+    expect MalformedRlpError:
+      r.consumeList(RlpListMode.IgnoreAdditionalElements):
+        discard r.read(uint8)
 
   test "encode byte arrays":
     var b1 = [byte(1), 2, 5, 7, 8]
