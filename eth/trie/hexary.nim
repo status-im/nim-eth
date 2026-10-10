@@ -1,9 +1,11 @@
 # nim-eth
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.push raises: [].}
 
 import std/tables, ../rlp, "."/[trie_defs, nibbles, db]
 
@@ -28,7 +30,7 @@ template asDbKey(k: TrieNodeKey): untyped =
   doAssert k.usedBytes == 32
   k.hash.data
 
-proc expectHash(r: Rlp): seq[byte] =
+proc expectHash(r: Rlp): seq[byte] {.raises: [RlpError].} =
   result = r.toBytes
   if result.len != 32:
     raise newException(
@@ -95,7 +97,7 @@ proc getAux(
   db: DB, nodeRlp: Rlp, path: NibblesBuf
 ): seq[byte] {.gcsafe, raises: [RlpError].}
 
-proc getAuxByHash(db: DB, node: TrieNodeKey, path: NibblesBuf): seq[byte] =
+proc getAuxByHash(db: DB, node: TrieNodeKey, path: NibblesBuf): seq[byte] {.raises: [RlpError].} =
   var nodeRlp = rlpFromBytes keyToLocalBytes(db, node)
   return getAux(db, nodeRlp, path)
 
@@ -139,7 +141,7 @@ proc getAux(
       CorruptedTrieDatabase, "HexaryTrie node with an unexpected number of children"
     )
 
-proc get*(self: HexaryTrie, key: openArray[byte]): seq[byte] =
+proc get*(self: HexaryTrie, key: openArray[byte]): seq[byte] {.raises: [RlpError].} =
   return getAuxByHash(self.db, self.root, NibblesBuf.fromBytes(key))
 
 proc toBytes(v: NibblesBuf): seq[byte] =
@@ -147,7 +149,7 @@ proc toBytes(v: NibblesBuf): seq[byte] =
 
 proc getKeysAux(
     db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesBuf]]
-): seq[byte] =
+): seq[byte] {.raises: [RlpError].} =
   while stack.len > 0:
     let (nodeRlp, path) = stack.pop()
     if not nodeRlp.hasData or nodeRlp.isEmpty:
@@ -183,14 +185,14 @@ proc getKeysAux(
         CorruptedTrieDatabase, "HexaryTrie node with an unexpected number of children"
       )
 
-iterator keys*(self: HexaryTrie): seq[byte] =
+iterator keys*(self: HexaryTrie): seq[byte] {.raises: [RlpError].} =
   var
     nodeRlp = rlpFromBytes keyToLocalBytes(self.db, self.root)
     stack = @[(nodeRlp, NibblesBuf())]
   while stack.len > 0:
     yield getKeysAux(self.db, stack)
 
-proc getValuesAux(db: DB, stack: var seq[Rlp]): seq[byte] =
+proc getValuesAux(db: DB, stack: var seq[Rlp]): seq[byte] {.raises: [RlpError].} =
   while stack.len > 0:
     let nodeRlp = stack.pop()
     if not nodeRlp.hasData or nodeRlp.isEmpty:
@@ -222,7 +224,7 @@ proc getValuesAux(db: DB, stack: var seq[Rlp]): seq[byte] =
         CorruptedTrieDatabase, "HexaryTrie node with an unexpected number of children"
       )
 
-iterator values*(self: HexaryTrie): seq[byte] =
+iterator values*(self: HexaryTrie): seq[byte] {.raises: [RlpError].} =
   var
     nodeRlp = rlpFromBytes keyToLocalBytes(self.db, self.root)
     stack = @[nodeRlp]
@@ -231,7 +233,7 @@ iterator values*(self: HexaryTrie): seq[byte] =
 
 proc getPairsAux(
     db: DB, stack: var seq[tuple[nodeRlp: Rlp, path: NibblesBuf]]
-): (seq[byte], seq[byte]) =
+): (seq[byte], seq[byte]) {.raises: [RlpError].} =
   while stack.len > 0:
     let (nodeRlp, path) = stack.pop()
     if not nodeRlp.hasData or nodeRlp.isEmpty:
@@ -267,14 +269,14 @@ proc getPairsAux(
         CorruptedTrieDatabase, "HexaryTrie node with an unexpected number of children"
       )
 
-iterator pairs*(self: HexaryTrie): (seq[byte], seq[byte]) =
+iterator pairs*(self: HexaryTrie): (seq[byte], seq[byte]) {.raises: [RlpError].} =
   var
     nodeRlp = rlpFromBytes keyToLocalBytes(self.db, self.root)
     stack = @[(nodeRlp, NibblesBuf())]
   while stack.len > 0:
     yield getPairsAux(self.db, stack)
 
-iterator replicate*(self: HexaryTrie): (seq[byte], seq[byte]) =
+iterator replicate*(self: HexaryTrie): (seq[byte], seq[byte]) {.raises: [RlpError].} =
   # this iterator helps 'rebuild' the entire trie without
   # going through a trie algorithm, but it will pull the entire
   # low level KV pairs. Thus the target db will only use put operations
@@ -318,12 +320,12 @@ iterator replicate*(self: HexaryTrie): (seq[byte], seq[byte]) =
         CorruptedTrieDatabase, "HexaryTrie node with an unexpected number of children"
       )
 
-proc getValues*(self: HexaryTrie): seq[seq[byte]] =
+proc getValues*(self: HexaryTrie): seq[seq[byte]] {.raises: [RlpError].} =
   result = @[]
   for v in self.values:
     result.add v
 
-proc getKeys*(self: HexaryTrie): seq[seq[byte]] =
+proc getKeys*(self: HexaryTrie): seq[seq[byte]] {.raises: [RlpError].} =
   result = @[]
   for k in self.keys:
     result.add k
@@ -336,7 +338,7 @@ template getNode(elem: untyped): untyped =
 
 proc getBranchAux(
     db: DB, node: openArray[byte], path: NibblesBuf, output: var seq[seq[byte]]
-) =
+) {.raises: [RlpError].} =
   var nodeRlp = rlpFromBytes node
   if not nodeRlp.hasData or nodeRlp.isEmpty:
     return
@@ -363,7 +365,7 @@ proc getBranchAux(
       CorruptedTrieDatabase, "HexaryTrie node with an unexpected number of children"
     )
 
-proc getBranch*(self: HexaryTrie, key: openArray[byte]): seq[seq[byte]] =
+proc getBranch*(self: HexaryTrie, key: openArray[byte]): seq[seq[byte]] {.raises: [RlpError].} =
   result = @[]
   var node = keyToLocalBytes(self.db, self.root)
   result.add node
@@ -385,13 +387,15 @@ proc appendAndSave(rlpWriter: var RlpWriter, data: openArray[byte], db: DB) =
   else:
     rlpWriter.appendRawBytes(data)
 
-proc isTrieBranch(rlp: Rlp): bool =
+proc isTrieBranch(rlp: Rlp): bool {.raises: [RlpError].} =
   rlp.isList and (var len = rlp.listLen; len == 2 or len == 17)
 
 proc hexPrefixEncode(k: NibblesBuf, v: bool): seq[byte] =
   @(k.toHexPrefix(v).data())
 
-proc replaceValue(data: Rlp, key: NibblesBuf, value: openArray[byte]): seq[byte] =
+proc replaceValue(
+    data: Rlp, key: NibblesBuf, value: openArray[byte]
+): seq[byte] {.raises: [RlpError].} =
   if data.isEmpty:
     let prefix = hexPrefixEncode(key, true)
     return encodeList(prefix, value)
@@ -413,7 +417,7 @@ proc replaceValue(data: Rlp, key: NibblesBuf, value: openArray[byte]): seq[byte]
   r.append value
   return r.finish()
 
-proc isTwoItemNode(self: HexaryTrie, r: Rlp): bool =
+proc isTwoItemNode(self: HexaryTrie, r: Rlp): bool {.raises: [RlpError].} =
   if r.isBlob:
     let resolved = self.db.get(r)
     let rlp = rlpFromBytes(resolved)
@@ -421,7 +425,7 @@ proc isTwoItemNode(self: HexaryTrie, r: Rlp): bool =
   else:
     return r.isList and r.listLen == 2
 
-proc findSingleChild(r: Rlp, childPos: var byte): Rlp =
+proc findSingleChild(r: Rlp, childPos: var byte): Rlp {.raises: [RlpError].} =
   result = zeroBytesRlp
   var i: byte = 0
   var rlp = r
@@ -440,7 +444,7 @@ proc deleteAt(
 
 proc deleteAux(
     self: var HexaryTrie, rlpWriter: var RlpWriter, origRlp: Rlp, path: NibblesBuf
-): bool =
+): bool {.raises: [RlpError].} =
   if origRlp.isEmpty:
     return false
 
@@ -458,7 +462,7 @@ proc deleteAux(
   rlpWriter.appendAndSave(b, self.db)
   return true
 
-proc graft(self: var HexaryTrie, r: Rlp): seq[byte] =
+proc graft(self: var HexaryTrie, r: Rlp): seq[byte] {.raises: [RlpError].} =
   doAssert r.isList and r.listLen == 2
   var (_, origPath) = r.extensionNodeKey
   var value = r.listElem(1)
@@ -477,7 +481,9 @@ proc graft(self: var HexaryTrie, r: Rlp): seq[byte] =
   rlpWriter.append value.listElem(1)
   return rlpWriter.finish
 
-proc mergeAndGraft(self: var HexaryTrie, soleChild: Rlp, childPos: byte): seq[byte] =
+proc mergeAndGraft(
+    self: var HexaryTrie, soleChild: Rlp, childPos: byte
+): seq[byte] {.raises: [RlpError].} =
   var output = initRlpList(2)
   if childPos == 16:
     output.append hexPrefixEncode(NibblesBuf(), true)
@@ -558,7 +564,7 @@ proc deleteAt(
       if singleChild.hasData:
         result = self.mergeAndGraft(singleChild, foundChildPos)
 
-proc del*(self: var HexaryTrie, key: openArray[byte]) =
+proc del*(self: var HexaryTrie, key: openArray[byte]) {.raises: [RlpError].} =
   var
     rootBytes = keyToLocalBytes(self.db, self.root)
     rootRlp = rlpFromBytes rootBytes
@@ -584,7 +590,7 @@ proc mergeAt(
     key: NibblesBuf,
     value: openArray[byte],
     isInline = false,
-): seq[byte] =
+): seq[byte] {.raises: [RlpError].} =
   self.mergeAt(rlp, rlp.rawData.keccak256, key, value, isInline)
 
 proc mergeAtAux(
@@ -593,7 +599,7 @@ proc mergeAtAux(
     orig: Rlp,
     key: NibblesBuf,
     value: openArray[byte],
-) =
+) {.raises: [RlpError].} =
   var resolved = orig
   var isRemovable = false
   if not (orig.isList or orig.isEmpty):
@@ -692,7 +698,7 @@ proc mergeAt(
 
     return r.finish
 
-proc put*(self: var HexaryTrie, key, value: openArray[byte]) =
+proc put*(self: var HexaryTrie, key, value: openArray[byte]) {.raises: [RlpError].} =
   if value.len == 0:
     # Empty nodes are not allowed as `[]` is not a valid RLP encoding
     # https://github.com/ethereum/py-trie/pull/109
@@ -711,13 +717,13 @@ proc put*(self: var HexaryTrie, key, value: openArray[byte]) =
 
   self.root = self.db.dbPut(newRootBytes)
 
-proc put*(self: var SecureHexaryTrie, key, value: openArray[byte]) =
+proc put*(self: var SecureHexaryTrie, key, value: openArray[byte]) {.raises: [RlpError].} =
   put(HexaryTrie(self), key.keccak256.data, value)
 
-proc get*(self: SecureHexaryTrie, key: openArray[byte]): seq[byte] =
+proc get*(self: SecureHexaryTrie, key: openArray[byte]): seq[byte] {.raises: [RlpError].} =
   return get(HexaryTrie(self), key.keccak256.data)
 
-proc del*(self: var SecureHexaryTrie, key: openArray[byte]) =
+proc del*(self: var SecureHexaryTrie, key: openArray[byte]) {.raises: [RlpError].} =
   del(HexaryTrie(self), key.keccak256.data)
 
 proc rootHash*(self: SecureHexaryTrie): Hash32 {.borrow.}
@@ -730,7 +736,7 @@ template contains*(self: HexaryTrie | SecureHexaryTrie, key: openArray[byte]): b
 # Validates merkle proof against provided root hash
 proc isValidBranch*(
     branch: seq[seq[byte]], rootHash: Hash32, key, value: seq[byte]
-): bool =
+): bool {.raises: [RlpError].} =
   # branch must not be empty
   doAssert(branch.len != 0)
 

@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   ./trie/[hexary, trie_defs]
 

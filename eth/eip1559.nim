@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import ./common/base
 
 const

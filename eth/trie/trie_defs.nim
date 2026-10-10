@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   ../common/hashes_rlp
 
