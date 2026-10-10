@@ -1382,6 +1382,3 @@ proc closeWait*(d: Protocol) {.async: (raises: []).} =
 
   await noCancel(allFutures(futures))
   await noCancel(d.transp.closeWait())
-
-proc close*(d: Protocol) {.deprecated: "Please use closeWait() instead".} =
-  asyncSpawn d.closeWait()

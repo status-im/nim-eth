@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -138,10 +138,6 @@ func to*(pubkey: PublicKey, _: type Address): Address =
   ## Convert public key to canonical address.
   let hash = keccak256(pubkey.toRaw())
   hash.to(Address)
-
-func toAddress*(pubkey: PublicKey): string {.deprecated.} =
-  ## Convert public key to hexadecimal string address.
-  pubkey.to(Address).to0xHex()
 
 func toChecksumAddress*(pubkey: PublicKey): string =
   ## Convert public key to checksumable mixed-case address (EIP-55).
