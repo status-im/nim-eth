@@ -106,41 +106,23 @@ proc countOptionalFields(T: type): int {.compileTime.} =
 
   enumerateRlpFields(dummy, op)
 
-proc genPrevFields(
-    obj: NimNode, fd: openArray[FieldDescription], hi, lo: int
-): NimNode =
-  result = newStmtList()
-  for i in countdown(hi, lo):
-    let fieldName = fd[i].name
-    let msg = fieldName.strVal & " expected"
-    result.add quote do:
-      doAssert(`obj`.`fieldName`.isSome, `msg`)
+proc validateOptionalFields(obj: object | tuple) =
+  ## Trailing optional fields are encoded by omission, so a present optional
+  ## field requires all trailing optional fields before it to be present.
+  mixin enumerateRlpFields
 
-macro genOptionalFieldsValidation(obj: untyped, T: type, num: static[int]): untyped =
-  let
-    Tresolved = getType(T)[1]
-    fd = recordFields(Tresolved.getImpl)
-    loidx = fd.len - num
+  var missing: cstring = nil
 
-  result = newStmtList()
-  for i in countdown(fd.high, loidx):
-    let fieldName = fd[i].name
-    let prevFields = genPrevFields(obj, fd, i - 1, loidx - 1)
-    result.add quote do:
-      if `obj`.`fieldName`.isSome:
-        `prevFields`
+  template op(RT, fN, f) {.used.} =
+    when f is Option or f is Opt:
+      if f.isSome:
+        doAssert missing == nil, $missing & " expected"
+      elif missing == nil:
+        missing = cstring(fN)
+    else:
+      doAssert missing == nil, $missing & " expected"
 
-  # generate something like
-  when false:
-    if obj.fee.isNone:
-      doAssert(obj.withdrawalsRoot.isNone, "withdrawalsRoot needs fee")
-      doAssert(obj.blobGasUsed.isNone, "blobGasUsed needs fee")
-      doAssert(obj.excessBlobGas.isNone, "excessBlobGas needs fee")
-    if obj.withdrawalsRoot.isNone:
-      doAssert(obj.blobGasUsed.isNone, "blobGasUsed needs withdrawalsRoot")
-      doAssert(obj.excessBlobGas.isNone, "excessBlobGas needs withdrawalsRoot")
-    doAssert obj.blobGasUsed.isSome == obj.excessBlobGas.isSome,
-      "blobGasUsed and excessBlobGas must both be present or absent"
+  enumerateRlpFields(obj, op)
 
 proc countFieldsRuntime(obj: object | tuple): int =
   mixin enumerateRlpFields
@@ -168,8 +150,7 @@ proc appendRecordType*(
   const cof = countOptionalFields(ObjType)
 
   when cof > 0:
-    # ignoring first optional fields
-    genOptionalFieldsValidation(obj, ObjType, cof - 1)
+    validateOptionalFields(obj)
 
   if wrapInList:
     when cof > 0:

@@ -4,6 +4,7 @@ import
   std/times,
   unittest2,
   stew/byteutils,
+  results,
   ../../eth/rlp,
   ../../eth/common/hashes
 
@@ -35,8 +36,23 @@ type
     customFoo {.rlpCustomSerialization.}: Foo
     ignored {.rlpIgnore.}: uint64
 
+  TrailingWithIgnored = object
+    a: uint64
+    b: Opt[uint64]
+    c: Opt[uint64]
+    cache {.rlpIgnore.}: int
+
+  TrailingWithRlpFields = object
+    a: uint64
+    b: Opt[uint64]
+    notEncoded: Opt[uint64]
+    c: Opt[uint64]
+
 rlpFields Foo,
   x, y, z
+
+rlpFields TrailingWithRlpFields,
+  a, b, c
 
 rlpFields Transaction,
   sender, receiver, amount
@@ -57,6 +73,22 @@ proc read*(rlp: var Rlp, holder: var CustomSerialized, T: type Foo): Foo =
 
 proc suite() =
   suite "object serialization":
+    test "trailing optional fields (with ignored field)":
+      let obj = TrailingWithIgnored(
+        a: 1, b: Opt.some(2'u64), c: Opt.some(3'u64), cache: 4)
+      check:
+        rlp.decode(rlp.encode(obj), TrailingWithIgnored) ==
+          TrailingWithIgnored(a: 1, b: Opt.some(2'u64), c: Opt.some(3'u64))
+      expect AssertionDefect:
+        discard rlp.encode(TrailingWithIgnored(a: 1, c: Opt.some(3'u64)))
+
+    test "trailing optional fields (with rlpFields)":
+      let obj = TrailingWithRlpFields(
+        a: 1, b: Opt.some(2'u64), c: Opt.some(3'u64))
+      check rlp.decode(rlp.encode(obj), TrailingWithRlpFields) == obj
+      expect AssertionDefect:
+        discard rlp.encode(TrailingWithRlpFields(a: 1, c: Opt.some(3'u64)))
+
     test "encoding and decoding an object":
       var originalBar = Bar(b: "abracadabra",
                             f: Foo(x: 5'u64, y: "hocus pocus", z: @[uint64 100, 200, 300]))
