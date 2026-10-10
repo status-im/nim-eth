@@ -1,5 +1,5 @@
 # nim-eth
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -385,6 +385,8 @@ func readImpl(rlp: var Rlp, T: type SomeUnsignedInt): T =
   rlp.positionAfter(item)
 
 func readImpl(rlp: var Rlp, T: type[enum]): T =
+  when ord(low(T)) < 0:
+    {.error: "Signed enum encoding is not defined for rlp".}
   let
     item = rlp.item()
     value = rlp.toInt(item, uint64)
