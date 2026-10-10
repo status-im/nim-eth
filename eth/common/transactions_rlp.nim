@@ -230,68 +230,68 @@ func rlpHashForSigning*(tx: Transaction, eip155: bool): Hash32 =
 
 proc readTxLegacy(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxLegacy
-  rlp.tryEnterList()
-  rlp.read(tx.nonce)
-  rlp.read(tx.gasPrice)
-  rlp.read(tx.gasLimit)
-  rlp.read(tx.to)
-  rlp.read(tx.value)
-  rlp.read(tx.payload)
-  rlp.read(tx.V)
-  rlp.read(tx.R)
-  rlp.read(tx.S)
+  rlp.consumeList:
+    rlp.read(tx.nonce)
+    rlp.read(tx.gasPrice)
+    rlp.read(tx.gasLimit)
+    rlp.read(tx.to)
+    rlp.read(tx.value)
+    rlp.read(tx.payload)
+    rlp.read(tx.V)
+    rlp.read(tx.R)
+    rlp.read(tx.S)
 
   if tx.V >= EIP155_CHAIN_ID_OFFSET:
     tx.chainId = ((tx.V - EIP155_CHAIN_ID_OFFSET) div 2).u256
 
 proc readTxEip2930(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip2930
-  rlp.tryEnterList()
-  tx.chainId = rlp.read(ChainId)
-  rlp.read(tx.nonce)
-  rlp.read(tx.gasPrice)
-  rlp.read(tx.gasLimit)
-  rlp.read(tx.to)
-  rlp.read(tx.value)
-  rlp.read(tx.payload)
-  rlp.read(tx.accessList)
-  rlp.read(tx.V)
-  rlp.read(tx.R)
-  rlp.read(tx.S)
+  rlp.consumeList:
+    tx.chainId = rlp.read(ChainId)
+    rlp.read(tx.nonce)
+    rlp.read(tx.gasPrice)
+    rlp.read(tx.gasLimit)
+    rlp.read(tx.to)
+    rlp.read(tx.value)
+    rlp.read(tx.payload)
+    rlp.read(tx.accessList)
+    rlp.read(tx.V)
+    rlp.read(tx.R)
+    rlp.read(tx.S)
 
 proc readTxEip1559(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip1559
-  rlp.tryEnterList()
-  tx.chainId = rlp.read(ChainId)
-  rlp.read(tx.nonce)
-  rlp.read(tx.maxPriorityFeePerGas)
-  rlp.read(tx.maxFeePerGas)
-  rlp.read(tx.gasLimit)
-  rlp.read(tx.to)
-  rlp.read(tx.value)
-  rlp.read(tx.payload)
-  rlp.read(tx.accessList)
-  rlp.read(tx.V)
-  rlp.read(tx.R)
-  rlp.read(tx.S)
+  rlp.consumeList:
+    tx.chainId = rlp.read(ChainId)
+    rlp.read(tx.nonce)
+    rlp.read(tx.maxPriorityFeePerGas)
+    rlp.read(tx.maxFeePerGas)
+    rlp.read(tx.gasLimit)
+    rlp.read(tx.to)
+    rlp.read(tx.value)
+    rlp.read(tx.payload)
+    rlp.read(tx.accessList)
+    rlp.read(tx.V)
+    rlp.read(tx.R)
+    rlp.read(tx.S)
 
 proc readTxEip4844(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip4844
-  rlp.tryEnterList()
-  tx.chainId = rlp.read(ChainId)
-  rlp.read(tx.nonce)
-  rlp.read(tx.maxPriorityFeePerGas)
-  rlp.read(tx.maxFeePerGas)
-  rlp.read(tx.gasLimit)
-  rlp.read(tx.to)
-  rlp.read(tx.value)
-  rlp.read(tx.payload)
-  rlp.read(tx.accessList)
-  rlp.read(tx.maxFeePerBlobGas)
-  rlp.read(tx.versionedHashes)
-  rlp.read(tx.V)
-  rlp.read(tx.R)
-  rlp.read(tx.S)
+  rlp.consumeList:
+    tx.chainId = rlp.read(ChainId)
+    rlp.read(tx.nonce)
+    rlp.read(tx.maxPriorityFeePerGas)
+    rlp.read(tx.maxFeePerGas)
+    rlp.read(tx.gasLimit)
+    tx.to = Opt.some(rlp.read(Address))
+    rlp.read(tx.value)
+    rlp.read(tx.payload)
+    rlp.read(tx.accessList)
+    rlp.read(tx.maxFeePerBlobGas)
+    rlp.read(tx.versionedHashes)
+    rlp.read(tx.V)
+    rlp.read(tx.R)
+    rlp.read(tx.S)
 
 func rlpEncodeEip7702(w: var RlpWriter, auth: Authorization) =
   w.append(0x05'u8)
@@ -321,30 +321,32 @@ func rlpHashForSigning*(auth: Authorization): Hash32 =
   writer.finish
 
 proc read*(rlp: var Rlp, T: type Authorization): T {.raises: [RlpError].} =
-  rlp.tryEnterList()
-  result.chainId = rlp.read(ChainId)
-  rlp.read(result.address)
-  rlp.read(result.nonce)
-  rlp.read(result.yParity)
-  rlp.read(result.r)
-  rlp.read(result.s)
+  rlp.consumeList:
+    let
+      chainId = rlp.read(ChainId)
+      address = rlp.read(Address)
+      nonce = rlp.read(AccountNonce)
+      yParity = rlp.read(uint8)
+      r = rlp.read(UInt256)
+      s = rlp.read(UInt256)
+  T(chainId: chainId, address: address, nonce: nonce, yParity: yParity, r: r, s: s)
 
 proc readTxEip7702(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip7702
-  rlp.tryEnterList()
-  tx.chainId = rlp.read(ChainId)
-  rlp.read(tx.nonce)
-  rlp.read(tx.maxPriorityFeePerGas)
-  rlp.read(tx.maxFeePerGas)
-  rlp.read(tx.gasLimit)
-  rlp.read(tx.to)
-  rlp.read(tx.value)
-  rlp.read(tx.payload)
-  rlp.read(tx.accessList)
-  rlp.read(tx.authorizationList)
-  rlp.read(tx.V)
-  rlp.read(tx.R)
-  rlp.read(tx.S)
+  rlp.consumeList:
+    tx.chainId = rlp.read(ChainId)
+    rlp.read(tx.nonce)
+    rlp.read(tx.maxPriorityFeePerGas)
+    rlp.read(tx.maxFeePerGas)
+    rlp.read(tx.gasLimit)
+    tx.to = Opt.some(rlp.read(Address))
+    rlp.read(tx.value)
+    rlp.read(tx.payload)
+    rlp.read(tx.accessList)
+    rlp.read(tx.authorizationList)
+    rlp.read(tx.V)
+    rlp.read(tx.R)
+    rlp.read(tx.S)
 
 proc readTxType(rlp: var Rlp): TxType {.raises: [RlpError].} =
   if rlp.isList:
@@ -379,7 +381,7 @@ proc readTxType(rlp: var Rlp): TxType {.raises: [RlpError].} =
 
   raise newException(
     UnsupportedRlpError,
-    "TypedTransaction type must be 1, 2, or 3 in this version, got " & $txType,
+    "Unsupported TypedTransaction type: " & $txType,
   )
 
 proc readTxPayload(
@@ -401,6 +403,8 @@ proc readTxPayload(
 proc readTxTyped(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   let txType = rlp.readTxType()
   rlp.readTxPayload(tx, txType)
+  if rlp.hasData:
+    raise newException(MalformedRlpError, "Transaction has trailing bytes")
 
 proc read*(rlp: var Rlp, T: type Transaction): T {.raises: [RlpError].} =
   # Individual transactions are encoded and stored as either `RLP([fields..])`

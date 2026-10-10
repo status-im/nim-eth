@@ -4,6 +4,7 @@ import
   std/times,
   unittest2,
   stew/byteutils,
+  results,
   ../../eth/rlp,
   ../../eth/common/hashes
 
@@ -13,6 +14,14 @@ type
     time: uint64
     sender: string
     receiver: string
+
+  Point = object
+    x: uint64
+    y: uint64
+
+  Segment = object
+    a: Point
+    b: Point
 
   Foo = object
     x: uint64
@@ -27,24 +36,59 @@ type
     customFoo {.rlpCustomSerialization.}: Foo
     ignored {.rlpIgnore.}: uint64
 
+  TrailingWithIgnored = object
+    a: uint64
+    b: Opt[uint64]
+    c: Opt[uint64]
+    cache {.rlpIgnore.}: int
+
+  TrailingWithRlpFields = object
+    a: uint64
+    b: Opt[uint64]
+    notEncoded: Opt[uint64]
+    c: Opt[uint64]
+
 rlpFields Foo,
   x, y, z
+
+rlpFields TrailingWithRlpFields,
+  a, b, c
 
 rlpFields Transaction,
   sender, receiver, amount
 
 proc append*(rlpWriter: var RlpWriter, holder: CustomSerialized, f: Foo) =
+  rlpWriter.startList(3)
   rlpWriter.append(f.x)
   rlpWriter.append(uint64 f.y.len)
   rlpWriter.append(holder.ignored)
 
 proc read*(rlp: var Rlp, holder: var CustomSerialized, T: type Foo): Foo =
-  result.x = rlp.read(uint64)
-  result.y = newString(rlp.read(uint64))
-  holder.ignored = rlp.read(uint64) * 2
+  rlp.consumeList:
+    let
+      x = rlp.read(uint64)
+      yLen = rlp.read(uint64)
+    holder.ignored = rlp.read(uint64) * 2
+  Foo(x: x, y: newString(yLen))
 
 proc suite() =
   suite "object serialization":
+    test "trailing optional fields (with ignored field)":
+      let obj = TrailingWithIgnored(
+        a: 1, b: Opt.some(2'u64), c: Opt.some(3'u64), cache: 4)
+      check:
+        rlp.decode(rlp.encode(obj), TrailingWithIgnored) ==
+          TrailingWithIgnored(a: 1, b: Opt.some(2'u64), c: Opt.some(3'u64))
+      expect AssertionDefect:
+        discard rlp.encode(TrailingWithIgnored(a: 1, c: Opt.some(3'u64)))
+
+    test "trailing optional fields (with rlpFields)":
+      let obj = TrailingWithRlpFields(
+        a: 1, b: Opt.some(2'u64), c: Opt.some(3'u64))
+      check rlp.decode(rlp.encode(obj), TrailingWithRlpFields) == obj
+      expect AssertionDefect:
+        discard rlp.encode(TrailingWithRlpFields(a: 1, c: Opt.some(3'u64)))
+
     test "encoding and decoding an object":
       var originalBar = Bar(b: "abracadabra",
                             f: Foo(x: 5'u64, y: "hocus pocus", z: @[uint64 100, 200, 300]))
@@ -78,6 +122,16 @@ proc suite() =
         origVal.customFoo.y.len == restored.customFoo.y.len
         restored.ignored == 10
 
+    test "object with additional list elements":
+      expect MalformedRlpError:
+        discard encode((1'u64, 2'u64, 3'u64)).decode(Point)
+      expect MalformedRlpError:
+        discard encode(((1'u64, 2'u64, 99'u64), (3'u64, 4'u64))).decode(Segment)
+
+    test "tuple with additional list elements":
+      expect MalformedRlpError:
+        discard encode((1'u64, 2'u64, 3'u64)).decode((uint64, uint64))
+
     test "RLP fields count":
       check:
         Bar.rlpFieldsCount == 2
@@ -108,5 +162,22 @@ proc suite() =
       check:
         originalBarBytes.len == length
         originalBarHash == hash
+
+    test "readRecordType uses custom read overloads":
+      type Versioned = object
+        version: uint64
+        payload: string
+
+      proc read(rlp: var Rlp, T: type Versioned): T =
+        rlp.tryEnterList()
+        T(version: rlp.read(uint64), payload: "custom " & rlp.read(string))
+
+      var r = rlpFromBytes(encode(Versioned(version: 1, payload: "x")))
+      check r.readRecordType(Versioned, true) ==
+        Versioned(version: 1, payload: "custom x")
+
+      r = rlpFromBytes(encode(1'u64) & encode("x"))
+      check r.readRecordType(Versioned, false) ==
+        Versioned(version: 1, payload: "x")
 
 suite()

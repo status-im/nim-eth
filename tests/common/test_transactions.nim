@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -100,6 +100,7 @@ func tx6(i: int): Transaction =
     txType:              TxEip4844,
     chainId:             chainId(1),
     nonce:               i.AccountNonce,
+    to:                  Opt.some(recipient),
     gasLimit:            123457.GasInt,
     maxPriorityFeePerGas:42.GasInt,
     maxFeePerGas:        10.GasInt,
@@ -114,6 +115,7 @@ func tx7(i: int): Transaction =
     txType:              TxEip4844,
     chainID:             chainId(1),
     nonce:               i.AccountNonce,
+    to:                  Opt.some(recipient),
     gasLimit:            123457.GasInt,
     maxPriorityFeePerGas:42.GasInt,
     maxFeePerGas:        10.GasInt,
@@ -183,9 +185,6 @@ suite "Transactions":
 
   test "Minimal Blob Tx":
     roundTrip(tx7, 8)
-
-  test "Minimal Blob Tx contract creation":
-    roundTrip(tx8, 9)
 
   test "EIP 7702":
     roundTrip(txEip7702, 9)
@@ -267,3 +266,155 @@ suite "Transactions":
 
       check:
         tx.recoverKey().expect("valid key").to(Address) == sender
+
+type
+  TxCase = object
+    tx: Transaction
+    toIdx, accessListIdx: int
+
+  TxParts = object
+    prefix: seq[byte] ## type byte of typed transactions
+    fields: seq[seq[byte]] ## RLP encoded fields of the transaction list
+
+const txCases = [
+  TxCase(tx: tx0(1), toIdx: 3, accessListIdx: -1),
+  TxCase(tx: tx2(1), toIdx: 4, accessListIdx: 7),
+  TxCase(tx: tx5(1), toIdx: 5, accessListIdx: 8),
+  TxCase(tx: tx8(1), toIdx: 5, accessListIdx: 8),
+  TxCase(tx: txEip7702(1), toIdx: 5, accessListIdx: 8)]
+
+proc parts(tx: Transaction): TxParts {.raises: [RlpError].} =
+  let
+    bytes = rlp.encode(tx)
+    prefix = if tx.txType != TxLegacy: bytes[0 ..< 1] else: newSeq[byte]()
+  var
+    r = rlpFromBytes(bytes[prefix.len .. ^1])
+    fields: seq[seq[byte]]
+  for item in r:
+    fields.add @(item.rawData)
+  TxParts(prefix: prefix, fields: fields)
+
+proc toBytes(
+    p: TxParts, numInList = p.fields.len, extra: seq[byte] = @[]): seq[byte] =
+  ## Fields past `numInList` are appended after the end of the list
+  var w = initRlpList(numInList)
+  for i in 0 ..< numInList:
+    w.appendRawBytes(p.fields[i])
+  var bytes = p.prefix & w.finish()
+  for i in numInList ..< p.fields.len:
+    bytes.add p.fields[i]
+  bytes & extra
+
+suite "Transaction decoding":
+  test "Decode all transaction types":
+    for c in txCases:
+      checkpoint $c.tx.txType
+      let decoded = rlp.decode(c.tx.parts.toBytes(), Transaction)
+      check rlp.encode(decoded) == rlp.encode(c.tx)
+
+  test "Missing fields":
+    for c in txCases:
+      checkpoint $c.tx.txType
+      var p = c.tx.parts
+      let fieldsAfterList = p.toBytes(numInList = c.toIdx)
+      p.fields.setLen(c.toIdx)
+      let endOfInput = p.toBytes()
+      expect MalformedRlpError:
+        discard rlp.decode(endOfInput, Transaction)
+      expect MalformedRlpError:
+        discard rlp.decode(fieldsAfterList, Transaction)
+
+  test "Fields after the end of the list":
+    for c in txCases:
+      checkpoint $c.tx.txType
+      let p = c.tx.parts
+      expect MalformedRlpError:
+        discard rlp.decode(p.toBytes(numInList = p.fields.len - 1), Transaction)
+
+  test "Extra field":
+    for c in txCases:
+      checkpoint $c.tx.txType
+      var p = c.tx.parts
+      p.fields.add rlp.encode(1'u64)
+      expect MalformedRlpError:
+        discard rlp.decode(p.toBytes(), Transaction)
+
+  test "Trailing bytes after typed transaction":
+    for c in txCases[1 .. ^1]:
+      checkpoint $c.tx.txType
+      let bytes = c.tx.parts.toBytes(extra = @[byte 0x01])
+      expect MalformedRlpError:
+        discard rlp.decode(bytes, Transaction)
+      var w = initRlpList(1)
+      w.append(bytes)
+      expect MalformedRlpError:
+        discard rlp.decode(w.finish(), seq[Transaction])
+
+  test "Recipient encoded as a list":
+    for c in txCases:
+      checkpoint $c.tx.txType
+      var p = c.tx.parts
+      p.fields[c.toIdx] = @[byte 0xc0]
+      expect RlpTypeMismatch:
+        discard rlp.decode(p.toBytes(), Transaction)
+
+  test "Empty recipient":
+    for c in txCases:
+      checkpoint $c.tx.txType
+      var p = c.tx.parts
+      p.fields[c.toIdx] = @[byte 0x80]
+      let bytes = p.toBytes()
+      if c.tx.txType in {TxEip4844, TxEip7702}:
+        expect RlpTypeMismatch:
+          discard rlp.decode(bytes, Transaction)
+      else:
+        check rlp.decode(bytes, Transaction).to.isNone
+
+  test "Integers with leading zeros":
+    for c in txCases:
+      checkpoint $c.tx.txType
+      var p = c.tx.parts
+      let nonceIdx = if c.tx.txType == TxLegacy: 0 else: 1
+      for nonce in [@[byte 0x82, 0x00, 0x01], @[byte 0x00]]:
+        p.fields[nonceIdx] = nonce
+        expect MalformedRlpError:
+          discard rlp.decode(p.toBytes(), Transaction)
+
+  test "Access list entry with extra element":
+    for c in txCases[1 .. ^1]:
+      checkpoint $c.tx.txType
+      var p = c.tx.parts
+      var w = initRlpList(1)
+      w.startList(3)
+      w.append(source)
+      w.append(@[storageKey])
+      w.append(1'u64)
+      p.fields[c.accessListIdx] = w.finish()
+      expect MalformedRlpError:
+        discard rlp.decode(p.toBytes(), Transaction)
+
+  test "Access list entry with missing element":
+    for c in txCases[1 .. ^1]:
+      checkpoint $c.tx.txType
+      var p = c.tx.parts
+      var w = initRlpList(1)
+      w.startList(1)
+      w.append(source)
+      p.fields[c.accessListIdx] = w.finish()
+      expect RlpTypeMismatch:
+        discard rlp.decode(p.toBytes(), Transaction)
+
+  test "Authorization with extra element":
+    var p = txEip7702(1).parts
+    var w = initRlpList(1)
+    w.startList(7)
+    w.append(1'u64)
+    w.append(source)
+    w.append(2'u64)
+    w.append(1'u64)
+    w.append(4'u64)
+    w.append(5'u64)
+    w.append(6'u64)
+    p.fields[9] = w.finish()
+    expect MalformedRlpError:
+      discard rlp.decode(p.toBytes(), Transaction)
