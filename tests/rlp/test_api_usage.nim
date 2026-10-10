@@ -217,6 +217,17 @@ suite "test api usage":
         discard r.read(uint8)
         discard r.read(uint8)
 
+  test "consumeList can ignore additional list elements":
+    var r = rlpFromHex("c301020304")
+    r.consumeList(RlpListMode.IgnoreAdditionalElements):
+      check r.read(uint8) == 1
+    check r.read(uint8) == 4
+    r = rlpFromHex("c10102")
+    expect MalformedRlpError:
+      r.consumeList(RlpListMode.IgnoreAdditionalElements):
+        discard r.read(uint8)
+        discard r.read(uint8)
+
   test "encode byte arrays":
     var b1 = [byte(1), 2, 5, 7, 8]
     var b2 = [byte(6), 8, 12, 123]
