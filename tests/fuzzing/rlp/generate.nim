@@ -59,6 +59,13 @@ proc generate() =
       parentBeaconBlockRoot: Opt.some(default(Hash32)),
       requestsHash: Opt.some(default(Hash32)))
     withdrawals = @[Withdrawal(index: 1, validatorIndex: 2, address: source, amount: 3)]
+    bal: BlockAccessList = @[AccountChanges(
+      address: source,
+      storageChanges: @[(1.u256, @[(1.BlockAccessIndex, 2.u256)])],
+      storageReads: @[3.u256],
+      balanceChanges: @[(1.BlockAccessIndex, 4.u256)],
+      nonceChanges: @[(1.BlockAccessIndex, 5'u64)],
+      codeChanges: @[(1.BlockAccessIndex, @[byte 0x60, 0x00])])]
 
   for i, tx in txs:
     rlp.encode(tx).toFile(inputsDir / "tx" & $i)
@@ -71,6 +78,7 @@ proc generate() =
   rlp.encode(Block(
     header: header, transactions: txs, withdrawals: Opt.some(withdrawals)
   )).toFile(inputsDir / "block")
+  rlp.encode(bal).toFile(inputsDir / "block_access_list")
   rlp.encode(("abc", 7'u32)).toFile(inputsDir / "tuple")
 
 discard existsOrCreateDir(inputsDir)
