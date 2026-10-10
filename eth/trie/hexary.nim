@@ -411,7 +411,7 @@ proc replaceValue(
   # We already know that we are working with a list
   doAssert iter.enterList()
   for i in 0 ..< 16:
-    r.append iter
+    r.appendRawBytes iter.rawData
     iter.skipElem
 
   r.append value
@@ -539,7 +539,7 @@ proc deleteAt(
         # We already know that we are working with a list
         doAssert iter.enterList
         for i in 0 ..< 16:
-          rlpRes.append iter
+          rlpRes.appendRawBytes iter.rawData
           iter.skipElem
         rlpRes.append ""
         return rlpRes.finish

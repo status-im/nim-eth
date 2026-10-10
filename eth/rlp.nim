@@ -547,8 +547,11 @@ template decode*(bytes: seq[byte], T: type): untyped =
 template rawData*(self: Rlp): openArray[byte] =
   self.bytes.toOpenArray(self.position, self.currentElemEnd - 1)
 
-func append*(writer: var RlpWriter, rlp: Rlp) {.raises: [RlpError].} =
-  appendRawBytes(writer, rlp.rawData)
+func append*(writer: var RlpWriter, rlp: Rlp) =
+  try:
+    appendRawBytes(writer, rlp.rawData)
+  except RlpError as exc:
+    raiseAssert "Invalid RLP item: " & exc.msg
 
 func isPrintable(s: string): bool =
   for c in s:
