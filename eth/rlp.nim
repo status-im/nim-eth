@@ -29,6 +29,10 @@ type
     rlpBlob
     rlpList
 
+  RlpListMode* {.pure.} = enum
+    RejectAdditionalElements
+    IgnoreAdditionalElements
+
   RlpError* = object of CatchableError
   MalformedRlpError* = object of RlpError
   UnsupportedRlpError* = object of RlpError
@@ -283,8 +287,28 @@ func enterList*(self: var Rlp): bool =
     return false
 
 func tryEnterList*(self: var Rlp) =
-  if not self.enterList():
+  let item = self.item()
+  if item.typ != rlpList:
     raiseExpectedList()
+
+  self.position = item.payload.a
+
+template consumeList*(self: var Rlp, mode: static RlpListMode, body: untyped) =
+  let listEnd = self.currentElemEnd()
+  self.tryEnterList()
+  body
+  when mode == RlpListMode.RejectAdditionalElements:
+    if self.position != listEnd:
+      raise (ref MalformedRlpError)(msg: "unexpected number of list elements")
+  else:
+    static: doAssert mode == RlpListMode.IgnoreAdditionalElements
+    while self.position < listEnd:
+      self.position = self.currentElemEnd()
+    if self.position != listEnd:
+      raise (ref MalformedRlpError)(msg: "unexpected number of list elements")
+
+template consumeList*(self: var Rlp, body: untyped) =
+  self.consumeList(RlpListMode.RejectAdditionalElements, body)
 
 func positionAfter(rlp: var Rlp, item: RlpItem) =
   rlp.position = item.payload.b + 1

@@ -199,6 +199,47 @@ suite "test api usage":
     expect MalformedRlpError:
       discard rlp.inspect
 
+  test "malformed lists are not reported as type mismatches":
+    for hex in ["c501", "f80101", ""]:
+      checkpoint hex
+      var r = rlpFromHex(hex)
+      expect MalformedRlpError:
+        r.tryEnterList()
+    var r = rlpFromHex("83616263")
+    expect RlpTypeMismatch:
+      r.tryEnterList()
+
+  test "consumeList requires exactly the list elements":
+    var r = rlpFromHex("c20102")
+    r.consumeList:
+      check:
+        r.read(uint8) == 1
+        r.read(uint8) == 2
+    r = rlpFromHex("c20102")
+    expect MalformedRlpError:
+      r.consumeList:
+        discard r.read(uint8)
+    r = rlpFromHex("c10102")
+    expect MalformedRlpError:
+      r.consumeList:
+        discard r.read(uint8)
+        discard r.read(uint8)
+
+  test "consumeList can ignore additional list elements":
+    var r = rlpFromHex("c301020304")
+    r.consumeList(RlpListMode.IgnoreAdditionalElements):
+      check r.read(uint8) == 1
+    check r.read(uint8) == 4
+    r = rlpFromHex("c10102")
+    expect MalformedRlpError:
+      r.consumeList(RlpListMode.IgnoreAdditionalElements):
+        discard r.read(uint8)
+        discard r.read(uint8)
+    r = rlpFromHex("c2018180")
+    expect MalformedRlpError:
+      r.consumeList(RlpListMode.IgnoreAdditionalElements):
+        discard r.read(uint8)
+
   test "encode byte arrays":
     var b1 = [byte(1), 2, 5, 7, 8]
     var b2 = [byte(6), 8, 12, 123]
