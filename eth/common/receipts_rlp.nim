@@ -154,19 +154,18 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpErr
       rlp.read(rec.cumulativeGasUsed)
       rlp.read(rec.payer)
       rlp.read(rec.frameReceipts)
-      return rec
-
-    if rlp.isBlob and rlp.blobLen in {0, 1}:
-      rec.isHash = false
-      rec.status = rlp.read(bool)
-    elif rlp.isBlob and rlp.blobLen == 32:
-      rec.isHash = true
-      rec.hash = rlp.read(Hash32)
     else:
-      raise newException(RlpTypeMismatch, "Expected status or 32-byte hash blob")
-
-    rlp.read(rec.cumulativeGasUsed)
-    rlp.read(rec.logs)
+      if rlp.isBlob and rlp.blobLen in {0, 1}:
+        rec.isHash = false
+        rec.status = rlp.read(bool)
+      elif rlp.isBlob and rlp.blobLen == 32:
+        rec.isHash = true
+        rec.hash = rlp.read(Hash32)
+      else:
+        raise newException(RlpTypeMismatch, "Expected status or 32-byte hash blob")
+  
+      rlp.read(rec.cumulativeGasUsed)
+      rlp.read(rec.logs)
 
   rec
 
