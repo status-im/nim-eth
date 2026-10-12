@@ -148,6 +148,15 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpErr
     if not checkedEnumAssign(rec.receiptType, txType):
       raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $txType)
 
+    if rec.receiptType == ReceiptType5:
+      raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $txType)
+
+    if rec.receiptType == Eip8141Receipt:
+      rlp.read(rec.cumulativeGasUsed)
+      rlp.read(rec.payer)
+      rlp.read(rec.frameReceipts)
+      return rec
+
     if rlp.isBlob and rlp.blobLen in {0, 1}:
       rec.isHash = false
       rec.status = rlp.read(bool)
@@ -157,31 +166,8 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpErr
     else:
       raise newException(RlpTypeMismatch, "Expected status or 32-byte hash blob")
 
-<<<<<<< HEAD
-  if rec.receiptType == ReceiptType5:
-    raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $txType)
-
-  if rec.receiptType == Eip8141Receipt:
-    rlp.read(rec.cumulativeGasUsed)
-    rlp.read(rec.payer)
-    rlp.read(rec.frameReceipts)
-    return rec
-
-  if rlp.isBlob and rlp.blobLen in {0, 1}:
-    rec.isHash = false
-    rec.status = rlp.read(uint8) == 1
-  elif rlp.isBlob and rlp.blobLen == 32:
-    rec.isHash = true
-    rec.hash = rlp.read(Hash32)
-  else:
-    raise newException(RlpTypeMismatch, "Expected status or 32-byte hash blob")
-
-  rlp.read(rec.cumulativeGasUsed)
-  rlp.read(rec.logs)
-=======
     rlp.read(rec.cumulativeGasUsed)
     rlp.read(rec.logs)
->>>>>>> master
 
   rec
 

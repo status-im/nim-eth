@@ -418,10 +418,9 @@ proc read*(rlp: var Rlp, T: type TransactionFrame): T {.raises: [RlpError].} =
     rlp.read(result.mode)
     rlp.read(result.flags)
     rlp.read(result.target)
-    block:
-      rlp.consumeList:
-        rlp.read(result.gasLimit)
-        rlp.read(result.stateGasLimit)
+    rlp.consumeList:
+      rlp.read(result.gasLimit)
+      rlp.read(result.stateGasLimit)
     rlp.read(result.value)
     rlp.read(result.data)
 
@@ -433,7 +432,6 @@ proc readTxEip8141(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
     rlp.read(tx.sender)
     rlp.read(tx.frames)
     rlp.read(tx.signatures)
-    block:
     rlp.consumeList:
       rlp.read(tx.maxPriorityFeePerGas)
       rlp.read(tx.maxFeePerGas)
