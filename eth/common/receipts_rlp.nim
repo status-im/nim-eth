@@ -64,13 +64,12 @@ proc append*(w: var RlpWriter, rec: StoredReceipt) =
   w.append(rec.logs)
 
 proc read*(rlp: var Rlp, T: type FrameReceipt): FrameReceipt {.raises: [RlpError].} =
-  rlp.tryEnterList()
-  rlp.read(result.status)
-  block:
-    rlp.tryEnterList()
-    rlp.read(result.gasUsed)
-    rlp.read(result.stateGasUsed)
-  rlp.read(result.logs)
+  rlp.consumeList:
+    rlp.read(result.status)
+    rlp.consumeList:
+      rlp.read(result.gasUsed)
+      rlp.read(result.stateGasUsed)
+    rlp.read(result.logs)
 
 # Decode legacy receipt (eth/68)
 proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].} =
