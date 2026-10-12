@@ -72,6 +72,7 @@ type
     sender*        : Address              # EIP-8141
     frames*        : seq[TransactionFrame]# EIP-8141
     signatures*    : seq[FrameSignature]  # EIP-8141
+    nonceKeys*     : seq[UInt256]         # EIP-8250
 
 func destination*(tx: Transaction): Address =
   # use getRecipient if you also want to get
@@ -85,3 +86,10 @@ func contractCreation*(tx: Transaction): bool =
   if tx.txType == TxEip8141:
     return false
   tx.to.isNone
+
+# EIP-8250
+template nonceSeq*(tx: Transaction): uint64 =
+  tx.nonce
+
+template `nonceSeq=`*(tx: Transaction, nonce: uint64) =
+  tx.nonce = nonce

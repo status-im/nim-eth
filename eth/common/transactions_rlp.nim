@@ -112,9 +112,10 @@ proc append*(w: var RlpWriter, x: TransactionFrame) =
   w.append(x.data)
 
 proc appendTxEip8141(w: var RlpWriter, tx: Transaction) =
-  w.startList(7)
+  w.startList(8)
   w.append(tx.chainId)
-  w.append(tx.nonce)
+  w.append(tx.nonceKeys)
+  w.append(tx.nonceSeq)
   w.append(tx.sender)
   w.append(tx.frames)
   w.append(tx.signatures)
@@ -243,9 +244,10 @@ proc appendSignatures(w: var RlpWriter, sigs: openArray[FrameSignature]) =
 
 proc rlpEncodeEip8141(w: var RlpWriter, tx: Transaction) =
   w.appendDetached(uint8(TxEip8141))
-  w.startList(7)
+  w.startList(8)
   w.append(tx.chainId)
-  w.append(tx.nonce)
+  w.append(tx.nonceKeys)
+  w.append(tx.nonceSeq)
   w.append(tx.sender)
   w.append(tx.frames)
   w.appendSignatures(tx.signatures)
@@ -428,7 +430,8 @@ proc readTxEip8141(rlp: var Rlp, tx: var Transaction) {.raises: [RlpError].} =
   tx.txType = TxEip8141
   rlp.consumeList:
     tx.chainId = rlp.read(ChainId)
-    rlp.read(tx.nonce)
+    rlp.read(tx.nonceKeys)
+    rlp.read(tx.nonceSeq)
     rlp.read(tx.sender)
     rlp.read(tx.frames)
     rlp.read(tx.signatures)
