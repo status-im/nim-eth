@@ -70,7 +70,7 @@ func del*(db: MemoryLayer, key: openArray[byte]) =
   # The database should ensure that the empty key is always active:
   if key != emptyRlpHash.data:
     # TODO: This is quite inefficient and it won't be necessary once
-    # https://github.com/nim-lang/Nim/issues/7457 is developed.
+    # https://github.com/nim-lang/RFCs/issues/33 is developed.
     let key = @key
 
     db.records.withValue(key, v):
@@ -86,7 +86,7 @@ func put*(db: MemoryLayer, key, val: openArray[byte]) =
   tracePut key, val
 
   # TODO: This is quite inefficient and it won't be necessary once
-  # https://github.com/nim-lang/Nim/issues/7457 is developed.
+  # https://github.com/nim-lang/RFCs/issues/33 is developed.
   let key = @key
 
   db.deleted.excl(key)
@@ -206,7 +206,7 @@ proc put*(db: TrieDatabaseRef, key, val: openArray[byte]) =
 
 proc get*(db: TrieDatabaseRef, key: openArray[byte]): seq[byte] =
   # TODO: This is quite inefficient and it won't be necessary once
-  # https://github.com/nim-lang/Nim/issues/7457 is developed.
+  # https://github.com/nim-lang/RFCs/issues/33 is developed.
   let key = @key
 
   var t = db.mostInnerTransaction
@@ -228,7 +228,7 @@ proc del*(db: TrieDatabaseRef, key: openArray[byte]) =
 
 proc contains*(db: TrieDatabaseRef, key: openArray[byte]): bool =
   # TODO: This is quite inefficient and it won't be necessary once
-  # https://github.com/nim-lang/Nim/issues/7457 is developed.
+  # https://github.com/nim-lang/RFCs/issues/33 is developed.
   let key = @key
 
   var t = db.mostInnerTransaction

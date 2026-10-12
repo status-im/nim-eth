@@ -1438,10 +1438,10 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
           bytesReceived = payloadLength
         # we are getting in order data packet, we can flush data directly to the
         # incoming buffer.
-        # await upload(addr socket.buffer, unsafeAddr p.payload[0], p.payload.len())
+        # await upload(addr socket.buffer, addr p.payload[0], p.payload.len())
         moveMem(
           addr socket.rcvBuffer[socket.offset],
-          unsafeAddr p.payload[0], payloadLength)
+          addr p.payload[0], payloadLength)
         socket.offset = socket.offset + payloadLength
 
       # Bytes have been passed to upper layer, we can increase number of last
@@ -1498,7 +1498,7 @@ proc processPacketInternal(socket: UtpSocket, p: Packet) =
           # overflow.
           moveMem(
             addr socket.rcvBuffer[socket.offset],
-            unsafeAddr packet.payload[0], reorderPacketPayloadLength)
+            addr packet.payload[0], reorderPacketPayloadLength)
           socket.offset = socket.offset + reorderPacketPayloadLength
 
         trace "Deleting packet",

@@ -7,7 +7,7 @@
 {.used.}
 
 import
-  std/[options, sequtils],
+  std/sequtils,
   chronos,
   stew/bitops2,
   testutils/unittests,

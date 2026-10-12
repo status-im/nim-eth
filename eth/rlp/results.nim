@@ -21,7 +21,10 @@ proc append*[T](w: var RlpWriter, val: Opt[T]) =
 
 proc read*[T](rlp: var Rlp, val: var Opt[T]) {.raises: [RlpError].} =
   mixin read
-  if rlp.blobLen != 0:
+  if not rlp.isBlob or rlp.blobLen != 0:
     val = Opt.some(rlp.read(T))
   else:
     rlp.skipElem
+
+proc read*[T](rlp: var Rlp, _: type Opt[T]): Opt[T] {.raises: [RlpError].} =
+  rlp.read(result)

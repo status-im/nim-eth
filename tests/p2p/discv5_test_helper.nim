@@ -8,6 +8,7 @@
 import
   std/net,
   chronos,
+  ../../eth/net/utils,
   ../../eth/enr/enr,
   ../../eth/p2p/discoveryv5/[node, routing_table],
   ../../eth/p2p/discoveryv5/protocol as discv5_protocol
@@ -43,53 +44,64 @@ proc initDiscoveryNode*(
 
   protocol
 
-func nodeIdInNodes*(id: NodeId, nodes: openArray[Node]): bool =
+func nodeIdInNodes*(id: NodeId, nodes: openArray[DiscoveryNode]): bool =
   for n in nodes:
     if id == n.id: return true
 
 func generateNode*(privKey: PrivateKey, port: int = 20302,
     ip: IpAddress = parseIpAddress("127.0.0.1"),
-    localEnrFields: openArray[FieldPair] = []): Node =
+    localEnrFields: openArray[FieldPair] = []): DiscoveryNode =
   let port = Port(port)
   let enr = enr.Record.init(1, privKey, Opt.some(ip),
     Opt.some(port), Opt.some(port), Opt.some(port), localEnrFields).expect("Properly initialized private key")
-  result = Node.fromRecord(enr)
+  result = DiscoveryNode.fromRecord(enr)
 
-proc generateNRandomNodes*(rng: var HmacDrbgContext, n: int): seq[Node] =
-  var res = newSeq[Node]()
+func updatedNode*(n: DiscoveryNode, privKey: PrivateKey, ip: IpAddress,
+    port: Port): DiscoveryNode =
+  ## The same peer with a new record: a higher sequence number and the given
+  ## endpoint.
+  var record = n.record
+  record.update(privKey, Opt.some(ip), Opt.some(port), Opt.some(port))
+    .expect("Valid record update")
+  DiscoveryNode.fromRecord(record)
+
+proc generateNRandomNodes*(rng: var HmacDrbgContext, n: int): seq[DiscoveryNode] =
+  var res = newSeq[DiscoveryNode]()
   for i in 1..n:
     let node = generateNode(PrivateKey.random(rng))
     res.add(node)
   res
 
-proc nodeAndPrivKeyAtDistance*(n: Node, rng: var HmacDrbgContext, d: uint32,
-    ip: IpAddress = parseIpAddress("127.0.0.1")): (Node, PrivateKey) =
+proc nodeAndPrivKeyAtDistance*(n: DiscoveryNode, rng: var HmacDrbgContext, d: uint32,
+    ip: IpAddress = parseIpAddress("127.0.0.1")): (DiscoveryNode, PrivateKey) =
   while true:
     let pk = PrivateKey.random(rng)
     let node = generateNode(pk, ip = ip)
     if logDistance(n.id, node.id) == d:
       return (node, pk)
 
-proc nodeAtDistance*(n: Node, rng: var HmacDrbgContext, d: uint32,
-    ip: IpAddress = parseIpAddress("127.0.0.1")): Node =
+proc nodeAtDistance*(n: DiscoveryNode, rng: var HmacDrbgContext, d: uint32,
+    ip: IpAddress = parseIpAddress("127.0.0.1")): DiscoveryNode =
   let (node, _) = n.nodeAndPrivKeyAtDistance(rng, d, ip)
   node
 
 proc nodesAtDistance*(
-    n: Node, rng: var HmacDrbgContext, d: uint32, amount: int,
-    ip: IpAddress = parseIpAddress("127.0.0.1")): seq[Node] =
+    n: DiscoveryNode, rng: var HmacDrbgContext, d: uint32, amount: int,
+    ip: IpAddress = parseIpAddress("127.0.0.1")): seq[DiscoveryNode] =
   for i in 0..<amount:
     result.add(nodeAtDistance(n, rng, d, ip))
 
 proc nodesAtDistanceUniqueIp*(
-    n: Node, rng: var HmacDrbgContext, d: uint32, amount: int,
-    ip: IpAddress = parseIpAddress("127.0.0.1")): seq[Node] =
+    n: DiscoveryNode, rng: var HmacDrbgContext, d: uint32, amount: int,
+    ip: IpAddress = parseIpAddress("127.0.0.1")): seq[DiscoveryNode] =
+  ## Nodes of which the addresses are each in a different subnet, as that is
+  ## what the ip limits are counted on.
   var ta = initTAddress(ip, Port(0))
   for i in 0..<amount:
-    ta.inc()
+    ta.inc(1 shl (32 - IpLimitSubnetV4))
     result.add(nodeAtDistance(n, rng, d, ta.address()))
 
-proc addSeenNode*(d: discv5_protocol.Protocol, n: Node): bool =
+proc addSeenNode*(d: discv5_protocol.Protocol, n: DiscoveryNode): bool =
   # Add it as a seen node, warning: for testing convenience only!
   n.seen = true
   d.addNode(n)

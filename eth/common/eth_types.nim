@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -59,23 +59,3 @@ func `$`*(x: BlockHashOrNumber): string =
     "0x" & x.hash.data.toHex
   else:
     $x.number
-
-# Backwards-compatibility section - this will be removed in future versions of
-# this file
-
-type
-  # Names that don't appear in the spec and have no particular purpose any more -
-  # just use the underlying type directly
-  Blob* {.deprecated: "seq[byte]".} = seq[byte]
-  BlockHeader* {.deprecated: "Header".} = Header
-  BlockNonce* {.deprecated: "Bytes8".} = Bytes8
-  BloomFilter* {.deprecated: "Bloom".} = Bloom
-  VersionedHashes* {.deprecated: "seq[VersionedHash]".} = seq[VersionedHash]
-
-func toBlockNonce*(n: uint64): Bytes8 {.deprecated.} =
-  n.to(Bytes8)
-
-func newAccount*(
-    nonce: AccountNonce = 0, balance: UInt256 = 0.u256
-): Account {.deprecated: "Account.init".} =
-  Account.init(nonce = nonce, balance = balance)

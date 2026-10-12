@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -75,21 +75,21 @@ proc read*(rlp: var Rlp, T: type FrameReceipt): FrameReceipt {.raises: [RlpError
 # Decode legacy receipt (eth/68)
 proc readReceiptLegacy(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].} =
   receipt.receiptType = LegacyReceipt
-  rlp.tryEnterList()
-  if rlp.isBlob and rlp.blobLen in {0, 1}:
-    receipt.isHash = false
-    receipt.status = rlp.read(uint8) == 1
-  elif rlp.isBlob and rlp.blobLen == 32:
-    receipt.isHash = true
-    receipt.hash = rlp.read(Hash32)
-  else:
-    raise newException(
-      RlpTypeMismatch,
-      "HashOrStatus expected, but the source RLP is not a blob of right size.",
-    )
-  rlp.read(receipt.cumulativeGasUsed)
-  rlp.read(receipt.logsBloom)
-  rlp.read(receipt.logs)
+  rlp.consumeList:
+    if rlp.isBlob and rlp.blobLen in {0, 1}:
+      receipt.isHash = false
+      receipt.status = rlp.read(bool)
+    elif rlp.isBlob and rlp.blobLen == 32:
+      receipt.isHash = true
+      receipt.hash = rlp.read(Hash32)
+    else:
+      raise newException(
+        RlpTypeMismatch,
+        "HashOrStatus expected, but the source RLP is not a blob of right size.",
+      )
+    rlp.read(receipt.cumulativeGasUsed)
+    rlp.read(receipt.logsBloom)
+    rlp.read(receipt.logs)
 
 # Decode typed receipt (eth/68)
 proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].} =
@@ -115,38 +115,49 @@ proc readReceiptTyped(rlp: var Rlp, receipt: var Receipt) {.raises: [RlpError].}
     raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $recType)
 
   if txVal == Eip8141Receipt:
-    rlp.tryEnterList()
-    rlp.read(receipt.cumulativeGasUsed)
-    rlp.read(receipt.payer)
-    rlp.read(receipt.frameReceipts)
+    rlp.consumeList:
+      rlp.read(receipt.cumulativeGasUsed)
+      rlp.read(receipt.payer)
+      rlp.read(receipt.frameReceipts)
     return
 
-  rlp.tryEnterList()
-  if rlp.isBlob and rlp.blobLen in {0, 1}:
-    receipt.isHash = false
-    receipt.status = rlp.read(uint8) == 1
-  elif rlp.isBlob and rlp.blobLen == 32:
-    receipt.isHash = true
-    receipt.hash = rlp.read(Hash32)
-  else:
-    raise newException(
-      RlpTypeMismatch,
-      "HashOrStatus expected, but the source RLP is not a blob of right size.",
-    )
+  rlp.consumeList:
+    if rlp.isBlob and rlp.blobLen in {0, 1}:
+      receipt.isHash = false
+      receipt.status = rlp.read(bool)
+    elif rlp.isBlob and rlp.blobLen == 32:
+      receipt.isHash = true
+      receipt.hash = rlp.read(Hash32)
+    else:
+      raise newException(
+        RlpTypeMismatch,
+        "HashOrStatus expected, but the source RLP is not a blob of right size.",
+      )
+    rlp.read(receipt.cumulativeGasUsed)
+    rlp.read(receipt.logsBloom)
+    rlp.read(receipt.logs)
 
-  rlp.read(receipt.cumulativeGasUsed)
-  rlp.read(receipt.logsBloom)
-  rlp.read(receipt.logs)
+  if rlp.hasData:
+    raise newException(MalformedRlpError, "Receipt has trailing bytes")
 
 # Decode eth/69 StoredReceipt
 proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpError].} =
   var rec: StoredReceipt
-  rlp.tryEnterList()
+  rlp.consumeList:
+    let txType = rlp.read(uint8)
+    if not checkedEnumAssign(rec.receiptType, txType):
+      raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $txType)
 
-  let txType = rlp.read(uint8)
-  if not checkedEnumAssign(rec.receiptType, txType):
-    raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $txType)
+    if rlp.isBlob and rlp.blobLen in {0, 1}:
+      rec.isHash = false
+      rec.status = rlp.read(bool)
+    elif rlp.isBlob and rlp.blobLen == 32:
+      rec.isHash = true
+      rec.hash = rlp.read(Hash32)
+    else:
+      raise newException(RlpTypeMismatch, "Expected status or 32-byte hash blob")
 
+<<<<<<< HEAD
   if rec.receiptType == ReceiptType5:
     raise newException(UnsupportedRlpError, "Unsupported ReceiptType: " & $txType)
 
@@ -167,6 +178,10 @@ proc read*(rlp: var Rlp, T: type StoredReceipt): StoredReceipt {.raises: [RlpErr
 
   rlp.read(rec.cumulativeGasUsed)
   rlp.read(rec.logs)
+=======
+    rlp.read(rec.cumulativeGasUsed)
+    rlp.read(rec.logs)
+>>>>>>> master
 
   rec
 

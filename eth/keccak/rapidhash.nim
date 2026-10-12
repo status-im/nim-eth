@@ -44,7 +44,7 @@ func rapidhashNanoRaw*(key: pointer, len: csize_t, seed: uint64): uint64 {.
 # An empty openArray has no valid element to take the address of, so the
 # wrappers below pass a nil pointer with length zero rather than indexing.
 template dataPtr(data: openArray[byte]): pointer =
-  if data.len == 0: nil else: unsafeAddr data[0]
+  if data.len == 0: nil else: addr data[0]
 
 func rapidhash*(data: openArray[byte]): uint64 {.inline.} =
   rapidhashRaw(dataPtr(data), csize_t(data.len))

@@ -22,6 +22,10 @@ proc read*(rlp: var Rlp, T: type StUint): T {.raises: [RlpError].} =
   if rlp.isBlob:
     let bytes = rlp.toBytes
     if bytes.len > 0:
+      if bytes[0] == 0:
+        raise newException(
+          MalformedRlpError, "Unsigned integer expected, but the source RLP has leading zeros"
+        )
       # be sure the amount of bytes matches the size of the stint
       if bytes.len <= sizeof(result):
         result.initFromBytesBE(bytes)

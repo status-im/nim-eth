@@ -7,7 +7,6 @@
 {.used.}
 
 import
-  std/options,
   unittest2,
   ../../eth/utp/packets
 

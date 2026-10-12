@@ -44,7 +44,7 @@ func hash(k: Key): Hash =
 
 func `==`(k: Key, data: openArray[byte]): bool =
   int(k.len) == data.len and
-    equalMem(unsafeAddr k.data[0], unsafeAddr data[0], data.len)
+    equalMem(addr k.data[0], addr data[0], data.len)
 
 func `==`(a, b: Key): bool =
   a == b.data.toOpenArray(0, int(b.len) - 1)

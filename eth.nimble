@@ -1,6 +1,6 @@
 mode = ScriptMode.Verbose
 
-version       = "0.9.1"
+version       = "0.9.3"
 author        = "Status Research & Development GmbH"
 description   = "Ethereum Common library"
 license       = "MIT"
@@ -8,7 +8,7 @@ skipDirs      = @["tests"]
 
 requires "nim >= 2.0.10",
          "chronicles >= 0.12.4",
-         "chronos >= 4.0.0",
+         "chronos >= 4.0.1",
          "confutils >= 0.1.1",
          "metrics >= 0.2.0",
          "minilru >= 0.1.1",
@@ -103,5 +103,7 @@ task fuzz, "Run fuzzing tests":
   fuzz "discoveryv5/fuzz_decode_packet"
   run "", "tests/fuzzing/enr/generate"
   fuzz "enr/fuzz_enr"
+  run "", "tests/fuzzing/rlp/generate"
   fuzz "rlp/rlp_decode"
+  fuzz "rlp/rlp_decode_eth"
   fuzz "rlp/rlp_inspect"

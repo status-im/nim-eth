@@ -52,17 +52,46 @@ objWithEmptyTrailingOptionals.j = Opt.some(0'u64)
 
 suite "test optional fields":
   test "all optionals are empty":
-    let bytes = rlp.encode(objWithEmptyOptional)
-    check: bytes.len == 7 # 6 mandatory fields + prefix byte
+    expect AssertionDefect: # empty non-trailing optionals cannot be encoded
+      discard rlp.encode(objWithEmptyOptional)
 
   test "all optionals are non empty":
     let bytes = rlp.encode(objWithNonEmptyOptional)
     check: bytes.len == 15 # 6 mandatory + 8 optional + prefix
 
   test "Only trailing optionals are non empty":
-    let bytes = rlp.encode(objWithNonEmptyTrailingOptionals)
-    check: bytes.len == 10 # 6 mandatory + 3 trailing optional + prefix
+    expect AssertionDefect: # empty non-trailing optionals cannot be encoded
+      discard rlp.encode(objWithNonEmptyTrailingOptionals)
   
   test "Only trailing optionals are empty":
     let bytes = rlp.encode(objWithEmptyTrailingOptionals)
     check: bytes.len == 12 # 6 mandatory + 5 non trailing + prefix
+
+suite "Opt reader":
+  test "Missing value is not accepted":
+    var
+      r = rlpFromHex("c0")
+      v: Opt[uint64]
+    r.tryEnterList()
+    expect RlpError:
+      r.read(v)
+
+  test "List is not accepted as an empty value":
+    var
+      r = rlpFromHex("c0")
+      v: Opt[uint64]
+    expect RlpError:
+      r.read(v)
+
+  test "Empty list is not mistaken for an empty value":
+    var
+      r = rlpFromHex("c0")
+      v: Opt[seq[uint64]]
+    r.read(v)
+    check v == Opt.some(newSeq[uint64]())
+
+  test "Decode by type":
+    for v in [Opt.some(5'u64), Opt.none(uint64)]:
+      check rlp.decode(rlp.encode(v), Opt[uint64]) == v
+    check rlp.decode(rlp.encode(@[Opt.some(1'u64), Opt.none(uint64)]), seq[Opt[uint64]]) ==
+      @[Opt.some(1'u64), Opt.none(uint64)]

@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -32,9 +32,6 @@ proc read*(rlp: var Rlp, T: type BlockHashOrNumber): T =
 
 proc rlpHash*[T](v: T): Hash32 {.deprecated: "computeRlpHash".} =
   rlp.computeRlpHash(v)
-
-func blockHash*(h: Header): Hash32 {.deprecated: "computeBlockHash".} =
-  rlp.computeRlpHash(h)
 
 template computeBlockHash*(h: Header): Hash32 =
   rlp.computeRlpHash(h)

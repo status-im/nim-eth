@@ -155,7 +155,7 @@ func update*(h: var KeccakXkcpCtx, data: openArray[byte]) =
   while remaining >= RATE_BYTES:
     for i in 0 ..< RATE_BYTES div 8:
       var v: uint64
-      copyMem(addr v, unsafeAddr data[pos + 8 * i], 8)
+      copyMem(addr v, addr data[pos + 8 * i], 8)
       h.state[i] = h.state[i] xor v
     keccakF(h.state)
     pos += RATE_BYTES
@@ -187,7 +187,7 @@ func keccak256Xkcp*(input: openArray[byte], output: var array[32, byte]) =
   while remaining >= RATE_BYTES:
     for i in 0 ..< RATE_BYTES div 8:
       var v: uint64
-      copyMem(addr v, unsafeAddr input[pos + 8 * i], 8)
+      copyMem(addr v, addr input[pos + 8 * i], 8)
       state[i] = state[i] xor v
     keccakF(state)
     pos += RATE_BYTES

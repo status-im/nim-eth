@@ -23,13 +23,36 @@ type
     ip*: IpAddress
     port*: Port
 
-  Node* = ref object
+  DiscoveryNode* = ref object
+    ## A peer in the DHT. Treated as immutable after construction: a peer with
+    ## an updated record is a new `DiscoveryNode` that replaces the old one.
+    ## Only `seen` is meant to be set.
+    id: NodeId
+    pubkey: PublicKey
+    address: Opt[Address]
+    record: Record
+    seen*: bool ## Indicates if there was at least one successful
+    ## request-response with this node.
+
+  LocalDiscoveryNode* = ref object
+    ## Local discovery identity and the record advertised. The record and thus
+    ## the addresses can change over time.
     id*: NodeId
     pubkey*: PublicKey
     address*: Opt[Address]
     record*: Record
-    seen*: bool ## Indicates if there was at least one successful
-    ## request-response with this node.
+
+func id*(n: DiscoveryNode): lent NodeId =
+  n.id
+
+func pubkey*(n: DiscoveryNode): lent PublicKey =
+  n.pubkey
+
+func address*(n: DiscoveryNode): lent Opt[Address] =
+  n.address
+
+func record*(n: DiscoveryNode): lent Record =
+  n.record
 
 func toNodeId*(pk: PublicKey): NodeId =
   ## Convert public key to a node identifier.
@@ -38,39 +61,49 @@ func toNodeId*(pk: PublicKey): NodeId =
   # The raw key used is the uncompressed public key.
   readUintBE[256](Keccak256.digest(pk.toRaw()).data)
 
-func fromRecord*(T: type Node, r: Record): T =
-  ## Create a new `Node` from a `Record`.
+func address(r: Record): Opt[Address] =
+  ## Derive the endpoint that is advertised in the record.
   let tr = TypedRecord.fromRecord(r)
   if tr.ip.isSome() and tr.udp.isSome() and tr.udp.get() != 0:
     # Port 0 is reserved (RFC 6335) and not routable as a destination.
     # Reject it here so peers with udp = 0 cannot enter the routing table
     # nor be returned in NODES responses.
-    let a = Address(ip: ipv4(tr.ip.get()), port: Port(tr.udp.get()))
-
-    Node(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
-       address: Opt.some(a))
+    Opt.some(Address(ip: ipv4(tr.ip.get()), port: Port(tr.udp.get())))
   else:
-    Node(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
-       address: Opt.none(Address))
+    Opt.none(Address)
 
-func newNode*(r: Record): Result[Node, cstring] {.deprecated: "Use TypedRecord.fromRecord instead".} =
-  ## Create a new `Node` from a `Record`.
-  ok(Node.fromRecord(r))
+func fromRecord*(T: type DiscoveryNode, r: Record): T =
+  ## Create a new `DiscoveryNode` from a `Record`.
+  DiscoveryNode(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
+    address: r.address())
 
-func update*(n: Node, pk: PrivateKey, ip: Opt[IpAddress],
+func fromRecord*(T: type LocalDiscoveryNode, r: Record): T =
+  ## Create a new `LocalDiscoveryNode` from a `Record`.
+  LocalDiscoveryNode(id: r.publicKey.toNodeId(), pubkey: r.publicKey, record: r,
+    address: r.address())
+
+func toNode*(ln: LocalDiscoveryNode): DiscoveryNode =
+  ## A snapshot of the `LocalDiscoveryNode` for the places where it appears as
+  ## a peer, such as the NODES response to a request at distance 0.
+  DiscoveryNode(id: ln.id, pubkey: ln.pubkey, record: ln.record,
+    address: ln.address)
+
+func update*(ln: LocalDiscoveryNode, pk: PrivateKey,
+    ip: Opt[IpAddress] = Opt.none(IpAddress),
     tcpPort: Opt[Port] = Opt.none(Port),
     udpPort: Opt[Port] = Opt.none(Port),
     quicPort: Opt[Port] = Opt.none(Port),
     extraFields: openArray[FieldPair] = []): Result[void, cstring] =
-  ? n.record.update(pk, ip, tcpPort, udpPort, quicPort, extraFields)
+  ## Update the record and the address of the `LocalDiscoveryNode`.
+  ? ln.record.update(pk, ip, tcpPort, udpPort, quicPort, extraFields)
 
-  n.address = Node.fromRecord(n.record).address
+  ln.address = ln.record.address()
 
   ok()
 
-func hash*(n: Node): hashes.Hash = hash(n.pubkey.toRaw)
+func hash*(n: DiscoveryNode): hashes.Hash = hash(n.pubkey.toRaw)
 
-func `==`*(a, b: Node): bool =
+func `==`*(a, b: DiscoveryNode): bool =
   (a.isNil and b.isNil) or
     (not a.isNil and not b.isNil and a.pubkey == b.pubkey)
 
@@ -104,7 +137,7 @@ func `$`*(a: Address): string =
   result.add($a.ip)
   result.add(":" & $a.port)
 
-func shortLog*(n: Node): string =
+func shortLog*(n: DiscoveryNode): string =
   if n.isNil:
     "uninitialized"
   elif n.address.isNone():
@@ -112,7 +145,15 @@ func shortLog*(n: Node): string =
   else:
     shortLog(n.id) & ":" & $n.address.get()
 
-func shortLog*(nodes: seq[Node]): string =
+func shortLog*(ln: LocalDiscoveryNode): string =
+  if ln.isNil:
+    "uninitialized"
+  elif ln.address.isNone():
+    shortLog(ln.id) & ":unaddressable"
+  else:
+    shortLog(ln.id) & ":" & $ln.address.get()
+
+func shortLog*(nodes: seq[DiscoveryNode]): string =
   result = "["
 
   var first = true
@@ -127,5 +168,24 @@ func shortLog*(nodes: seq[Node]): string =
 
 chronicles.formatIt(NodeId): shortLog(it)
 chronicles.formatIt(Address): $it
-chronicles.formatIt(Node): shortLog(it)
-chronicles.formatIt(seq[Node]): shortLog(it)
+chronicles.formatIt(DiscoveryNode): shortLog(it)
+chronicles.formatIt(seq[DiscoveryNode]): shortLog(it)
+chronicles.formatIt(LocalDiscoveryNode): shortLog(it)
+
+# Deprecated API, kept for backwards compatibility only.
+
+type Node* {.deprecated: "Use DiscoveryNode".} = DiscoveryNode
+  ## The peer type was called `Node`, which is ambiguous in a codebase that
+  ## has a node type per protocol and per client.
+
+func newNode*(r: Record): Result[DiscoveryNode, cstring]
+    {.deprecated: "Use DiscoveryNode.fromRecord instead".} =
+  ## Create a new `DiscoveryNode` from a `Record`.
+  ok(DiscoveryNode.fromRecord(r))
+
+converter toNodeCompat*(ln: LocalDiscoveryNode): DiscoveryNode
+    {.deprecated: "A LocalDiscoveryNode is not a peer, use " &
+      "LocalDiscoveryNode.toNode() for an explicit snapshot".} =
+  ## Keeps passing a `LocalDiscoveryNode` where a `DiscoveryNode` is expected
+  ## still possible.
+  ln.toNode()

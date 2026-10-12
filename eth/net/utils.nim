@@ -11,11 +11,23 @@ import
   std/[tables, hashes, net],
   results, chronos, chronicles
 
-export net.IpAddress
+export net.IpAddress, net.parseIpAddress
+
+const
+  IpLimitSubnetV4* = 24
+    ## The IPv4 prefix length that the ip limits are counted on. Prefixes
+    ## longer than a /24 are commonly filtered out of the global routing
+    ## tables, which makes a /24 the smallest block that can be obtained and
+    ## announced on its own.
+  IpLimitSubnetV6* = 64
+    ## The IPv6 prefix length that the ip limits are counted on. A /64 is what
+    ## a single network gets assigned, down to a home gateway, and the
+    ## addresses in it are free to pick for its host. It is thus the equivalent
+    ## of the single address that such a gateway has on IPv4.
 
 type
   IpLimits* = object
-    limit*: uint
+    limit*: uint ## Maximum amount of addresses allowed per subnet
     ips: Table[IpAddress, uint]
 
 func hash*(ip: IpAddress): Hash =
@@ -23,35 +35,61 @@ func hash*(ip: IpAddress): Hash =
   of IpAddressFamily.IPv6: hash(ip.address_v6)
   of IpAddressFamily.IPv4: hash(ip.address_v4)
 
+func subnet*(ip: IpAddress): IpAddress =
+  ## The subnet of the `ip` that the limits are counted on. Counting
+  ## exact addresses instead would make the limits meaningless for anyone
+  ## holding a prefix, which for IPv6 is every regular end user.
+  var masked = ip
+  case ip.family
+  of IpAddressFamily.IPv4:
+    for i in IpLimitSubnetV4 div 8 ..< masked.address_v4.len:
+      masked.address_v4[i] = 0
+  of IpAddressFamily.IPv6:
+    for i in IpLimitSubnetV6 div 8 ..< masked.address_v6.len:
+      masked.address_v6[i] = 0
+
+  masked
+
 func inc*(ipLimits: var IpLimits, ip: IpAddress): bool =
-  let val = ipLimits.ips.getOrDefault(ip, 0)
+  let
+    subnet = ip.subnet()
+    val = ipLimits.ips.getOrDefault(subnet, 0)
   if val < ipLimits.limit:
-    ipLimits.ips[ip] = val + 1
+    ipLimits.ips[subnet] = val + 1
     true
   else:
     false
 
 func dec*(ipLimits: var IpLimits, ip: IpAddress) =
-  let val = ipLimits.ips.getOrDefault(ip, 0)
+  let
+    subnet = ip.subnet()
+    val = ipLimits.ips.getOrDefault(subnet, 0)
   if val == 1:
-    ipLimits.ips.del(ip)
+    ipLimits.ips.del(subnet)
   elif val > 1:
-    ipLimits.ips[ip] = val - 1
+    ipLimits.ips[subnet] = val - 1
+
+func isLocallyAssigned*(address: TransportAddress): bool =
+  ## Returns true for addresses that are assigned within a local network
+  ## instead of globally: loopback, private and link local addresses.
+  # TODO: replace with isPrivate once nim-chronos tag > v4.1.1
+  address.isLoopback() or address.isSiteLocal() or address.isUniqueLocal() or
+    address.isLinkLocal()
+
+func isLocallyAssigned*(address: IpAddress): bool =
+  let a = initTAddress(address, Port(0))
+  a.isLocallyAssigned()
 
 func isGlobalUnicast*(address: TransportAddress): bool =
-  if address.isGlobal() and address.isUnicast():
-    true
-  else:
-    false
+  # nim-chronos its `isGlobal` follows the IANA special-purpose registry,
+  # which no longer lists the IPv6 site local range `fec0::/10`: deprecated
+  # by RFC 3879 but never reassigned, so it is not reachable either. It's
+  # the only address range that is removed here with isSiteLocal.
+  address.isGlobal() and address.isUnicast() and not address.isSiteLocal()
 
 func isGlobalUnicast*(address: IpAddress): bool =
   let a = initTAddress(address, Port(0))
   a.isGlobalUnicast()
-
-func isPublic*(address: IpAddress): bool =
-  ## Returns true for globally routable (public) addresses
-  let a = initTAddress(address, Port(0))
-  not (a.isLoopback() or a.isSiteLocal() or a.isLinkLocal())
 
 proc getRouteIpv4*(): Result[IpAddress, cstring] =
   # Avoiding Exception with initTAddress and can't make it work with static.

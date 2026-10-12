@@ -272,11 +272,7 @@ iterator pairs*(self: HexaryTrie): (seq[byte], seq[byte]) =
     nodeRlp = rlpFromBytes keyToLocalBytes(self.db, self.root)
     stack = @[(nodeRlp, NibblesBuf())]
   while stack.len > 0:
-    # perhaps a Nim bug #9778
-    # cannot yield the helper proc directly
-    # it will cut the yield in half
-    let res = getPairsAux(self.db, stack)
-    yield res
+    yield getPairsAux(self.db, stack)
 
 iterator replicate*(self: HexaryTrie): (seq[byte], seq[byte]) =
   # this iterator helps 'rebuild' the entire trie without

@@ -22,7 +22,7 @@ type
     records: Table[seq[byte], seq[byte]]
       # TODO interaction with this table would benefit from heterogeneous lookup
       #      (see `@key` below)
-      #      https://github.com/nim-lang/Nim/issues/7457
+      #      https://github.com/nim-lang/RFCs/issues/33
 
   KvResult*[T] = Result[T, string]
 

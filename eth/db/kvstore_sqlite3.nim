@@ -106,7 +106,7 @@ proc prepareStmt*(db: SqStoreRef,
 proc bindParam(s: RawStmtPtr, n: int, val: auto): cint =
   when val is openArray[byte]|seq[byte]:
     if val.len > 0:
-      sqlite3_bind_blob(s, n.cint, unsafeAddr val[0], val.len.cint, nil)
+      sqlite3_bind_blob(s, n.cint, addr val[0], val.len.cint, nil)
     else:
       sqlite3_bind_blob(s, n.cint, nil, 0.cint, nil)
   elif val is array:
@@ -114,7 +114,7 @@ proc bindParam(s: RawStmtPtr, n: int, val: auto): cint =
       # Prior to Nim 1.4 and view types array[N, byte] in tuples
       # don't match with openArray[byte]
       if val.len > 0:
-        sqlite3_bind_blob(s, n.cint, unsafeAddr val[0], val.len.cint, nil)
+        sqlite3_bind_blob(s, n.cint, addr val[0], val.len.cint, nil)
       else:
         sqlite3_bind_blob(s, n.cint, nil, 0.cint, nil)
     else:

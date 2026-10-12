@@ -213,11 +213,6 @@ proc add*[T](b: var OrderedTrieRootBuilder, w: var TrieRlpWriter, v: openArray[T
   ## Add items to the trie root builder, calling `rlp.encode(item)` to compute
   ## the value of the item. The total number of items added before calling
   ## `rootHash` must equal what was given in `init`.
-  ##
-  ## TODO instead of RLP-encoding the items to bytes, we should be hashing them
-  ##      directly:
-  ##      * https://github.com/status-im/nim-eth/issues/724
-  ##      * https://github.com/status-im/nim-eth/issues/698
   for item in v:
     b.updateHash(w, uint64 b.items, item)
     b.items += 1

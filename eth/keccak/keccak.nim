@@ -80,7 +80,7 @@ when keccakCacheEnabled:
 
   func `==`(k: KeccakCacheKey, data: openArray[byte]): bool =
     int(k.len) == data.len and
-      equalMem(unsafeAddr k.data[0], unsafeAddr data[0], data.len)
+      equalMem(addr k.data[0], addr data[0], data.len)
 
   func `==`(a, b: KeccakCacheKey): bool =
     a == b.data.toOpenArray(0, int(b.len) - 1)
@@ -118,7 +118,7 @@ func digestImpl(data: openArray[byte]): MDigest[256] {.noinit, inline.} =
 
       var key: KeccakCacheKey
       key.len = uint8(data.len)
-      copyMem(addr key.data[0], unsafeAddr data[0], data.len)
+      copyMem(addr key.data[0], addr data[0], data.len)
       keccakCache.putBySlot(slot, key, digest)
       return digest
 

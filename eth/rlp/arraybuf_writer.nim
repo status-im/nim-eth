@@ -47,7 +47,7 @@ proc maybeClosePendingLists(self: var RlpArrayBufWriter) =
 
       moveMem(
         addr self.output[listStartPos + totalPrefixBytes],
-        unsafeAddr self.output[listStartPos],
+        addr self.output[listStartPos],
         listLen,
       )
 
