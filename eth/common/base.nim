@@ -22,6 +22,7 @@ import
   stint,
   results,
   stew/[assign2, byteutils, endians2],
+  nimcrypto/sysrand,
   ../keccak/rapidhash
 
 export stint, hashes, results
@@ -85,13 +86,19 @@ template default*[N](T: type FixedBytes[N]): T =
 func `==`*(a, b: FixedBytes): bool {.inline.} =
   equalMem(addr a.data[0], addr b.data[0], a.N)
 
+let fixedBytesHashSeed: uint64 = block:
+  var s: array[1, uint64]
+  doAssert randomBytes(s) == s.len
+  s[0]
+
 func hash*[N: static int](v: FixedBytes[N]): Hash {.inline.} =
-  when N <= 48:
-    cast[Hash](rapidhashNano(v.data))
-  elif N <= 512:
-    cast[Hash](rapidhashMicro(v.data))
-  else:
-    cast[Hash](rapidhash(v.data))
+  {.cast(noSideEffect).}:
+    when N <= 48:
+      cast[Hash](rapidhashNano(v.data, fixedBytesHashSeed))
+    elif N <= 512:
+      cast[Hash](rapidhashMicro(v.data, fixedBytesHashSeed))
+    else:
+      cast[Hash](rapidhash(v.data, fixedBytesHashSeed))
 
 func toHex*(v: FixedBytes): string =
   ## Convert to lowercase hex without 0x prefix
