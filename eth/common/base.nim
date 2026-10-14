@@ -22,7 +22,6 @@ import
   stint,
   results,
   stew/[assign2, byteutils, endians2],
-  nimcrypto/sysrand,
   ../keccak/rapidhash
 
 export stint, hashes, results
@@ -86,10 +85,15 @@ template default*[N](T: type FixedBytes[N]): T =
 func `==`*(a, b: FixedBytes): bool {.inline.} =
   equalMem(addr a.data[0], addr b.data[0], a.N)
 
-let fixedBytesHashSeed: uint64 = block:
-  var s: array[1, uint64]
-  doAssert randomBytes(s) == s.len
-  s[0]
+# sysrand only supports posix/windows. other targets keep the unseeded hash
+when defined(posix) or defined(windows):
+  import nimcrypto/sysrand
+  let fixedBytesHashSeed: uint64 = block:
+    var s: array[1, uint64]
+    doAssert randomBytes(s) == s.len
+    s[0]
+else:
+  const fixedBytesHashSeed = 0'u64
 
 func hash*[N: static int](v: FixedBytes[N]): Hash {.inline.} =
   {.cast(noSideEffect).}:
