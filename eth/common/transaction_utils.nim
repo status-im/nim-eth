@@ -72,6 +72,8 @@ proc recoverSender*(tx: Transaction): Opt[Address] =
   ##
   ## Returns `none` if the signature is invalid with respect to the rest of
   ## the transaction data.
+  if tx.txType == TxEip8141:
+    return ok(tx.sender)
   let key = ?tx.recoverKey()
   ok key.to(Address)
 
