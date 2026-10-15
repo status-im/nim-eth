@@ -204,6 +204,18 @@ suite "ENR encoding tests":
       ])
     check Record.fromBytes(raw).isErr()
 
+  test "secp256k1 public key must be 33 bytes":
+    let pk = PrivateKey.random(rng[])
+    proc recordWithKey(key: seq[byte]): seq[byte] =
+      signedRecord(1, pk, [("id", enc("v4")), ("secp256k1", enc(key))])
+
+    let raw64 = @(pk.toPublicKey().toRaw())
+    check:
+      Record.fromBytes(recordWithKey(@(pk.toPublicKey().toRawCompressed()))).isOk()
+      # 64 byte raw key and 64 bytes followed by other data are not accepted
+      Record.fromBytes(recordWithKey(raw64)).isErr()
+      Record.fromBytes(recordWithKey(raw64 & @[byte 1, 2, 3])).isErr()
+
   test "Duplicate keys rejected":
     let
       pk = PrivateKey.random(rng[])
