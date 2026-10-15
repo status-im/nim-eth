@@ -478,6 +478,9 @@ func fromBytesAux(T: type Record, s: openArray[byte]): EnrResult[T] =
   if not rlp.isList:
     return err("Record does not contain valid RLP list")
 
+  if rlpResult(rlp.currentElemEnd()) != s.len:
+    return err("Record contains data after the RLP list")
+
   let sz = rlpResult rlp.listLen
   if sz < minRlpListLen or sz mod 2 != 0:
     return err("Wrong RLP list length")
@@ -535,6 +538,8 @@ func fromBytesAux(T: type Record, s: openArray[byte]): EnrResult[T] =
         let content = ?buildRlpContent(s)
         if pkRaw.isNone():
           return err("No secp256k1 k:v pair in the ENR")
+        if pkRaw.value().len != SkRawCompressedPublicKeySize:
+          return err("Invalid secp256k1 public key length")
         let pk = ?PublicKey.fromRaw(pkRaw.value())
         ?verifySignatureV4(pk, signatureRaw, content)
         pk

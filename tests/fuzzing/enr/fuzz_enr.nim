@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   std/algorithm,
   testutils/fuzzing,

@@ -5,6 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
 {.used.}
 
 import
@@ -221,7 +222,7 @@ suite "Routing Table Tests":
 
     let (replacementNode, privKey) = node.nodeAndPrivKeyAtDistance(rng[], 256)
 
-    proc recordAtSeqNum(seqNum: uint64, ip: string): DiscoveryNode =
+    proc recordAtSeqNum(seqNum: uint64, ip: string): DiscoveryNode {.raises: [ValueError].} =
       let port = Port(20302)
       DiscoveryNode.fromRecord(enr.Record.init(seqNum, privKey,
         Opt.some(parseIpAddress(ip)), Opt.some(port), Opt.some(port),

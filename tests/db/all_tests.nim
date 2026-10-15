@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   ./test_kvstore_sqlite3,
   ./test_kvstore_sqlite3_custom_func,

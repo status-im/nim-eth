@@ -103,5 +103,7 @@ task fuzz, "Run fuzzing tests":
   fuzz "discoveryv5/fuzz_decode_packet"
   run "", "tests/fuzzing/enr/generate"
   fuzz "enr/fuzz_enr"
+  run "", "tests/fuzzing/rlp/generate"
   fuzz "rlp/rlp_decode"
+  fuzz "rlp/rlp_decode_eth"
   fuzz "rlp/rlp_inspect"

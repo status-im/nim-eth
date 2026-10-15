@@ -1,3 +1,4 @@
+{.push raises: [].}
 {.used.}
 
 import
@@ -5,7 +6,7 @@ import
   nimcrypto, stew/byteutils,
   ../../eth/p2p/discoveryv5/hkdf
 
-proc hextToBytes(s: string): seq[byte] =
+proc hextToBytes(s: string): seq[byte] {.raises: [ValueError].} =
   if s.len != 0: return hexToSeqByte(s)
 
 template runTest(constants: untyped) =

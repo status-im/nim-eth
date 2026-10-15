@@ -4,6 +4,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   ./[
     accounts_rlp, addresses_rlp, base_rlp, block_access_lists_rlp, eth_types,
@@ -24,7 +26,7 @@ proc append*(rlpWriter: var RlpWriter, value: BlockHashOrNumber) =
   else:
     rlpWriter.append(value.number)
 
-proc read*(rlp: var Rlp, T: type BlockHashOrNumber): T =
+proc read*(rlp: var Rlp, T: type BlockHashOrNumber): T {.raises: [RlpError].} =
   if rlp.blobLen == 32:
     BlockHashOrNumber(isHash: true, hash: rlp.read(Hash32))
   else:
