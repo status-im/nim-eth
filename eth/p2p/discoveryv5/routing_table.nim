@@ -239,16 +239,18 @@ proc add(k: KBucket, n: DiscoveryNode) =
   k.nodes.add(n)
   routing_table_nodes.inc()
 
-proc remove(k: KBucket, n: DiscoveryNode): bool =
+proc remove(k: KBucket, n: DiscoveryNode): Opt[DiscoveryNode] =
+  ## Remove the entry with the node id of `n` and return the removed entry.
   let i = k.nodes.find(n)
-  if i != -1:
-    routing_table_nodes.dec()
-    if k.nodes[i].seen:
-      routing_table_nodes.dec(labelValues = ["seen"])
-    k.nodes.delete(i)
-    true
-  else:
-    false
+  if i == -1:
+    return Opt.none(DiscoveryNode)
+
+  let removed = k.nodes[i]
+  routing_table_nodes.dec()
+  if removed.seen:
+    routing_table_nodes.dec(labelValues = ["seen"])
+  k.nodes.delete(i)
+  Opt.some(removed)
 
 func split(k: KBucket): tuple[lower, upper: KBucket] =
   ## Split the kbucket `k` at the median id.
@@ -469,8 +471,9 @@ proc addNode*(r: var RoutingTable, n: DiscoveryNode): NodeStatus =
 proc removeNode*(r: var RoutingTable, n: DiscoveryNode) =
   ## Remove the node `n` from the routing table.
   let b = r.bucketForNode(n.id)
-  if b.remove(n):
-    ipLimitDec(r, b, n)
+  let removed = b.remove(n).valueOr:
+    return
+  ipLimitDec(r, b, removed)
 
 proc replaceNode*(r: var RoutingTable, n: DiscoveryNode) =
   ## Replace node `n` with last entry in the replacement cache. If there are
@@ -479,13 +482,14 @@ proc replaceNode*(r: var RoutingTable, n: DiscoveryNode) =
   # replacements. However, that would require a bit more complexity in the
   # revalidation as you don't want to try pinging that node all the time.
   let b = r.bucketForNode(n.id)
-  if b.remove(n):
-    ipLimitDec(r, b, n)
+  let removed = b.remove(n).valueOr:
+    return
+  ipLimitDec(r, b, removed)
 
-    if b.replacementCache.len > 0:
-      # Nodes in the replacement cache are already included in the ip limits.
-      b.add(b.replacementCache[high(b.replacementCache)])
-      b.replacementCache.delete(high(b.replacementCache))
+  if b.replacementCache.len > 0:
+    # Nodes in the replacement cache are already included in the ip limits.
+    b.add(b.replacementCache[high(b.replacementCache)])
+    b.replacementCache.delete(high(b.replacementCache))
 
 func getNode*(r: RoutingTable, id: NodeId): Opt[DiscoveryNode] =
   ## Get the `DiscoveryNode` with `id` as `NodeId` from the routing table.

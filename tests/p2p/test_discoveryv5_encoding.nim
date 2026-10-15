@@ -231,6 +231,16 @@ suite "Discovery v5.1 Protocol Message Encodings":
     let decoded = decodeMessage(hexToSeqByte(encodedPong))
     check decoded.isErr()
 
+  test "Ping with additional list element":
+    # ping message `[reqId, enrSeq, 2]`
+    check decodeMessage(hexToSeqByte("01c3010102")).isErr()
+
+  test "Ping with data after the list":
+    # ping message `[reqId, enrSeq]` followed by a single byte
+    check:
+      decodeMessage(hexToSeqByte("01c20101")).isOk()
+      decodeMessage(hexToSeqByte("01c2010100")).isErr()
+
 # According to test vectors:
 # https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire-test-vectors.md#cryptographic-primitives
 suite "Discovery v5.1 Cryptographic Primitives Test Vectors":
