@@ -478,6 +478,9 @@ func fromBytesAux(T: type Record, s: openArray[byte]): EnrResult[T] =
   if not rlp.isList:
     return err("Record does not contain valid RLP list")
 
+  if rlpResult(rlp.currentElemEnd()) != s.len:
+    return err("Record contains data after the RLP list")
+
   let sz = rlpResult rlp.listLen
   if sz < minRlpListLen or sz mod 2 != 0:
     return err("Wrong RLP list length")
