@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import ../../eth/trie/[db, hexary, ordered_trie], ../../eth/rlp, ../../eth/common/[transactions_rlp, receipts_rlp, blocks_rlp], unittest2
 
 {.used.}

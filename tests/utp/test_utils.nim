@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   chronos,
   ../../eth/utp/utp_socket,

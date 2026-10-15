@@ -1,9 +1,11 @@
 # eth
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.push raises: [].}
 
 import stew/shims/macros
 
@@ -34,18 +36,3 @@ proc rlpFieldsCount*(T: type): int =
 
   const res = helper()
   return res
-
-macro rlpFields*(T: typedesc, fields: varargs[untyped]): untyped =
-  var body = newStmtList()
-  let
-    ins = genSym(nskParam, "instance")
-    op = genSym(nskParam, "op")
-
-  for field in fields:
-    let fieldName = $field
-    body.add quote do:
-      `op`(`T`, `fieldName`, `ins`.`field`)
-
-  result = quote:
-    template enumerateRlpFields*(`ins`: `T`, `op`: untyped) {.inject.} =
-      `body`

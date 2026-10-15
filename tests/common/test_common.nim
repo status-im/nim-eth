@@ -1,9 +1,10 @@
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
 {.used.}
 
 import
@@ -11,10 +12,6 @@ import
   unittest2,
   stew/byteutils,
   ../../eth/[common, rlp]
-
-type
-  EthHeader = object
-    header: Header
 
 proc loadFile(x: int) =
   let fileName = currentSourcePath.parentDir / "eip2718" / "acl_block_" & $x & ".json"
@@ -30,7 +27,8 @@ proc loadFile(x: int) =
     check bytes1 == bytes2
 
     var r      = rlpFromBytes(bytes1)
-    let header = r.read(EthHeader).header
+    r.tryEnterList()
+    let header = r.read(Header)
     let body   = r.readRecordType(BlockBody, false)
 
     let blk3 = EthBlock(header: header, transactions: body.transactions, uncles: body.uncles)
@@ -99,7 +97,7 @@ suite "EIP-2718 transaction / receipt":
     loadFile(i)
 
   test "Header: rlp roundtrip EIP-1559 / EIP-4895 / EIP-4844":
-    proc doTest(h: Header) =
+    proc doTest(h: Header) {.raises: [RlpError].} =
       let xy = rlp.encode(h)
       let hh = rlp.decode(xy, Header)
       check h == hh

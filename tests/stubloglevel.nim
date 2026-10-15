@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import chronicles
 
 {.used.}

@@ -5,6 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
 {.used.}
 
 ## Fuzz tests for `eth/keccak/fixed_cache`.
@@ -93,8 +94,8 @@ func randomVal(rng: var Rand): Val =
 # ------------------------------------------------------------------------------
 
 proc modelFuzz(capacity, rounds: int, seed: int64,
-               keyGen: proc(n: int): Key {.noSideEffect.},
-               keySpace: int, useViews: bool): (int, int) =
+               keyGen: proc(n: int): Key {.noSideEffect, raises: [].},
+               keySpace: int, useViews: bool): (int, int) {.raises: [KeyError].} =
   ## Runs a random put/get stream against the cache and a last-write model.
   ## Returns (hits, wrongs); every hit was checked against the model.
   var
@@ -280,7 +281,9 @@ when compileOption("threads"):
     discard s.misses.fetchAdd(localMisses, moRelaxed)
     discard s.wrong.fetchAdd(localWrong, moRelaxed)
 
-  proc runMixed(capacity, keySpace, threads: int): (int, int, int) =
+  proc runMixed(
+      capacity, keySpace, threads: int
+  ): (int, int, int) {.raises: [ResourceExhaustedError].} =
     var cache: FixedCache[Key, Val]
     cache.init(capacity)
     defer: cache.dispose()

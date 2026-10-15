@@ -9,7 +9,7 @@
 {.push raises: [].}
 
 import
-  std/[os, sequtils, strutils, times, tables],
+  std/[exitprocs, os, sequtils, strutils, times, tables],
   results, nat_traversal/[miniupnpc, natpmp],
   chronicles, json_serialization/std/net, chronos,
   ./utils as netutils
@@ -368,7 +368,7 @@ proc redirectPorts*(internalPorts: seq[PortSpec], description: string): Opt[seq[
       # the thread now owns sharedArgs from this point
       sharedArgs = nil
       # atexit() in disguise
-      addQuitProc(stopNatThread)
+      addExitProc(stopNatThread)
     except Exception as exc:
       freePortMappingsArgPtr(sharedArgs)
       for p in internalPorts:

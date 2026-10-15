@@ -1,10 +1,11 @@
 # eth
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
 {.used.}
 
 import
@@ -15,9 +16,9 @@ import
 
 proc q(s: string): string = "\"" & s & "\""
 proc i(s: string): string = s.replace(" ").replace("\n")
-proc inspectMatch(r: Rlp, s: string): bool = r.inspect.i == s.i
+proc inspectMatch(r: Rlp, s: string): bool {.raises: [RlpError].} = r.inspect.i == s.i
 
-proc test_blockBodyTranscode() =
+proc test_blockBodyTranscode() {.raises: [RlpError].} =
   ## RLP encode/decode a list of `BlockBody` objects. Note that there is/was a
   ## problem in `eth/common/eth_types_rlp.append()` for `BlockBody` encoding.
   let blkSeq = @[
@@ -309,6 +310,16 @@ suite "test api usage":
     expect RlpTypeMismatch:
       discard rlp.read(MyEnum)
     rlp.skipElem()
+
+  test "enums with negative values are not supported":
+    type
+      MyEnum = enum
+        neg = -1,
+        zero = 0
+
+    check:
+      not compiles(rlp.encode(neg))
+      not compiles(rlp.decode(@[byte 0x80], MyEnum))
 
   test "encodeInt basics":
     for i in [uint64 0, 1, 10, 100, 1000, uint64.high]:

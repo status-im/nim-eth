@@ -4,6 +4,7 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
 {.used.}
 
 import
@@ -14,7 +15,7 @@ import
 
 let rng = newRng()
 
-func testRlpEncodingLoop(r: enr.Record): bool =
+func testRlpEncodingLoop(r: enr.Record): bool {.raises: [RlpError].} =
   let encoded = rlp.encode(r)
   let decoded = rlp.decode(encoded, enr.Record)
   decoded == r
@@ -204,6 +205,18 @@ suite "ENR encoding tests":
       ])
     check Record.fromBytes(raw).isErr()
 
+  test "secp256k1 public key must be 33 bytes":
+    let pk = PrivateKey.random(rng[])
+    proc recordWithKey(key: seq[byte]): seq[byte] =
+      signedRecord(1, pk, [("id", enc("v4")), ("secp256k1", enc(key))])
+
+    let raw64 = @(pk.toPublicKey().toRaw())
+    check:
+      Record.fromBytes(recordWithKey(@(pk.toPublicKey().toRawCompressed()))).isOk()
+      # 64 byte raw key and 64 bytes followed by other data are not accepted
+      Record.fromBytes(recordWithKey(raw64)).isErr()
+      Record.fromBytes(recordWithKey(raw64 & @[byte 1, 2, 3])).isErr()
+
   test "Duplicate keys rejected":
     let
       pk = PrivateKey.random(rng[])
@@ -215,6 +228,17 @@ suite "ENR encoding tests":
         ("udp", enc(30303'u16)),
       ])
     check Record.fromBytes(raw).isErr()
+
+  test "Data after the RLP list rejected":
+    let
+      pk = PrivateKey.random(rng[])
+      raw = signedRecord(1, pk, [
+        ("id", enc("v4")),
+        ("secp256k1", enc(@(pk.toPublicKey().toRawCompressed()))),
+      ])
+    check:
+      Record.fromBytes(raw).isOk()
+      Record.fromBytes(raw & @[byte 0x01]).isErr()
 
 suite "ENR init tests":
   test "Record.init minimum fields":

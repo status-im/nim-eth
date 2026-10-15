@@ -35,7 +35,7 @@ type
     generateKeys
 
   DiscoveryConf* = object
-    logLevel* {.
+    logLvl* {.
       defaultValue: LogLevel.DEBUG
       desc: "Sets the log level"
       name: "log-level" .}: LogLevel
@@ -439,6 +439,6 @@ when isMainModule:
   let config = DiscoveryConf.load()
   {.push raises: [], gcsafe.}
 
-  setLogLevel(config.logLevel)
+  setLogLevel(config.logLvl)
 
   run(config)
