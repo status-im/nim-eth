@@ -272,6 +272,45 @@ suite "Routing Table Tests":
       # And its ip limits must have been released.
       table.addNode(node.nodeAtDistance(rng[], 256, pubIp1)) == Added
 
+  test "Ip limits: replace/remove with an outdated node releases the stored record's ip":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
+
+    template addOutdatedNode(oldIp, newIp: IpAddress): DiscoveryNode =
+      let (outdatedNode, privKey) =
+        node.nodeAndPrivKeyAtDistance(rng[], 256, oldIp)
+      check:
+        table.addNode(node.nodeAtDistance(rng[], 256, oldIp)) == Added
+        table.addNode(outdatedNode) == Added
+        table.addNode(outdatedNode.updatedNode(privKey, newIp, Port(20302))) ==
+          Existing
+      outdatedNode
+
+    template checkIpsReleased(oldIp, newIp: IpAddress) =
+      check:
+        table.addNode(node.nodeAtDistance(rng[], 256, newIp)) == Added
+        table.addNode(node.nodeAtDistance(rng[], 256, newIp)) == Added
+        table.addNode(node.nodeAtDistance(rng[], 256, oldIp)) == Added
+        table.addNode(node.nodeAtDistance(rng[], 256, oldIp)) == IpLimitReached
+
+    block: # replaceNode
+      const
+        replaceOldIp = parseIpAddress("1.2.3.4")
+        replaceNewIp = parseIpAddress("1.2.4.4")
+      let toReplace = addOutdatedNode(replaceOldIp, replaceNewIp)
+      table.replaceNode(toReplace)
+      check table.getNode(toReplace.id).isNone()
+      checkIpsReleased(replaceOldIp, replaceNewIp)
+
+    block: # removeNode
+      const
+        removeOldIp = parseIpAddress("1.2.5.4")
+        removeNewIp = parseIpAddress("1.2.6.4")
+      let toRemove = addOutdatedNode(removeOldIp, removeNewIp)
+      table.removeNode(toRemove)
+      check table.getNode(toRemove.id).isNone()
+      checkIpsReleased(removeOldIp, removeNewIp)
+
   test "Just seen":
     let node = generateNode(PrivateKey.random(rng[]))
     # bitsPerHop = 1 -> Split only the branch in range of own id
