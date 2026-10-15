@@ -94,6 +94,13 @@ func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
 
   var message = Message(kind: kind)
   var rlp = rlpFromBytes(body.toOpenArray(1, body.high))
+  # Only needed for the topic messages, which are not decoded: `decode` catches this too.
+  try:
+    if rlp.currentElemEnd() != body.len - 1:
+      return err("Invalid message encoding: data after rlp list")
+  except RlpError:
+    return err("Invalid message encoding")
+
   if rlp.enterList:
     try:
       message.reqId = rlp.read(RequestId)
@@ -104,6 +111,8 @@ func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
         {.nimcall, raises: [RlpError].} =
       for k, v in v.fieldPairs:
         v = rlp.read(typeof(v))
+      if rlp.hasData():
+        raise (ref MalformedRlpError)(msg: "unexpected number of list elements")
 
     try:
       case kind
