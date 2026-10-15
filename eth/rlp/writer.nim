@@ -118,8 +118,7 @@ proc genPrevFields(
 
 macro genOptionalFieldsValidation(obj: untyped, T: type, num: static[int]): untyped =
   let
-    Tresolved = getType(T)[1]
-    fd = recordFields(Tresolved.getImpl)
+    fd = T.recordFields
     loidx = fd.len - num
 
   result = newStmtList()
