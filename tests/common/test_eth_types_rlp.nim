@@ -8,6 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
 {.used.}
 
 import
@@ -18,7 +19,7 @@ import
   unittest2,
   ../../eth/[rlp, common]
 
-proc importBlock(blocksRlp: openArray[byte]): bool =
+proc importBlock(blocksRlp: openArray[byte]): bool {.raises: [RlpError].} =
   var
     # the encoded rlp can contains one or more blocks
     rlp = rlpFromBytes(blocksRlp)
@@ -31,7 +32,7 @@ proc importBlock(blocksRlp: openArray[byte]): bool =
 
   true
 
-proc runTest(importFile: string): bool =
+proc runTest(importFile: string): bool {.raises: [RlpError].} =
   let res = io2.readAllBytes(importFile)
   if res.isErr:
     echo "failed to import", importFile

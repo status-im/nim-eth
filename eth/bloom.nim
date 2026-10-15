@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import stint, ./common/[addresses, base, hashes]
 
 type UInt2048 = StUint[2048]

@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   std/[os, strutils],
   ../../../eth/common/eth_types_rlp,
@@ -6,7 +8,7 @@ import
 template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 const inputsDir = sourceDir / "corpus"
 
-proc generate() =
+proc generate() {.raises: [CatchableError].} =
   const
     recipient = address"095e7baea6a6c7c4c2dfeb977efac326af552d87"
     source = address"0000000000000000000000000000000000000001"
