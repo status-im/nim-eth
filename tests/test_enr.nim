@@ -216,6 +216,17 @@ suite "ENR encoding tests":
       ])
     check Record.fromBytes(raw).isErr()
 
+  test "Data after the RLP list rejected":
+    let
+      pk = PrivateKey.random(rng[])
+      raw = signedRecord(1, pk, [
+        ("id", enc("v4")),
+        ("secp256k1", enc(@(pk.toPublicKey().toRawCompressed()))),
+      ])
+    check:
+      Record.fromBytes(raw).isOk()
+      Record.fromBytes(raw & @[byte 0x01]).isErr()
+
 suite "ENR init tests":
   test "Record.init minimum fields":
     let
