@@ -580,7 +580,7 @@ proc setJustSeen*(r: RoutingTable, n: DiscoveryNode) =
     if idx != 0:
       b.nodes.moveRight(0, idx - 1)
 
-    if not n.seen:
+    if not b.nodes[0].seen:
       b.nodes[0].seen = true
       routing_table_nodes.inc(labelValues = ["seen"])
 
