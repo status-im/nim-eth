@@ -468,17 +468,10 @@ proc addNode*(r: var RoutingTable, n: DiscoveryNode): NodeStatus =
       # When bucket doesn't get split the node is added to the replacement cache
       return r.addReplacement(bucket, n)
 
-proc removeNode*(r: var RoutingTable, n: DiscoveryNode) =
-  ## Remove the node `n` from the routing table.
-  let b = r.bucketForNode(n.id)
-  let removed = b.remove(n).valueOr:
-    return
-  ipLimitDec(r, b, removed)
-
 proc replaceNode*(r: var RoutingTable, n: DiscoveryNode) =
   ## Replace node `n` with last entry in the replacement cache. If there are
   ## no entries in the replacement cache, node `n` will simply be removed.
-  # TODO: Kademlia paper recommends here to not remove nodes if there are no
+  # Note: Kademlia paper recommends here to not remove nodes if there are no
   # replacements. However, that would require a bit more complexity in the
   # revalidation as you don't want to try pinging that node all the time.
   let b = r.bucketForNode(n.id)
@@ -580,7 +573,7 @@ proc setJustSeen*(r: RoutingTable, n: DiscoveryNode) =
     if idx != 0:
       b.nodes.moveRight(0, idx - 1)
 
-    if not n.seen:
+    if not b.nodes[0].seen:
       b.nodes[0].seen = true
       routing_table_nodes.inc(labelValues = ["seen"])
 
