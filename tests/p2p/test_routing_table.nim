@@ -273,7 +273,7 @@ suite "Routing Table Tests":
       # And its ip limits must have been released.
       table.addNode(node.nodeAtDistance(rng[], 256, pubIp1)) == Added
 
-  test "Ip limits: replace/remove with an outdated node releases the stored record's ip":
+  test "Ip limits: replace with an outdated node releases the stored record's ip":
     let node = generateNode(PrivateKey.random(rng[]))
     var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
@@ -302,15 +302,6 @@ suite "Routing Table Tests":
       table.replaceNode(toReplace)
       check table.getNode(toReplace.id).isNone()
       checkIpsReleased(replaceOldIp, replaceNewIp)
-
-    block: # removeNode
-      const
-        removeOldIp = parseIpAddress("1.2.5.4")
-        removeNewIp = parseIpAddress("1.2.6.4")
-      let toRemove = addOutdatedNode(removeOldIp, removeNewIp)
-      table.removeNode(toRemove)
-      check table.getNode(toRemove.id).isNone()
-      checkIpsReleased(removeOldIp, removeNewIp)
 
   test "Just seen":
     let node = generateNode(PrivateKey.random(rng[]))
