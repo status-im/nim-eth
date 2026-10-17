@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   testutils/fuzzing,
   ../../../eth/common/eth_types_rlp,

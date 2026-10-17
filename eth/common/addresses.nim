@@ -10,7 +10,7 @@
 ## 20-byte ethereum account address, as derived from the keypair controlling it
 ## https://ethereum.org/en/developers/docs/accounts/#account-creation
 
-import std/[typetraits, hashes as std_hashes], ../keccak/rapidhash,  ./[base, hashes], stew/assign2
+import std/[typetraits, hashes as std_hashes], ./[base, hashes], stew/assign2
 
 export hashes
 
@@ -56,9 +56,7 @@ template default*(_: type Address): Address =
   zeroAddress
 
 func `==`*(a, b: Address): bool {.borrow.}
-
-func hash*(a: Address): Hash {.inline.} =
-  cast[Hash](rapidhashNano(a.data)) 
+func hash*(a: Address): Hash {.borrow.}
 
 func toHex*(a: Address): string {.borrow.}
 func to0xHex*(a: Address): string {.borrow.}

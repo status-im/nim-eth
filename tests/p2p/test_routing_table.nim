@@ -5,6 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
 {.used.}
 
 import
@@ -221,7 +222,7 @@ suite "Routing Table Tests":
 
     let (replacementNode, privKey) = node.nodeAndPrivKeyAtDistance(rng[], 256)
 
-    proc recordAtSeqNum(seqNum: uint64, ip: string): DiscoveryNode =
+    proc recordAtSeqNum(seqNum: uint64, ip: string): DiscoveryNode {.raises: [ValueError].} =
       let port = Port(20302)
       DiscoveryNode.fromRecord(enr.Record.init(seqNum, privKey,
         Opt.some(parseIpAddress(ip)), Opt.some(port), Opt.some(port),
@@ -271,6 +272,45 @@ suite "Routing Table Tests":
       table.getNode(nodeToUpdate.id).isNone()
       # And its ip limits must have been released.
       table.addNode(node.nodeAtDistance(rng[], 256, pubIp1)) == Added
+
+  test "Ip limits: replace/remove with an outdated node releases the stored record's ip":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
+
+    template addOutdatedNode(oldIp, newIp: IpAddress): DiscoveryNode =
+      let (outdatedNode, privKey) =
+        node.nodeAndPrivKeyAtDistance(rng[], 256, oldIp)
+      check:
+        table.addNode(node.nodeAtDistance(rng[], 256, oldIp)) == Added
+        table.addNode(outdatedNode) == Added
+        table.addNode(outdatedNode.updatedNode(privKey, newIp, Port(20302))) ==
+          Existing
+      outdatedNode
+
+    template checkIpsReleased(oldIp, newIp: IpAddress) =
+      check:
+        table.addNode(node.nodeAtDistance(rng[], 256, newIp)) == Added
+        table.addNode(node.nodeAtDistance(rng[], 256, newIp)) == Added
+        table.addNode(node.nodeAtDistance(rng[], 256, oldIp)) == Added
+        table.addNode(node.nodeAtDistance(rng[], 256, oldIp)) == IpLimitReached
+
+    block: # replaceNode
+      const
+        replaceOldIp = parseIpAddress("1.2.3.4")
+        replaceNewIp = parseIpAddress("1.2.4.4")
+      let toReplace = addOutdatedNode(replaceOldIp, replaceNewIp)
+      table.replaceNode(toReplace)
+      check table.getNode(toReplace.id).isNone()
+      checkIpsReleased(replaceOldIp, replaceNewIp)
+
+    block: # removeNode
+      const
+        removeOldIp = parseIpAddress("1.2.5.4")
+        removeNewIp = parseIpAddress("1.2.6.4")
+      let toRemove = addOutdatedNode(removeOldIp, removeNewIp)
+      table.removeNode(toRemove)
+      check table.getNode(toRemove.id).isNone()
+      checkIpsReleased(removeOldIp, removeNewIp)
 
   test "Just seen":
     let node = generateNode(PrivateKey.random(rng[]))

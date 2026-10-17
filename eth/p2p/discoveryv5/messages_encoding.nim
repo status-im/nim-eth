@@ -22,12 +22,12 @@ from stew/objects import checkedEnumAssign
 export messages, rlp, results
 
 func read*(rlp: var Rlp, T: type RequestId): T
-    {.raises: [ValueError, RlpError].} =
+    {.raises: [RlpError].} =
   mixin read
   var reqId: RequestId
   reqId.id = rlp.toBytes()
   if reqId.id.len > 8:
-    raise newException(ValueError, "RequestId is > 8 bytes")
+    raise newException(RlpTypeMismatch, "RequestId is > 8 bytes")
   rlp.skipElem()
 
   reqId
@@ -94,16 +94,25 @@ func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
 
   var message = Message(kind: kind)
   var rlp = rlpFromBytes(body.toOpenArray(1, body.high))
+  # Only needed for the topic messages, which are not decoded: `decode` catches this too.
+  try:
+    if rlp.currentElemEnd() != body.len - 1:
+      return err("Invalid message encoding: data after rlp list")
+  except RlpError:
+    return err("Invalid message encoding")
+
   if rlp.enterList:
     try:
       message.reqId = rlp.read(RequestId)
-    except RlpError, ValueError:
+    except RlpError:
       return err("Invalid request-id")
 
     func decode[T](rlp: var Rlp, v: var T)
         {.nimcall, raises: [RlpError].} =
       for k, v in v.fieldPairs:
         v = rlp.read(typeof(v))
+      if rlp.hasData():
+        raise (ref MalformedRlpError)(msg: "unexpected number of list elements")
 
     try:
       case kind
@@ -120,7 +129,7 @@ func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
         # But we ignore the message as per specification as "the content and
         # semantics of this message are not final".
         discard
-    except RlpError, ValueError:
+    except RlpError:
       return err("Invalid message encoding")
 
     ok(message)

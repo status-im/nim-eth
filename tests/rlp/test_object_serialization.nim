@@ -1,3 +1,4 @@
+{.push raises: [].}
 {.used.}
 
 import
@@ -48,7 +49,7 @@ proc append*(rlpWriter: var RlpWriter, holder: CustomSerialized, f: Foo) =
   rlpWriter.append(uint64 f.y.len)
   rlpWriter.append(holder.ignored)
 
-proc read*(rlp: var Rlp, holder: var CustomSerialized, T: type Foo): Foo =
+proc read*(rlp: var Rlp, holder: var CustomSerialized, T: type Foo): Foo {.raises: [RlpError].} =
   rlp.consumeList:
     let
       x = rlp.read(uint64)
@@ -146,7 +147,7 @@ proc suite() =
         version: uint64
         payload: string
 
-      proc read(rlp: var Rlp, T: type Versioned): T =
+      proc read(rlp: var Rlp, T: type Versioned): T {.raises: [RlpError].} =
         rlp.tryEnterList()
         T(version: rlp.read(uint64), payload: "custom " & rlp.read(string))
 

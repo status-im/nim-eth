@@ -85,13 +85,24 @@ template default*[N](T: type FixedBytes[N]): T =
 func `==`*(a, b: FixedBytes): bool {.inline.} =
   equalMem(addr a.data[0], addr b.data[0], a.N)
 
+# sysrand only supports posix/windows. other targets keep the unseeded hash
+when defined(posix) or defined(windows):
+  import nimcrypto/sysrand
+  let fixedBytesHashSeed: uint64 = block:
+    var s: array[1, uint64]
+    doAssert randomBytes(s) == s.len
+    s[0]
+else:
+  const fixedBytesHashSeed = 0'u64
+
 func hash*[N: static int](v: FixedBytes[N]): Hash {.inline.} =
-  when N <= 48:
-    cast[Hash](rapidhashNano(v.data))
-  elif N <= 512:
-    cast[Hash](rapidhashMicro(v.data))
-  else:
-    cast[Hash](rapidhash(v.data))
+  {.cast(noSideEffect).}:
+    when N <= 48:
+      cast[Hash](rapidhashNano(v.data, fixedBytesHashSeed))
+    elif N <= 512:
+      cast[Hash](rapidhashMicro(v.data, fixedBytesHashSeed))
+    else:
+      cast[Hash](rapidhash(v.data, fixedBytesHashSeed))
 
 func toHex*(v: FixedBytes): string =
   ## Convert to lowercase hex without 0x prefix

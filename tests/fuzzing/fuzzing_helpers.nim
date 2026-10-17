@@ -1,8 +1,10 @@
+{.push raises: [].}
+
 import
   std/streams,
   ../../eth/rlp
 
-proc toFile*(data: seq[byte], fn: string) =
+proc toFile*(data: seq[byte], fn: string) {.raises: [IOError, OSError].} =
   var s = newFileStream(fn, fmWrite)
   for x in data:
     s.write(x)
