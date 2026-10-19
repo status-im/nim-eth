@@ -125,7 +125,7 @@ test:
     template heldNode(): DiscoveryNode =
       history[id][int(nextByte()) mod history[id].len]
 
-    case nextByte() mod 13
+    case nextByte() mod 12
     of 0 .. 3:
       inc seqNums[id]
       let n = discoveryNode(
@@ -142,21 +142,18 @@ test:
         table.replaceNode(heldNode())
     of 6:
       if history[id].len > 0:
-        table.replaceNode(heldNode())
-    of 7:
-      if history[id].len > 0:
         table.setJustSeen(heldNode())
-    of 8:
+    of 7:
       let n = table.nodeToRevalidate()
       if not n.isNil:
         table.setJustSeen(n)
-    of 9:
+    of 8:
       let n = table.nodeToRevalidate()
       if not n.isNil:
         table.replaceNode(n)
-    of 10:
+    of 9:
       table.banNode(nodeIds[id], banPeriods[nextByte() mod banPeriods.len])
-    of 11:
+    of 10:
       table.cleanupExpiredBans()
     else:
       checkQueries(
