@@ -75,6 +75,10 @@ task test_asan, "Run all tests with ASAN":
 task build_dcli, "Build dcli":
   build "-d:release -d:chronicles_log_level=TRACE", "tools/dcli"
 
+task build_benchmarks, "Build benchmarks (compile only)":
+  build "-d:release", "eth/trie/ordered_trie"
+  build "-d:release", "tests/keccak/bench_keccak"
+
 let
   fuzzSeconds = getEnv("FUZZ_SECONDS", "100")
   fuzzTime =
