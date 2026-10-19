@@ -772,6 +772,39 @@ suite "Routing Table Tests":
       table.addNode(node1) == Existing
       table.addNode(node2) == Banned
 
+  test "Banned nodes: re-ban after an expired ban removes the node":
+    let
+      localNode = generateNode(PrivateKey.random(rng[]))
+      node1 = generateNode(PrivateKey.random(rng[]))
+
+    var table = RoutingTable.init(localNode.id, 1, DefaultTableIpLimits, rng = rng)
+
+    check table.addNode(node1) == Added
+    table.banNode(node1.id, 1.nanoseconds)
+    sleep(1) # node1's ban is expired but not cleaned up
+    check table.addNode(node1) == Added
+
+    table.banNode(node1.id, 1.minutes)
+    check:
+      table.isBanned(node1.id) == true
+      table.contains(node1) == false
+      table.len == 0
+
+  test "Banned nodes: banned node in the replacement cache is not added":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
+
+    for n in node.nodesAtDistance(rng[], 256, BUCKET_SIZE):
+      check table.addNode(n) == Added
+    let cachedNode = node.nodeAtDistance(rng[], 256)
+    check table.addNode(cachedNode) == ReplacementAdded
+
+    table.banNode(cachedNode.id, 1.minutes)
+    table.replaceNode(table.nodeToRevalidate())
+    check:
+      table.contains(cachedNode) == false
+      table.len == BUCKET_SIZE - 1
+
   test "neighbours filter predicate":
     let numNodes = 10
     let local = generateNode(PrivateKey.random(rng[]))
