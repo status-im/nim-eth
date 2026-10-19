@@ -101,6 +101,7 @@ proc fuzz(target: string) =
 task fuzz, "Run fuzzing tests":
   fuzz "discoveryv5/fuzz_decode_message"
   fuzz "discoveryv5/fuzz_decode_packet"
+  fuzz "discoveryv5/fuzz_routing_table"
   run "", "tests/fuzzing/enr/generate"
   fuzz "enr/fuzz_enr"
   run "", "tests/fuzzing/rlp/generate"
