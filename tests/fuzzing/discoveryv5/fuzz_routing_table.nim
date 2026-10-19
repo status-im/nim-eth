@@ -142,7 +142,7 @@ test:
         table.replaceNode(heldNode())
     of 6:
       if history[id].len > 0:
-        table.removeNode(heldNode())
+        table.replaceNode(heldNode())
     of 7:
       if history[id].len > 0:
         table.setJustSeen(heldNode())
