@@ -273,7 +273,7 @@ suite "Routing Table Tests":
       # And its ip limits must have been released.
       table.addNode(node.nodeAtDistance(rng[], 256, pubIp1)) == Added
 
-  test "Ip limits: replace/remove with an outdated node releases the stored record's ip":
+  test "Ip limits: replace with an outdated node releases the stored record's ip":
     let node = generateNode(PrivateKey.random(rng[]))
     var table = RoutingTable.init(node.id, 1, DefaultTableIpLimits, rng = rng)
 
@@ -302,15 +302,6 @@ suite "Routing Table Tests":
       table.replaceNode(toReplace)
       check table.getNode(toReplace.id).isNone()
       checkIpsReleased(replaceOldIp, replaceNewIp)
-
-    block: # removeNode
-      const
-        removeOldIp = parseIpAddress("1.2.5.4")
-        removeNewIp = parseIpAddress("1.2.6.4")
-      let toRemove = addOutdatedNode(removeOldIp, removeNewIp)
-      table.removeNode(toRemove)
-      check table.getNode(toRemove.id).isNone()
-      checkIpsReleased(removeOldIp, removeNewIp)
 
   test "Just seen":
     let node = generateNode(PrivateKey.random(rng[]))
@@ -780,6 +771,39 @@ suite "Routing Table Tests":
       table.isBanned(node2.id) == true
       table.addNode(node1) == Existing
       table.addNode(node2) == Banned
+
+  test "Banned nodes: re-ban after an expired ban removes the node":
+    let
+      localNode = generateNode(PrivateKey.random(rng[]))
+      node1 = generateNode(PrivateKey.random(rng[]))
+
+    var table = RoutingTable.init(localNode.id, 1, DefaultTableIpLimits, rng = rng)
+
+    check table.addNode(node1) == Added
+    table.banNode(node1.id, 1.nanoseconds)
+    sleep(1) # node1's ban is expired but not cleaned up
+    check table.addNode(node1) == Added
+
+    table.banNode(node1.id, 1.minutes)
+    check:
+      table.isBanned(node1.id) == true
+      table.contains(node1) == false
+      table.len == 0
+
+  test "Banned nodes: banned node in the replacement cache is not added":
+    let node = generateNode(PrivateKey.random(rng[]))
+    var table = RoutingTable.init(node.id, 1, ipLimits, rng = rng)
+
+    for n in node.nodesAtDistance(rng[], 256, BUCKET_SIZE):
+      check table.addNode(n) == Added
+    let cachedNode = node.nodeAtDistance(rng[], 256)
+    check table.addNode(cachedNode) == ReplacementAdded
+
+    table.banNode(cachedNode.id, 1.minutes)
+    table.replaceNode(table.nodeToRevalidate())
+    check:
+      table.contains(cachedNode) == false
+      table.len == BUCKET_SIZE - 1
 
   test "neighbours filter predicate":
     let numNodes = 10

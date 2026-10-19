@@ -141,4 +141,24 @@ suite "MPT trie proof verification":
 
       check res.kind == InvalidProof
 
+  test "Validate proof for key extending a stored key":
+    let db = newMemoryDB()
+    var trie = initHexaryTrie(db)
+
+    trie.put("k".toBytes, "v".toBytes)
+
+    block: # leaf as root
+      let proof = trie.getBranch("kk".toBytes)
+      check:
+        verifyMptProof(proof, trie.rootHash, "kk".toBytes, "v".toBytes).isMissing()
+        verifyMptProof(proof, trie.rootHash, "kk".toBytes, "x".toBytes).isMissing()
+
+    trie.put("doe".toBytes, "reindeer".toBytes)
+    trie.put("dog".toBytes, "puppy".toBytes)
+
+    block: # embedded leaf below a branch
+      let proof = trie.getBranch("doex".toBytes)
+      check:
+        verifyMptProof(proof, trie.rootHash, "doex".toBytes, "reindeer".toBytes).isMissing()
+        verifyMptProof(proof, trie.rootHash, "doe".toBytes, "reindeer".toBytes).isValid()
 

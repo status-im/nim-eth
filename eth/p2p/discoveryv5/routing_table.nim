@@ -190,25 +190,40 @@ func ipLimitUpdate(r: var RoutingTable, b: KBucket, old, new: DiscoveryNode): bo
 
   return true
 
+func removeReplacement(r: var RoutingTable, b: KBucket, idx: int) =
+  ## Remove the replacement cache entry at `idx` and its ip from the limits.
+  ipLimitDec(r, b, b.replacementCache[idx])
+  b.replacementCache.delete(idx)
+
 func getNode*(r: RoutingTable, id: NodeId): Opt[DiscoveryNode]
 proc replaceNode*(r: var RoutingTable, n: DiscoveryNode)
+func bucketForNode(r: RoutingTable, id: NodeId): KBucket
 
 proc banNode*(r: var RoutingTable, nodeId: NodeId, period: chronos.Duration) =
   ## Ban a node from the routing table for the given period. The node is removed
-  ## from the routing table and replaced using a node from the replacement cache.
-  let banTimeout = now(chronos.Moment) + period
+  ## from the routing table bucket or replacement cache.
+  let
+    currentTime = now(chronos.Moment)
+    banTimeout = currentTime + period
+    existingTimeout = r.bannedNodes.getOrDefault(nodeId)
 
-  if r.bannedNodes.contains(nodeId):
-    let existingTimeout = r.bannedNodes.getOrDefault(nodeId)
+  if currentTime < existingTimeout:
+    # An active ban keeps the node out of the routing table and the replacement
+    # cache, so there is nothing to remove.
     if existingTimeout < banTimeout:
       r.bannedNodes[nodeId] = banTimeout
-    return # node is already banned so we don't need to try replacing it because
-    # it should have already been replaced when it was initially banned
+    return
 
-  # NodeId doesn't yet exist in the banned nodes table
+  # No ban, or an expired one that is not cleaned up yet. With an expired ban
+  # the node could have been added again so we need to check for that case.
   r.bannedNodes[nodeId] = banTimeout
 
-  # Remove the node from the routing table
+  let b = r.bucketForNode(nodeId)
+  for i in 0 ..< b.replacementCache.len:
+    if b.replacementCache[i].id == nodeId:
+      r.removeReplacement(b, i)
+      break
+
   let node = r.getNode(nodeId)
   if node.isSome():
     r.replaceNode(node.get())
@@ -364,8 +379,7 @@ func addReplacement(r: var RoutingTable, k: KBucket, n: DiscoveryNode): NodeStat
     if not ipLimitUpdate(r, k, existing, n):
       # Cannot add the new version of record because of IP limits,
       # thus remove the old stale record.
-      ipLimitDec(r, k, existing)
-      k.replacementCache.delete(nodeIdx)
+      r.removeReplacement(k, nodeIdx)
       return IpLimitReached
 
     k.replacementCache.delete(nodeIdx)
@@ -379,8 +393,7 @@ func addReplacement(r: var RoutingTable, k: KBucket, n: DiscoveryNode): NodeStat
     doAssert(k.replacementCache.len <= REPLACEMENT_CACHE_SIZE)
     if k.replacementCache.len == REPLACEMENT_CACHE_SIZE:
       # Remove the oldest entry and its IPs from the limits.
-      ipLimitDec(r, k, k.replacementCache[0])
-      k.replacementCache.delete(0)
+      r.removeReplacement(k, 0)
 
     k.replacementCache.add(n)
     return ReplacementAdded
@@ -468,17 +481,10 @@ proc addNode*(r: var RoutingTable, n: DiscoveryNode): NodeStatus =
       # When bucket doesn't get split the node is added to the replacement cache
       return r.addReplacement(bucket, n)
 
-proc removeNode*(r: var RoutingTable, n: DiscoveryNode) =
-  ## Remove the node `n` from the routing table.
-  let b = r.bucketForNode(n.id)
-  let removed = b.remove(n).valueOr:
-    return
-  ipLimitDec(r, b, removed)
-
 proc replaceNode*(r: var RoutingTable, n: DiscoveryNode) =
   ## Replace node `n` with last entry in the replacement cache. If there are
   ## no entries in the replacement cache, node `n` will simply be removed.
-  # TODO: Kademlia paper recommends here to not remove nodes if there are no
+  # Note: Kademlia paper recommends here to not remove nodes if there are no
   # replacements. However, that would require a bit more complexity in the
   # revalidation as you don't want to try pinging that node all the time.
   let b = r.bucketForNode(n.id)
@@ -580,7 +586,7 @@ proc setJustSeen*(r: RoutingTable, n: DiscoveryNode) =
     if idx != 0:
       b.nodes.moveRight(0, idx - 1)
 
-    if not n.seen:
+    if not b.nodes[0].seen:
       b.nodes[0].seen = true
       routing_table_nodes.inc(labelValues = ["seen"])
 
