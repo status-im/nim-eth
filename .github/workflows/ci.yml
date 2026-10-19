@@ -14,6 +14,7 @@ jobs:
         nimble test_asan
         nimble test
         nimble build_dcli
+        nimble build_benchmarks
 
   fuzz:
     strategy:
