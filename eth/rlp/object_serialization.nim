@@ -24,15 +24,19 @@ template enumerateRlpFields*[T](x: T, op: untyped) =
     when not hasCustomPragmaFixed(RecordType, fieldName, rlpIgnore):
       op(RecordType, fieldName, field)
 
-proc rlpFieldsCount*(T: type): int =
-  mixin enumerateRlpFields
+template enumerateRlpFieldTypes*(T: type, op: untyped) =
+  for fieldName, FieldType in fieldTypePairs(T):
+    when not hasCustomPragmaFixed(T, fieldName, rlpIgnore):
+      op(T, fieldName, FieldType)
 
-  proc helper(): int =
-    var dummy: T
+func rlpFieldsCount*(T: type): int =
+  mixin enumerateRlpFieldTypes
+
+  func helper(): int =
     template countFields(RT, n, x) {.used.} =
       inc result
 
-    enumerateRlpFields(dummy, countFields)
+    enumerateRlpFieldTypes(T, countFields)
 
   const res = helper()
   return res
