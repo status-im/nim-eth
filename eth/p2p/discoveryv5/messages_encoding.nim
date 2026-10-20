@@ -11,7 +11,7 @@
 
 import
   std/net,
-  stew/arrayops,
+  stew/[arrayops, shims/macros],
   results,
   chronos/transports/ipnet,
   ../../rlp,
@@ -65,15 +65,12 @@ func append*(writer: var RlpWriter, ip: IpAddress) =
   of IpAddressFamily.IPv6:
     writer.append(ip.address_v6)
 
-func numFields(T: typedesc): int =
-  for k, v in fieldPairs(default(T)): inc result
-
 func encodeMessage*[T: SomeMessage](p: T, reqId: RequestId): seq[byte] =
   ## Encodes a message with provided `reqId`.
   var bytes = newSeqOfCap[byte](64)
   bytes.add(messageKind(T).ord)
 
-  const sz = numFields(T)
+  const sz = recordFields(T).len
   var writer = initRlpList(sz + 1)
   writer.append(reqId)
   for k, v in fieldPairs(p):
