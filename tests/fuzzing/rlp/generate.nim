@@ -67,7 +67,7 @@ proc generate() {.raises: [CatchableError].} =
       storageReads: @[3.u256],
       balanceChanges: @[(1.BlockAccessIndex, 4.u256)],
       nonceChanges: @[(1.BlockAccessIndex, 5'u64)],
-      codeChanges: @[(1.BlockAccessIndex, @[byte 0x60, 0x00])])]
+      codeChanges: @[(1.BlockAccessIndex, @[byte 0x60, 0x00], Opt.some(default(Hash32)))])]
 
   for i, tx in txs:
     rlp.encode(tx).toFile(inputsDir / "tx" & $i)
