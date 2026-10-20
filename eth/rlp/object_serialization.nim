@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import stew/shims/macros
+import stew/shims/[iterators, macros]
 
 template rlpIgnore*() {.pragma.}
   ## Specifies that a certain field should be ignored for the purposes
