@@ -285,7 +285,7 @@ proc orderedTrieRoot*[T](items: openArray[T]): Root =
   b.rootHash(w)
 
 when isMainModule: # A small benchmark
-  import std/[monotimes, times], eth/trie/[hexary, db]
+  import std/[monotimes, times], ./[hexary, db]
 
   let n = 1000000
   echo "Testing ", n
@@ -297,10 +297,12 @@ when isMainModule: # A small benchmark
 
   let x0 = getMonoTime()
   let b1 = block:
-    var db = OrderedTrieRootBuilder.init(values.len)
+    var
+      b = OrderedTrieRootBuilder.init(values.len)
+      w = TrieRlpWriter.init()
 
-    db.add(values)
-    db.rootHash()
+    b.add(w, values)
+    b.rootHash(w)
   echo b1
   let x1 = getMonoTime()
   let b2 = block:
@@ -310,7 +312,7 @@ when isMainModule: # A small benchmark
 
     db2.rootHash()
   let x2 = getMonoTime()
-  assert b1 == b2
+  doAssert b1 == b2
 
   echo (
     (x1 - x0), (x2 - x1), (x1 - x0).inNanoseconds.float / (x2 - x1).inNanoseconds.float

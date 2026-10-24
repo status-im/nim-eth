@@ -18,7 +18,7 @@ requires "nim >= 2.2.14",
          "secp256k1 >= 0.7.0",
          "snappy",
          "sqlite3_abi >= 3.53.4.1",
-         "stew >= 0.5.0",
+         "stew >= 0.6.4",
          "stint >= 0.8.0",
          "testutils >= 0.8.5",
          "unittest2 >= 0.2.0"
@@ -69,6 +69,10 @@ task test_asan, "Run all tests with ASAN":
 
 task build_dcli, "Build dcli":
   build "-d:release -d:chronicles_log_level=TRACE", "tools/dcli"
+
+task build_benchmarks, "Build benchmarks (compile only)":
+  build "-d:release", "eth/trie/ordered_trie"
+  build "-d:release", "tests/keccak/bench_keccak"
 
 let
   fuzzSeconds = getEnv("FUZZ_SECONDS", "100")
