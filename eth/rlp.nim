@@ -270,6 +270,13 @@ func toBytes(self: Rlp, item: RlpItem): seq[byte] {.raises: [RlpError].} =
 func toBytes*(self: Rlp): seq[byte] {.raises: [RlpError].} =
   self.toBytes(self.item())
 
+template blobView*(self: Rlp): openArray[byte] =
+  ## The payload of the current item, which must be a blob, without copying it.
+  let item = self.item()
+  if item.typ != rlpBlob:
+    raiseExpectedBlob()
+  self.bytes.view(item.payload)
+
 func currentElemEnd(self: Rlp, position: int): int {.raises: [RlpError].} =
   let item = self.item(position).payload
   item.b + 1

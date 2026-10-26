@@ -262,6 +262,19 @@ suite "test api usage":
       b = rlp.toBytes
     check $b == "@[]"
 
+  test "blobView":
+    var
+      rlp = rlpFromBytes(encode(([byte 1, 2, 5], @[byte 0x7f], "", @[1'u64])))
+      views: seq[seq[byte]]
+    for elem in rlp:
+      if elem.isBlob:
+        views.add @(elem.blobView)
+        check @(elem.blobView) == elem.toBytes()
+      else:
+        expect RlpTypeMismatch:
+          discard @(elem.blobView)
+    check views == @[@[byte 1, 2, 5], @[byte 0x7f], @[]]
+
   test "invalid enum":
     type
       MyEnum = enum
