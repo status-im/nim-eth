@@ -19,7 +19,7 @@ proc append*[T](w: var RlpWriter, val: Opt[T]) =
   if val.isSome:
     w.append(val.get())
   else:
-    w.append("")
+    w.append(array[0, byte]([]))
 
 proc read*[T](rlp: var Rlp, val: var Opt[T]) {.raises: [RlpError].} =
   mixin read
