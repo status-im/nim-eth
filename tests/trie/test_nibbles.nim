@@ -18,6 +18,22 @@ suite "Nibbles":
     check:
       sizeof(NibblesBuf) == 33
 
+  test "compile time":
+    const
+      n = NibblesBuf.fromBytes([byte 0x12, 0x34, 0x56])
+      full = NibblesBuf.fromBytes(repeat(byte 0xab, 32))
+      s = n.slice(1)
+      h = n.toHexPrefix(true)
+      joined = s & NibblesBuf.nibble(7)
+    check:
+      $n == "123456"
+      $full == repeat("ab", 32)
+      $s == "23456"
+      $joined == "234567"
+      n.getBytes()[0] == 0x12
+      n.sharedPrefixLen(full) == 0
+      NibblesBuf.fromHexPrefix(h.data()) == (true, n)
+
   test "indexed write":
     var n = NibblesBuf.fromBytes([byte 0x12, 0x34])
     n[0] = 0xf

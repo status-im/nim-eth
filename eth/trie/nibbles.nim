@@ -48,25 +48,59 @@ proc c_memcpy(dst, src: pointer, n: csize_t): pointer {.
 template limbPos(i: untyped): uint =
   uint(range[0 .. Limbs - 1](i)) shl 3
 
-template limbNative(r: NibblesBuf, i: untyped): uint64 =
-  var v {.noinit.}: uint64
-  c_memcpy(addr v, unsafeAddr r.bytes[limbPos(i)], csize_t sizeof(v))
+template loadNative(src: untyped, spos: untyped): uint64 =
+  let p = int(spos)
+  var v: uint64
+  when nimvm:
+    for k in 0 ..< 8:
+      when cpuEndian == littleEndian:
+        v = v or (uint64(src[p + k]) shl (k * 8))
+      else:
+        v = v or (uint64(src[p + k]) shl (56 - k * 8))
+  else:
+    c_memcpy(addr v, unsafeAddr src[p], csize_t sizeof(v))
   v
+
+template storeNative(dst: untyped, dpos: untyped, v: uint64) =
+  let
+    p = int(dpos)
+    val = v
+  when nimvm:
+    for k in 0 ..< 8:
+      when cpuEndian == littleEndian:
+        dst[p + k] = byte(val shr (k * 8))
+      else:
+        dst[p + k] = byte(val shr (56 - k * 8))
+  else:
+    discard c_memcpy(addr dst[p], unsafeAddr val, csize_t sizeof(val))
+
+template copyBytes(dst: untyped, dpos: untyped, src: untyped, spos: untyped, n: untyped) =
+  let
+    dp = int(dpos)
+    sp = int(spos)
+    len = int(n)
+  discard dst[dp + len - 1]
+  discard src[sp + len - 1]
+  when nimvm:
+    for k in 0 ..< len:
+      dst[dp + k] = src[sp + k]
+  else:
+    discard c_memcpy(addr dst[dp], unsafeAddr src[sp], csize_t len)
+
+template limbNative(r: NibblesBuf, i: untyped): uint64 =
+  loadNative(r.bytes, limbPos(i))
 
 template limb(r: NibblesBuf, i: untyped): uint64 =
   toBE(r.limbNative(i))
 
 template setLimbNative(r: var NibblesBuf, i: untyped, v: uint64) =
-  let val = v
-  discard c_memcpy(addr r.bytes[limbPos(i)], unsafeAddr val, csize_t sizeof(val))
+  storeNative(r.bytes, limbPos(i), v)
 
 template setLimb(r: var NibblesBuf, i: untyped, v: uint64) =
   r.setLimbNative(i, toBE(v))
 
 template storeBE(dst: var array, pos: static int, v: uint64) =
-  discard dst[pos + 7]
-  let be = toBE(v)
-  discard c_memcpy(addr dst[pos], unsafeAddr be, csize_t sizeof(be))
+  storeNative(dst, pos, toBE(v))
 
 template tailMask(nibbles: uint8): uint64 =
   let tail = nibbles and 15
@@ -92,7 +126,7 @@ func `[]=`*(r: var NibblesBuf, i: int, v: byte) =
 func fromBytes*(T: type NibblesBuf, bytes: openArray[byte]): T {.noinit.} =
   if bytes.len >= 32:
     result.iend = 64
-    c_memcpy(addr result.bytes[0], unsafeAddr bytes[0], 32)
+    copyBytes(result.bytes, 0, bytes, 0, 32)
   else:
     let
       blen = bytes.len
@@ -102,18 +136,17 @@ func fromBytes*(T: type NibblesBuf, bytes: openArray[byte]): T {.noinit.} =
 
     staticFor i, 0 ..< Limbs - 1:
       if i < full:
-        c_memcpy(addr result.bytes[i * 8], unsafeAddr bytes[i * 8], 8)
+        copyBytes(result.bytes, i * 8, bytes, i * 8, 8)
 
     if tail > 0:
-      var w {.noinit.}: uint64
+      var w: uint64
       if blen >= 8:
-        c_memcpy(addr w, unsafeAddr bytes[blen - 8], 8)
+        w = loadNative(bytes, blen - 8)
         when cpuEndian == littleEndian:
           w = w shr ((8 - tail) * 8)
         else:
           w = w shl ((8 - tail) * 8)
       else:
-        w = 0
         for j in 0 ..< tail:
           when cpuEndian == littleEndian:
             w = w or (uint64(bytes[j]) shl (j * 8))
@@ -289,11 +322,7 @@ func toHexPrefix*(r: NibblesBuf, isLeaf = false): HexPrefixBuf {.noinit.} =
   else:
     staticFor i, 0 ..< Limbs:
       if i < limbs:
-        const
-          pos = i * 8 + 1
-          src = i * 8
-        discard result.buf[pos + 7]
-        c_memcpy(addr result.buf[pos], unsafeAddr r.bytes[src], 8)
+        copyBytes(result.buf, i * 8 + 1, r.bytes, i * 8, 8)
 
   result.setLen(int((r.iend shr 1) + 1))
 
