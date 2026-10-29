@@ -21,6 +21,8 @@ import
   stint,
   ../common/hashes
 
+from stew/objects import declval
+
 export arraybuf, default_writer, length_writer, two_pass_writer, hash_writer, arraybuf_writer
 
 type
@@ -70,44 +72,40 @@ proc appendImpl[T](self: var RlpWriter, list: openArray[T]) =
   for i in 0 ..< list.len:
     self.append list[i]
 
-template innerType[T](x: Opt[T]): typedesc =
+template innerType[T](_: type Opt[T]): typedesc =
   T
 
-proc countNestedListsDepth(T: type): int {.compileTime.} =
-  mixin enumerateRlpFields
+func countNestedListsDepth(T: type): int {.compileTime.} =
+  mixin enumerateRlpFieldTypes
 
-  var dummy {.used.}: T
-
-  template op(RT, fN, f) {.used.} =
-    result += countNestedListsDepth(type f)
+  template op(RT, fN, FieldType) {.used.} =
+    result += countNestedListsDepth(FieldType)
 
   when T is Opt:
-    result += countNestedListsDepth(innerType(dummy))
+    result += countNestedListsDepth(innerType(T))
   elif T is UInt256:
     discard
   elif T is object or T is tuple:
     inc result
-    enumerateRlpFields(dummy, op)
+    enumerateRlpFieldTypes(T, op)
   elif T is seq or T is array:
     inc result
-    result += countNestedListsDepth(elementType(dummy))
+    result += countNestedListsDepth(elementType(declval(T)))
 
-proc countNestedListsDepth[E](T: type openArray[E]): int =
+func countNestedListsDepth[E](T: type openArray[E]): int =
   countNestedListsDepth(seq[E])
 
-proc countOptionalFields(T: type): int {.compileTime.} =
-  mixin enumerateRlpFields
-
-  var dummy: T
+func countOptionalFields(T: type): int {.compileTime.} =
+  mixin enumerateRlpFieldTypes
 
   # closure signature matches the one in object_serialization.nim
-  template op(RT, fN, f) {.used.} =
-    when f is Opt:
+  template op(RT, fN, FieldType) {.used.} =
+    when FieldType is Opt:
       inc result
     else: # this will count only optional fields at the end
       result = 0
 
-  enumerateRlpFields(dummy, op)
+  enumerateRlpFieldTypes(T, op)
 
 proc validateOptionalFields(obj: object | tuple) =
   ## Trailing optional fields are encoded by omission, so a present optional

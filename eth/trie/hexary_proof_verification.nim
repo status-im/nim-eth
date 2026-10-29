@@ -133,6 +133,10 @@ proc getNextNode(nodeRlp: Rlp, key: NibblesBuf): Result[NextNodeResult, string] 
       let nextRef = ?currNode.getListElem(1)
 
       if isLeaf:
+        # The key must end at the leaf, not just start with the leaf's path
+        if len(restKey) != len(k):
+          return ok(NextNodeResult(kind: EmptyValue))
+
         let blobBytes = ?nextRef.blobBytes()
         return ok(NextNodeResult(kind: ValueNode, value: blobBytes))
 

@@ -1,12 +1,12 @@
 mode = ScriptMode.Verbose
 
-version       = "0.9.5"
+version       = "0.10.0"
 author        = "Status Research & Development GmbH"
 description   = "Ethereum Common library"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 2.0.10",
+requires "nim >= 2.2.14",
          "chronicles >= 0.12.4",
          "chronos >= 4.0.1",
          "confutils >= 0.1.1",
@@ -18,7 +18,7 @@ requires "nim >= 2.0.10",
          "secp256k1 >= 0.7.0",
          "snappy",
          "sqlite3_abi >= 3.53.4.1",
-         "stew >= 0.5.0",
+         "stew >= 0.6.4",
          "stint >= 0.8.0",
          "testutils >= 0.8.5",
          "unittest2 >= 0.2.0"
@@ -52,12 +52,7 @@ task test, "Run all tests":
     run args & " --mm:orc", "tests/all_tests"
 
 task test_asan, "Run all tests with ASAN":
-  if platform != "x86" and (NimMajor, NimMinor) >= (2, 2):
-    try:
-      exec "echo '#if __clang_major__ < 20\n#error\n#endif' | clang -E - >/dev/null"
-    except OSError:
-      return
-
+  if platform != "x86":
     # https://clang.llvm.org/docs/AddressSanitizer.html
     putEnv("ASAN_OPTIONS", "detect_leaks=0:detect_stack_use_after_return=1")
     # https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
@@ -74,6 +69,10 @@ task test_asan, "Run all tests with ASAN":
 
 task build_dcli, "Build dcli":
   build "-d:release -d:chronicles_log_level=TRACE", "tools/dcli"
+
+task build_benchmarks, "Build benchmarks (compile only)":
+  build "-d:release", "eth/trie/ordered_trie"
+  build "-d:release", "tests/keccak/bench_keccak"
 
 let
   fuzzSeconds = getEnv("FUZZ_SECONDS", "100")
@@ -101,6 +100,7 @@ proc fuzz(target: string) =
 task fuzz, "Run fuzzing tests":
   fuzz "discoveryv5/fuzz_decode_message"
   fuzz "discoveryv5/fuzz_decode_packet"
+  fuzz "discoveryv5/fuzz_routing_table"
   run "", "tests/fuzzing/enr/generate"
   fuzz "enr/fuzz_enr"
   run "", "tests/fuzzing/rlp/generate"

@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -78,9 +78,7 @@ type
     # to move the socket in `Connected` state.
     # If set to none, the incoming socket will immediately be set to `Connected`
     # state and will be able to transfer data.
-    # TODO: Move to Opt but need to figure out current compile error:
-    # cannot instantiate: 'Opt[T]'; Maybe generic arguments are missing
-    incomingSocketReceiveTimeout*: Option[Duration]
+    incomingSocketReceiveTimeout*: Opt[Duration]
 
     # Timeout after which the send window will be reset to its minimal value
     # after it dropped to zero.
@@ -404,7 +402,7 @@ proc init*(
   initialSynTimeout: Duration = defaultInitialSynTimeout,
   dataResendsBeforeFailure: uint16 = defaultDataResendsBeforeFailure,
   optRcvBuffer: uint32 = defaultOptRcvBuffer,
-  incomingSocketReceiveTimeout: Option[Duration] = some(defaultRcvRetransmitTimeout),
+  incomingSocketReceiveTimeout: Opt[Duration] = Opt.some(defaultRcvRetransmitTimeout),
   remoteWindowResetTimeout: Duration = defaultResetWindowTimeout,
   optSndBuffer: uint32 = defaultOptRcvBuffer,
   payloadSize: uint32 = defaultPayloadSize,
