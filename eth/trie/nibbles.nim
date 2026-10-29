@@ -42,28 +42,23 @@ template limbOf(i: int | uint8): uint8 =
   # In which limb can nibble i be found?
   uint8(i) shr 4 # shr 4 = div 16 = 16 nibbles per limb
 
-template shift(i: int | uint8): uint8 =
-  # How many bits to shift to find nibble i within its limb?
-  60 - ((uint8(i) mod 16) shl 2) # shl 2 = 4 bits per nibble
-
 proc c_memcpy(dst, src: pointer, n: csize_t): pointer {.
   importc: "memcpy", header: "<string.h>", discardable, noSideEffect.}
 
+template limbPos(i: untyped): uint =
+  uint(range[0 .. Limbs - 1](i)) shl 3
+
 template limbNative(r: NibblesBuf, i: untyped): uint64 =
-  let pos = uint(i) shl 3
-  discard r.bytes[pos + 7]
   var v {.noinit.}: uint64
-  c_memcpy(addr v, unsafeAddr r.bytes[pos], csize_t sizeof(v))
+  c_memcpy(addr v, unsafeAddr r.bytes[limbPos(i)], csize_t sizeof(v))
   v
 
 template limb(r: NibblesBuf, i: untyped): uint64 =
   toBE(r.limbNative(i))
 
 template setLimbNative(r: var NibblesBuf, i: untyped, v: uint64) =
-  let pos = uint(i) shl 3
-  discard r.bytes[pos + 7]
   let val = v
-  discard c_memcpy(addr r.bytes[pos], unsafeAddr val, csize_t sizeof(val))
+  discard c_memcpy(addr r.bytes[limbPos(i)], unsafeAddr val, csize_t sizeof(val))
 
 template setLimb(r: var NibblesBuf, i: untyped, v: uint64) =
   r.setLimbNative(i, toBE(v))
@@ -73,12 +68,19 @@ template storeBE(dst: var array, pos: static int, v: uint64) =
   let be = toBE(v)
   discard c_memcpy(addr dst[pos], unsafeAddr be, csize_t sizeof(be))
 
+template tailMask(nibbles: uint8): uint64 =
+  let tail = nibbles and 15
+  if tail == 0:
+    not 0'u64
+  else:
+    (not 0'u64) shl (64 - int(tail) * 4)
+
 func nibble*(T: type NibblesBuf, nibble: byte): T {.noinit.} =
   result.setLimb(0, uint64(nibble) shl (64 - 4))
   result.iend = 1
 
 func `[]`*(r: NibblesBuf, i: int): byte =
-  (r.bytes[i shr 1] shr (4 - ((i and 1) shl 2))) and 0x0f
+  (r.bytes[i shr 1] shr ((not i and 1) shl 2)) and 0x0f
 
 func `[]=`*(r: var NibblesBuf, i: int, v: byte) =
   let pos = i shr 1
@@ -92,11 +94,32 @@ func fromBytes*(T: type NibblesBuf, bytes: openArray[byte]): T {.noinit.} =
     result.iend = 64
     c_memcpy(addr result.bytes[0], unsafeAddr bytes[0], 32)
   else:
-    let blen = bytes.len
+    let
+      blen = bytes.len
+      full = blen shr 3
+      tail = blen and 7
     result.iend = uint8(blen * 2)
-    result.setLimbNative(blen shr 3, 0'u64)
-    if blen > 0:
-      c_memcpy(addr result.bytes[0], unsafeAddr bytes[0], csize_t blen)
+
+    staticFor i, 0 ..< Limbs - 1:
+      if i < full:
+        c_memcpy(addr result.bytes[i * 8], unsafeAddr bytes[i * 8], 8)
+
+    if tail > 0:
+      var w {.noinit.}: uint64
+      if blen >= 8:
+        c_memcpy(addr w, unsafeAddr bytes[blen - 8], 8)
+        when cpuEndian == littleEndian:
+          w = w shr ((8 - tail) * 8)
+        else:
+          w = w shl ((8 - tail) * 8)
+      else:
+        w = 0
+        for j in 0 ..< tail:
+          when cpuEndian == littleEndian:
+            w = w or (uint64(bytes[j]) shl (j * 8))
+          else:
+            w = w or (uint64(bytes[j]) shl (56 - j * 8))
+      result.setLimbNative(full, w)
 
 func len*(r: NibblesBuf): int =
   int(r.iend)
@@ -178,10 +201,9 @@ func slice*(r: NibblesBuf, ibegin: int, iend = -1): NibblesBuf {.noinit.} =
 
   if result.iend mod 16 > 0:
     # Clear last limb past iend so that we can compare full limbs
-    let
-      elimb = result.iend.limbOf
-      eshift = result.iend.shift + 4
-    result.setLimb(elimb, result.limb(elimb) and (0xffffffffffffffff'u64 shl eshift))
+    let elimb = result.iend.limbOf
+    result.setLimbNative(
+      elimb, result.limbNative(elimb) and toBE(tailMask(result.iend)))
 
 template copyshr(aend: uint8) =
   block adone: # copy aend nibbles of a
