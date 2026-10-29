@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,7 +10,7 @@
 
 {.push raises: [], gcsafe, inline.}
 
-import stew/[arraybuf, arrayops, bitops2, endians2, staticfor]
+import stew/[arraybuf, bitops2, endians2, staticfor]
 
 export arraybuf
 
@@ -18,26 +18,27 @@ type
   NibblesBuf* = object
     ## Allocation-free type for storing up to 64 4-bit nibbles, as seen in the
     ## Ethereum MPT
-    limbs: array[4, uint64]
-      # Each limb holds 16 nibbles in big endian order - for buffers shorter
-      # 64 nibbles we make sure the last limb holding any data is zero-padded
-      # (so as to avoid UB on uninitialized reads) - for example a buffer
-      # holding one nibble will have one fully initialized limb and 3
-      # uninitialized limbs.
+    bytes: array[32, byte]
+      # Two nibbles per byte, grouped in 8-byte limbs of 16 nibbles each - for
+      # buffers shorter than 64 nibbles we make sure the last limb holding any
+      # data is zero-padded (so as to avoid UB on uninitialized reads) - for
+      # example a buffer holding one nibble will have one fully initialized
+      # limb and 3 uninitialized limbs.
     iend: uint8
       # Where valid nibbles can be found - we use indices here to avoid copies
       # wen slicing - iend not inclusive
 
   HexPrefixBuf* = ArrayBuf[33, byte]
 
+const Limbs = 4
+
+static:
+  doAssert sizeof(NibblesBuf) == 33
+
 func high*(T: type NibblesBuf): int =
   63
 
-func nibble*(T: type NibblesBuf, nibble: byte): T {.noinit.} =
-  result.limbs[0] = uint64(nibble) shl (64 - 4)
-  result.iend = 1
-
-template limb(i: int | uint8): uint8 =
+template limbOf(i: int | uint8): uint8 =
   # In which limb can nibble i be found?
   uint8(i) shr 4 # shr 4 = div 16 = 16 nibbles per limb
 
@@ -45,45 +46,57 @@ template shift(i: int | uint8): uint8 =
   # How many bits to shift to find nibble i within its limb?
   60 - ((uint8(i) mod 16) shl 2) # shl 2 = 4 bits per nibble
 
+proc c_memcpy(dst, src: pointer, n: csize_t): pointer {.
+  importc: "memcpy", header: "<string.h>", discardable, noSideEffect.}
+
+template limbNative(r: NibblesBuf, i: untyped): uint64 =
+  let pos = uint(i) shl 3
+  discard r.bytes[pos + 7]
+  var v {.noinit.}: uint64
+  c_memcpy(addr v, unsafeAddr r.bytes[pos], csize_t sizeof(v))
+  v
+
+template limb(r: NibblesBuf, i: untyped): uint64 =
+  toBE(r.limbNative(i))
+
+template setLimbNative(r: var NibblesBuf, i: untyped, v: uint64) =
+  let pos = uint(i) shl 3
+  discard r.bytes[pos + 7]
+  let val = v
+  discard c_memcpy(addr r.bytes[pos], unsafeAddr val, csize_t sizeof(val))
+
+template setLimb(r: var NibblesBuf, i: untyped, v: uint64) =
+  r.setLimbNative(i, toBE(v))
+
+template storeBE(dst: var array, pos: static int, v: uint64) =
+  discard dst[pos + 7]
+  let be = toBE(v)
+  discard c_memcpy(addr dst[pos], unsafeAddr be, csize_t sizeof(be))
+
+func nibble*(T: type NibblesBuf, nibble: byte): T {.noinit.} =
+  result.setLimb(0, uint64(nibble) shl (64 - 4))
+  result.iend = 1
+
 func `[]`*(r: NibblesBuf, i: int): byte =
-  let
-    ilimb = i.limb
-    ishift = i.shift
-  byte((r.limbs[ilimb] shr ishift) and 0x0f)
+  (r.bytes[i shr 1] shr (4 - ((i and 1) shl 2))) and 0x0f
 
 func `[]=`*(r: var NibblesBuf, i: int, v: byte) =
-  let
-    ilimb = i.limb
-    ishift = i.shift
-
-  r.limbs[ilimb] =
-    (uint64(v and 0x0f) shl ishift) or ((r.limbs[ilimb] and not (0x0f'u64 shl ishift)))
+  let pos = i shr 1
+  if (i and 1) == 0:
+    r.bytes[pos] = ((v and 0x0f) shl 4) or (r.bytes[pos] and 0x0f)
+  else:
+    r.bytes[pos] = (r.bytes[pos] and 0xf0) or (v and 0x0f)
 
 func fromBytes*(T: type NibblesBuf, bytes: openArray[byte]): T {.noinit.} =
   if bytes.len >= 32:
     result.iend = 64
-    staticFor i, 0 ..< result.limbs.len:
-      const pos = i * 8 # 16 nibbles per limb, 2 nibbles per byte
-      result.limbs[i] = uint64.fromBytesBE(bytes.toOpenArray(pos, pos + 7))
+    c_memcpy(addr result.bytes[0], unsafeAddr bytes[0], 32)
   else:
-    let blen = uint8(bytes.len)
-    result.iend = blen * 2
-
-    block done:
-      staticFor i, 0 ..< result.limbs.len:
-        const pos = i * 8
-        if pos + 7 < blen:
-          result.limbs[i] = uint64.fromBytesBE(bytes.toOpenArray(pos, pos + 7))
-        else:
-          if pos < blen:
-            var tmp = 0'u64
-            var shift = 56'u8
-            for j in uint8(pos) ..< blen:
-              tmp = tmp or uint64(bytes[j]) shl shift
-              shift -= 8
-
-            result.limbs[i] = tmp
-          break done
+    let blen = bytes.len
+    result.iend = uint8(blen * 2)
+    result.setLimbNative(blen shr 3, 0'u64)
+    if blen > 0:
+      c_memcpy(addr result.bytes[0], unsafeAddr bytes[0], csize_t blen)
 
 func len*(r: NibblesBuf): int =
   int(r.iend)
@@ -98,19 +111,20 @@ func `==`*(lhs, rhs: NibblesBuf): bool =
   if lhs.iend != rhs.iend:
     return false
 
-  staticFor i, 0 ..< lhs.limbs.len:
+  staticFor i, 0 ..< Limbs:
     if uint8(i * 16) >= lhs.iend:
       return true
-    if lhs.limbs[i] != rhs.limbs[i]:
+    if lhs.limbNative(i) != rhs.limbNative(i):
       return false
   true
 
 func sharedPrefixLen*(lhs, rhs: NibblesBuf): int =
   let len = min(lhs.iend, rhs.iend)
-  staticFor i, 0 ..< lhs.limbs.len:
+  staticFor i, 0 ..< Limbs:
     const pos = i * 16
 
-    if (pos + 16) >= len or lhs.limbs[i] != rhs.limbs[i]:
+    let diff = lhs.limbNative(i) xor rhs.limbNative(i)
+    if (pos + 16) >= len or diff != 0:
       return
         if pos < len:
           let mask =
@@ -118,7 +132,7 @@ func sharedPrefixLen*(lhs, rhs: NibblesBuf): int =
               0'u64
             else:
               (not 0'u64) shr ((len - pos) * 4)
-          pos + leadingZeros((lhs.limbs[i] xor rhs.limbs[i]) or mask) shr 2
+          pos + leadingZeros(toBE(diff) or mask) shr 2
         else:
           pos
 
@@ -137,72 +151,76 @@ func slice*(r: NibblesBuf, ibegin: int, iend = -1): NibblesBuf {.noinit.} =
   # With noinit, we have to be careful not to read result.bytes
   result.iend = uint8(e - ibegin)
 
-  var ilimb = ibegin.limb
+  var ilimb = ibegin.limbOf
   block done:
     let shift = (ibegin mod 16) shl 2
     if shift == 0: # Must be careful not to shift by 64 which is UB!
-      staticFor i, 0 ..< result.limbs.len:
+      staticFor i, 0 ..< Limbs:
         if uint8(i * 16) >= result.iend:
           break done
-        result.limbs[i] = r.limbs[ilimb]
+        result.setLimbNative(i, r.limbNative(ilimb))
         ilimb += 1
     else:
-      staticFor i, 0 ..< result.limbs.len:
+      var cur = r.limb(ilimb)
+      staticFor i, 0 ..< Limbs:
         if uint8(i * 16) >= result.iend:
           break done
 
-        let cur = r.limbs[ilimb] shl shift
         ilimb += 1
-
-        result.limbs[i] =
+        let next =
           if (ilimb * 16) < uint8 r.iend:
-            let next = r.limbs[ilimb] shr (64 - shift)
-            cur or next
+            r.limb(ilimb)
           else:
-            cur
+            0'u64
+
+        result.setLimb(i, (cur shl shift) or (next shr (64 - shift)))
+        cur = next
 
   if result.iend mod 16 > 0:
     # Clear last limb past iend so that we can compare full limbs
     let
-      elimb = result.iend.limb
+      elimb = result.iend.limbOf
       eshift = result.iend.shift + 4
-    result.limbs[elimb] = result.limbs[elimb] and (0xffffffffffffffff'u64 shl eshift)
+    result.setLimb(elimb, result.limb(elimb) and (0xffffffffffffffff'u64 shl eshift))
 
 template copyshr(aend: uint8) =
   block adone: # copy aend nibbles of a
-    staticFor i, 0 ..< result.limbs.len:
+    staticFor i, 0 ..< Limbs:
       if uint8(i * 16) >= aend:
         break adone
 
-      result.limbs[i] = a.limbs[i]
+      result.setLimbNative(i, a.limbNative(i))
 
   block bdone:
     let shift = (aend mod 16) shl 2
 
-    var alimb = aend.limb
+    var alimb = aend.limbOf
 
     if shift == 0:
-      staticFor i, 0 ..< result.limbs.len:
+      staticFor i, 0 ..< Limbs:
         if uint8(i * 16) >= b.iend:
           break bdone
 
-        result.limbs[alimb] = b.limbs[i]
+        result.setLimbNative(alimb, b.limbNative(i))
         alimb += 1
     else:
       # remove the part of a that should be b from the last a limb
-      result.limbs[alimb] = result.limbs[alimb] and ((not 0'u64) shl (64 - shift))
+      var carry = result.limb(alimb) and ((not 0'u64) shl (64 - shift))
 
-      staticFor i, 0 ..< result.limbs.len:
+      staticFor i, 0 ..< Limbs:
         if uint8(i * 16) >= b.iend:
+          if (alimb * 16) < result.iend:
+            result.setLimb(alimb, carry)
           break bdone
 
-        # reading result.limbs here is safe because because the previous loop
-        # iteration will have initialized it (or the a copy on initial iteration)
-        result.limbs[alimb] = result.limbs[alimb] or b.limbs[i] shr shift
+        let cur = b.limb(i)
+        result.setLimb(alimb, carry or cur shr shift)
 
         alimb += 1
-        if (alimb * 16) < result.iend:
-          result.limbs[alimb] = b.limbs[i] shl (64 - shift)
+        carry = cur shl (64 - shift)
+
+      if (alimb * 16) < result.iend:
+        result.setLimb(alimb, carry)
 
 func `&`*(a, b: NibblesBuf): NibblesBuf {.noinit.} =
   result.iend = min(64'u8, a.iend + b.iend)
@@ -227,31 +245,33 @@ func toHexPrefix*(r: NibblesBuf, isLeaf = false): HexPrefixBuf {.noinit.} =
 
   result.n = 33 # careful with noinit, to not call setlen
   let
-    limbs = (r.iend + 15).limb
+    limbs = (r.iend + 15).limbOf
     isOdd = (r.iend and 1) > 0
 
   result[0] = (byte(isLeaf) * 2 + byte(isOdd)) shl 4
 
   if isOdd:
-    result[0] = result[0] or byte(r.limbs[0] shr 60)
+    result[0] = result[0] or (r.bytes[0] shr 4)
 
-    staticFor i, 0 ..< r.limbs.len:
+    staticFor i, 0 ..< Limbs:
       if i < limbs:
         let next =
-          when i == r.limbs.high:
+          when i == Limbs - 1:
             0'u64
           else:
-            r.limbs[i + 1]
-        let limb = r.limbs[i] shl 4 or next shr 60
+            r.limb(i + 1)
+        let limb = r.limb(i) shl 4 or next shr 60
 
         const pos = i * 8 + 1
-        assign(result.data.toOpenArray(pos, pos + 7), limb.toBytesBE())
+        result.buf.storeBE(pos, limb)
   else:
-    staticFor i, 0 ..< r.limbs.len:
+    staticFor i, 0 ..< Limbs:
       if i < limbs:
-        let limb = r.limbs[i]
-        const pos = i * 8 + 1
-        assign(result.data.toOpenArray(pos, pos + 7), limb.toBytesBE())
+        const
+          pos = i * 8 + 1
+          src = i * 8
+        discard result.buf[pos + 7]
+        c_memcpy(addr result.buf[pos], unsafeAddr r.bytes[src], 8)
 
   result.setLen(int((r.iend shr 1) + 1))
 
@@ -274,6 +294,4 @@ func fromHexPrefix*(
     result.nibbles.iend = 0
 
 func getBytes*(a: NibblesBuf): array[32, byte] =
-  staticFor i, 0 ..< a.limbs.len:
-    const pos = i * 8
-    assign(result.toOpenArray(pos, pos + 7), a.limbs[i].toBytesBE)
+  a.bytes

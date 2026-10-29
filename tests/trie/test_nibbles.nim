@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,6 +14,22 @@
 import std/[sequtils, strutils], stew/byteutils, unittest2, ../../eth/trie/nibbles
 
 suite "Nibbles":
+  test "size":
+    check:
+      sizeof(NibblesBuf) == 33
+
+  test "indexed write":
+    var n = NibblesBuf.fromBytes([byte 0x12, 0x34])
+    n[0] = 0xf
+    n[3] = 0xa
+    check:
+      $n == "f23a"
+      n[0] == 0xf
+      n[1] == 2
+      n[2] == 3
+      n[3] == 0xa
+      n == NibblesBuf.fromBytes([byte 0xf2, 0x3a])
+
   test "trivial cases":
     block:
       let n = NibblesBuf.fromBytes([])
