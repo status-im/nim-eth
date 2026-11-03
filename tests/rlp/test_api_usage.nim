@@ -210,6 +210,24 @@ suite "test api usage":
     expect RlpTypeMismatch:
       r.tryEnterList()
 
+  test "positions outside of the input are rejected":
+    for position in [-1, 3, 4]:
+      checkpoint $position
+      var r = rlpFromHex("c20102")
+      r.position = position
+      expect MalformedRlpError:
+        r.skipElem()
+
+  test "consumeList rejects non-lists and malformed lists":
+    var r = rlpFromHex("83616263")
+    expect RlpTypeMismatch:
+      r.consumeList:
+        discard
+    r = rlpFromHex("c501")
+    expect MalformedRlpError:
+      r.consumeList:
+        discard
+
   test "consumeList requires exactly the list elements":
     var r = rlpFromHex("c20102")
     r.consumeList:

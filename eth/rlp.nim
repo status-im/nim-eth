@@ -77,6 +77,10 @@ func toString(self: Rlp, item: RlpItem): string {.raises: [RlpError].} =
     result = newString(item.payload.len)
     copyMem(addr result[0], self.bytes.view(item.payload)[0].addr, result.len)
 
+# `decodeInteger` and `rlpPayload` check every access explicitly, raising an
+# `RlpError`, which makes the compiler's own checks redundant
+{.push checks: off.}
+
 func decodeInteger(input: openArray[byte]): uint64 {.raises: [RlpError].} =
   # For a positive integer, it is converted to the the shortest byte array whose
   # big-endian interpretation is the integer, and then encoded as a string
@@ -104,7 +108,7 @@ func rlpPayload(input: openArray[byte], start = 0): Slice[int] {.raises: [RlpErr
   # The item type is deliberately not returned: at 16 bytes, the result comes
   # back in registers, whereas a full `RlpItem` goes through memory and is
   # copied out in a way that stalls on store-to-load forwarding.
-  if start >= len(input):
+  if uint(start) >= uint(len(input)): # rejects a negative `start` too
     raiseOutOfBounds()
 
   let
@@ -176,6 +180,7 @@ func rlpPayload(input: openArray[byte], start = 0): Slice[int] {.raises: [RlpErr
       raiseOutOfBounds()
 
     start + 1 + lenOfListLen .. start + lenOfListLen + int(listLen)
+{.pop.}
 
 template item(self: Rlp, position: int): RlpItem =
   # A template, not an `{.inline.}` func: inlining is only a hint, and when it
@@ -313,8 +318,11 @@ func tryEnterList*(self: var Rlp) {.raises: [RlpError].} =
   self.position = item.payload.a
 
 template consumeList*(self: var Rlp, mode: static RlpListMode, body: untyped) =
-  let listEnd = self.currentElemEnd()
-  self.tryEnterList()
+  let listItem = self.item()
+  if listItem.typ != rlpList:
+    raiseExpectedList()
+  let listEnd = listItem.payload.b + 1
+  self.position = listItem.payload.a
   body
   when mode == RlpListMode.RejectAdditionalElements:
     if self.position != listEnd:
@@ -466,9 +474,7 @@ func readImpl[E](rlp: var Rlp, T: type seq[E]): T {.raises: [RlpError].} =
     if item.typ != rlpList:
       raiseExpectedList()
 
-    result = newSeqOfCap[E](rlp.listLen)
-
-    for elem in rlp.items():
+    for elem in rlp.items(item):
       result.add rlp.read(E)
 
   rlp.positionAfter(item)
