@@ -94,7 +94,8 @@ proc wrapEncoding*(self: var RlpTwoPassWriter, numOfEncodings: int) =
   self.writeLength(encodingLen, BLOB_START_MARKER)
 
 func initTwoPassWriter*(tracker: var RlpLengthTracker): RlpTwoPassWriter =
-  result.output = newSeq[byte](tracker.totalLength)
+  # every byte is written by the second pass
+  result.output = newSeqUninit[byte](tracker.totalLength)
   result.lengths = move(tracker.lengths)
   result.wrapLengths = move(tracker.wrapLengths)
 
