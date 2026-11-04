@@ -94,37 +94,26 @@ proc decrementCounters(self: var RlpLengthTracker, isSelfEncoding: bool) =
       self.lengths[i.idx] = listLen
       self.totalLength += prefixLength(listLen)
 
-  var
-    wrapStatus = true
-    listStatus = true
-    isSelfEncodingFlag = isSelfEncoding
+  var isSelfEncodingFlag = isSelfEncoding
 
-  # we use a while loop here to close nested wrappings one after the other (if possible)
+  # The item just written belongs to the innermost open list or wrapping - each
+  # one that it completes is in turn an item of the one around it
   while true:
     let
-      topListItem = self.pendingLists.peek(PendingListItem).get((0, 0))
-      topWrapItem = self.wrappedEncodings.peek(PendingWrapItem).get((0, 0, 0))
-      wrapItem =
-        # if a wrapped encoding was started just before a list started (AND the list is not yet closed) then do not decrement the counter
-        if topListItem.idx < topWrapItem.listIdx and wrapStatus:
-          self.wrappedEncodings.pop(PendingWrapItem)
+      topListItem = self.pendingLists.peek(PendingListItem)
+      topWrapItem = self.wrappedEncodings.peek(PendingWrapItem)
+      # a wrapping is innermost when it was started after the top list
+      closed =
+        if topWrapItem.isSome() and
+            (topListItem.isNone() or topListItem.get().idx < topWrapItem.get().listIdx):
+          self.processWrapCounter(
+            self.wrappedEncodings.pop(PendingWrapItem), isSelfEncodingFlag)
         else:
-          Opt.none(PendingWrapItem)
-
-      wrapStatus = self.processWrapCounter(wrapItem, isSelfEncodingFlag)
-
-    let
-      listItem =
-        if listStatus:
-          self.pendingLists.pop(PendingListItem)
-        else:
-          Opt.none(PendingListItem)
-
-      listStatus = self.processListCounter(listItem)
+          self.processListCounter(self.pendingLists.pop(PendingListItem))
 
     isSelfEncodingFlag = false
 
-    if not listStatus and not wrapStatus:
+    if not closed:
       return
 
 func appendRawBytes*(self: var RlpLengthTracker, bytes: openArray[byte]) =

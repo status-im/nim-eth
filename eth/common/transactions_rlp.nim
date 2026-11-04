@@ -549,4 +549,9 @@ proc append*(rlpWriter: var RlpWriter, txs: seq[Transaction] | openArray[Transac
     if tx.txType == TxLegacy:
       rlpWriter.append(tx)
     else:
-      rlpWriter.append(rlp.encode(tx))
+      when rlpWriter is RlpDefaultWriter | RlpArrayBufWriter:
+        rlpWriter.append(rlp.encode(tx))
+      else:
+        # Typed transactions are wrapped in a blob - encode it in place
+        rlpWriter.wrapEncoding(1)
+        rlpWriter.append(tx)

@@ -86,10 +86,10 @@ proc startList*(writer: var RlpTwoPassWriter, listSize: int) =
 proc wrapEncoding*(self: var RlpTwoPassWriter, numOfEncodings: int) =
   let encodingLen = self.wrapLengths[self.wrapCount]
 
+  self.wrapCount += 1
+
   if encodingLen == 0:
     return # do nothing because nested encoding of a single byte <128 is the byte itself
-
-  self.wrapCount += 1
 
   self.writeLength(encodingLen, BLOB_START_MARKER)
 

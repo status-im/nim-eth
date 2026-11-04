@@ -84,10 +84,10 @@ proc startList*(writer: var RlpHashWriter, listSize: int) =
 proc wrapEncoding*(writer: var RlpHashWriter, numOfEncodings: int) =
   let encodingLen = writer.wrapLengths[writer.wrapCount]
 
+  writer.wrapCount += 1
+
   if encodingLen == 0:
     return # do nothing because nested encoding of a single byte <128 is the byte itself
-
-  writer.wrapCount += 1
 
   writer.writeLength(encodingLen, BLOB_START_MARKER)
 

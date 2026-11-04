@@ -18,6 +18,32 @@ proc encodeDirect[T](v: T): seq[byte] =
   writer.append(v)
   move(writer.finish)
 
+type WrapItem = object
+  ## An integer or a list, optionally wrapped: encoded as a blob holding its
+  ## encoding
+  isList, wrap: bool
+  value: uint64
+  list: seq[uint64]
+
+proc append(w: var RlpWriter, x: WrapItem) =
+  template appendItem(w: untyped) =
+    if x.isList:
+      w.append(x.list)
+    else:
+      w.append(x.value)
+
+  if x.wrap:
+    when w is RlpDefaultWriter:
+      # no `wrapEncoding` - encode separately, as a reference
+      var inner = initRlpWriter()
+      inner.appendItem()
+      w.append(inner.finish)
+    else:
+      w.wrapEncoding(1)
+      w.appendItem()
+  else:
+    w.appendItem()
+
 template checkAgainstDirect(v: untyped) =
   let expected = encodeDirect(v)
   check:
@@ -112,3 +138,49 @@ suite "RLP length tracker":
         Header(number: high(uint64), extraData: newSeq[byte](0)),
       ]
     )
+
+  test "wrapped encodings anywhere in a list":
+    var rng = initRand(0x9abc)
+    for _ in 0 ..< 2000:
+      var outer: seq[seq[WrapItem]]
+      for a in 0 ..< rng.rand(1 .. 3):
+        var items: seq[WrapItem]
+        for b in 0 ..< rng.rand(5):
+          var item = WrapItem(isList: rng.rand(1) == 1, wrap: rng.rand(1) == 1)
+          if item.isList:
+            for c in 0 ..< rng.rand(3):
+              item.list.add uint64(rng.rand(1000))
+          else:
+            # below 128, an integer is its own single byte encoding
+            item.value = uint64(rng.rand(200))
+          items.add item
+        outer.add items
+      checkAgainstDirect(outer)
+      checkAgainstDirect(outer[0])
+
+  test "consecutive wrapped single bytes":
+    checkAgainstDirect(@[
+      WrapItem(wrap: true, value: 1), WrapItem(wrap: true, value: 2),
+      WrapItem(wrap: true, value: 300), WrapItem(wrap: true, value: 3)])
+
+  test "typed transactions and receipts in a list":
+    # typed ones are wrapped in a blob, legacy ones are not
+    var
+      txs: seq[Transaction]
+      receipts: seq[Receipt]
+    for i in 0 ..< 6:
+      txs.add Transaction(
+        txType: if i mod 3 == 0: TxLegacy else: TxEip1559,
+        nonce: uint64(i),
+        payload: newSeq[byte](i * 20),
+        accessList: @[AccessPair(storageKeys: newSeq[Bytes32](i mod 3))],
+      )
+      receipts.add Receipt(
+        receiptType: if i mod 3 == 0: LegacyReceipt else: Eip1559Receipt,
+        cumulativeGasUsed: uint64(i),
+        logs: newSeq[Log](i mod 2),
+      )
+    checkAgainstDirect(txs)
+    checkAgainstDirect(receipts)
+    checkAgainstDirect(@[txs, txs])
+    checkAgainstDirect(EthBlock(transactions: txs))
