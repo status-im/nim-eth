@@ -74,6 +74,7 @@ task build_benchmarks, "Build benchmarks (compile only)":
   build "-d:release", "eth/trie/ordered_trie"
   build "-d:release", "tests/keccak/bench_keccak"
   build "-d:release", "tests/rlp/bench_rlp_decode"
+  build "-d:release", "tests/rlp/bench_rlp_encode"
 
 let
   fuzzSeconds = getEnv("FUZZ_SECONDS", "100")
