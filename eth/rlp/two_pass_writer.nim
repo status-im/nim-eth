@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import stew/assign2, ./priv/defs, utils, length_writer
+import stew/endians2, ./priv/defs, utils, length_writer
 
 type RlpTwoPassWriter* = object
   output*: seq[byte]
@@ -21,9 +21,15 @@ template update(self: var RlpTwoPassWriter, data: byte) =
   self.output[self.fillLevel] = data
   self.fillLevel += 1
 
+template checkSpace(self: RlpTwoPassWriter, n: int) =
+  if self.output.len - self.fillLevel < n:
+    raiseAssert "RLP output overflow: the length and the write pass disagree"
+
 template update(self: var RlpTwoPassWriter, data: openArray[byte]) =
-  assign(self.output.toOpenArray(self.fillLevel, self.fillLevel + data.len - 1), data)
-  self.fillLevel += data.len
+  if data.len > 0:
+    self.checkSpace(data.len)
+    copyMem(addr self.output[self.fillLevel], unsafeAddr data[0], data.len)
+    self.fillLevel += data.len
 
 template updateBigEndian(self: var RlpTwoPassWriter, i: SomeUnsignedInt, length: int) =
   self.fillLevel += length

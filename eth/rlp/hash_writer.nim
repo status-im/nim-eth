@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import ../keccak/keccak, ./priv/defs, utils, ../common/hashes, length_writer
+import stew/endians2, ../keccak/keccak, ./priv/defs, utils, ../common/hashes, length_writer
 
 const BufferSize = 136
   ## The keccak-256 rate: whole blocks are absorbed a lane at a time, whereas
@@ -51,9 +51,13 @@ func update(writer: var RlpHashWriter, data: openArray[byte]) =
     copyMem(addr writer.buf[0], unsafeAddr data[pos], writer.bufLen)
 
 template updateBigEndian(writer: var RlpHashWriter, i: SomeUnsignedInt, length: int) =
-  var bigEndianBuf: array[8, byte]
-  bigEndianBuf.writeBigEndian(i, length - 1, length)
-  writer.update(bigEndianBuf.toOpenArray(0, length - 1))
+  if length > 0 and writer.bufLen + 8 <= BufferSize:
+    let bytes = toBytesBE(uint64(i) shl (8 * (8 - length)))
+    copyMem(addr writer.buf[writer.bufLen], unsafeAddr bytes[0], 8)
+    writer.bufLen += length
+  else:
+    let bytes = toBytesBE(uint64(i))
+    writer.update(bytes.toOpenArray(bytes.len - length, bytes.high))
 
 func writeLength(writer: var RlpHashWriter, dataLen: int, baseMarker: byte) =
   if dataLen < THRESHOLD_LEN:
