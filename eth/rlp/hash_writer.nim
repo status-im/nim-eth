@@ -9,23 +9,51 @@
 
 import ../keccak/keccak, ./priv/defs, utils, ../common/hashes, length_writer
 
+const BufferSize = 136
+  ## The keccak-256 rate: whole blocks are absorbed a lane at a time, whereas
+  ## the many small writes of an encoding would be absorbed byte by byte
+
 type RlpHashWriter* = object
   keccak: keccak.Keccak256
   lengths*: seq[int]
   wrapLengths*: seq[int]
   listCount: int
   wrapCount: int
-  bigEndianBuf: array[8, byte]
+  buf: array[BufferSize, byte]
+  bufLen: int
 
-template update(writer: var RlpHashWriter, data: byte) =
-  writer.keccak.update([data])
+func update(writer: var RlpHashWriter, data: byte) =
+  if writer.bufLen == BufferSize:
+    writer.keccak.update(writer.buf)
+    writer.bufLen = 0
+  writer.buf[writer.bufLen] = data
+  writer.bufLen += 1
 
-template update(writer: var RlpHashWriter, data: openArray[byte]) =
-  writer.keccak.update(data)
+func update(writer: var RlpHashWriter, data: openArray[byte]) =
+  var pos = 0
+  if writer.bufLen > 0 or data.len < BufferSize:
+    pos = min(BufferSize - writer.bufLen, data.len)
+    if pos > 0:
+      copyMem(addr writer.buf[writer.bufLen], unsafeAddr data[0], pos)
+      writer.bufLen += pos
+    if writer.bufLen < BufferSize:
+      return
+    writer.keccak.update(writer.buf)
+    writer.bufLen = 0
+
+  let wholeBlocks = (data.len - pos) div BufferSize * BufferSize
+  if wholeBlocks > 0:
+    writer.keccak.update(data.toOpenArray(pos, pos + wholeBlocks - 1))
+    pos += wholeBlocks
+
+  writer.bufLen = data.len - pos
+  if writer.bufLen > 0:
+    copyMem(addr writer.buf[0], unsafeAddr data[pos], writer.bufLen)
 
 template updateBigEndian(writer: var RlpHashWriter, i: SomeUnsignedInt, length: int) =
-  writer.bigEndianBuf.writeBigEndian(i, length - 1, length)
-  writer.update(writer.bigEndianBuf.toOpenArray(0, length - 1))
+  var bigEndianBuf: array[8, byte]
+  bigEndianBuf.writeBigEndian(i, length - 1, length)
+  writer.update(bigEndianBuf.toOpenArray(0, length - 1))
 
 func writeLength(writer: var RlpHashWriter, dataLen: int, baseMarker: byte) =
   if dataLen < THRESHOLD_LEN:
@@ -100,6 +128,8 @@ func reInit*(self: var RlpHashWriter, tracker: var RlpLengthTracker) =
   self.wrapLengths = move(tracker.wrapLengths)
 
 template finish*(self: var RlpHashWriter): Hash32 =
+  self.keccak.update(self.buf.toOpenArray(0, self.bufLen - 1))
+  self.bufLen = 0
   self.keccak.finish.to(Hash32)
 
 func clear*(self: var RlpHashWriter) =
@@ -108,4 +138,5 @@ func clear*(self: var RlpHashWriter) =
   self.wrapLengths.setLen(0)
   self.listCount = 0
   self.wrapCount = 0
+  self.bufLen = 0
   self.keccak.clear()
