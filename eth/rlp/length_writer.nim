@@ -9,29 +9,66 @@
 
 import ./priv/defs, utils, stacked_counters
 
+const InlineListLengths = 8
+  ## Enough for the lists of a transaction or receipt - encoding one then
+  ## needs no allocation for its list lengths
+
 type
   PendingListItem = tuple[idx, startLen: int]
   PendingWrapItem = tuple[idx, listIdx, startLen: int]
 
+  ListLengths* = object
+    ## The lengths of the lists of an encoding, in the order they start
+    count: int
+    inline: array[InlineListLengths, int]
+    spilled: seq[int]
+
   StaticRlpLengthTracker*[N: static int] = object
     pendingLists: StaticStackedCounters[N, PendingListItem]
     wrappedEncodings: DynamicStackedCounters[PendingWrapItem]
-    lengths*: seq[int]
+    lengths*: ListLengths
     wrapLengths*: seq[int]
     totalLength*: int
 
   DynamicRlpLengthTracker* = object
     pendingLists: DynamicStackedCounters[PendingListItem]
     wrappedEncodings: DynamicStackedCounters[PendingWrapItem]
-    lengths*: seq[int]
+    lengths*: ListLengths
     wrapLengths*: seq[int]
     totalLength*: int
 
   RlpLengthTracker* = StaticRlpLengthTracker | DynamicRlpLengthTracker
 
-# these constants set the initial capacities of the pendingLists stack and lengths list
-const LIST_LENGTH = 5
+# this constant sets the initial capacity of the pendingLists stack
 const STACK_LENGTH = 5
+
+func len*(s: ListLengths): int =
+  s.count
+
+func add*(s: var ListLengths, listLen: int) =
+  if s.count < InlineListLengths:
+    s.inline[s.count] = listLen
+  else:
+    s.spilled.add listLen
+  s.count += 1
+
+func `[]`*(s: ListLengths, i: int): int =
+  doAssert i < s.count, "list length index out of bounds"
+  if i < InlineListLengths:
+    s.inline[i]
+  else:
+    s.spilled[i - InlineListLengths]
+
+func `[]=`*(s: var ListLengths, i: int, listLen: int) =
+  doAssert i < s.count, "list length index out of bounds"
+  if i < InlineListLengths:
+    s.inline[i] = listLen
+  else:
+    s.spilled[i - InlineListLengths] = listLen
+
+func clear*(s: var ListLengths) =
+  s.count = 0
+  s.spilled.setLen(0)
 
 proc processWrapCounter(
     self: var RlpLengthTracker, i: PendingWrapItem, isSelfEncoding: bool
@@ -161,14 +198,14 @@ proc appendDetached*(self: var RlpLengthTracker, data: byte) =
 func initLengthTracker*(self: var RlpLengthTracker) =
   when self is DynamicRlpLengthTracker:
     self.pendingLists.init(STACK_LENGTH, PendingListItem)
-  self.lengths = newSeqOfCap[int](LIST_LENGTH)
+  self.lengths.clear()
 
 template finish*(self: RlpLengthTracker): int =
   self.totalLength
 
 func clear*(w: var RlpLengthTracker) =
   # Prepare writer for reuse
-  w.lengths.setLen(0)
+  w.lengths.clear()
   w.totalLength = 0
   when w is DynamicRlpLengthTracker:
     w.pendingLists.clear

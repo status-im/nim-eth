@@ -11,7 +11,7 @@ import stew/assign2, ./priv/defs, utils, length_writer
 
 type RlpTwoPassWriter* = object
   output*: seq[byte]
-  lengths*: seq[int]
+  lengths*: ListLengths
   wrapLengths*: seq[int]
   fillLevel: int
   listCount: int
@@ -109,7 +109,7 @@ template finish*(self: RlpTwoPassWriter): seq[byte] =
 
 func clear*(self: var RlpTwoPassWriter) =
   # Prepare writer for reuse
-  self.lengths.setLen(0)
+  self.lengths.clear()
   self.wrapLengths.setLen(0)
   self.output.setLen(0)
   self.listCount = 0
