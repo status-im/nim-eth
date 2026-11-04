@@ -77,6 +77,10 @@ func toString(self: Rlp, item: RlpItem): string {.raises: [RlpError].} =
     result = newString(item.payload.len)
     copyMem(addr result[0], self.bytes.view(item.payload)[0].addr, result.len)
 
+# `decodeInteger` and `rlpPayload` check every access explicitly, raising an
+# `RlpError`, which makes the compiler's own checks redundant
+{.push checks: off.}
+
 func decodeInteger(input: openArray[byte]): uint64 {.raises: [RlpError].} =
   # For a positive integer, it is converted to the the shortest byte array whose
   # big-endian interpretation is the integer, and then encoded as a string
@@ -96,10 +100,15 @@ func decodeInteger(input: openArray[byte]): uint64 {.raises: [RlpError].} =
     v
 
 # https://ethereum.org/en/developers/docs/data-structures-and-encoding/rlp/
-func rlpItem(input: openArray[byte], start = 0): RlpItem {.raises: [RlpError].} =
-  # Extract coordinates for the RLP item starting at `start`, ensuring that
-  # it (but not necessarily its payload) is correctly encoded
-  if start >= len(input):
+func rlpPayload(input: openArray[byte], start = 0): Slice[int] {.raises: [RlpError].} =
+  # Extract the payload coordinates of the RLP item starting at `start`,
+  # ensuring that the item (but not necessarily its payload) is correctly
+  # encoded.
+  #
+  # The item type is deliberately not returned: at 16 bytes, the result comes
+  # back in registers, whereas a full `RlpItem` goes through memory and is
+  # copied out in a way that stalls on store-to-load forwarding.
+  if uint(start) >= uint(len(input)): # rejects a negative `start` too
     raiseOutOfBounds()
 
   let
@@ -109,7 +118,7 @@ func rlpItem(input: openArray[byte], start = 0): RlpItem {.raises: [RlpError].} 
   if prefix <= 0x7f:
     # For a single byte whose value is in the [0x00, 0x7f] (decimal [0, 127])
     # range, that byte is its own RLP encoding.
-    (start .. start, rlpBlob)
+    start .. start
   elif prefix <= 0xb7:
     # Otherwise, if a string is 0-55 bytes long, the RLP encoding consists of a
     # single byte with value 0x80 (dec. 128) plus the length of the string
@@ -121,7 +130,7 @@ func rlpItem(input: openArray[byte], start = 0): RlpItem {.raises: [RlpError].} 
     if strLen == 1 and input[start + 1] <= 0x7f:
       raiseNonCanonical()
 
-    (start + 1 .. start + strLen, rlpBlob)
+    start + 1 .. start + strLen
   elif prefix <= 0xbf:
     # If a string is more than 55 bytes long, the RLP encoding consists of a
     # single byte with value 0xb7 (dec. 183) plus the length in bytes of the
@@ -142,7 +151,7 @@ func rlpItem(input: openArray[byte], start = 0): RlpItem {.raises: [RlpError].} 
     if strLen >= uint64(length - lenOfStrLen):
       raiseOutOfBounds()
 
-    (start + 1 + lenOfStrLen .. start + lenOfStrLen + int(strLen), rlpBlob)
+    start + 1 + lenOfStrLen .. start + lenOfStrLen + int(strLen)
   elif prefix <= 0xf7:
     # If the total payload of a list (i.e. the combined length of all its items
     # being RLP encoded) is 0-55 bytes long, the RLP encoding consists of a
@@ -153,7 +162,7 @@ func rlpItem(input: openArray[byte], start = 0): RlpItem {.raises: [RlpError].} 
     if listLen >= length:
       raiseOutOfBounds()
 
-    (start + 1 .. start + listLen, rlpList)
+    start + 1 .. start + listLen
   else:
     # If the total payload of a list is more than 55 bytes long, the RLP
     # encoding consists of a single byte with value 0xf7 plus the length in
@@ -170,12 +179,18 @@ func rlpItem(input: openArray[byte], start = 0): RlpItem {.raises: [RlpError].} 
     if listLen >= uint64(length - lenOfListLen):
       raiseOutOfBounds()
 
-    (start + 1 + lenOfListLen .. start + lenOfListLen + int(listLen), rlpList)
+    start + 1 + lenOfListLen .. start + lenOfListLen + int(listLen)
+{.pop.}
 
-func item(self: Rlp, position: int): RlpItem {.raises: [RlpError].} =
-  rlpItem(self.bytes, position)
+template item(self: Rlp, position: int): RlpItem =
+  # A template, not an `{.inline.}` func: inlining is only a hint, and when it
+  # is not taken, returning the `RlpItem` stalls just like in `rlpPayload`
+  let
+    pos = position
+    payload = rlpPayload(self.bytes, pos)
+  (payload, if self.bytes[pos] < LIST_START_MARKER: rlpBlob else: rlpList)
 
-func item(self: Rlp): RlpItem {.raises: [RlpError].} =
+template item(self: Rlp): RlpItem =
   self.item(self.position)
 
 func rlpFromBytes*(data: openArray[byte]): Rlp =
@@ -303,8 +318,11 @@ func tryEnterList*(self: var Rlp) {.raises: [RlpError].} =
   self.position = item.payload.a
 
 template consumeList*(self: var Rlp, mode: static RlpListMode, body: untyped) =
-  let listEnd = self.currentElemEnd()
-  self.tryEnterList()
+  let listItem = self.item()
+  if listItem.typ != rlpList:
+    raiseExpectedList()
+  let listEnd = listItem.payload.b + 1
+  self.position = listItem.payload.a
   body
   when mode == RlpListMode.RejectAdditionalElements:
     if self.position != listEnd:
@@ -335,7 +353,7 @@ template iterateIt(self: Rlp, position: int, body: untyped) =
   var it {.inject.} = item.payload.a
   let last = item.payload.b
   while it <= last:
-    let subItem = rlpItem(self.bytes.view(it .. last)).payload
+    let subItem = rlpPayload(self.bytes.view(it .. last))
     body
     it += subItem.b + 1
 
@@ -348,7 +366,7 @@ iterator items(self: var Rlp, item: RlpItem): var Rlp {.raises: [RlpError].} =
   let last = item.payload.b
   while self.position <= last:
     let
-      subItem = rlpItem(self.bytes.view(self.position .. last)).payload
+      subItem = rlpPayload(self.bytes.view(self.position .. last))
       next = self.position + subItem.b + 1
     yield self
     self.position = next # self.position might have changed during yield
@@ -367,11 +385,11 @@ func listElem*(self: Rlp, i: int): Rlp {.raises: [RlpError].} =
   var
     i = i
     start = item.payload.a
-    payload = rlpItem(self.bytes.view(start .. item.payload.b)).payload
+    payload = rlpPayload(self.bytes.view(start .. item.payload.b))
 
   while i > 0:
     start += payload.b + 1
-    payload = rlpItem(self.bytes.view(start .. item.payload.b)).payload
+    payload = rlpPayload(self.bytes.view(start .. item.payload.b))
     dec i
 
   rlpFromBytes self.bytes.view(start .. start + payload.b)
@@ -456,9 +474,7 @@ func readImpl[E](rlp: var Rlp, T: type seq[E]): T {.raises: [RlpError].} =
     if item.typ != rlpList:
       raiseExpectedList()
 
-    result = newSeqOfCap[E](rlp.listLen)
-
-    for elem in rlp.items():
+    for elem in rlp.items(item):
       result.add rlp.read(E)
 
   rlp.positionAfter(item)

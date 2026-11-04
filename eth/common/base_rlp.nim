@@ -18,24 +18,27 @@ template read*[T](rlp: var Rlp, val: var T) =
   mixin read
   val = rlp.read(type val)
 
+func fromRlpBlob(T: type StUint, bytes: openArray[byte]): T {.raises: [RlpError].} =
+  if bytes.len > 0:
+    if bytes[0] == 0:
+      raise newException(
+        MalformedRlpError, "Unsigned integer expected, but the source RLP has leading zeros"
+      )
+    # be sure the amount of bytes matches the size of the stint
+    if bytes.len <= sizeof(result):
+      result.initFromBytesBE(bytes)
+    else:
+      raise newException(
+        RlpTypeMismatch,
+        "Unsigned integer expected, but the source RLP has the wrong length",
+      )
+  else:
+    result = 0.to(T)
+
 proc read*(rlp: var Rlp, T: type StUint): T {.raises: [RlpError].} =
   if rlp.isBlob:
-    let bytes = rlp.toBytes
-    if bytes.len > 0:
-      if bytes[0] == 0:
-        raise newException(
-          MalformedRlpError, "Unsigned integer expected, but the source RLP has leading zeros"
-        )
-      # be sure the amount of bytes matches the size of the stint
-      if bytes.len <= sizeof(result):
-        result.initFromBytesBE(bytes)
-      else:
-        raise newException(
-          RlpTypeMismatch,
-          "Unsigned integer expected, but the source RLP has the wrong length",
-        )
-    else:
-      result = 0.to(T)
+    # `blobView` rather than `toBytes`, to not allocate a copy of the payload
+    result = T.fromRlpBlob(rlp.blobView)
   else:
     raise newException(
       RlpTypeMismatch, "Unsigned integer expected, but the source RLP is a list"
