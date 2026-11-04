@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import ./priv/defs, utils, pkg/results, stacked_counters
+import ./priv/defs, utils, stacked_counters
 
 type
   PendingListItem = tuple[idx, startLen: int]
@@ -34,87 +34,67 @@ const LIST_LENGTH = 5
 const STACK_LENGTH = 5
 
 proc processWrapCounter(
-    self: var RlpLengthTracker, item: Opt[PendingWrapItem], isSelfEncoding: bool
-): bool =
-  if item.isSome():
-    let i = item.get()
+    self: var RlpLengthTracker, i: PendingWrapItem, isSelfEncoding: bool
+) =
+  var
+    encodingLen = self.totalLength - i.startLen
+    prefixLen = prefixLength(encodingLen)
 
-    var
-      encodingLen = self.totalLength - i.startLen
-      prefixLen = prefixLength(encodingLen)
+  if isSelfEncoding and prefixLen == 1:
+    # nested/wrapped encoding of a single byte lesser than 128(BLOB_START_MARKER)
+    # is not required the byte itself is its own encoding
+    prefixLen = 0
+    # NOTE: encoding len is 1 but is set to 0 to differentiate between 
+    # single byte <128 versus single byte >=128 on the second pass
+    encodingLen = 0
 
-    if isSelfEncoding and prefixLen == 1:
-      # nested/wrapped encoding of a single byte lesser than 128(BLOB_START_MARKER)
-      # is not required the byte itself is its own encoding
-      prefixLen = 0
-      # NOTE: encoding len is 1 but is set to 0 to differentiate between 
-      # single byte <128 versus single byte >=128 on the second pass
-      encodingLen = 0
+  # save the encoding length
+  self.wrapLengths[i.idx] = encodingLen
 
-    # save the encoding length
-    self.wrapLengths[i.idx] = encodingLen
+  # update the total length
+  self.totalLength += prefixLen
 
-    # update the total length
-    self.totalLength += prefixLen
-    return true
-  else:
-    return false
+proc processListCounter(self: var RlpLengthTracker, i: PendingListItem) =
+  let
+    listLen = self.totalLength - i.startLen
+    prefixLen = prefixLength(listLen)
 
-proc processListCounter(self: var RlpLengthTracker, item: Opt[PendingListItem]): bool =
-  if item.isSome():
-    let
-      i = item.get()
-      listLen = self.totalLength - i.startLen
-      prefixLen = prefixLength(listLen)
+  # save the list length
+  self.lengths[i.idx] = listLen
 
-    # save the list length
-    self.lengths[i.idx] = listLen
-
-    # update the total length
-    self.totalLength += prefixLen
-
-    return true
-  else:
-    return false
+  # update the total length
+  self.totalLength += prefixLen
 
 proc decrementCounters(self: var RlpLengthTracker, isSelfEncoding: bool) =
   if self.wrappedEncodings.isEmpty():
     if self.pendingLists.decrementTop():
       return
 
-    while true:
-      let item = self.pendingLists.pop(PendingListItem)
-      if item.isNone():
-        return
-
-      let
-        i = item.unsafeGet()
-        listLen = self.totalLength - i.startLen
-
-      self.lengths[i.idx] = listLen
-      self.totalLength += prefixLength(listLen)
+    var item: PendingListItem
+    while self.pendingLists.pop(item):
+      self.processListCounter(item)
+    return
 
   var isSelfEncodingFlag = isSelfEncoding
 
   # The item just written belongs to the innermost open list or wrapping - each
   # one that it completes is in turn an item of the one around it
   while true:
-    let
-      topListItem = self.pendingLists.peek(PendingListItem)
-      topWrapItem = self.wrappedEncodings.peek(PendingWrapItem)
-      # a wrapping is innermost when it was started after the top list
-      closed =
-        if topWrapItem.isSome() and
-            (topListItem.isNone() or topListItem.get().idx < topWrapItem.get().listIdx):
-          self.processWrapCounter(
-            self.wrappedEncodings.pop(PendingWrapItem), isSelfEncodingFlag)
-        else:
-          self.processListCounter(self.pendingLists.pop(PendingListItem))
+    # a wrapping is innermost when it was started after the top list
+    if not self.wrappedEncodings.isEmpty() and (
+        self.pendingLists.isEmpty() or
+        self.pendingLists.topItem.idx < self.wrappedEncodings.topItem.listIdx):
+      var item: PendingWrapItem
+      if not self.wrappedEncodings.pop(item):
+        return
+      self.processWrapCounter(item, isSelfEncodingFlag)
+    else:
+      var item: PendingListItem
+      if not self.pendingLists.pop(item):
+        return
+      self.processListCounter(item)
 
     isSelfEncodingFlag = false
-
-    if not closed:
-      return
 
 func appendRawBytes*(self: var RlpLengthTracker, bytes: openArray[byte]) =
   self.totalLength += bytes.len

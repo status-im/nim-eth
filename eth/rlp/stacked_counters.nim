@@ -1,6 +1,8 @@
 {.push raises: [].}
 
-import pkg/results
+# `topItem` and `pop` give the item without wrapping it in an `Opt`: an `Opt` of a
+# tuple is returned through memory, and reading it back right after it was
+# written field by field stalls on store forwarding.
 
 type
   StaticStackedCounters*[N: static int, T] = object
@@ -40,42 +42,42 @@ func decrementTop*(self: var DynamicStackedCounters): bool {.inline.} =
       return true
   false
 
-proc peek*(self: var StaticStackedCounters, T: type): Opt[T] =
-  if self.top > 0:
-    return Opt.some(self.stack[self.top - 1].item)
+template topItem*(self: StaticStackedCounters): untyped =
+  ## The item on top of the stack, which must not be empty
+  self.stack[self.top - 1].item
 
-  return Opt.none(T)
+template topItem*(self: DynamicStackedCounters): untyped =
+  ## The item on top of the stack, which must not be empty
+  self.stack[self.stack.len - 1].item
 
-proc peek*(self: var DynamicStackedCounters, T: type): Opt[T] =
-  if self.stack.len > 0:
-    return Opt.some(self.stack[self.stack.len - 1].item)
-
-  return Opt.none(T)
-
-proc pop*(self: var StaticStackedCounters, T: type): Opt[T] =
+proc pop*[N: static int, T](self: var StaticStackedCounters[N, T], item: var T): bool =
+  ## Decrements the counter on top of the stack - when it reaches zero, removes
+  ## the top and returns true, with its item in `item`
   if self.top > 0:
     #decrement the counter
     self.stack[self.top - 1].count -= 1
 
     if self.stack[self.top - 1].count == 0:
-      let item = self.stack[self.top - 1].item
+      item = self.stack[self.top - 1].item
       self.top -= 1
-      return Opt.some(item)
+      return true
 
-  Opt.none(T)
+  false
 
-proc pop*(self: var DynamicStackedCounters, T: type): Opt[T] =
+proc pop*[T](self: var DynamicStackedCounters[T], item: var T): bool =
+  ## Decrements the counter on top of the stack - when it reaches zero, removes
+  ## the top and returns true, with its item in `item`
   let top = self.stack.len
   if top > 0:
     #decrement the counter
     self.stack[top - 1].count -= 1
 
     if self.stack[top - 1].count == 0:
-      let item = self.stack[top - 1].item
+      item = self.stack[top - 1].item
       self.stack.setLen(top - 1)
-      return Opt.some(item)
+      return true
 
-  Opt.none(T)
+  false
 
 proc init*(self: var DynamicStackedCounters, stackLen: int, T: type) =
   self.stack = newSeqOfCap[(T, int)](stackLen)
