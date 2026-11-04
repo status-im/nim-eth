@@ -46,18 +46,12 @@ proc read*(rlp: var Rlp, T: type StUint): T {.raises: [RlpError].} =
 
   rlp.skipElem
 
-func significantBytesBE(val: openArray[byte]): int =
-  ## Returns the number of significant trailing bytes in a big endian
-  ## representation of a number.
-  for i in 0 ..< val.len:
-    if val[i] != 0:
-      return val.len - i
-  return 1
-
 proc append*(w: var RlpWriter, value: StUint) =
   if value > 128:
-    let bytes = value.toBytesBE
-    let nonZeroBytes = significantBytesBE(bytes)
+    let
+      bytes = value.toBytesBE
+      # `value` is not zero, so this is at least one byte
+      nonZeroBytes = bytes.len - value.leadingZeros div 8
     w.append bytes.toOpenArray(bytes.len - nonZeroBytes, bytes.len - 1)
   else:
     w.append(value.truncate(uint))
