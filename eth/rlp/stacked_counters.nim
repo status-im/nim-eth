@@ -1,9 +1,5 @@
 {.push raises: [].}
 
-# `topItem` and `pop` give the item without wrapping it in an `Opt`: an `Opt` of a
-# tuple is returned through memory, and reading it back right after it was
-# written field by field stalls on store forwarding.
-
 type
   StaticStackedCounters*[N: static int, T] = object
     stack: array[N, tuple[item: T, count: int]]

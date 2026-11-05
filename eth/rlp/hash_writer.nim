@@ -10,8 +10,6 @@
 import stew/endians2, ../keccak/keccak, ./priv/defs, utils, ../common/hashes, length_writer
 
 const BufferSize = 136
-  ## The keccak-256 rate: whole blocks are absorbed a lane at a time, whereas
-  ## the many small writes of an encoding would be absorbed byte by byte
 
 type RlpHashWriter* = object
   keccak: keccak.Keccak256
