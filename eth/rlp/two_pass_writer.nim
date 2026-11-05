@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import stew/endians2, ./priv/defs, utils, length_writer
+import ./priv/defs, utils, length_writer
 
 type RlpTwoPassWriter* = object
   output*: seq[byte]
