@@ -45,11 +45,16 @@ const STACK_LENGTH = 5
 func len*(s: ListLengths): int =
   s.count
 
+func spill(s: var ListLengths, listLen: int) {.noinline.} =
+  if s.spilled.len == 0:
+    s.spilled = newSeqOfCap[int](32)
+  s.spilled.add listLen
+
 func add*(s: var ListLengths, listLen: int) =
   if s.count < InlineListLengths:
     s.inline[s.count] = listLen
   else:
-    s.spilled.add listLen
+    s.spill(listLen)
   s.count += 1
 
 func `[]`*(s: ListLengths, i: int): int =
