@@ -7,25 +7,55 @@
 
 {.push raises: [].}
 
-import ../keccak/keccak, ./priv/defs, utils, ../common/hashes, length_writer
+import stew/endians2, ../keccak/keccak, ./priv/defs, utils, ../common/hashes, length_writer
+
+const BufferSize = 136
 
 type RlpHashWriter* = object
   keccak: keccak.Keccak256
-  lengths*: seq[int]
+  lengths*: ListLengths
   wrapLengths*: seq[int]
   listCount: int
   wrapCount: int
-  bigEndianBuf: array[8, byte]
+  buf: array[BufferSize, byte]
+  bufLen: int
 
-template update(writer: var RlpHashWriter, data: byte) =
-  writer.keccak.update([data])
+func update(writer: var RlpHashWriter, data: byte) =
+  if writer.bufLen == BufferSize:
+    writer.keccak.update(writer.buf)
+    writer.bufLen = 0
+  writer.buf[writer.bufLen] = data
+  writer.bufLen += 1
 
-template update(writer: var RlpHashWriter, data: openArray[byte]) =
-  writer.keccak.update(data)
+func update(writer: var RlpHashWriter, data: openArray[byte]) =
+  var pos = 0
+  if writer.bufLen > 0 or data.len < BufferSize:
+    pos = min(BufferSize - writer.bufLen, data.len)
+    if pos > 0:
+      copyMem(addr writer.buf[writer.bufLen], unsafeAddr data[0], pos)
+      writer.bufLen += pos
+    if writer.bufLen < BufferSize:
+      return
+    writer.keccak.update(writer.buf)
+    writer.bufLen = 0
+
+  let wholeBlocks = (data.len - pos) div BufferSize * BufferSize
+  if wholeBlocks > 0:
+    writer.keccak.update(data.toOpenArray(pos, pos + wholeBlocks - 1))
+    pos += wholeBlocks
+
+  writer.bufLen = data.len - pos
+  if writer.bufLen > 0:
+    copyMem(addr writer.buf[0], unsafeAddr data[pos], writer.bufLen)
 
 template updateBigEndian(writer: var RlpHashWriter, i: SomeUnsignedInt, length: int) =
-  writer.bigEndianBuf.writeBigEndian(i, length - 1, length)
-  writer.update(writer.bigEndianBuf.toOpenArray(0, length - 1))
+  if length > 0 and writer.bufLen + 8 <= BufferSize:
+    let bytes = toBytesBE(uint64(i) shl (8 * (8 - length)))
+    copyMem(addr writer.buf[writer.bufLen], unsafeAddr bytes[0], 8)
+    writer.bufLen += length
+  else:
+    let bytes = toBytesBE(uint64(i))
+    writer.update(bytes.toOpenArray(bytes.len - length, bytes.high))
 
 func writeLength(writer: var RlpHashWriter, dataLen: int, baseMarker: byte) =
   if dataLen < THRESHOLD_LEN:
@@ -84,10 +114,10 @@ proc startList*(writer: var RlpHashWriter, listSize: int) =
 proc wrapEncoding*(writer: var RlpHashWriter, numOfEncodings: int) =
   let encodingLen = writer.wrapLengths[writer.wrapCount]
 
+  writer.wrapCount += 1
+
   if encodingLen == 0:
     return # do nothing because nested encoding of a single byte <128 is the byte itself
-
-  writer.wrapCount += 1
 
   writer.writeLength(encodingLen, BLOB_START_MARKER)
 
@@ -100,12 +130,15 @@ func reInit*(self: var RlpHashWriter, tracker: var RlpLengthTracker) =
   self.wrapLengths = move(tracker.wrapLengths)
 
 template finish*(self: var RlpHashWriter): Hash32 =
+  self.keccak.update(self.buf.toOpenArray(0, self.bufLen - 1))
+  self.bufLen = 0
   self.keccak.finish.to(Hash32)
 
 func clear*(self: var RlpHashWriter) =
   # Prepare writer for reuse
-  self.lengths.setLen(0)
+  self.lengths.clear()
   self.wrapLengths.setLen(0)
   self.listCount = 0
   self.wrapCount = 0
+  self.bufLen = 0
   self.keccak.clear()

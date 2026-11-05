@@ -77,10 +77,6 @@ func toString(self: Rlp, item: RlpItem): string {.raises: [RlpError].} =
     result = newString(item.payload.len)
     copyMem(addr result[0], self.bytes.view(item.payload)[0].addr, result.len)
 
-# `decodeInteger` and `rlpPayload` check every access explicitly, raising an
-# `RlpError`, which makes the compiler's own checks redundant
-{.push checks: off.}
-
 func decodeInteger(input: openArray[byte]): uint64 {.raises: [RlpError].} =
   # For a positive integer, it is converted to the the shortest byte array whose
   # big-endian interpretation is the integer, and then encoded as a string
@@ -91,12 +87,14 @@ func decodeInteger(input: openArray[byte]): uint64 {.raises: [RlpError].} =
   if input.len == 0:
     0
   else:
+    {.push checks: off.}
     if input[0] == 0:
       raiseNonCanonical()
 
     var v: uint64
     for b in input:
       v = (v shl 8) or uint64(b)
+    {.pop.}
     v
 
 # https://ethereum.org/en/developers/docs/data-structures-and-encoding/rlp/
@@ -111,9 +109,11 @@ func rlpPayload(input: openArray[byte], start = 0): Slice[int] {.raises: [RlpErr
   if uint(start) >= uint(len(input)): # rejects a negative `start` too
     raiseOutOfBounds()
 
+  {.push checks: off.}
   let
     length = len(input) - start # >= 1
     prefix = input[start]
+  {.pop.}
 
   if prefix <= 0x7f:
     # For a single byte whose value is in the [0x00, 0x7f] (decimal [0, 127])
@@ -127,10 +127,14 @@ func rlpPayload(input: openArray[byte], start = 0): Slice[int] {.raises: [RlpErr
     let strLen = int(prefix - 0x80)
     if strLen >= length:
       raiseOutOfBounds()
+
+    {.push checks: off.}
     if strLen == 1 and input[start + 1] <= 0x7f:
       raiseNonCanonical()
 
-    start + 1 .. start + strLen
+    let payload = start + 1 .. start + strLen
+    {.pop.}
+    payload
   elif prefix <= 0xbf:
     # If a string is more than 55 bytes long, the RLP encoding consists of a
     # single byte with value 0xb7 (dec. 183) plus the length in bytes of the
@@ -141,9 +145,10 @@ func rlpPayload(input: openArray[byte], start = 0): Slice[int] {.raises: [RlpErr
     # 0x0400 (dec. 1024) that denote the length of the actual string. The range
     # of the first byte is thus [0xb8, 0xbf] (dec. [184, 191]).
 
-    let
-      lenOfStrLen = int(prefix - 0xb7)
-      strLen = decodeInteger(input.view(start + 1 .. start + lenOfStrLen))
+    let lenOfStrLen = int(prefix - 0xb7)
+
+    {.push checks: off.}
+    let strLen = decodeInteger(input.view(start + 1 .. start + lenOfStrLen))
 
     if strLen < THRESHOLD_LEN:
       raiseNonCanonical()
@@ -151,7 +156,9 @@ func rlpPayload(input: openArray[byte], start = 0): Slice[int] {.raises: [RlpErr
     if strLen >= uint64(length - lenOfStrLen):
       raiseOutOfBounds()
 
-    start + 1 + lenOfStrLen .. start + lenOfStrLen + int(strLen)
+    let payload = start + 1 + lenOfStrLen .. start + lenOfStrLen + int(strLen)
+    {.pop.}
+    payload
   elif prefix <= 0xf7:
     # If the total payload of a list (i.e. the combined length of all its items
     # being RLP encoded) is 0-55 bytes long, the RLP encoding consists of a
@@ -162,16 +169,20 @@ func rlpPayload(input: openArray[byte], start = 0): Slice[int] {.raises: [RlpErr
     if listLen >= length:
       raiseOutOfBounds()
 
-    start + 1 .. start + listLen
+    {.push checks: off.}
+    let payload = start + 1 .. start + listLen
+    {.pop.}
+    payload
   else:
     # If the total payload of a list is more than 55 bytes long, the RLP
     # encoding consists of a single byte with value 0xf7 plus the length in
     # bytes of the length of the payload in binary form, followed by the length
     # of the payload, followed by the concatenation of the RLP encodings of the
     # items. The range of the first byte is thus [0xf8, 0xff] (dec. [248, 255]).
-    let
-      lenOfListLen = int(prefix - 0xf7)
-      listLen = decodeInteger(input.view(start + 1 .. start + lenOfListLen))
+    let lenOfListLen = int(prefix - 0xf7)
+
+    {.push checks: off.}
+    let listLen = decodeInteger(input.view(start + 1 .. start + lenOfListLen))
 
     if listLen < THRESHOLD_LEN:
       raiseNonCanonical()
@@ -179,8 +190,9 @@ func rlpPayload(input: openArray[byte], start = 0): Slice[int] {.raises: [RlpErr
     if listLen >= uint64(length - lenOfListLen):
       raiseOutOfBounds()
 
-    start + 1 + lenOfListLen .. start + lenOfListLen + int(listLen)
-{.pop.}
+    let payload = start + 1 + lenOfListLen .. start + lenOfListLen + int(listLen)
+    {.pop.}
+    payload
 
 template item(self: Rlp, position: int): RlpItem =
   # A template, not an `{.inline.}` func: inlining is only a hint, and when it

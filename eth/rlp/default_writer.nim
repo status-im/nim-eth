@@ -13,6 +13,9 @@ type RlpDefaultWriter* = object
   pendingLists: seq[tuple[remainingItems, startPos: int]]
   output: seq[byte]
 
+func init*(T: type RlpDefaultWriter, capacity: int): T =
+  T(output: newSeqOfCap[byte](capacity))
+
 func writeCount(writer: var RlpDefaultWriter, count: int, baseMarker: byte) =
   if count < THRESHOLD_LEN:
     writer.output.add(baseMarker + byte(count))

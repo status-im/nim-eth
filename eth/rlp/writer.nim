@@ -32,10 +32,12 @@ type
 
 const wrapObjsInList* = true
 
-proc initRlpWriter*(): RlpDefaultWriter =
+const defaultWriterCapacity = 256
+
+proc initRlpWriter*(capacity = defaultWriterCapacity): RlpDefaultWriter =
   # Avoid allocations during initial write of small items - since the writer is
   # expected to be short-lived, it doesn't hurt to allocate this buffer
-  result
+  RlpDefaultWriter.init(capacity)
 
 template appendBlob(self: var RlpWriter, data: openArray[byte]) =
   self.writeBlob(data)
@@ -188,8 +190,8 @@ template append*[T](w: var RlpWriter, data: T) =
 template append*(w: var RlpWriter, data: SomeSignedInt) =
   {.error: "Signed integer encoding is not defined for rlp".}
 
-proc initRlpList*(listSize: int): RlpDefaultWriter =
-  result = initRlpWriter()
+proc initRlpList*(listSize: int, capacity = defaultWriterCapacity): RlpDefaultWriter =
+  result = initRlpWriter(capacity)
   startList(result, listSize)
 
 template withTracker*(v, body) =
