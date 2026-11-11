@@ -7,11 +7,11 @@
 
 {.push raises: [].}
 
-import stew/assign2, ./priv/defs, utils, length_writer
+import ./priv/defs, utils, length_writer
 
 type RlpTwoPassWriter* = object
   output*: seq[byte]
-  lengths*: seq[int]
+  lengths*: ListLengths
   wrapLengths*: seq[int]
   fillLevel: int
   listCount: int
@@ -21,9 +21,15 @@ template update(self: var RlpTwoPassWriter, data: byte) =
   self.output[self.fillLevel] = data
   self.fillLevel += 1
 
+template checkSpace(self: RlpTwoPassWriter, n: int) =
+  if self.output.len - self.fillLevel < n:
+    raiseAssert "RLP output overflow: the length and the write pass disagree"
+
 template update(self: var RlpTwoPassWriter, data: openArray[byte]) =
-  assign(self.output.toOpenArray(self.fillLevel, self.fillLevel + data.len - 1), data)
-  self.fillLevel += data.len
+  if data.len > 0:
+    self.checkSpace(data.len)
+    copyMem(addr self.output[self.fillLevel], unsafeAddr data[0], data.len)
+    self.fillLevel += data.len
 
 template updateBigEndian(self: var RlpTwoPassWriter, i: SomeUnsignedInt, length: int) =
   self.fillLevel += length
@@ -86,15 +92,16 @@ proc startList*(writer: var RlpTwoPassWriter, listSize: int) =
 proc wrapEncoding*(self: var RlpTwoPassWriter, numOfEncodings: int) =
   let encodingLen = self.wrapLengths[self.wrapCount]
 
+  self.wrapCount += 1
+
   if encodingLen == 0:
     return # do nothing because nested encoding of a single byte <128 is the byte itself
-
-  self.wrapCount += 1
 
   self.writeLength(encodingLen, BLOB_START_MARKER)
 
 func initTwoPassWriter*(tracker: var RlpLengthTracker): RlpTwoPassWriter =
-  result.output = newSeq[byte](tracker.totalLength)
+  # every byte is written by the second pass
+  result.output = newSeqUninit[byte](tracker.totalLength)
   result.lengths = move(tracker.lengths)
   result.wrapLengths = move(tracker.wrapLengths)
 
@@ -108,7 +115,7 @@ template finish*(self: RlpTwoPassWriter): seq[byte] =
 
 func clear*(self: var RlpTwoPassWriter) =
   # Prepare writer for reuse
-  self.lengths.setLen(0)
+  self.lengths.clear()
   self.wrapLengths.setLen(0)
   self.output.setLen(0)
   self.listCount = 0

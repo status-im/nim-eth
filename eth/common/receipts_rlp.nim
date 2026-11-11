@@ -219,7 +219,12 @@ proc append*(w: var RlpWriter, receipts: seq[Receipt] | openArray[Receipt]) =
     if rec.receiptType == LegacyReceipt:
       w.append(rec)
     else:
-      w.append(rlp.encode(rec))
+      when w is RlpDefaultWriter | RlpArrayBufWriter:
+        w.append(rlp.encode(rec))
+      else:
+        # Typed receipts are wrapped in a blob - encode it in place
+        w.wrapEncoding(1)
+        w.append(rec)
 
 # Encode list of eth/69 StoredReceipts
 proc append*(w: var RlpWriter, receipts: seq[StoredReceipt] | openArray[StoredReceipt]) =

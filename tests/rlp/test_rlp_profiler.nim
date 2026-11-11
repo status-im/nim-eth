@@ -33,14 +33,16 @@ proc readBlock(): EthBlock {.raises: [RlpError].} =
   while rlpBytes.hasData:
     result = rlpBytes.read(EthBlock)
 
+const iterations = 10_000
+
 template benchmark(benchmarkName: string, code: untyped) =
   block:
     var sum = 0.0
-    for i in countup(1,100):
+    for i in countup(1, iterations):
       let t0 = epochTime()
       code
       sum += (epochTime() - t0)
-    let elapsed = sum/100
+    let elapsed = sum / iterations
     let elapsedStr = elapsed.formatFloat(format = ffDecimal, precision = 9)
     echo "CPU Time [", benchmarkName, "] ", elapsedStr, "s"
 

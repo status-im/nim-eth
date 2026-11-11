@@ -43,6 +43,18 @@ type
     c: Opt[uint64]
     cache {.rlpIgnore.}: int
 
+  InitPoint {.requiresInit.} = object
+    x: uint64
+    y: uint64
+
+  InitSegment {.requiresInit.} = object
+    a: InitPoint
+    b: Opt[uint64]
+
+  InitPath = object
+    points: array[2, InitPoint]
+    more: seq[InitPoint]
+
 proc append*(rlpWriter: var RlpWriter, holder: CustomSerialized, f: Foo) =
   rlpWriter.startList(3)
   rlpWriter.append(f.x)
@@ -89,6 +101,18 @@ proc suite() =
         t2.sender == "Alice"
         t2.receiver == "Bob"
         t2.amount == 1000
+
+    test "encoding objects that require initialization":
+      check:
+        InitPoint.rlpFieldsCount == 2
+        encode(InitPoint(x: 1, y: 2)).toHex == "c20102"
+        encode(InitSegment(
+            a: InitPoint(x: 1, y: 2), b: Opt.some(3'u64))).toHex ==
+          "c4c2010203"
+        encode(InitPath(
+            points: [InitPoint(x: 1, y: 2), InitPoint(x: 3, y: 4)],
+            more: @[InitPoint(x: 5, y: 6)])).toHex ==
+          "cbc6c20102c20304c3c20506"
 
     test "custom field serialization":
       var origVal = CustomSerialized(customFoo: Foo(x: 10'u64, y: "y", z: @[]), ignored: 5)

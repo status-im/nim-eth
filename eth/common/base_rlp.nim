@@ -18,24 +18,27 @@ template read*[T](rlp: var Rlp, val: var T) =
   mixin read
   val = rlp.read(type val)
 
+func fromRlpBlob(T: type StUint, bytes: openArray[byte]): T {.raises: [RlpError].} =
+  if bytes.len > 0:
+    if bytes[0] == 0:
+      raise newException(
+        MalformedRlpError, "Unsigned integer expected, but the source RLP has leading zeros"
+      )
+    # be sure the amount of bytes matches the size of the stint
+    if bytes.len <= sizeof(result):
+      result.initFromBytesBE(bytes)
+    else:
+      raise newException(
+        RlpTypeMismatch,
+        "Unsigned integer expected, but the source RLP has the wrong length",
+      )
+  else:
+    result = 0.to(T)
+
 proc read*(rlp: var Rlp, T: type StUint): T {.raises: [RlpError].} =
   if rlp.isBlob:
-    let bytes = rlp.toBytes
-    if bytes.len > 0:
-      if bytes[0] == 0:
-        raise newException(
-          MalformedRlpError, "Unsigned integer expected, but the source RLP has leading zeros"
-        )
-      # be sure the amount of bytes matches the size of the stint
-      if bytes.len <= sizeof(result):
-        result.initFromBytesBE(bytes)
-      else:
-        raise newException(
-          RlpTypeMismatch,
-          "Unsigned integer expected, but the source RLP has the wrong length",
-        )
-    else:
-      result = 0.to(T)
+    # `blobView` rather than `toBytes`, to not allocate a copy of the payload
+    result = T.fromRlpBlob(rlp.blobView)
   else:
     raise newException(
       RlpTypeMismatch, "Unsigned integer expected, but the source RLP is a list"
@@ -43,18 +46,12 @@ proc read*(rlp: var Rlp, T: type StUint): T {.raises: [RlpError].} =
 
   rlp.skipElem
 
-func significantBytesBE(val: openArray[byte]): int =
-  ## Returns the number of significant trailing bytes in a big endian
-  ## representation of a number.
-  for i in 0 ..< val.len:
-    if val[i] != 0:
-      return val.len - i
-  return 1
-
 proc append*(w: var RlpWriter, value: StUint) =
   if value > 128:
-    let bytes = value.toBytesBE
-    let nonZeroBytes = significantBytesBE(bytes)
+    let
+      bytes = value.toBytesBE
+      # `value` is not zero, so this is at least one byte
+      nonZeroBytes = bytes.len - value.leadingZeros div 8
     w.append bytes.toOpenArray(bytes.len - nonZeroBytes, bytes.len - 1)
   else:
     w.append(value.truncate(uint))

@@ -210,6 +210,24 @@ suite "test api usage":
     expect RlpTypeMismatch:
       r.tryEnterList()
 
+  test "positions outside of the input are rejected":
+    for position in [-1, 3, 4]:
+      checkpoint $position
+      var r = rlpFromHex("c20102")
+      r.position = position
+      expect MalformedRlpError:
+        r.skipElem()
+
+  test "consumeList rejects non-lists and malformed lists":
+    var r = rlpFromHex("83616263")
+    expect RlpTypeMismatch:
+      r.consumeList:
+        discard
+    r = rlpFromHex("c501")
+    expect MalformedRlpError:
+      r.consumeList:
+        discard
+
   test "consumeList requires exactly the list elements":
     var r = rlpFromHex("c20102")
     r.consumeList:
@@ -261,6 +279,19 @@ suite "test api usage":
       rlp = rlpFromBytes rlp.encode("")
       b = rlp.toBytes
     check $b == "@[]"
+
+  test "blobView":
+    var
+      rlp = rlpFromBytes(encode(([byte 1, 2, 5], @[byte 0x7f], "", @[1'u64])))
+      views: seq[seq[byte]]
+    for elem in rlp:
+      if elem.isBlob:
+        views.add @(elem.blobView)
+        check @(elem.blobView) == elem.toBytes()
+      else:
+        expect RlpTypeMismatch:
+          discard @(elem.blobView)
+    check views == @[@[byte 1, 2, 5], @[byte 0x7f], @[]]
 
   test "invalid enum":
     type
