@@ -22,30 +22,30 @@ proc generate() {.raises: [CatchableError].} =
   let
     txs = @[
       Transaction(
-        txType: TxLegacy, nonce: 1, gasPrice: 2, gasLimit: 21000,
+        txType: TxLegacy, nonce: 1, gasPrice: 2.u256, gasLimit: 21000,
         to: Opt.some(recipient), value: 3.u256, payload: @[byte 1, 2, 3],
         V: 37, R: 4.u256, S: 5.u256),
       Transaction(
-        txType: TxLegacy, nonce: 1, gasPrice: 2, gasLimit: 53000,
+        txType: TxLegacy, nonce: 1, gasPrice: 2.u256, gasLimit: 53000,
         payload: @[byte 0x60, 0x00], V: 27, R: 4.u256, S: 5.u256),
       Transaction(
-        txType: TxEip2930, chainId: chainId(1), nonce: 1, gasPrice: 2,
+        txType: TxEip2930, chainId: chainId(1), nonce: 1, gasPrice: 2.u256,
         gasLimit: 21000, to: Opt.some(recipient), accessList: accesses,
         V: 1, R: 4.u256, S: 5.u256),
       Transaction(
         txType: TxEip1559, chainId: chainId(1), nonce: 1,
-        maxPriorityFeePerGas: 2, maxFeePerGas: 3, gasLimit: 21000,
+        maxPriorityFeePerGas: 2.u256, maxFeePerGas: 3.u256, gasLimit: 21000,
         to: Opt.some(recipient), accessList: accesses,
         V: 1, R: 4.u256, S: 5.u256),
       Transaction(
         txType: TxEip4844, chainId: chainId(1), nonce: 1,
-        maxPriorityFeePerGas: 2, maxFeePerGas: 3, gasLimit: 21000,
+        maxPriorityFeePerGas: 2.u256, maxFeePerGas: 3.u256, gasLimit: 21000,
         to: Opt.some(recipient), accessList: accesses,
         maxFeePerBlobGas: 4.u256, versionedHashes: @[versionedHash],
         V: 1, R: 4.u256, S: 5.u256),
       Transaction(
         txType: TxEip7702, chainId: chainId(1), nonce: 1,
-        maxPriorityFeePerGas: 2, maxFeePerGas: 3, gasLimit: 21000,
+        maxPriorityFeePerGas: 2.u256, maxFeePerGas: 3.u256, gasLimit: 21000,
         to: Opt.some(recipient), accessList: accesses,
         authorizationList: authList, V: 1, R: 4.u256, S: 5.u256)]
     logs = @[Log(address: source, topics: @[default(Bytes32)], data: @[byte 1])]

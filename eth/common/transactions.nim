@@ -56,9 +56,9 @@ type
     txType*        : TxType               # EIP-2718
     chainId*       : ChainId              # EIP-2930
     nonce*         : AccountNonce
-    gasPrice*      : GasInt
-    maxPriorityFeePerGas*: GasInt         # EIP-1559
-    maxFeePerGas*  : GasInt               # EIP-1559
+    gasPrice*      : UInt256
+    maxPriorityFeePerGas*: UInt256        # EIP-1559
+    maxFeePerGas*  : UInt256              # EIP-1559
     gasLimit*      : GasInt
     to*            : Opt[Address]
     value*         : UInt256
