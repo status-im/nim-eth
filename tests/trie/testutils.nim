@@ -33,7 +33,7 @@ proc randBytes*(len: int): seq[byte] =
   result = newSeq[byte](len)
   discard randomBytes(result[0].addr, len)
 
-func toBytesRange*(str: string): seq[byte] =
+func toBytesRange*(str: string): seq[byte] {.raises: [ValueError].} =
   var s: seq[byte]
   if str[0] == '0' and str[1] == 'x':
     s = fromHex(str.substr(2))
