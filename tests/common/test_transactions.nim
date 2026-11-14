@@ -37,7 +37,7 @@ func tx0(i: int): Transaction =
     nonce:    i.AccountNonce,
     to:       Opt.some recipient,
     gasLimit: 1.GasInt,
-    gasPrice: 2.GasInt,
+    gasPrice: 2.u256,
     payload:  abcdef)
 
 func tx1(i: int): Transaction =
@@ -46,7 +46,7 @@ func tx1(i: int): Transaction =
     txType:   TxLegacy,
     nonce:    i.AccountNonce,
     gasLimit: 1.GasInt,
-    gasPrice: 2.GasInt,
+    gasPrice: 2.u256,
     payload:  abcdef)
 
 func tx2(i: int): Transaction =
@@ -57,7 +57,7 @@ func tx2(i: int): Transaction =
     nonce:      i.AccountNonce,
     to:         Opt.some recipient,
     gasLimit:   123457.GasInt,
-    gasPrice:   10.GasInt,
+    gasPrice:   10.u256,
     accessList: accesses,
     payload:    abcdef)
 
@@ -69,7 +69,7 @@ func tx3(i: int): Transaction =
     nonce:    i.AccountNonce,
     to:       Opt.some recipient,
     gasLimit: 123457.GasInt,
-    gasPrice: 10.GasInt,
+    gasPrice: 10.u256,
     payload:  abcdef)
 
 func tx4(i: int): Transaction =
@@ -79,7 +79,7 @@ func tx4(i: int): Transaction =
     chainId:    chainId(1),
     nonce:      i.AccountNonce,
     gasLimit:   123457.GasInt,
-    gasPrice:   10.GasInt,
+    gasPrice:   10.u256,
     accessList: accesses)
 
 func tx5(i: int): Transaction =
@@ -88,8 +88,8 @@ func tx5(i: int): Transaction =
     chainId:    chainId(1),
     nonce:      i.AccountNonce,
     gasLimit:   123457.GasInt,
-    maxPriorityFeePerGas: 42.GasInt,
-    maxFeePerGas: 10.GasInt,
+    maxPriorityFeePerGas: 42.u256,
+    maxFeePerGas: 10.u256,
     accessList: accesses)
 
 func tx6(i: int): Transaction =
@@ -102,8 +102,8 @@ func tx6(i: int): Transaction =
     nonce:               i.AccountNonce,
     to:                  Opt.some(recipient),
     gasLimit:            123457.GasInt,
-    maxPriorityFeePerGas:42.GasInt,
-    maxFeePerGas:        10.GasInt,
+    maxPriorityFeePerGas:42.u256,
+    maxFeePerGas:        10.u256,
     accessList:          accesses,
     versionedHashes:     @[digest])
 
@@ -117,8 +117,8 @@ func tx7(i: int): Transaction =
     nonce:               i.AccountNonce,
     to:                  Opt.some(recipient),
     gasLimit:            123457.GasInt,
-    maxPriorityFeePerGas:42.GasInt,
-    maxFeePerGas:        10.GasInt,
+    maxPriorityFeePerGas:42.u256,
+    maxFeePerGas:        10.u256,
     accessList:          accesses,
     versionedHashes:     @[digest],
     maxFeePerBlobGas:    10000000.u256)
@@ -133,8 +133,8 @@ func tx8(i: int): Transaction =
     nonce:               i.AccountNonce,
     to:                  Opt.some(recipient),
     gasLimit:            123457.GasInt,
-    maxPriorityFeePerGas:42.GasInt,
-    maxFeePerGas:        10.GasInt,
+    maxPriorityFeePerGas:42.u256,
+    maxFeePerGas:        10.u256,
     accessList:          accesses,
     versionedHashes:     @[digest],
     maxFeePerBlobGas:    10000000.u256)
@@ -144,8 +144,8 @@ func txEip7702(i: int): Transaction =
     txType:   TxEip7702,
     chainId:  chainId(1),
     nonce:    i.AccountNonce,
-    maxPriorityFeePerGas: 2.GasInt,
-    maxFeePerGas: 3.GasInt,
+    maxPriorityFeePerGas: 2.u256,
+    maxFeePerGas: 3.u256,
     gasLimit: 4.GasInt,
     to:       Opt.some recipient,
     value:    5.u256,
@@ -189,6 +189,22 @@ suite "Transactions":
   test "EIP 7702":
     roundTrip(txEip7702, 9)
 
+  test "Fee fields wider than 64 bits survive encode decode":
+    # Fee fields are unbounded in the spec; only the sender's balance limits
+    # them. 2^64 needs 9 bytes, high(UInt256) all 32.
+    var legacy = tx0(10)
+    legacy.gasPrice = 1.u256 shl 64
+    var dynFee = tx5(11)
+    dynFee.maxPriorityFeePerGas = 1.u256 shl 64
+    dynFee.maxFeePerGas = high(UInt256)
+
+    let legacy2 = rlp.decode(rlp.encode(legacy), Transaction)
+    let dynFee2 = rlp.decode(rlp.encode(dynFee), Transaction)
+    check:
+      legacy2.gasPrice == 1.u256 shl 64
+      dynFee2.maxPriorityFeePerGas == 1.u256 shl 64
+      dynFee2.maxFeePerGas == high(UInt256)
+
   test "Minimal Blob tx recipient survive encode decode":
     let tx = tx8(12)
     let bytes = rlp.encode(tx)
@@ -229,7 +245,7 @@ suite "Transactions":
         txType: TxLegacy,
         chainId: chainId(1),
         nonce: 9,
-        gasPrice: 20000000000'u64,
+        gasPrice: 20000000000.u256,
         gasLimit: 21000'u64,
         to: Opt.some address"0x3535353535353535353535353535353535353535",
         value: u256"1000000000000000000",

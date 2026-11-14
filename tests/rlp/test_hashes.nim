@@ -23,8 +23,8 @@ let myTx = Transaction(
   chainId:    chainId(1),
   nonce:      0.AccountNonce,
   gasLimit:   123457.GasInt,
-  maxPriorityFeePerGas: 42.GasInt,
-  maxFeePerGas: 10.GasInt,
+  maxPriorityFeePerGas: 42.u256,
+  maxFeePerGas: 10.u256,
   accessList: accesses
 )
 
