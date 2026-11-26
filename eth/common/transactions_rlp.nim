@@ -13,6 +13,7 @@ import
   ../rlp/[length_writer, two_pass_writer, hash_writer]
 
 from stew/objects import checkedEnumAssign
+from stew/endians2 import toBytesBE
 
 export addresses_rlp, base_rlp, hashes_rlp, transactions, rlp
 
@@ -232,8 +233,8 @@ proc appendSignature(w: var RlpWriter, sig: FrameSignature) =
   w.append(sig.signer)
   w.append(sig.msg)
   if sig.msg.len == 0:
-    const emptySeq = newSeq[byte](0)
-    w.append(emptySeq)
+    let signaturesLenBytes = sig.signature.len.uint64.toBytesBE
+    w.append(signaturesLenBytes)
   else:
     w.append(sig.signature)
 
