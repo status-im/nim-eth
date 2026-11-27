@@ -98,9 +98,9 @@ func distance*(a, b: NodeId): UInt256 =
 func logDistance*(a, b: NodeId): uint16 =
   ## Calculate the logarithmic distance between two `NodeId`s.
   ##
-  ## According the specification, this is the log base 2 of the distance. But it
-  ## is rather the log base 2 of the distance + 1, as else the 0 value can not
-  ## be used (e.g. by FindNode call to return peer its own ENR)
+  ## As in the specification, this is the bit length of the distance:
+  ## floor(log2(distance)) + 1, or 0 for equal `NodeId`s. The 0 value is used by
+  ## FindNode to request a peer's own ENR.
   ## For NodeId of 256 bits, range is 0-256.
   let a = a.toBytesBE
   let b = b.toBytesBE
